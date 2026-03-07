@@ -22,7 +22,7 @@ export default function CustomPlanningPage() {
   const handleSubmit = async e => {
     e.preventDefault();
     try {
-      await fetch('/api/submit-brief', {
+      await fetch('/api/send-brief', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
