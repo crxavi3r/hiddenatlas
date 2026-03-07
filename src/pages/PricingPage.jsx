@@ -3,15 +3,15 @@ import { Check, ArrowRight, Star } from 'lucide-react';
 
 export default function PricingPage() {
   const premiumItineraries = [
-    { name: 'Single Itinerary', price: '$69–$119', desc: 'One-time purchase. Full access to your chosen route — day plans, stays, restaurants, logistics. Download it forever.' },
-    { name: 'Explorer Bundle (3)', price: '$199', desc: 'Choose any 3 premium itineraries. Perfect if you have multiple trips in mind or want to gift one.' },
-    { name: 'Annual Access', price: '$349 / year', desc: 'Unlimited downloads from our full library for 12 months, including all new releases. Best value for frequent travelers.' },
+    { name: 'Single Itinerary', price: '€29', desc: 'One-time purchase. Full access to your chosen route — day plans, stays, restaurants, logistics. Download it forever.' },
+    { name: 'Explorer Bundle (3)', price: '€79', desc: 'Choose any 3 premium itineraries. Ideal if you have multiple trips in mind or want to gift one.' },
+    { name: 'Annual Access', price: '€249 / year', desc: 'Unlimited downloads from the full premium library for 12 months, including all new releases. Best for frequent travelers.' },
   ];
 
   const customTiers = [
     {
       name: 'Couple / Duo',
-      price: '$499',
+      price: '€349',
       best: false,
       group: '2 people',
       duration: 'Up to 14 days',
@@ -27,7 +27,7 @@ export default function PricingPage() {
     },
     {
       name: 'Small Group',
-      price: '$749',
+      price: '€549',
       best: true,
       group: '3–6 people',
       duration: 'Up to 14 days',
@@ -42,7 +42,7 @@ export default function PricingPage() {
     },
     {
       name: 'Large Group / Family',
-      price: 'From $999',
+      price: 'From €849',
       best: false,
       group: '7+ people',
       duration: 'Custom scope',
@@ -65,7 +65,7 @@ export default function PricingPage() {
     },
     {
       q: 'What currency are prices in?',
-      a: 'All prices are in USD. We accept major credit cards and PayPal.',
+      a: 'Custom planning fees are in EUR. We accept major credit cards and PayPal.',
     },
     {
       q: 'Do you offer refunds?',
@@ -125,6 +125,7 @@ export default function PricingPage() {
                 style={{
                   background: 'white', border: '1px solid #E8E3DA',
                   borderRadius: '10px', padding: '32px',
+                  display: 'flex', flexDirection: 'column',
                 }}
               >
                 <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600', color: '#1C1A16', marginBottom: '8px' }}>
@@ -133,7 +134,7 @@ export default function PricingPage() {
                 <div style={{ fontSize: '32px', fontWeight: '700', color: '#1B6B65', fontFamily: "'Playfair Display', Georgia, serif", marginBottom: '16px' }}>
                   {plan.price}
                 </div>
-                <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.7', marginBottom: '28px' }}>
+                <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.7', marginBottom: '28px', flex: 1 }}>
                   {plan.desc}
                 </p>
                 <Link
@@ -182,6 +183,7 @@ export default function PricingPage() {
                   position: 'relative',
                   transform: tier.best ? 'scale(1.03)' : 'none',
                   boxShadow: tier.best ? '0 24px 80px rgba(28,26,22,0.25)' : 'none',
+                  display: 'flex', flexDirection: 'column',
                 }}
               >
                 {tier.best && (
@@ -206,7 +208,7 @@ export default function PricingPage() {
                   {tier.price}
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px', flex: 1 }}>
                   {tier.features.map((f, j) => (
                     <div key={j} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                       <Check size={14} color={tier.best ? '#C9A96E' : '#1B6B65'} strokeWidth={2.5} style={{ flexShrink: 0, marginTop: '2px' }} />

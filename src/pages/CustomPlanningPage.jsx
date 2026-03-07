@@ -19,8 +19,17 @@ export default function CustomPlanningPage() {
         : [...prev.style, style],
     }));
   };
-  const handleSubmit = e => {
+  const handleSubmit = async e => {
     e.preventDefault();
+    try {
+      await fetch('/api/submit-brief', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+    } catch (_) {
+      // Submission notification failed silently — still show success to user
+    }
     setSubmitted(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -67,9 +76,9 @@ export default function CustomPlanningPage() {
   ];
 
   const budgets = [
-    { label: 'Comfortable', desc: '$200–350 / person / day', value: 'comfortable' },
-    { label: 'Premium', desc: '$350–600 / person / day', value: 'premium' },
-    { label: 'Ultra-Luxury', desc: '$600+ / person / day', value: 'ultra' },
+    { label: 'Comfortable', desc: '€200–350 / person / day', value: 'comfortable' },
+    { label: 'Premium', desc: '€350–600 / person / day', value: 'premium' },
+    { label: 'Ultra-Luxury', desc: '€600+ / person / day', value: 'ultra' },
   ];
 
   return (
@@ -343,7 +352,7 @@ export default function CustomPlanningPage() {
                 Submit My Brief <ArrowRight size={16} />
               </button>
               <p style={{ fontSize: '13px', color: '#8C8070', textAlign: 'center', marginTop: '12px' }}>
-                No payment required now. We'll reach out within 48 hours.
+                No payment required now. We'll review your brief and get back to you within 48 hours.
               </p>
             </form>
 
@@ -355,9 +364,9 @@ export default function CustomPlanningPage() {
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '28px' }}>
                   {[
-                    { label: 'Couple / Duo', price: '$499', desc: '2 people, up to 14 days' },
-                    { label: 'Small Group', price: '$749', desc: '3–6 people, up to 14 days' },
-                    { label: 'Large Group / Family', price: 'From $999', desc: '7+ people, custom scope' },
+                    { label: 'Couple / Duo', price: '€349', desc: '2 people, up to 14 days' },
+                    { label: 'Small Group', price: '€549', desc: '3–6 people, up to 14 days' },
+                    { label: 'Large Group / Family', price: 'From €849', desc: '7+ people, custom scope' },
                   ].map((tier, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '20px', borderBottom: i < 2 ? '1px solid #2E2922' : 'none' }}>
                       <div>
