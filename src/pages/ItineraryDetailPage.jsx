@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router-dom';
-import { Clock, Users, MapPin, Check, Star, ArrowRight, Lock, Download, ChevronRight } from 'lucide-react';
+import { Clock, Users, MapPin, Check, Star, ArrowRight, Lock, Download, ChevronRight, Route } from 'lucide-react';
 import { itineraries } from '../data/itineraries';
 
 export default function ItineraryDetailPage() {
@@ -17,26 +17,11 @@ export default function ItineraryDetailPage() {
     );
   }
 
-  const { title, subtitle, country, region, duration, groupSize, price, isPremium, image, coverImage, highlights, description, bestFor, difficulty, category } = itinerary;
-
-  const days = [
-    { day: 1, title: 'Arrival & First Impressions', desc: 'Private transfer from the airport to your boutique hotel. Evening orientation walk through the old quarter. Dinner at a neighborhood trattoria recommended by your innkeeper.', img: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=600&q=80' },
-    { day: 2, title: 'Into the Heart of the Region', desc: 'Early morning walk before the crowds arrive. Visit the main historical site with a private guide. Lunch at a family-run restaurant. Afternoon free for wandering.', img: 'https://images.unsplash.com/photo-1501854140801-50d01698950b?w=600&q=80' },
-    { day: 3, title: 'The Countryside Escape', desc: 'Drive into the surrounding countryside. Visit a local producer — wine, olive oil, or ceramics depending on the region. Picnic lunch in a scenic spot. Return for sunset views.', img: 'https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?w=600&q=80' },
-    { day: 4, title: 'Hidden Villages & Local Life', desc: 'A full day in the region\'s lesser-known villages. Markets, artisan workshops, and conversations with locals. This is the day that travelers remember most.', img: 'https://images.unsplash.com/photo-1533587851505-d119e13fa0d7?w=600&q=80' },
-    { day: 5, title: 'Coast & Water', desc: 'Charter a small boat for the morning. Swim in secluded coves only accessible from the sea. Afternoon aperitivo on a clifftop terrace. Special dinner reservation secured in advance.', img: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&q=80' },
-  ];
-
-  const included = [
-    'Day-by-day itinerary with specific timings',
-    '12–15 hotel recommendations across budget levels',
-    '20+ restaurant picks with booking notes',
-    'Transport options and logistics guide',
-    'What to book in advance (and how far ahead)',
-    'Estimated daily budget breakdown',
-    'Local tips, cultural notes & what to pack',
-    'Digital PDF + mobile-optimized format',
-  ];
+  const {
+    title, subtitle, country, region, duration, groupSize, price, isPremium,
+    image, coverImage, highlights, description, bestFor, difficulty,
+    days = [], whySpecial, routeOverview, included = [],
+  } = itinerary;
 
   return (
     <div style={{ background: '#FAFAF8', paddingTop: '72px' }}>
@@ -90,7 +75,7 @@ export default function ItineraryDetailPage() {
 
       {/* Body */}
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '60px 24px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: '64px', alignItems: 'start' }}>
+        <div className="resp-detail-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: '64px', alignItems: 'start' }}>
 
           {/* Left: Content */}
           <div>
@@ -126,7 +111,7 @@ export default function ItineraryDetailPage() {
               <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '24px' }}>
                 Trip Highlights
               </h2>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+              <div className="resp-highlights-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 {highlights.map((h, i) => (
                   <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                     <div style={{
@@ -142,7 +127,7 @@ export default function ItineraryDetailPage() {
               </div>
             </section>
 
-            {/* Day by Day — Preview */}
+            {/* Day by Day */}
             <section style={{ marginBottom: '60px' }}>
               <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '32px' }}>
                 Day by Day
@@ -184,9 +169,25 @@ export default function ItineraryDetailPage() {
                         <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '20px', fontWeight: '600', color: '#1C1A16', marginBottom: '10px' }}>
                           {day.title}
                         </h3>
-                        <p style={{ fontSize: '15px', color: '#6B6156', lineHeight: '1.7', marginBottom: '16px' }}>
+                        <p style={{ fontSize: '15px', color: '#6B6156', lineHeight: '1.7', marginBottom: day.bullets?.length ? '16px' : '0' }}>
                           {day.desc}
                         </p>
+
+                        {/* Bullets */}
+                        {day.bullets?.length > 0 && (
+                          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {day.bullets.map((bullet, bi) => (
+                              <li key={bi} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                                <span style={{
+                                  width: '5px', height: '5px', borderRadius: '50%',
+                                  background: '#C9A96E', flexShrink: 0, marginTop: '8px',
+                                }} />
+                                <span style={{ fontSize: '14px', color: '#4A433A', lineHeight: '1.6' }}>{bullet}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+
                         {day.img && !isLocked && (
                           <img
                             src={day.img} alt={day.title}
@@ -225,15 +226,60 @@ export default function ItineraryDetailPage() {
                       cursor: 'pointer',
                     }}
                   >
-                    Unlock for ${price}
+                    Unlock for €{price}
                   </button>
                 </div>
               )}
             </section>
+
+            {/* Why This Journey Is Special */}
+            {whySpecial && (
+              <section style={{ marginBottom: '60px' }}>
+                <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '16px' }}>
+                  Why This Journey Is Special
+                </h2>
+                <div style={{
+                  borderLeft: '3px solid #C9A96E',
+                  paddingLeft: '24px',
+                }}>
+                  <p style={{ fontSize: '17px', color: '#4A433A', lineHeight: '1.85', fontStyle: 'italic' }}>
+                    {whySpecial}
+                  </p>
+                </div>
+              </section>
+            )}
+
+            {/* Route Overview */}
+            {routeOverview && (
+              <section style={{ marginBottom: '60px' }}>
+                <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '20px' }}>
+                  Route Overview
+                </h2>
+                <div style={{
+                  background: '#EFF6F5',
+                  borderRadius: '8px',
+                  padding: '24px 28px',
+                  display: 'flex',
+                  gap: '16px',
+                  alignItems: 'flex-start',
+                }}>
+                  <div style={{
+                    width: '36px', height: '36px', borderRadius: '50%',
+                    background: '#1B6B65', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Route size={16} color="white" />
+                  </div>
+                  <p style={{ fontSize: '15px', color: '#2C5F5A', lineHeight: '1.7', fontWeight: '500' }}>
+                    {routeOverview}
+                  </p>
+                </div>
+              </section>
+            )}
           </div>
 
           {/* Right: Sidebar */}
-          <div style={{ position: 'sticky', top: '100px' }}>
+          <div className="resp-sidebar" style={{ position: 'sticky', top: '100px' }}>
             <div style={{
               background: 'white',
               border: '1px solid #E8E3DA',
@@ -251,7 +297,7 @@ export default function ItineraryDetailPage() {
                       {[1,2,3,4,5].map(i => <Star key={i} size={12} fill="#C9A96E" color="#C9A96E" />)}
                     </div>
                     <div style={{ fontSize: '36px', fontWeight: '700', color: 'white', fontFamily: "'Playfair Display', Georgia, serif" }}>
-                      ${price}
+                      €{price}
                     </div>
                     <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.65)', marginTop: '4px' }}>One-time purchase · Digital download</p>
                   </>
@@ -266,17 +312,21 @@ export default function ItineraryDetailPage() {
               </div>
 
               <div style={{ padding: '28px' }}>
-                <p style={{ fontSize: '13px', fontWeight: '600', color: '#4A433A', marginBottom: '16px', letterSpacing: '0.3px' }}>
-                  What's included:
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '28px' }}>
-                  {included.map((item, i) => (
-                    <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                      <Check size={14} color="#1B6B65" style={{ flexShrink: 0, marginTop: '2px' }} strokeWidth={2.5} />
-                      <span style={{ fontSize: '13px', color: '#4A433A', lineHeight: '1.5' }}>{item}</span>
+                {included.length > 0 && (
+                  <>
+                    <p style={{ fontSize: '13px', fontWeight: '600', color: '#4A433A', marginBottom: '16px', letterSpacing: '0.3px' }}>
+                      What's included:
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '28px' }}>
+                      {included.map((item, i) => (
+                        <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                          <Check size={14} color="#1B6B65" style={{ flexShrink: 0, marginTop: '2px' }} strokeWidth={2.5} />
+                          <span style={{ fontSize: '13px', color: '#4A433A', lineHeight: '1.5' }}>{item}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </>
+                )}
 
                 {isPremium ? (
                   <button
@@ -292,7 +342,7 @@ export default function ItineraryDetailPage() {
                     }}
                   >
                     <Download size={15} />
-                    Get This Itinerary
+                    Unlock for €{price}
                   </button>
                 ) : (
                   <button

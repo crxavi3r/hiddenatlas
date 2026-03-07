@@ -143,7 +143,7 @@ export default function ItineraryCard({ itinerary, variant = 'default' }) {
               <div>
                 {isPremium ? (
                   <span style={{ fontSize: '17px', fontWeight: '700', color: '#1C1A16', fontFamily: "'Playfair Display', Georgia, serif" }}>
-                    ${price}
+                    €{price}
                     <span style={{ fontSize: '12px', fontWeight: '400', color: '#B5AA99', fontFamily: 'Inter, sans-serif' }}> / plan</span>
                   </span>
                 ) : (

@@ -52,104 +52,138 @@ const T = {
 const destinations = [
   {
     name: 'Japan',
-    tagline: 'Culture, design, and unforgettable detail',
-    image: 'https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=900&q=80',
-    href: '/itineraries?destination=japan',
+    tagline: '18 days of culture, craft and living tradition',
+    image: 'https://images.unsplash.com/photo-06b2oaQPevQ?w=900&q=80',
+    href: '/itineraries/japan-grand-cultural-journey',
   },
   {
     name: 'Philippines',
-    tagline: 'Island hopping and hidden beaches',
-    image: 'https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?w=900&q=80',
-    href: '/itineraries?destination=philippines',
+    tagline: 'Palawan limestone islands and hidden lagoons',
+    image: 'https://images.unsplash.com/photo-3T9dDY0WqDI?w=900&q=80',
+    href: '/itineraries/philippines-island-journey',
   },
   {
-    name: 'Italy',
-    tagline: 'Food, history, and timeless landscapes',
-    image: 'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=900&q=80',
-    href: '/itineraries?destination=italy',
+    name: 'Puglia',
+    tagline: 'Trulli, baroque towns and the Adriatic coast',
+    image: 'https://images.unsplash.com/photo-1547394765-185e1e68f34e?w=900&q=80',
+    href: '/itineraries/puglia-road-journey',
   },
   {
-    name: 'Portugal',
-    tagline: 'Wild coastlines, wine, and village life',
-    image: 'https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=900&q=80',
-    href: '/itineraries?destination=portugal',
+    name: 'Budapest',
+    tagline: 'Central Europe\'s most architecturally dramatic city',
+    image: 'https://images.unsplash.com/photo-1541849546-216549ae216d?w=900&q=80',
+    href: '/itineraries/budapest-city-break',
   },
   {
-    name: 'Iceland',
-    tagline: 'Glaciers, geysers, and infinite sky',
-    image: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=900&q=80',
-    href: '/itineraries?destination=iceland',
+    name: 'Bali',
+    tagline: 'Temples, rice terraces and volcanic island life',
+    image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=900&q=80',
+    href: '/itineraries/bali-island-journey',
   },
   {
-    name: 'London',
-    tagline: 'World-class museums, food, and theatre',
-    image: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=900&q=80',
-    href: '/itineraries?destination=london',
+    name: 'Northern England',
+    tagline: 'Lake District, Yorkshire Dales and the North Sea coast',
+    image: 'https://images.unsplash.com/photo-j4dD5iLp78Y?w=900&q=80',
+    href: '/itineraries/northern-england-roadtrip',
+  },
+  {
+    name: 'Normandy & Loire',
+    tagline: 'Étretat cliffs, Mont Saint-Michel and Loire Valley châteaux',
+    image: 'https://images.unsplash.com/photo-UV__njnjEK4?w=900&q=80',
+    href: '/itineraries/normandy-brittany-loire',
+  },
+  {
+    name: 'Vienna',
+    tagline: 'Imperial palaces, Ringstrasse grandeur and café culture',
+    image: 'https://images.unsplash.com/photo-ZkQNOEezi6k?w=900&q=80',
+    href: '/itineraries/vienna-imperial-journey',
   },
 ];
 
-/* ─── Popular itinerary data ─── */
+/* ─── Free journeys (homepage featured) ─── */
 const popularItineraries = [
   {
-    id: 'japan-cultural-route',
-    name: 'Japan — 10 Day Cultural Route',
+    id: 'bali-island-journey',
+    name: 'Bali — 10 Day Island Journey',
     duration: '10 days',
-    description: 'Kyoto\'s temples at dawn, Kanazawa\'s preserved geisha districts, a ryokan on the Sea of Japan, and a private tea ceremony that changes how you think about slowness.',
-    tags: ['Couples', 'Culture', 'Luxury'],
-    image: 'https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=900&q=80',
-    price: 119,
+    description: 'Uluwatu at sunset, Tegallalang before the crowds, a dawn volcano climb, the offshore drama of Nusa Penida, and east-coast fishing villages that haven\'t changed since the 1970s.',
+    tags: ['Couples', 'Family', 'Nature'],
+    image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=900&q=80',
+    price: 0,
   },
   {
-    id: 'philippines-island-escape',
-    name: 'Philippines — 14 Day Island Escape',
-    duration: '14 days',
-    description: 'El Nido\'s limestone karsts, Coron\'s WWII shipwreck lagoons, and a final stretch of white sand in Boracay. The Philippines, done without the crowds.',
-    tags: ['Couples', 'Family', 'Beach'],
-    image: 'https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?w=900&q=80',
-    price: 99,
-  },
-  {
-    id: 'italy-tuscany-amalfi',
-    name: 'Italy — Tuscany & Amalfi Journey',
-    duration: '12 days',
-    description: 'A week in the Tuscan hills — truffle hunts, wine estates, medieval towns — then south to a private villa above the Amalfi coast. Food-forward and memorably paced.',
-    tags: ['Couples', 'Groups', 'Food & Wine'],
-    image: 'https://images.unsplash.com/photo-1533587851505-d119e13fa0d7?w=900&q=80',
-    price: 89,
-  },
-  {
-    id: 'london-city-break',
-    name: 'London — 3 Day Cultural City Break',
+    id: 'budapest-city-break',
+    name: 'Budapest — 3 Day Cultural City Break',
     duration: '3 days',
-    description: 'Three days in London done properly: a boutique hotel in Marylebone, backstage access at the National Theatre, a guided Tate Modern visit, and dinner in a Soho private members\' club.',
+    description: 'Parliament at dusk, Fisherman\'s Bastion before the crowds, Széchenyi baths on a cold morning, and ruin bars after midnight. Central Europe\'s most compelling city.',
     tags: ['Couples', 'Culture', 'City'],
-    image: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=900&q=80',
-    price: 49,
+    image: 'https://images.unsplash.com/photo-1541849546-216549ae216d?w=900&q=80',
+    price: 0,
+  },
+  {
+    id: 'northern-england-roadtrip',
+    name: 'Northern England — 4 Day Roadtrip',
+    duration: '4 days',
+    description: 'The Yorkshire Dales, Castlerigg Stone Circle at dawn, Ullswater by boat, Whitby Abbey on the cliff, and York at dusk. The England most visitors never reach.',
+    tags: ['Couples', 'Friend Groups', 'Nature'],
+    image: 'https://images.unsplash.com/photo-j4dD5iLp78Y?w=900&q=80',
+    price: 0,
+  },
+  {
+    id: 'puglia-road-journey',
+    name: 'Puglia — 4 Day Southern Italy Road Journey',
+    duration: '4 days',
+    description: 'Bari Vecchia, Polignano a Mare above the sea caves, Ostuni\'s whitewashed hilltop, the trulli of Alberobello, and Matera — the ancient cave city that is unlike anywhere else.',
+    tags: ['Couples', 'Food & Wine', 'Culture'],
+    image: 'https://images.unsplash.com/photo-1547394765-185e1e68f34e?w=900&q=80',
+    price: 0,
   },
 ];
 
 /* ─── Journal articles ─── */
 const journalArticles = [
   {
-    title: 'Best areas to stay in El Nido',
+    title: 'El Nido — where to stay, what to skip',
     category: 'Destination Guide',
-    image: 'https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?w=700&q=80',
-    excerpt: 'Corong Corong for sunsets, Nacpan for quiet. A neighbourhood-by-neighbourhood breakdown for first-time visitors.',
+    image: 'https://images.unsplash.com/photo-3T9dDY0WqDI?w=700&q=80',
+    excerpt: 'Corong Corong for sunsets, Nacpan for quiet. A neighbourhood-by-neighbourhood breakdown of Palawan\'s most visited town.',
     href: '/journal/el-nido-where-to-stay',
   },
   {
-    title: 'Japan with kids — without rushing',
-    category: 'Family Travel',
-    image: 'https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=700&q=80',
-    excerpt: 'How to slow Japan down for families who want the temples and the food without the 6am queues.',
-    href: '/journal/japan-with-kids',
+    title: 'The best time to visit Kyoto',
+    category: 'Travel Planning',
+    image: 'https://images.unsplash.com/photo-06b2oaQPevQ?w=700&q=80',
+    excerpt: 'Cherry blossom, autumn colour, or winter quiet? A month-by-month guide to Kyoto\'s seasons from someone who\'s been in all of them.',
+    href: '/journal/best-time-to-visit-kyoto',
   },
   {
-    title: 'Hidden restaurants in Florence',
-    category: 'Food & Drink',
-    image: 'https://images.unsplash.com/photo-1516483638261-f4dbaf036963?w=700&q=80',
-    excerpt: 'The seven tables that locals actually book — and how to get a reservation before you leave home.',
-    href: '/journal/florence-hidden-restaurants',
+    title: 'Puglia by car — the Valle d\'Itria loop',
+    category: 'Road Journey',
+    image: 'https://images.unsplash.com/photo-1547394765-185e1e68f34e?w=700&q=80',
+    excerpt: 'Alberobello, Locorotondo, Cisternino and Martina Franca in two days. The trulli country is better by road and better in the early morning.',
+    href: '/journal/puglia-valley-itria-road-trip',
+  },
+];
+
+/* ─── Premium journeys ─── */
+const curatedJourneys = [
+  {
+    id: 'japan-grand-cultural-journey',
+    title: 'Japan — 18 Day Cultural Grand Journey',
+    duration: '18 days',
+    tag: 'Premium · €29',
+    description: "From Tokyo's electric neighbourhoods to Kanazawa's geisha districts, Shirakawa-go's thatched farmhouses, Kyoto at dawn, and a ryokan above the Hakone volcanic landscape.",
+    image: 'https://images.unsplash.com/photo-06b2oaQPevQ?w=800&q=80',
+    bestFor: ['Couples', 'Culture Seekers'],
+  },
+  {
+    id: 'philippines-island-journey',
+    title: 'Philippines — 14 Day Island Journey',
+    duration: '14 days',
+    tag: 'Premium · €29',
+    description: "El Nido's limestone karst towers, Coron's hidden lagoons and WWII shipwrecks, and Boracay's quiet northern shore. The Philippines, planned without compromise.",
+    image: 'https://images.unsplash.com/photo-3T9dDY0WqDI?w=800&q=80',
+    bestFor: ['Couples', 'Family'],
   },
 ];
 
@@ -231,16 +265,16 @@ export default function HomePage() {
               fontWeight: '600', color: 'white',
               lineHeight: '1.1', letterSpacing: '-1px', marginBottom: '22px',
             }}>
-              The trip you always<br />
-              <em style={{ fontStyle: 'italic', color: 'rgba(255,255,255,0.82)' }}>meant to plan properly.</em>
+              Curated journeys<br />
+              <em style={{ fontStyle: 'italic', color: 'rgba(255,255,255,0.82)' }}>designed to be followed.</em>
             </h1>
 
             <p style={{
               fontSize: 'clamp(16px, 1.8vw, 18px)', color: 'rgba(255,255,255,0.72)',
               lineHeight: '1.75', maxWidth: '540px', marginBottom: '36px',
             }}>
-              Expert-crafted itineraries built around boutique hotels, private guides,
-              and hidden places — for families, couples, and groups who travel with intention.
+              HiddenAtlas journeys are curated travel routes built from real trips.
+              Each route is structured day by day — so you can simply follow the journey.
             </p>
 
             <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
@@ -357,7 +391,7 @@ export default function HomePage() {
           </Reveal>
 
           {/* 3-column top row + 3-column bottom row */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+          <div className="dest-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             {destinations.map((dest, i) => (
               <Reveal key={dest.name} delay={i * 0.06} style={{ height: '100%' }}>
                 <DestinationCard dest={dest} />
@@ -377,18 +411,57 @@ export default function HomePage() {
       </section>
 
       {/* ══════════════════════════════
-          §2  POPULAR ITINERARIES
+          §1.5  PRODUCT CONCEPT
       ══════════════════════════════ */}
-      <section style={{ padding: 'clamp(48px, 6vw, 96px) 24px', background: '#F4F1EC' }}>
+      <section style={{ background: '#F4F1EC', padding: 'clamp(48px, 5vw, 72px) 24px' }}>
+        <div style={{ maxWidth: '860px', margin: '0 auto', textAlign: 'center' }}>
+          <Reveal>
+            <span style={T.label}>How it works</span>
+            <h2 style={{ ...T.h2, marginBottom: '16px' }}>Journeys designed to be followed day by day.</h2>
+            <p style={{ ...T.body, maxWidth: '560px', margin: '0 auto 44px' }}>
+              HiddenAtlas journeys are curated travel routes built from real trips. Each journey is designed to be followed step by step — like a travel recipe. No planning required.
+            </p>
+            <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', textAlign: 'left' }}>
+              <div style={{ background: 'white', borderRadius: '8px', padding: '28px 30px', border: '1px solid #E8E3DA' }}>
+                <span style={{ display: 'inline-block', padding: '4px 11px', background: '#EFF6F5', color: '#1B6B65', borderRadius: '3px', fontSize: '10px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '14px' }}>
+                  Free Journey
+                </span>
+                <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '18px', fontWeight: '600', color: '#1C1A16', marginBottom: '10px', lineHeight: '1.3' }}>
+                  Explore the route, free
+                </p>
+                <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.7' }}>
+                  A curated day-by-day itinerary you can explore freely. See the full route logic, the destinations, and the travel structure.
+                </p>
+              </div>
+              <div style={{ background: '#0E3D39', borderRadius: '8px', padding: '28px 30px' }}>
+                <span style={{ display: 'inline-block', padding: '4px 11px', background: '#C9A96E', color: 'white', borderRadius: '3px', fontSize: '10px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '14px' }}>
+                  Premium · €29
+                </span>
+                <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '18px', fontWeight: '600', color: 'white', marginBottom: '10px', lineHeight: '1.3' }}>
+                  The complete travel plan
+                </p>
+                <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.65)', lineHeight: '1.7' }}>
+                  A deeper journey with full day-by-day structure, curated route logic, destination highlights, and hidden stops. Designed for real trips.
+                </p>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ══════════════════════════════
+          §2  FREE JOURNEYS
+      ══════════════════════════════ */}
+      <section style={{ padding: 'clamp(48px, 6vw, 96px) 24px', background: 'white' }}>
         <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
 
           <Reveal>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '48px', flexWrap: 'wrap', gap: '20px' }}>
               <div>
-                <span style={T.label}>Ready to download</span>
-                <h2 style={T.h2}>Popular itineraries</h2>
+                <span style={T.label}>Free to explore</span>
+                <h2 style={T.h2}>Free Journeys</h2>
                 <p style={{ ...T.body, marginTop: '12px', maxWidth: '500px' }}>
-                  Researched in person, refined over multiple trips. Every plan includes hotels, logistics, and the details most guides skip.
+                  Curated travel routes designed to inspire your next journey. Explore the day-by-day structure and follow the route.
                 </p>
               </div>
               <Link to="/itineraries" style={{
@@ -403,7 +476,7 @@ export default function HomePage() {
           </Reveal>
 
           {/* Featured large + 3 smaller */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'stretch' }}>
+          <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'stretch' }}>
             {/* Large featured card */}
             <Reveal delay={0} style={{ height: '100%' }}>
               <ItineraryBigCard it={popularItineraries[0]} />
@@ -422,6 +495,88 @@ export default function HomePage() {
       </section>
 
       {/* ══════════════════════════════
+          §2.5  PREMIUM JOURNEYS
+      ══════════════════════════════ */}
+      <section style={{ padding: 'clamp(48px, 6vw, 96px) 24px', background: '#F4F1EC' }}>
+        <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+          <Reveal>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '48px', flexWrap: 'wrap', gap: '20px' }}>
+              <div>
+                <span style={{ ...T.label, color: '#C9A96E' }}>Full curated travel plans</span>
+                <h2 style={T.h2}>Premium Journeys</h2>
+                <p style={{ ...T.body, marginTop: '12px', maxWidth: '460px' }}>
+                  Complete curated journeys with deeper travel guidance and detailed day-by-day structure.
+                </p>
+              </div>
+              <Link to="/itineraries" style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                fontSize: '12px', fontWeight: '700', letterSpacing: '1px',
+                textTransform: 'uppercase', color: '#1B6B65', textDecoration: 'none',
+                borderBottom: '1px solid #1B6B65', paddingBottom: '2px', whiteSpace: 'nowrap',
+              }}>
+                View all journeys <ArrowRight size={13} />
+              </Link>
+            </div>
+          </Reveal>
+
+          <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '24px', marginBottom: '48px' }}>
+            {curatedJourneys.map((journey, i) => (
+              <Reveal key={journey.id} delay={i * 0.08}>
+                <CuratedJourneyCard journey={journey} />
+              </Reveal>
+            ))}
+          </div>
+
+          <Reveal delay={0.1}>
+            <div style={{
+              background: 'white', borderRadius: '12px', border: '1px solid #E8E3DA',
+              padding: 'clamp(28px, 4vw, 44px)',
+              display: 'grid', gridTemplateColumns: '1fr auto', gap: '40px', alignItems: 'center',
+            }}
+              className="resp-grid-2"
+            >
+              <div>
+                <p style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#C9A96E', marginBottom: '12px' }}>
+                  Premium journeys include
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px 32px' }}>
+                  {[
+                    'Complete day-by-day travel structure',
+                    'Curated route logic and pacing',
+                    'Destination highlights and hidden stops',
+                    'Travel rhythm designed for real trips',
+                  ].map((item, i) => (
+                    <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                      <Check size={14} color="#C9A96E" style={{ flexShrink: 0, marginTop: '3px' }} strokeWidth={2.5} />
+                      <span style={{ fontSize: '14px', color: '#4A433A', lineHeight: '1.5' }}>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ textAlign: 'center', flexShrink: 0 }}>
+                <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '32px', fontWeight: '700', color: '#1C1A16', marginBottom: '4px' }}>€29</p>
+                <p style={{ fontSize: '12px', color: '#8C8070', marginBottom: '20px' }}>One-time · Digital access</p>
+                <Link
+                  to="/itineraries"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '8px',
+                    padding: '13px 24px', background: '#C9A96E', color: 'white',
+                    borderRadius: '4px', fontSize: '12px', fontWeight: '700',
+                    letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none',
+                    whiteSpace: 'nowrap', transition: 'background 0.2s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#B08D4E'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#C9A96E'}
+                >
+                  Unlock Premium Journey <ArrowRight size={13} />
+                </Link>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ══════════════════════════════
           §3  HOW IT WORKS
       ══════════════════════════════ */}
       <section style={{ padding: 'clamp(64px, 8vw, 120px) 24px', background: '#1C1A16' }}>
@@ -434,7 +589,7 @@ export default function HomePage() {
             </div>
           </Reveal>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', background: '#2E2922' }}>
+          <div className="resp-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', background: '#2E2922' }}>
             {[
               {
                 num: '01',
@@ -505,7 +660,7 @@ export default function HomePage() {
             </div>
           </Reveal>
 
-          <div style={{
+          <div className="resp-grid-2" style={{
             display: 'grid', gridTemplateColumns: '1fr 1fr',
             borderRadius: '12px', overflow: 'hidden',
             boxShadow: '0 24px 80px rgba(28,26,22,0.12)',
@@ -516,7 +671,7 @@ export default function HomePage() {
             <Reveal delay={0}>
               <div style={{ position: 'relative', background: '#0D3834', height: '100%', minHeight: '540px' }}>
                 <img
-                  src="https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?w=900&q=80"
+                  src="https://images.unsplash.com/photo-3T9dDY0WqDI?w=900&q=80"
                   alt="Philippines"
                   style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.35, position: 'absolute', inset: 0 }}
                 />
@@ -604,7 +759,7 @@ export default function HomePage() {
                     <p style={{ fontSize: '12px', color: '#8C8070' }}>Hotels · logistics · restaurant picks · booking notes</p>
                   </div>
                   <Link
-                    to="/itineraries/philippines-island-escape"
+                    to="/itineraries/philippines-island-journey"
                     style={{
                       display: 'flex', alignItems: 'center', gap: '6px',
                       padding: '11px 18px', background: '#C9A96E', color: 'white',
@@ -616,7 +771,7 @@ export default function HomePage() {
                     onMouseLeave={e => e.currentTarget.style.background = '#C9A96E'}
                   >
                     <Lock size={12} />
-                    Unlock — €39
+                    Unlock — €29
                   </Link>
                 </div>
               </div>
@@ -638,13 +793,13 @@ export default function HomePage() {
             </div>
           </Reveal>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+          <div className="resp-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
             {[
               {
                 quote: 'The best trip we ever took as a family. Every hotel, every restaurant — it was all exactly right. We\'ve already started planning our next one with HiddenAtlas.',
                 name: 'Marta',
                 location: 'Lisbon',
-                trip: 'Portugal Family Trip',
+                trip: 'Bali Island Journey',
                 avatar: '/avatars/marta.svg',
                 fallbackAvatar: 'https://i.pravatar.cc/100?img=47',
                 type: 'Family',
@@ -653,7 +808,7 @@ export default function HomePage() {
                 quote: 'Saved us weeks of research and planning. I kept waiting for something to go wrong — nothing did. The itinerary was better than anything we\'d have put together ourselves.',
                 name: 'Daniel',
                 location: 'London',
-                trip: 'Japan Cultural Route',
+                trip: 'Japan — 18 Day Cultural Grand Journey',
                 avatar: '/avatars/daniel.svg',
                 fallbackAvatar: 'https://i.pravatar.cc/100?img=12',
                 type: 'Couple',
@@ -662,7 +817,7 @@ export default function HomePage() {
                 quote: 'Every hotel and experience was exactly right — understated, elegant, local. Our group of six had completely different tastes and everyone came home happy.',
                 name: 'Sofia',
                 location: 'Milan',
-                trip: 'Tuscany & Amalfi Journey',
+                trip: 'Puglia Road Journey',
                 avatar: '/avatars/sofia.svg',
                 fallbackAvatar: 'https://i.pravatar.cc/100?img=55',
                 type: 'Group',
@@ -721,7 +876,7 @@ export default function HomePage() {
         }} />
 
         <div style={{ position: 'relative', zIndex: 2, maxWidth: '1280px', margin: '0 auto', padding: 'clamp(64px, 8vw, 120px) 24px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '80px', alignItems: 'center' }}>
+          <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '80px', alignItems: 'center' }}>
 
             <Reveal>
               <div>
@@ -820,12 +975,92 @@ export default function HomePage() {
             </div>
           </Reveal>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+          <div className="resp-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
             {journalArticles.map((article, i) => (
               <Reveal key={i} delay={i * 0.09}>
                 <JournalCard article={article} />
               </Reveal>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════════════════════════
+          §7.5  AI PLANNER TEASER
+      ══════════════════════════════ */}
+      <section style={{ background: '#1C1A16', padding: 'clamp(64px, 8vw, 120px) 24px' }}>
+        <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+          <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '80px', alignItems: 'center' }}>
+            <Reveal>
+              <div>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  fontSize: '10.5px', fontWeight: '700', letterSpacing: '2.5px',
+                  textTransform: 'uppercase', color: '#C9A96E', marginBottom: '14px',
+                }}>
+                  New · Powered by AI
+                </span>
+                <h2 style={{
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                  fontSize: 'clamp(28px, 3.8vw, 48px)',
+                  fontWeight: '600', color: 'white',
+                  lineHeight: '1.18', letterSpacing: '-0.5px', marginBottom: '20px',
+                }}>
+                  Plan your journey,<br />
+                  <em style={{ fontStyle: 'italic', color: 'rgba(255,255,255,0.65)' }}>in seconds.</em>
+                </h2>
+                <p style={{ fontSize: '16px', color: 'rgba(255,255,255,0.6)', lineHeight: '1.8', marginBottom: '36px', maxWidth: '440px' }}>
+                  Tell us where you want to go. Our AI generates a complete, bespoke itinerary — day plans, hotel suggestions, and local experiences — built around your travel style.
+                </p>
+                <Link
+                  to="/ai-planner"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '8px',
+                    padding: '15px 30px', background: '#C9A96E', color: 'white',
+                    borderRadius: '4px', fontSize: '13px', fontWeight: '700',
+                    letterSpacing: '0.8px', textTransform: 'uppercase', textDecoration: 'none',
+                    transition: 'background 0.2s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#B08D4E'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#C9A96E'}
+                >
+                  Try the AI Planner <ArrowRight size={15} />
+                </Link>
+              </div>
+            </Reveal>
+            <Reveal delay={0.12}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {[
+                  { step: '01', title: 'Enter your destination', desc: 'Any place in the world — city, region, or country.' },
+                  { step: '02', title: 'Set your travel style', desc: 'Trip length, group type, budget, and travel preferences.' },
+                  { step: '03', title: 'Get your itinerary', desc: 'A day-by-day plan with hotels, experiences, and insider notes.' },
+                ].map((item, i) => (
+                  <div key={i} style={{
+                    padding: '20px 24px',
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: '8px',
+                    display: 'flex', gap: '18px', alignItems: 'flex-start',
+                  }}>
+                    <span style={{
+                      fontFamily: "'Playfair Display', Georgia, serif",
+                      fontSize: '22px', fontWeight: '600',
+                      color: '#2E2922', lineHeight: 1, flexShrink: 0, userSelect: 'none',
+                    }}>
+                      {item.step}
+                    </span>
+                    <div>
+                      <p style={{ fontSize: '14px', fontWeight: '600', color: 'rgba(255,255,255,0.85)', marginBottom: '4px' }}>
+                        {item.title}
+                      </p>
+                      <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.45)', lineHeight: '1.55' }}>
+                        {item.desc}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Reveal>
           </div>
         </div>
       </section>
@@ -1008,7 +1243,10 @@ function ItineraryBigCard({ it }) {
               {it.name}
             </p>
           </div>
-          <div style={{ position: 'absolute', top: '14px', right: '14px', padding: '5px 12px', background: '#C9A96E', borderRadius: '3px', fontSize: '10px', fontWeight: '700', letterSpacing: '0.8px', textTransform: 'uppercase', color: 'white' }}>
+          <div style={{ position: 'absolute', top: '14px', left: '14px', padding: '5px 11px', background: it.price === 0 ? '#1B6B65' : '#C9A96E', borderRadius: '3px', fontSize: '10px', fontWeight: '700', letterSpacing: '0.8px', textTransform: 'uppercase', color: 'white' }}>
+            {it.price === 0 ? 'Free Journey' : `Premium · €${it.price}`}
+          </div>
+          <div style={{ position: 'absolute', top: '14px', right: '14px', padding: '5px 12px', background: 'rgba(28,26,22,0.55)', borderRadius: '3px', fontSize: '10px', fontWeight: '700', letterSpacing: '0.8px', textTransform: 'uppercase', color: 'white', backdropFilter: 'blur(6px)' }}>
             {it.duration}
           </div>
         </div>
@@ -1032,7 +1270,7 @@ function ItineraryBigCard({ it }) {
             paddingTop: '16px', borderTop: '1px solid #F4F1EC',
           }}>
             <span style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '20px', fontWeight: '700', color: '#1C1A16' }}>
-              €{it.price}
+              {it.price === 0 ? 'Free' : `€${it.price}`}
             </span>
             <span style={{
               display: 'flex', alignItems: 'center', gap: '5px',
@@ -1077,9 +1315,14 @@ function ItinerarySmallCard({ it }) {
           />
         </div>
         <div style={{ padding: '16px 18px' }}>
-          <p style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', color: '#C9A96E', marginBottom: '5px' }}>
-            {it.duration}
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '5px' }}>
+            <span style={{ padding: '2px 8px', background: it.price === 0 ? '#EFF6F5' : 'rgba(201,169,110,0.12)', color: it.price === 0 ? '#1B6B65' : '#A0722A', borderRadius: '2px', fontSize: '9px', fontWeight: '700', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
+              {it.price === 0 ? 'Free' : `Premium · €${it.price}`}
+            </span>
+            <span style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', color: '#C9A96E' }}>
+              {it.duration}
+            </span>
+          </div>
           <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '15px', fontWeight: '600', color: '#1C1A16', lineHeight: '1.3', marginBottom: '8px' }}>
             {it.name}
           </p>
@@ -1195,6 +1438,88 @@ function JournalCard({ article }) {
           }}>
             Read article <ArrowRight size={12} />
           </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function CuratedJourneyCard({ journey }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Link
+      to={`/itineraries/${journey.id}`}
+      style={{ textDecoration: 'none', display: 'block', height: '100%' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div style={{
+        borderRadius: '10px', overflow: 'hidden', background: 'white',
+        height: '100%', display: 'flex', flexDirection: 'column',
+        boxShadow: hovered ? '0 20px 60px rgba(28,26,22,0.13)' : '0 4px 24px rgba(28,26,22,0.06)',
+        transition: 'box-shadow 0.35s, transform 0.35s',
+        transform: hovered ? 'translateY(-5px)' : 'none',
+      }}>
+        <div style={{ position: 'relative', paddingTop: '56%', overflow: 'hidden', flexShrink: 0 }}>
+          <img
+            src={journey.image} alt={journey.title}
+            style={{
+              position: 'absolute', inset: 0, width: '100%', height: '100%',
+              objectFit: 'cover',
+              transform: hovered ? 'scale(1.05)' : 'scale(1)',
+              transition: 'transform 0.6s ease',
+            }}
+            loading="lazy"
+          />
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'linear-gradient(to top, rgba(28,26,22,0.4) 0%, transparent 50%)',
+          }} />
+          <span style={{
+            position: 'absolute', top: '14px', left: '14px',
+            padding: '4px 10px', background: '#C9A96E', color: 'white',
+            borderRadius: '3px', fontSize: '10px', fontWeight: '700', letterSpacing: '0.8px',
+            textTransform: 'uppercase',
+          }}>
+            {journey.tag}
+          </span>
+        </div>
+        <div style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
+            {journey.bestFor.map(tag => (
+              <span key={tag} style={{
+                padding: '3px 9px', borderRadius: '20px',
+                fontSize: '11px', fontWeight: '600',
+                background: '#EFF6F5', color: '#1B6B65',
+              }}>
+                {tag}
+              </span>
+            ))}
+            <span style={{
+              padding: '3px 9px', borderRadius: '20px',
+              fontSize: '11px', fontWeight: '600',
+              background: '#F4F1EC', color: '#8C8070',
+            }}>
+              {journey.duration}
+            </span>
+          </div>
+          <h3 style={{
+            fontFamily: "'Playfair Display', Georgia, serif",
+            fontSize: 'clamp(17px, 2vw, 21px)', fontWeight: '600', color: '#1C1A16',
+            lineHeight: '1.3', marginBottom: '10px',
+          }}>
+            {journey.title}
+          </h3>
+          <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.7', flex: 1, marginBottom: '18px' }}>
+            {journey.description}
+          </p>
+          <span style={{
+            display: 'flex', alignItems: 'center', gap: '5px',
+            fontSize: '12px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase',
+            color: hovered ? '#1B6B65' : '#B5AA99', transition: 'color 0.2s',
+          }}>
+            View itinerary <ArrowRight size={12} />
+          </span>
         </div>
       </div>
     </Link>

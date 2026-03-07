@@ -4,6 +4,7 @@ import { Menu, X } from 'lucide-react';
 
 const navLinks = [
   { label: 'Itineraries', href: '/itineraries' },
+  { label: 'AI Planner', href: '/ai-planner' },
   { label: 'Custom Planning', href: '/custom' },
   { label: 'Pricing', href: '/pricing' },
   { label: 'Journal', href: '/journal' },
