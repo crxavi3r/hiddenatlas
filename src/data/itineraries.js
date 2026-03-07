@@ -86,7 +86,7 @@ export const itineraries = [
           "Goa Gajah — the 9th-century cave sanctuary with its carved stone demon entrance",
           "Sidemen Valley — rice paddies, weavers and Mount Agung views without the crowds",
         ],
-        img: "https://images.unsplash.com/photo-1518544801976-3e159e50e5bb?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1704253411849-099f8bff9e4d?w=800&q=80",
       },
       {
         day: 4,
@@ -109,7 +109,7 @@ export const itineraries = [
           "Munduk waterfall — a series of waterfalls through clove and coffee plantations",
           "Handara Golf Gate — the iconic bamboo entrance to the highland golf course",
         ],
-        img: "https://images.unsplash.com/photo-1518544801976-3e159e50e5bb?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1704253411612-e4deb715dcd8?w=800&q=80",
       },
       {
         day: 6,
@@ -121,7 +121,7 @@ export const itineraries = [
           "Broken Beach — a circular cove with a natural rock arch bridge",
           "Crystal Bay — the snorkelling site for manta rays on the island's west side",
         ],
-        img: "https://images.unsplash.com/photo-1518544801976-3e159e50e5bb?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1566987827971-f2c40e748a54?w=800&q=80",
       },
       {
         day: 7,
@@ -364,7 +364,7 @@ export const itineraries = [
           "Polignano a Mare — the clifftop town above the Adriatic sea caves",
           "Lama Monachile cove — the pebble beach below the old town bridge",
         ],
-        img: "https://images.unsplash.com/photo-1580674684081-7617fbf3d745?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1755745360285-0633c972b0fd?w=800&q=80",
       },
       {
         day: 2,
@@ -400,7 +400,7 @@ export const itineraries = [
           "Murgia Plateau viewpoint — for the panorama over the ravine and cave city",
           "Madonna de Idris — the rock-hewn church carved into the Matera cliff face",
         ],
-        img: "https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1528214096798-37891d32174c?w=800&q=80",
       },
     ],
     whySpecial: "Puglia has the density of good things per square kilometre that most of Italy lost to mass tourism twenty years ago. The food is serious without being precious — burrata made that morning, orecchiette with cime di rapa, primitivo from the vineyard you drove past. The towns are genuinely old. And Matera — the cave city across the border — is one of the few places in Europe that remains genuinely astonishing on first sight.",
