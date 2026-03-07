@@ -40,6 +40,7 @@ export default function ItineraryCard({ itinerary, variant = 'default' }) {
                 transform: hovered ? 'scale(1.05)' : 'scale(1)',
               }}
               loading="lazy"
+              onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=800&q=80'; }}
             />
             {/* Gradient */}
             <div style={{
@@ -198,6 +199,7 @@ export default function ItineraryCard({ itinerary, variant = 'default' }) {
               transition: 'transform 0.4s ease',
             }}
             loading="lazy"
+            onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=800&q=80'; }}
           />
         </div>
         <div style={{ padding: '20px 24px' }}>

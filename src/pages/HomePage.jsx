@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, ChevronDown, Star, Check, MapPin, Lock, BookOpen, Compass } from 'lucide-react';
+import { itineraries, journeyImg } from '../data/itineraries';
 
 /* ─── Scroll animation hook ─── */
 function useInView(threshold = 0.1) {
@@ -48,142 +49,34 @@ const T = {
   },
 };
 
-/* ─── Destination data ─── */
-const destinations = [
-  {
-    name: 'Japan',
-    tagline: '18 days of culture, craft and living tradition',
-    image: 'https://images.unsplash.com/photo-06b2oaQPevQ?w=900&q=80',
-    href: '/itineraries/japan-grand-cultural-journey',
-  },
-  {
-    name: 'Philippines',
-    tagline: 'Palawan limestone islands and hidden lagoons',
-    image: 'https://images.unsplash.com/photo-3T9dDY0WqDI?w=900&q=80',
-    href: '/itineraries/philippines-island-journey',
-  },
-  {
-    name: 'Puglia',
-    tagline: 'Trulli, baroque towns and the Adriatic coast',
-    image: 'https://images.unsplash.com/photo-1547394765-185e1e68f34e?w=900&q=80',
-    href: '/itineraries/puglia-road-journey',
-  },
-  {
-    name: 'Budapest',
-    tagline: 'Central Europe\'s most architecturally dramatic city',
-    image: 'https://images.unsplash.com/photo-1541849546-216549ae216d?w=900&q=80',
-    href: '/itineraries/budapest-city-break',
-  },
-  {
-    name: 'Bali',
-    tagline: 'Temples, rice terraces and volcanic island life',
-    image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=900&q=80',
-    href: '/itineraries/bali-island-journey',
-  },
-  {
-    name: 'Northern England',
-    tagline: 'Lake District, Yorkshire Dales and the North Sea coast',
-    image: 'https://images.unsplash.com/photo-j4dD5iLp78Y?w=900&q=80',
-    href: '/itineraries/northern-england-roadtrip',
-  },
-  {
-    name: 'Normandy & Loire',
-    tagline: 'Étretat cliffs, Mont Saint-Michel and Loire Valley châteaux',
-    image: 'https://images.unsplash.com/photo-UV__njnjEK4?w=900&q=80',
-    href: '/itineraries/normandy-brittany-loire',
-  },
-  {
-    name: 'Vienna',
-    tagline: 'Imperial palaces, Ringstrasse grandeur and café culture',
-    image: 'https://images.unsplash.com/photo-ZkQNOEezi6k?w=900&q=80',
-    href: '/itineraries/vienna-imperial-journey',
-  },
-];
+// Destinations derived from itineraries — see itineraries.js
 
-/* ─── Free journeys (homepage featured) ─── */
-const popularItineraries = [
-  {
-    id: 'bali-island-journey',
-    name: 'Bali — 10 Day Island Journey',
-    duration: '10 days',
-    description: 'Uluwatu at sunset, Tegallalang before the crowds, a dawn volcano climb, the offshore drama of Nusa Penida, and east-coast fishing villages that haven\'t changed since the 1970s.',
-    tags: ['Couples', 'Family', 'Nature'],
-    image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=900&q=80',
-    price: 0,
-  },
-  {
-    id: 'budapest-city-break',
-    name: 'Budapest — 3 Day Cultural City Break',
-    duration: '3 days',
-    description: 'Parliament at dusk, Fisherman\'s Bastion before the crowds, Széchenyi baths on a cold morning, and ruin bars after midnight. Central Europe\'s most compelling city.',
-    tags: ['Couples', 'Culture', 'City'],
-    image: 'https://images.unsplash.com/photo-1541849546-216549ae216d?w=900&q=80',
-    price: 0,
-  },
-  {
-    id: 'northern-england-roadtrip',
-    name: 'Northern England — 4 Day Roadtrip',
-    duration: '4 days',
-    description: 'The Yorkshire Dales, Castlerigg Stone Circle at dawn, Ullswater by boat, Whitby Abbey on the cliff, and York at dusk. The England most visitors never reach.',
-    tags: ['Couples', 'Friend Groups', 'Nature'],
-    image: 'https://images.unsplash.com/photo-j4dD5iLp78Y?w=900&q=80',
-    price: 0,
-  },
-  {
-    id: 'puglia-road-journey',
-    name: 'Puglia — 4 Day Southern Italy Road Journey',
-    duration: '4 days',
-    description: 'Bari Vecchia, Polignano a Mare above the sea caves, Ostuni\'s whitewashed hilltop, the trulli of Alberobello, and Matera — the ancient cave city that is unlike anywhere else.',
-    tags: ['Couples', 'Food & Wine', 'Culture'],
-    image: 'https://images.unsplash.com/photo-1547394765-185e1e68f34e?w=900&q=80',
-    price: 0,
-  },
-];
+/* ─── Derived from itineraries data ─── */
+const freeJourneys = itineraries.filter(it => !it.isPremium);
+const premiumJourneys = itineraries.filter(it => it.isPremium);
 
 /* ─── Journal articles ─── */
 const journalArticles = [
   {
     title: 'El Nido — where to stay, what to skip',
     category: 'Destination Guide',
-    image: 'https://images.unsplash.com/photo-3T9dDY0WqDI?w=700&q=80',
+    image: journeyImg('philippines-island-journey', 700),
     excerpt: 'Corong Corong for sunsets, Nacpan for quiet. A neighbourhood-by-neighbourhood breakdown of Palawan\'s most visited town.',
     href: '/journal/el-nido-where-to-stay',
   },
   {
     title: 'The best time to visit Kyoto',
     category: 'Travel Planning',
-    image: 'https://images.unsplash.com/photo-06b2oaQPevQ?w=700&q=80',
+    image: journeyImg('japan-grand-cultural-journey', 700),
     excerpt: 'Cherry blossom, autumn colour, or winter quiet? A month-by-month guide to Kyoto\'s seasons from someone who\'s been in all of them.',
     href: '/journal/best-time-to-visit-kyoto',
   },
   {
     title: 'Puglia by car — the Valle d\'Itria loop',
     category: 'Road Journey',
-    image: 'https://images.unsplash.com/photo-1547394765-185e1e68f34e?w=700&q=80',
+    image: journeyImg('puglia-road-journey', 700),
     excerpt: 'Alberobello, Locorotondo, Cisternino and Martina Franca in two days. The trulli country is better by road and better in the early morning.',
     href: '/journal/puglia-valley-itria-road-trip',
-  },
-];
-
-/* ─── Premium journeys ─── */
-const curatedJourneys = [
-  {
-    id: 'japan-grand-cultural-journey',
-    title: 'Japan — 18 Day Cultural Grand Journey',
-    duration: '18 days',
-    tag: 'Premium · €29',
-    description: "From Tokyo's electric neighbourhoods to Kanazawa's geisha districts, Shirakawa-go's thatched farmhouses, Kyoto at dawn, and a ryokan above the Hakone volcanic landscape.",
-    image: 'https://images.unsplash.com/photo-06b2oaQPevQ?w=800&q=80',
-    bestFor: ['Couples', 'Culture Seekers'],
-  },
-  {
-    id: 'philippines-island-journey',
-    title: 'Philippines — 14 Day Island Journey',
-    duration: '14 days',
-    tag: 'Premium · €29',
-    description: "El Nido's limestone karst towers, Coron's hidden lagoons and WWII shipwrecks, and Boracay's quiet northern shore. The Philippines, planned without compromise.",
-    image: 'https://images.unsplash.com/photo-3T9dDY0WqDI?w=800&q=80',
-    bestFor: ['Couples', 'Family'],
   },
 ];
 
@@ -390,11 +283,11 @@ export default function HomePage() {
             </div>
           </Reveal>
 
-          {/* 3-column top row + 3-column bottom row */}
+          {/* 3-column destination grid — all 8 journeys */}
           <div className="dest-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-            {destinations.map((dest, i) => (
-              <Reveal key={dest.name} delay={i * 0.06} style={{ height: '100%' }}>
-                <DestinationCard dest={dest} />
+            {itineraries.map((it, i) => (
+              <Reveal key={it.id} delay={i * 0.06} style={{ height: '100%' }}>
+                <DestinationCard it={it} />
               </Reveal>
             ))}
           </div>
@@ -475,16 +368,16 @@ export default function HomePage() {
             </div>
           </Reveal>
 
-          {/* Featured large + 3 smaller */}
+          {/* Featured large + 3 smaller — first 4 free journeys */}
           <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'stretch' }}>
             {/* Large featured card */}
             <Reveal delay={0} style={{ height: '100%' }}>
-              <ItineraryBigCard it={popularItineraries[0]} />
+              <ItineraryBigCard it={freeJourneys[0]} />
             </Reveal>
 
             {/* Stack of 3 smaller */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {popularItineraries.slice(1).map((it, i) => (
+              {freeJourneys.slice(1, 4).map((it, i) => (
                 <Reveal key={it.id} delay={i * 0.08 + 0.08} style={{ flex: 1 }}>
                   <ItinerarySmallCard it={it} />
                 </Reveal>
@@ -520,9 +413,9 @@ export default function HomePage() {
           </Reveal>
 
           <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '24px', marginBottom: '48px' }}>
-            {curatedJourneys.map((journey, i) => (
-              <Reveal key={journey.id} delay={i * 0.08}>
-                <CuratedJourneyCard journey={journey} />
+            {premiumJourneys.map((it, i) => (
+              <Reveal key={it.id} delay={i * 0.08}>
+                <CuratedJourneyCard it={it} />
               </Reveal>
             ))}
           </div>
@@ -671,7 +564,7 @@ export default function HomePage() {
             <Reveal delay={0}>
               <div style={{ position: 'relative', background: '#0D3834', height: '100%', minHeight: '540px' }}>
                 <img
-                  src="https://images.unsplash.com/photo-3T9dDY0WqDI?w=900&q=80"
+                  src={journeyImg('philippines-island-journey', 900)}
                   alt="Philippines"
                   style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.35, position: 'absolute', inset: 0 }}
                 />
@@ -1131,11 +1024,11 @@ export default function HomePage() {
    SUB-COMPONENTS
 ════════════════════════════════════════ */
 
-function DestinationCard({ dest }) {
+function DestinationCard({ it }) {
   const [hovered, setHovered] = useState(false);
   return (
     <Link
-      to={dest.href}
+      to={`/itineraries/${it.id}`}
       style={{ textDecoration: 'none', display: 'block', height: '100%' }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -1148,8 +1041,8 @@ function DestinationCard({ dest }) {
         cursor: 'pointer',
       }}>
         <img
-          src={dest.image}
-          alt={dest.name}
+          src={journeyImg(it.id, 900)}
+          alt={it.title}
           style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%',
             objectFit: 'cover',
@@ -1157,6 +1050,7 @@ function DestinationCard({ dest }) {
             transition: 'transform 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
           }}
           loading="lazy"
+          onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = it.image; }}
         />
         {/* Gradient */}
         <div style={{
@@ -1178,7 +1072,7 @@ function DestinationCard({ dest }) {
             fontSize: 'clamp(18px, 2vw, 24px)', fontWeight: '600',
             color: 'white', marginBottom: '5px', letterSpacing: '-0.2px',
           }}>
-            {dest.name}
+            {it.title}
           </p>
           <p style={{
             fontSize: '12px', color: 'rgba(255,255,255,0.72)',
@@ -1186,7 +1080,7 @@ function DestinationCard({ dest }) {
             opacity: hovered ? 1 : 0.75,
             transition: 'opacity 0.3s',
           }}>
-            {dest.tagline}
+            {it.tagline}
           </p>
         </div>
         {/* Arrow on hover */}
@@ -1226,7 +1120,7 @@ function ItineraryBigCard({ it }) {
       }}>
         <div style={{ position: 'relative', paddingTop: '58%', overflow: 'hidden', flexShrink: 0 }}>
           <img
-            src={it.image} alt={it.name}
+            src={it.image} alt={it.title}
             style={{
               position: 'absolute', inset: 0, width: '100%', height: '100%',
               objectFit: 'cover',
@@ -1240,7 +1134,7 @@ function ItineraryBigCard({ it }) {
           }} />
           <div style={{ position: 'absolute', bottom: '16px', left: '18px' }}>
             <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 'clamp(16px, 2vw, 22px)', fontWeight: '600', color: 'white', lineHeight: '1.25' }}>
-              {it.name}
+              {it.title}
             </p>
           </div>
           <div style={{ position: 'absolute', top: '14px', left: '14px', padding: '5px 11px', background: it.price === 0 ? '#1B6B65' : '#C9A96E', borderRadius: '3px', fontSize: '10px', fontWeight: '700', letterSpacing: '0.8px', textTransform: 'uppercase', color: 'white' }}>
@@ -1252,10 +1146,10 @@ function ItineraryBigCard({ it }) {
         </div>
         <div style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
           <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.7', marginBottom: '18px', flex: 1 }}>
-            {it.description}
+            {it.shortDescription}
           </p>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' }}>
-            {it.tags.map(tag => (
+            {it.bestFor.map(tag => (
               <span key={tag} style={{
                 padding: '3px 10px', borderRadius: '20px',
                 fontSize: '11px', fontWeight: '600',
@@ -1305,7 +1199,7 @@ function ItinerarySmallCard({ it }) {
       }}>
         <div style={{ position: 'relative', overflow: 'hidden', minHeight: '110px' }}>
           <img
-            src={it.image} alt={it.name}
+            src={it.image} alt={it.title}
             style={{
               position: 'absolute', inset: 0, width: '100%', height: '100%',
               objectFit: 'cover',
@@ -1324,10 +1218,10 @@ function ItinerarySmallCard({ it }) {
             </span>
           </div>
           <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '15px', fontWeight: '600', color: '#1C1A16', lineHeight: '1.3', marginBottom: '8px' }}>
-            {it.name}
+            {it.title} — {it.subtitle}
           </p>
           <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '10px' }}>
-            {it.tags.slice(0, 2).map(tag => (
+            {it.bestFor.slice(0, 2).map(tag => (
               <span key={tag} style={{
                 padding: '2px 8px', borderRadius: '20px',
                 fontSize: '10px', fontWeight: '600',
@@ -1444,11 +1338,12 @@ function JournalCard({ article }) {
   );
 }
 
-function CuratedJourneyCard({ journey }) {
+function CuratedJourneyCard({ it }) {
   const [hovered, setHovered] = useState(false);
+  const badgeLabel = it.isPremium ? `Premium · €${it.price}` : 'Free Journey';
   return (
     <Link
-      to={`/itineraries/${journey.id}`}
+      to={`/itineraries/${it.id}`}
       style={{ textDecoration: 'none', display: 'block', height: '100%' }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -1462,7 +1357,7 @@ function CuratedJourneyCard({ journey }) {
       }}>
         <div style={{ position: 'relative', paddingTop: '56%', overflow: 'hidden', flexShrink: 0 }}>
           <img
-            src={journey.image} alt={journey.title}
+            src={it.image} alt={it.title}
             style={{
               position: 'absolute', inset: 0, width: '100%', height: '100%',
               objectFit: 'cover',
@@ -1470,6 +1365,7 @@ function CuratedJourneyCard({ journey }) {
               transition: 'transform 0.6s ease',
             }}
             loading="lazy"
+            onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = it.coverImage; }}
           />
           <div style={{
             position: 'absolute', inset: 0,
@@ -1477,16 +1373,16 @@ function CuratedJourneyCard({ journey }) {
           }} />
           <span style={{
             position: 'absolute', top: '14px', left: '14px',
-            padding: '4px 10px', background: '#C9A96E', color: 'white',
+            padding: '4px 10px', background: it.isPremium ? '#C9A96E' : '#1B6B65', color: 'white',
             borderRadius: '3px', fontSize: '10px', fontWeight: '700', letterSpacing: '0.8px',
             textTransform: 'uppercase',
           }}>
-            {journey.tag}
+            {badgeLabel}
           </span>
         </div>
         <div style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
-            {journey.bestFor.map(tag => (
+            {it.bestFor.map(tag => (
               <span key={tag} style={{
                 padding: '3px 9px', borderRadius: '20px',
                 fontSize: '11px', fontWeight: '600',
@@ -1500,7 +1396,7 @@ function CuratedJourneyCard({ journey }) {
               fontSize: '11px', fontWeight: '600',
               background: '#F4F1EC', color: '#8C8070',
             }}>
-              {journey.duration}
+              {it.duration}
             </span>
           </div>
           <h3 style={{
@@ -1508,10 +1404,10 @@ function CuratedJourneyCard({ journey }) {
             fontSize: 'clamp(17px, 2vw, 21px)', fontWeight: '600', color: '#1C1A16',
             lineHeight: '1.3', marginBottom: '10px',
           }}>
-            {journey.title}
+            {it.title} — {it.subtitle}
           </h3>
           <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.7', flex: 1, marginBottom: '18px' }}>
-            {journey.description}
+            {it.shortDescription}
           </p>
           <span style={{
             display: 'flex', alignItems: 'center', gap: '5px',
