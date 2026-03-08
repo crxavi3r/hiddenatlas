@@ -10,6 +10,7 @@ export const journeyImages = {
   'vienna-imperial-journey':      '1663214957746-2da10a9f4b2b',
   'albania-riviera-mountains':    '1677426240101-4b133cef0039', // Komani Lake fjord
   'bali-island-journey':          '1537996194471-e657df975ab4',
+  'brazil-coastal-journey':       '1515700281303-5a0a73d9c584', // Sugarloaf / Rio bay
   'japan-grand-cultural-journey': '1570692890937-f60db72ac6b4',
   'philippines-island-journey':   '1531761535209-180857e963b9',
 };
@@ -25,6 +26,7 @@ export const itineraries = [
   /* ─────────────────────────────────────────
      FREE JOURNEYS
   ───────────────────────────────────────── */
+
 
   {
     id: "bali-island-journey",
@@ -351,6 +353,195 @@ export const itineraries = [
     ],
     whySpecial: "Albania is what the Mediterranean coast looked like twenty years ago before the money arrived. The Riviera has the water quality and clarity of the Maldives without the infrastructure. Gjirokastër and Berat are UNESCO cities that still feel like working towns rather than open-air museums. And the Albanian Alps — Valbonë, Theth, the Accursed Mountains — are world-class mountain country that almost no one outside the region has heard of. The combination of Ionian coast, Ottoman architecture and Balkan alpine landscape in ten days is not available anywhere else.",
     routeOverview: "Tirana → Llogara Pass → Himarë → Jala Beach → Qeparo → Borsh → Porto Palermo → Ksamil Islands → Butrint → Gjirokastër → Berat → Shkodër → Komani Lake ferry → Valbonë → Valbona Pass → Theth",
+  },
+
+  {
+    id: "brazil-coastal-journey",
+    title: "Brazil",
+    subtitle: "12 Day Coastal Journey",
+    tagline: "Rio, Búzios and Angra — where the mountains meet the sea",
+    shortDescription: "Copacabana and Christ the Redeemer are the famous surface. Beneath it: sailing to deserted coves off Búzios, island-hopping in Angra dos Reis, and the art-lined stairways of Santa Teresa that Rio keeps for itself.",
+    country: "Brazil",
+    region: "Rio de Janeiro State",
+    duration: "12 days",
+    groupSize: "2–6 people",
+    price: 0,
+    isPremium: false,
+    tag: "Free Journey",
+    category: "Coastal Journey",
+    bestFor: ["Couples", "Friend Groups", "Adventurers"],
+    difficulty: "Easy to Moderate",
+    image: journeyImg('brazil-coastal-journey', 800),
+    coverImage: journeyImg('brazil-coastal-journey', 1600),
+    description: "Rio de Janeiro is one of the world's great cities but it is not the whole story. Drive two hours east along the Costa do Sol and you reach Búzios — a rocky peninsula of 23 beaches and an atmosphere that Brigitte Bardot made famous in the 1960s and the Atlantic Ocean has preserved since. Drive two hours west and Angra dos Reis opens into the largest bay on Brazil's coast, its 365 islands accessible only by boat. This twelve-day route moves through all three worlds: city, coast and island, in an order that builds rather than repeats.",
+    highlights: [
+      "Arraial do Cabo — Brazil's most transparently blue water, on the road to Búzios",
+      "Búzios — 23 beaches, a cobblestone pedestrian street, and sailing to hidden coves",
+      "Sugarloaf Mountain — the cable car to the 396-metre granite peak above Guanabara Bay",
+      "Christ the Redeemer — the 38-metre Art Deco statue above the Tijuca forest at 710 metres",
+      "Ilha Grande — a car-free island of Atlantic rainforest and crescent beaches",
+      "Selarón Steps — Jorge Selarón's 250-step mosaic stairway in the Santa Teresa neighbourhood",
+    ],
+    days: [
+      {
+        day: 1,
+        title: "Rio de Janeiro — Arrival & Ipanema",
+        desc: "Arrive at Galeão International Airport, transfer to Ipanema. The afternoon is free for orientation: the famous beachfront boulevard between Ipanema and Leblon, the neighbourhood's tree-lined streets, and the local beach culture that is unlike anything else in South America. Sunset at Arpoador Rock — the granite headland at the east end of Ipanema where the whole beach falls silent to watch the sun drop behind the Dois Irmãos peaks.",
+        bullets: [
+          "Ipanema Beach — the 2.9-kilometre arc of beach between the Dois Irmãos mountains and Leblon",
+          "Arpoador Rock — the sunset viewpoint where cariocas gather every evening without fail",
+          "Rua Garcia d'Ávila — Ipanema's main shopping and café street one block from the beach",
+          "Lagoa Rodrigo de Freitas — the lagoon behind Ipanema, rented paddle boards at dusk",
+        ],
+        img: "https://images.unsplash.com/photo-1700674027760-c815d6078688?w=800&q=80",
+        tip: "Arpoador sunset draws a crowd — arrive fifteen minutes early and position yourself on the flat rock at the point, not on the steps behind. When the sun touches the horizon, the entire crowd applauds. It is one of those rituals that is not on any tourist map but is repeated every evening without fail.",
+      },
+      {
+        day: 2,
+        title: "Arraial do Cabo — Brazil's Blue Water, En Route to Búzios",
+        desc: "Depart early for the Costa do Sol highway east. Stop at Arraial do Cabo — a small fishing town often described as the 'Brazilian Caribbean' for the luminous blue-green transparency of its water. The cold Falkland Current meets the warm tropical Atlantic here, producing water clarity that is genuinely extraordinary. Praia do Forno is accessible only on foot through the dunes; Gruta Azul is a sea cave reached by boat. Continue 30 minutes to Búzios for the night.",
+        bullets: [
+          "Arraial do Cabo — the meeting point of two ocean currents, producing the clearest water on Brazil's Atlantic coast",
+          "Praia do Forno — the secluded beach requiring a 20-minute walk through dune formations",
+          "Gruta Azul — a sea cave where light refracts through the entrance to illuminate the interior blue",
+          "Búzios peninsula — the rocky promontory extending 8 kilometres into the Atlantic, with 23 beaches",
+        ],
+        img: "https://images.unsplash.com/photo-1700705301404-67a3d13614dc?w=800&q=80",
+        tip: "Arraial do Cabo's boat tours to the Gruta Azul depart from the marina from 8am. The cave's light effect is best between 10am and noon when sunlight enters the entrance at the right angle. If the sky is overcast, the effect disappears — check the forecast.",
+      },
+      {
+        day: 3,
+        title: "Búzios — The 23 Beaches",
+        desc: "A full day on the Búzios peninsula. The eastern beaches face the open Atlantic and have surf and wind: Praia Brava, Praia João Fernandes. The sheltered western beaches face the bay and are calm, warm, and transparent. Ferradura is the most dramatically beautiful of the protected beaches — a horseshoe bay with still water and cliffs on three sides. The cobblestone Rua das Pedras is the pedestrian restaurant and bar street; walk it in the afternoon as the light turns golden on the bay.",
+        bullets: [
+          "Praia Ferradura — the horseshoe-shaped bay on the protected western side of the peninsula",
+          "Praia João Fernandes — the eastern beach with clearer water and a snorkelling reef",
+          "Rua das Pedras — the 600-metre cobblestone pedestrian street facing Orla Bardot bay",
+          "Brigitte Bardot statue — the bronze cast on Orla Bardot, marking where she first visited in 1964",
+        ],
+        img: "https://images.unsplash.com/photo-1764864774686-75d668deb934?w=800&q=80",
+        tip: "The eastern Atlantic-facing beaches are beautiful but the current is strong — swim between the flags only and do not attempt to snorkel outside the marked reef areas. The western beaches are safe for everyone. Rua das Pedras restaurants fill completely by 8pm — book ahead or eat before 7pm.",
+      },
+      {
+        day: 4,
+        title: "Búzios — Sailing Day & Hidden Coves",
+        desc: "A full-day catamaran or schooner tour around the peninsula is the defining experience of Búzios. The boats depart from Orla Bardot at 9am and move through 6–8 beaches, stopping for swimming and snorkelling at each. The east-side coves — Praia do Forno (the local one, not Arraial's), Azeda, Azedinha — are inaccessible by road and look entirely different from the water. Lunch is served on board. Return by 5pm.",
+        bullets: [
+          "Praia Azeda and Azedinha — twin coves inaccessible by road, with snorkelling coral",
+          "Praia Tartaruga — the turtle beach, a protected nesting site on the northern coast",
+          "Ostras Beach (Praia das Ostras) — the sheltered bay where the boat anchors for lunch",
+          "Ilha Rasa — the uninhabited island two nautical miles offshore from the peninsula",
+        ],
+        img: "https://images.unsplash.com/photo-1760465789348-737d6c11ca95?w=800&q=80",
+        tip: "Book the boat tour through your pousada the evening before — the reputable operators fill up fast in high season (December–February) and the cheaper alternatives cut the route short. A full-day tour costs R$120–R$180 per person and includes snorkelling equipment, fruit and a caipirinha. Anti-nausea medication is advisable if the swell is above one metre.",
+      },
+      {
+        day: 5,
+        title: "Return to Rio — Copacabana & the Bay",
+        desc: "Drive back to Rio de Janeiro. Check in to Copacabana or Flamengo — the old Zona Sul hotels that face the bay directly. Afternoon walk the Copacabana promenade: the black-and-white wave mosaic, the beach volleyball courts, the kiosks serving coconut water. Evening at a churrasqueira in Botafogo or a kilo restaurant in Flamengo — the local format where you pay by weight and the cuts rotate all night.",
+        bullets: [
+          "Copacabana Beach — the 4.7-kilometre crescent beach below the classic Rio skyline",
+          "Copacabana Forte — the 19th-century fort at the south end of the beach, with a panorama café",
+          "Botafogo Praia Shopping — the rooftop food hall with direct Sugarloaf views at sunset",
+          "Flamengo Park — Roberto Burle Marx's 1.2-kilometre waterfront park along Guanabara Bay",
+        ],
+        img: "https://images.unsplash.com/photo-1763110805060-80dbead1f9d3?w=800&q=80",
+        tip: "The kilo restaurant format (rodízio de pratos quentes) is the best value eating in Rio — choose a restaurant on a back street in Flamengo or Catete rather than the Copacabana seafront, where the same format costs twice as much for the same food. Ask your hotel for the nearest neighbourhood option.",
+      },
+      {
+        day: 6,
+        title: "Rio Icons — Sugarloaf & Christ the Redeemer",
+        desc: "The two great viewpoints, on the same day. Sugarloaf first: the cable car departs from Praia Vermelha and rises in two stages to the 396-metre summit above Guanabara Bay. The city spreads below in every direction. Then Corcovado: either the rack railway from Cosme Velho or the van service through Tijuca Forest to the 710-metre peak where Christ the Redeemer stands. The 360-degree view from the base of the statue — Guanabara Bay, Copacabana, the Atlantic, the Serra do Mar — is the context for everything else.",
+        bullets: [
+          "Sugarloaf Mountain (Pão de Açúcar) — the 396-metre granite monolith at the mouth of Guanabara Bay",
+          "Christ the Redeemer (Cristo Redentor) — the 38-metre Art Deco statue completed in 1931",
+          "Corcovado rack railway — the 3.8-kilometre narrow-gauge railway through Atlantic rainforest",
+          "Tijuca National Forest — the world's largest urban tropical rainforest, 32 square kilometres",
+        ],
+        img: "https://images.unsplash.com/photo-1772603503638-74ca65f96589?w=800&q=80",
+        tip: "Visit Sugarloaf at sunset and Christ the Redeemer in the morning — the light direction works in your favour at both. Book Christ the Redeemer tickets online at least 48 hours ahead; the queue without a ticket in high season can exceed two hours. If cloud is forecast above 700 metres, swap the days — Christ in cloud is just wind and wet steps.",
+      },
+      {
+        day: 7,
+        title: "Drive to Angra dos Reis — Arrival by Catamaran",
+        desc: "Take the BR-101 coast road west toward Angra dos Reis — two and a half hours from Rio along a spectacular stretch of the Serra do Mar dropping toward the sea. Angra is the gateway to the Baía de Ilha Grande, a UNESCO-listed bay containing 365 islands of Atlantic forest. Afternoon catamaran cruise around the inner bay: the first islands and coves, timed to arrive at Praia do Dentista for the late afternoon light on the water.",
+        bullets: [
+          "BR-101 coastal highway — the mountain coastal road between Rio and Angra, with ocean viewpoints",
+          "Angra dos Reis — the 16th-century port town at the head of the Bay of Ilha Grande",
+          "Baía de Ilha Grande — the UNESCO-protected bay containing 365 islands of Atlantic rainforest",
+          "Praia do Dentista — a calm, sheltered inner bay beach accessible only by boat",
+        ],
+        img: "https://images.unsplash.com/photo-1612199585811-9ae83eac87a1?w=800&q=80",
+        tip: "The BR-101 between Rio and Angra has several genuinely spectacular viewpoints — stop at Mirante do Gato on the Serra Brava stretch, a 180-degree view over the coast from 400 metres. The drive takes 2.5 hours without stops; allow 4 hours with photography breaks. Afternoon catamaran tours from Angra marina operate until 6pm.",
+      },
+      {
+        day: 8,
+        title: "Ilha Grande — Atlantic Rainforest & Lopes Mendes",
+        desc: "Day trip to Ilha Grande — the largest island in the bay, a car-free reserve of Atlantic rainforest with 102 beaches. The main village Vila do Abraão is reached by ferry from Angra in 90 minutes. From there, trails fan out through the forest: the main route south to Lopes Mendes, consistently rated among the top ten beaches in Brazil — a 3.5-kilometre arc of white sand and heavy Atlantic surf completely without any infrastructure beyond a path through the trees.",
+        bullets: [
+          "Ilha Grande — a car-free island with no roads, 102 beaches and 193 km² of Atlantic rainforest",
+          "Lopes Mendes — the 3.5-kilometre surf beach reached by a 7-kilometre rainforest trail",
+          "Vila do Abraão — the only village on the island, with guesthouses, kayak rental and boat taxis",
+          "Lagoa Azul — the blue lagoon in the north of the island, accessible only by boat",
+        ],
+        img: "https://images.unsplash.com/photo-1758135005258-cc749c2578df?w=800&q=80",
+        tip: "The Lopes Mendes trail is 7 kilometres each way — start by 8am to arrive before the day-trip crowds and have the beach to yourself in the morning. Bring all water with you (2+ litres) as there is nothing on the trail and the beach has no facilities. The last ferry back to Abraão leaves Lopes Mendes beach by 5pm.",
+      },
+      {
+        day: 9,
+        title: "Angra dos Reis — Island Hopping & Secluded Anchorages",
+        desc: "Private or shared boat day through the outer islands of the bay. The 365 islands of Angra range from small rocky outcrops to forested islands with hidden beaches. Ilha Cataguases has the clearest snorkelling water in the bay. Ilha da Gipóia is the largest inhabited island and has a restaurant under mango trees on the beach. Ilha Jorge Grego is the smallest — a single palm tree on a circle of rock — and has appeared in advertising for the bay since the 1990s.",
+        bullets: [
+          "Ilha Cataguases — the inner-bay island with the most transparent water for snorkelling",
+          "Ilha da Gipóia — the inhabited island with a beachside restaurant under mango trees",
+          "Ilha Jorge Grego — the iconic single-palm island at the entrance to the inner bay",
+          "Praia do Bananal — a sheltered arc of sand on the mainland side, used as a lunch anchorage",
+        ],
+        img: "https://images.unsplash.com/photo-1612199585811-9ae83eac87a1?w=800&q=80",
+        tip: "Shared schooner tours from Angra marina cost R$80–R$120 per person and cover 5–6 stops in a day. Private boat hire is R$600–R$900 for the whole vessel and allows you to set the route and timing. If you have a group of 6 or more, the private option works out the same price and the experience is entirely different — no schedule, no crowds.",
+      },
+      {
+        day: 10,
+        title: "Return to Rio — Flamengo & the Bay Views",
+        desc: "Drive back to Rio along the coast. Check in to the Flamengo or Gloria neighbourhood — the old waterfront zone facing directly onto Guanabara Bay with Sugarloaf framed at the end of the inlet. Afternoon walk the Aterro do Flamengo, Burle Marx's great linear park on reclaimed land beside the bay. Evening in Lapa: the colonial neighbourhood around the Arcos da Lapa aqueduct, which becomes a street party on weekend nights.",
+        bullets: [
+          "Aterro do Flamengo — Roberto Burle Marx's 1.2-kilometre waterfront park, now a linear leisure space",
+          "Arcos da Lapa — the 18th-century Roman-arched aqueduct converted to a tramway viaduct",
+          "Lapa neighbourhood — Rio's bohemian quarter, with live samba and forró on weekend nights",
+          "Gloria Church (Nossa Senhora da Gloria do Outeiro) — the 18th-century hilltop church above the bay",
+        ],
+        img: "https://images.unsplash.com/photo-1515700281303-5a0a73d9c584?w=800&q=80",
+        tip: "Lapa's street party (the Arcos area on Friday and Saturday nights) is entirely outdoors and goes until 4am. The streets around the arches become a continuous samba venue — no tickets, no queue, just pay for your chopp (draught beer) as you walk. It is one of Rio's authentic experiences that tourists rarely encounter.",
+      },
+      {
+        day: 11,
+        title: "Historic Rio — Santa Teresa & the Selarón Steps",
+        desc: "Santa Teresa: the hilltop bohemian neighbourhood above Lapa, reached by the last working tram in Rio (the Santa Teresa Bonde). Cobbled streets, colonial mansions converted to art studios, views across the entire city. The neighbourhood resisted demolition in the 1970s and retains an organic texture that the rest of Rio's Centro has lost. Then the Selarón Steps: Chilean artist Jorge Selarón's 250-step mosaic stairway connecting Lapa to Santa Teresa, covered in 2,000 tiles from 60 countries — his life's work, completed in 2013.",
+        bullets: [
+          "Santa Teresa Bonde — the historic tram connecting Lapa to the hillside neighbourhood above",
+          "Selarón Steps (Escadaria Selarón) — Jorge Selarón's 250-step mosaic stairway, a continuous artwork",
+          "Chácara do Céu Museum — a private villa museum with Matisse, Miró and Portinari collections",
+          "Bar do Gomez — the 1927 grocery-bar in Santa Teresa's main square, unchanged in a century",
+        ],
+        img: "https://images.unsplash.com/photo-1626568941852-70bc179e493e?w=800&q=80",
+        tip: "The Selarón Steps are best photographed in the first hour after sunrise — the morning light hits the mosaic from the east and the steps are empty. By 9am, photo-tour groups arrive and remain until evening. Jorge Selarón himself stated that the work would only be finished on his death — he died on the steps in 2013.",
+      },
+      {
+        day: 12,
+        title: "Final Morning — Ipanema Last Swim & Departure",
+        desc: "A final morning swim at Ipanema before departure. The beach before 8am belongs to the cariocas — the early runners, the open-water swimmers, the old men playing altinha with a football above the surf. This is the Rio that doesn't photograph well but stays longest. Açaí breakfast at a juice bar on Rua Visconde de Pirajá. Transfer to Galeão or Santos Dumont airport for onward flights.",
+        bullets: [
+          "Ipanema at dawn — the beach before the tourists arrive, used by locals for training and swimming",
+          "Rua Visconde de Pirajá — the main commercial street of Ipanema, with juice and açaí bars",
+          "Santos Dumont Airport — the domestic airport 10 minutes from Centro, for flights to São Paulo and beyond",
+          "Galeão International Airport — 40 minutes from Ipanema by Uber; allow 3 hours before departure",
+        ],
+        img: "https://images.unsplash.com/photo-1700674027760-c815d6078688?w=800&q=80",
+        tip: "Rio traffic to Galeão can be unpredictable — always book an Uber or taxi 3.5 hours before an international departure, not 2.5. The bridge to the airport crosses Guanabara Bay and is subject to delays. Santos Dumont is significantly faster to reach but handles domestic flights only.",
+      },
+    ],
+    whySpecial: "Brazil's coast between Rio and Búzios is where the Tropical Atlantic does what it does nowhere else: warm turquoise water over white sand with the Serra do Mar as a green backdrop. Búzios has the reputation but Arraial do Cabo has the best water. Angra dos Reis has 365 islands and most visitors see two. Ilha Grande is car-free and 95% undisturbed forest with the kind of beaches that take two hours of walking through rainforest to reach. And Rio itself — underneath the stadiums and the statistics — is a city of extraordinary urban texture. Santa Teresa still has art studios in 19th-century villas. Lapa still has samba in the street on Friday nights. The combination of world-class beaches, Atlantic island wilderness and one of the planet's great cities in twelve days is available nowhere else on earth.",
+    routeOverview: "Rio de Janeiro → Arraial do Cabo → Búzios → Búzios boat day → Rio → Sugarloaf → Christ the Redeemer → Angra dos Reis → Ilha Grande → Angra islands → Lapa → Santa Teresa → Rio",
   },
 
   /* ─────────────────────────────────────────
