@@ -3,12 +3,12 @@
    All image URLs are derived from this map.
    ───────────────────────────────────────── */
 export const journeyImages = {
-  'northern-england-roadtrip':    '1586861223840-7802dfaf65fc',
+  'northern-england-roadtrip':    '1757788752453-c37a900f22e6', // Whitby Abbey silhouette
   'budapest-city-break':          '1541849546-216549ae216d',
-  'normandy-brittany-loire':      '1432059964050-d4eba2ef368a',
-  'puglia-road-journey':          '1747328085813-ce9e5a889e1c',
+  'normandy-brittany-loire':      '1531250552633-528fe896fdd4', // Mont-Saint-Michel golden hour
+  'puglia-road-journey':          '1658411820124-93bddab6970f', // Alberobello trulli rooftops
   'vienna-imperial-journey':      '1663214957746-2da10a9f4b2b',
-  'albania-riviera-mountains':     '1738675326350-aff65cc55000',
+  'albania-riviera-mountains':    '1677426240101-4b133cef0039', // Komani Lake fjord
   'bali-island-journey':          '1537996194471-e657df975ab4',
   'japan-grand-cultural-journey': '1570692890937-f60db72ac6b4',
   'philippines-island-journey':   '1531761535209-180857e963b9',
