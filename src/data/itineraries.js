@@ -65,6 +65,7 @@ export const itineraries = [
           "Bingin Beach — the tiered clifftop warung cafés above the surf break",
         ],
         img: "https://images.unsplash.com/photo-1576019206484-54273acdfa89?w=800&q=80",
+        tip: "Arrive at Uluwatu no later than one hour before sunset to secure a cliff-facing seat for the Kecak performance. The car park fills from 4pm. From Seminyak, the drive south takes 45 minutes in traffic — add thirty minutes buffer.",
       },
       {
         day: 2,
@@ -77,6 +78,7 @@ export const itineraries = [
           "Ubud Art Market — the covered market for textiles, carvings and silver work",
         ],
         img: "https://images.unsplash.com/photo-1576796225952-44192ed176ad?w=800&q=80",
+        tip: "Tegallalang must be visited before 9am — the selfie poles and hawkers arrive with the first tour buses and stay all day. The Sacred Monkey Forest closes at 6pm; monkeys are most active in the morning when food is distributed.",
       },
       {
         day: 3,
@@ -88,6 +90,7 @@ export const itineraries = [
           "Sidemen Valley — rice paddies, weavers and Mount Agung views without the crowds",
         ],
         img: "https://images.unsplash.com/photo-1704253411849-099f8bff9e4d?w=800&q=80",
+        tip: "Tirta Empul is an active Hindu ritual — dress appropriately (sarong and sash provided at the gate), move quietly around the pools, and do not photograph worshippers without permission. The ceremony is most vivid between 7am and 9am.",
       },
       {
         day: 4,
@@ -99,6 +102,7 @@ export const itineraries = [
           "Kintamani viewpoint — the ridge town overlooking the volcano and crater lake",
         ],
         img: "https://images.unsplash.com/photo-1532186651327-6ac23687d189?w=800&q=80",
+        tip: "The 3am departure is non-negotiable — later starts miss the summit sunrise entirely. Arrange your guide through your accommodation, not at the car park. Temperatures at the crater rim drop to single figures before dawn; bring a wind layer.",
       },
       {
         day: 5,
@@ -111,6 +115,7 @@ export const itineraries = [
           "Handara Golf Gate — the iconic bamboo entrance to the highland golf course",
         ],
         img: "https://images.unsplash.com/photo-1704253411612-e4deb715dcd8?w=800&q=80",
+        tip: "Ulun Danu Beratan is surrounded by mist until around 10am — this is not a reason to avoid it but a reason to arrive early. The mist is part of the atmosphere. The Handara Golf Gate selfie spot has a formal queue and a small fee; arrive before 8am to skip both.",
       },
       {
         day: 6,
@@ -123,6 +128,7 @@ export const itineraries = [
           "Crystal Bay — the snorkelling site for manta rays on the island's west side",
         ],
         img: "https://images.unsplash.com/photo-1566987827971-f2c40e748a54?w=800&q=80",
+        tip: "Fast boats from Sanur depart between 8am and 9am — book the day before through your accommodation. Kelingking's cliff viewpoint is accessible to everyone; the beach below requires a steep 30-minute descent on rope and is for the fit only. Bring cash: the island has very few ATMs.",
       },
       {
         day: 7,
@@ -134,6 +140,7 @@ export const itineraries = [
           "Mount Agung — Bali's highest peak and holiest volcano, visible from the coast road",
         ],
         img: null,
+        tip: "The USS Liberty wreck at Tulamben is accessible to snorkellers — the deck sits at 5 metres. Equipment hire is available from every shop on the Tulamben beach strip. Dawn is the quietest time; by 9am the site has a dozen boats moored above it.",
       },
       {
         day: 8,
@@ -145,6 +152,7 @@ export const itineraries = [
           "Echo Beach — the most photogenic of the Canggu beaches at dusk",
         ],
         img: "https://images.unsplash.com/photo-1555865138-193ba536d7e0?w=800&q=80",
+        tip: "Tanah Lot is a sunset destination only — arrive 45 minutes before sunset and stay through the tide. Canggu's morning beach scene is best before noon; the cafés and surf breaks fill steadily from 1pm onwards.",
       },
       {
         day: 9,
@@ -156,6 +164,7 @@ export const itineraries = [
           "Traditional Balinese massage — the four-hand technique with coconut and frangipani oil",
         ],
         img: "https://images.unsplash.com/photo-1484994223141-cd796f3c3c14?w=800&q=80",
+        tip: "The best traditional Balinese massage in Seminyak is in the small parlours on side streets off Jalan Petitenget, not the hotel spas. A two-hour treatment costs a fraction of the hotel rate and is technically identical.",
       },
       {
         day: 10,
@@ -166,6 +175,7 @@ export const itineraries = [
           "Ngurah Rai International Airport — 20 minutes from Jimbaran, 45 from Seminyak",
         ],
         img: null,
+        tip: "The Jimbaran seafood restaurants are quietest at noon, when the fishing boats are still in the bay. Sunset draws the crowds. Most restaurants serve on the sand — bring shoes you can easily remove.",
       },
     ],
     whySpecial: "Bali is one of the most visited islands in the world, which makes it easy to visit it badly. This route is structured around the version of Bali that exists between the obvious stops: the highland temples at dawn before the coaches arrive, the offshore island that most visitors skip, the east coast fishing villages that haven't changed their shape since the 1970s. The structure gives you everything the island is famous for while sidestepping the version of it that Instagram built.",
@@ -219,6 +229,7 @@ export const itineraries = [
           "Blloku — the former communist elite quarter, now Tirana's café and nightlife district",
         ],
         img: "https://images.unsplash.com/photo-1705174315361-a1ee617a3d5b?w=800&q=80",
+        tip: "The New Bazar is most alive in the morning — arrive before 10am for the best produce and coffee. Blloku comes alive in the evening; locals eat dinner at 9pm or later. Raki, the Albanian grape spirit, is offered everywhere — it is genuinely good and genuinely strong.",
       },
       {
         day: 2,
@@ -231,6 +242,7 @@ export const itineraries = [
           "Himarë Venetian Castle — the medieval fortress above the old Greek minority village",
         ],
         img: "https://images.unsplash.com/photo-1738675326350-aff65cc55000?w=800&q=80",
+        tip: "The pass road can be closed after heavy rain — check conditions before driving. The descent from the pass is one of the great drives in the Mediterranean but requires full concentration; stop at designated lay-bys rather than photographing while driving. Himarë has limited accommodation — book ahead.",
       },
       {
         day: 3,
@@ -243,6 +255,7 @@ export const itineraries = [
           "Coast road — the Albanian Riviera coastal highway rivals the Amalfi and Corniche",
         ],
         img: "https://images.unsplash.com/photo-1738675326350-aff65cc55000?w=800&q=80",
+        tip: "The Riviera coast road has no barriers and steep drops — drive slowly and stop at designated viewpoints. Jala Beach access road is rough and requires clearance; the last 400 metres is best walked. Water shoes are useful on the pebble beaches.",
       },
       {
         day: 4,
@@ -255,6 +268,7 @@ export const itineraries = [
           "Porto Palermo — the triangular fortress built by Ali Pasha of Ioannina on a sea peninsula",
         ],
         img: "https://images.unsplash.com/photo-1738247122284-46d2b810174f?w=800&q=80",
+        tip: "Porto Palermo fortress is free to enter but has irregular opening hours — check the gate before making the detour. The Borsh Castle walk is unmarked; ask a local in the village for the path. Riviera heat peaks between noon and 3pm — plan swimming stops around this window.",
       },
       {
         day: 5,
@@ -267,6 +281,7 @@ export const itineraries = [
           "Butrint lagoon — the wetland ecosystem surrounding the archaeological site",
         ],
         img: "https://images.unsplash.com/photo-1529776554120-56027bd36834?w=800&q=80",
+        tip: "Ksamil Islands are accessed by pedal boat or a 5-minute swim — the water is shallow and safe. Butrint gets crowded from 11am; arrive at opening time (9am) and work backwards through the site. The paths are uneven archaeological ground — wear proper footwear, not sandals.",
       },
       {
         day: 6,
@@ -279,6 +294,7 @@ export const itineraries = [
           "Ethnographic Museum — Enver Hoxha's birthplace, now a museum of Albanian domestic life",
         ],
         img: "https://images.unsplash.com/photo-1742302928037-3e8ddf1e6485?w=800&q=80",
+        tip: "Gjirokastër's old town is built on steep limestone cobblestones — walking shoes with grip are essential. The castle's captured American U-2 spy plane is the unexpected highlight of the military museum. The best hotels in the old town book up quickly in summer; reserve two weeks ahead.",
       },
       {
         day: 7,
@@ -291,6 +307,7 @@ export const itineraries = [
           "Osum River gorge — the canyon below Berat visible from the castle walls",
         ],
         img: "https://images.unsplash.com/photo-1637567068269-df5225247a79?w=800&q=80",
+        tip: "Berat Kalaja is a living neighbourhood — the people inside are residents, not actors. Walking up from Mangalem to the castle gate takes 20 minutes on steep cobbles. The Osum River gorge is visible from the castle walls; it is worth the 200-metre detour to the viewpoint.",
       },
       {
         day: 8,
@@ -303,6 +320,7 @@ export const itineraries = [
           "Historical Museum — the story of Shkodër from Illyrian times through Ottoman rule and communism",
         ],
         img: "https://images.unsplash.com/photo-1545231597-d6c381c583aa?w=800&q=80",
+        tip: "Rozafa Castle is best in the late afternoon when the light catches the lake surface. Coffee culture in Shkodër is taken very seriously — Kolë Idromeno Street has the best espresso in northern Albania. Lake Shkodër is shared with Montenegro; boat trips are available from the Montenegrin side at Virpazar.",
       },
       {
         day: 9,
@@ -315,6 +333,7 @@ export const itineraries = [
           "Valbonë Valley National Park — the alpine valley at the end of the ferry route",
         ],
         img: "https://images.unsplash.com/photo-1708454314624-9f5e454303fb?w=800&q=80",
+        tip: "The ferry departs Koman Dam at 9am sharp — the drive from Shkodër takes 90 minutes on rough mountain road, so leave by 7am. Tickets are bought at the dock; no booking system exists. Bring food and water: nothing is sold on board. The upper deck and bow have the best views.",
       },
       {
         day: 10,
@@ -327,6 +346,7 @@ export const itineraries = [
           "Kulla e Ngujimit — the lock-in tower where blood feuds were arbitrated under the Kanun",
         ],
         img: "https://images.unsplash.com/photo-1758045792792-d002a88d983e?w=800&q=80",
+        tip: "Start the Valbonë–Theth hike no later than 7am to cross the pass before afternoon cloud builds. The trail is marked with red-and-white paint but the upper section can be obscured by snow until June. Pack 2 litres of water — there is one spring on the ascent. Walking poles help significantly on the descent.",
       },
     ],
     whySpecial: "Albania is what the Mediterranean coast looked like twenty years ago before the money arrived. The Riviera has the water quality and clarity of the Maldives without the infrastructure. Gjirokastër and Berat are UNESCO cities that still feel like working towns rather than open-air museums. And the Albanian Alps — Valbonë, Theth, the Accursed Mountains — are world-class mountain country that almost no one outside the region has heard of. The combination of Ionian coast, Ottoman architecture and Balkan alpine landscape in ten days is not available anywhere else.",
@@ -376,6 +396,7 @@ export const itineraries = [
           "Dohány Street Synagogue — the largest synagogue in Europe",
         ],
         img: "https://images.unsplash.com/photo-1541849546-216549ae216d?w=800&q=80",
+        tip: "The Hungarian Parliament's interior is accessible only on a guided tour — book online in advance, as walk-up availability is limited in summer. It is best photographed from the Batthyány tér metro stop across the Danube at dusk. Szimpla Kert opens its Sunday flea market at 9am — it is calmer and more interesting than the evening crowd.",
       },
       {
         day: 2,
@@ -388,6 +409,7 @@ export const itineraries = [
           "Hungarian State Opera — one of the most ornate opera houses in Europe",
         ],
         img: "https://images.unsplash.com/photo-1557846699-4d18ac9898a6?w=800&q=80",
+        tip: "Cross to Buda on foot via the Chain Bridge — the walk gives you the finest view of the Parliament. Fisherman's Bastion charges an entry fee to the upper terraces after 9am; arrive before then and it is free and empty. Matthias Church has its own admission; the interior is spectacular and undervisited.",
       },
       {
         day: 3,
@@ -400,6 +422,7 @@ export const itineraries = [
           "Hungarian National Museum — the country's history from the Roman occupation to the present",
         ],
         img: "https://images.unsplash.com/photo-1630665425312-37a2c337694b?w=800&q=80",
+        tip: "Széchenyi opens at 6am — this is the correct time to arrive. The outdoor pool chess players are regulars, not a tourist display. The baths are partially segregated; the main outdoor pools are mixed. Heroes' Square is busiest between 10am and 4pm; early morning or evening visits are dramatically quieter.",
       },
     ],
     whySpecial: "Budapest rewards those who stay long enough to get beyond the obvious. The thermal baths are not a tourist gimmick — they are how the city has woken up every morning for 150 years. The ruin bars are genuinely strange in a way that cannot be manufactured. And the architecture — the sheer quantity of first-rate nineteenth-century buildings that survived the twentieth century — is unlike anything in Western Europe.",
@@ -445,6 +468,7 @@ export const itineraries = [
           "Yorkshire Dales — 841 square miles of moorland, rivers and dry-stone walls",
         ],
         img: "https://images.unsplash.com/photo-1570131727684-7bcd493cc529?w=800&q=80",
+        tip: "The B-roads through the Dales are single-track in places with passing points — a confident driver is useful. Malham Cove is a 20-minute flat walk from the village car park; Gordale Scar adds 15 minutes on rougher ground. Settle, the nearest market town, has the best selection of local food shops in the Dales.",
       },
       {
         day: 2,
@@ -457,6 +481,7 @@ export const itineraries = [
           "Honister Pass — the most dramatic road in the Lake District",
         ],
         img: "https://images.unsplash.com/photo-1568576411512-946a1a201093?w=800&q=80",
+        tip: "Castlerigg Stone Circle is free, unfenced, and open 24 hours — dawn and dusk are the atmospheric windows. Ullswater Steamers run from Pooley Bridge to Glenridding; the round trip takes 90 minutes and covers the most scenic section of the lake. Arrive before 9am to have either to yourself.",
       },
       {
         day: 3,
@@ -469,6 +494,7 @@ export const itineraries = [
           "Windermere — the largest natural lake in England",
         ],
         img: "https://images.unsplash.com/photo-1629499883398-9d2ad4b6ac63?w=800&q=80",
+        tip: "Grasmere's coach tour season runs from 10am to 4pm daily in summer — the village doubles in population during these hours. Dove Cottage requires a timed entry booking; do this online before leaving. The Latrigg ascent from Keswick takes 45 minutes and gives the finest accessible fell view in the Lake District.",
       },
       {
         day: 4,
@@ -482,6 +508,7 @@ export const itineraries = [
           "The Shambles — a medieval street so perfectly preserved it looks staged",
         ],
         img: "https://images.unsplash.com/photo-1514258953601-4b8cf9cd6cb2?w=800&q=80",
+        tip: "Whitby's 199 steps are the only access to the Abbey from the harbour — there is no accessible alternative. The Magpie Café fish and chips has a queue but is worth it. York's city walls circuit takes 90 minutes at a normal pace; the Micklegate Bar to Bootham Bar section is the finest stretch.",
       },
     ],
     whySpecial: "Most English road trips follow the obvious southern circuit — Bath, the Cotswolds, the coast. Northern England is what they miss. The landscapes here are rawer, the towns more honest, and the light — especially in autumn and winter — has a quality that is hard to photograph but impossible to forget. This route covers in four days what most visitors give four hours.",
@@ -527,6 +554,7 @@ export const itineraries = [
           "Lama Monachile cove — the pebble beach below the old town bridge",
         ],
         img: "https://images.unsplash.com/photo-1755745360285-0633c972b0fd?w=800&q=80",
+        tip: "In Bari Vecchia, the pasta-making women work from their doorsteps in the morning — this is a daily ritual, not a performance, and they sell directly. Polignano a Mare is best in the evening when the day-trippers have gone; the clifftop main square is genuinely dramatic with the sea far below.",
       },
       {
         day: 2,
@@ -539,6 +567,7 @@ export const itineraries = [
           "Piazza del Duomo, Lecce — one of the most theatrical squares in southern Italy",
         ],
         img: "https://images.unsplash.com/photo-1732966713411-1bcf1273eaa6?w=800&q=80",
+        tip: "Ostuni's old town is best walked without a map — get lost in the whitewashed alleys above the main square. Lecce's soft pietra leccese limestone allows extreme decorative carving that harder stones cannot achieve; this is why the baroque here is more intricate than Rome's. The Lecce Archaeological Museum is free and excellent.",
       },
       {
         day: 3,
@@ -551,6 +580,7 @@ export const itineraries = [
           "Valle d'Itria — the valley of trulli, vineyards and cherry orchards",
         ],
         img: "https://images.unsplash.com/photo-1571403712587-f99cedc8cf99?w=800&q=80",
+        tip: "Alberobello is most photogenic in the early morning or late afternoon — midday light is flat. The Trullo Sovrano is the only two-storey trullo in existence and worth the small entry fee. Locorotondo has better restaurants than Alberobello and is genuinely calmer; consider basing the evening there.",
       },
       {
         day: 4,
@@ -563,6 +593,7 @@ export const itineraries = [
           "Madonna de Idris — the rock-hewn church carved into the Matera cliff face",
         ],
         img: "https://images.unsplash.com/photo-1528214096798-37891d32174c?w=800&q=80",
+        tip: "Navigate the Sassi by descending from Piazza Vittorio Veneto and following route markers through Sasso Barisano first. The rupestrian churches are carved into rock — many require a torch or phone light. The Murgia Plateau viewpoint is reached by a 20-minute drive across the ravine and is the only angle from which the full scale of the cave city is comprehensible.",
       },
     ],
     whySpecial: "Puglia has the density of good things per square kilometre that most of Italy lost to mass tourism twenty years ago. The food is serious without being precious — burrata made that morning, orecchiette with cime di rapa, primitivo from the vineyard you drove past. The towns are genuinely old. And Matera — the cave city across the border — is one of the few places in Europe that remains genuinely astonishing on first sight.",
@@ -607,6 +638,7 @@ export const itineraries = [
           "Honfleur Vieux Bassin — the 17th-century harbour that launched a school of painting",
         ],
         img: "https://images.unsplash.com/photo-1575651133704-76021f71cc32?w=800&q=80",
+        tip: "Étretat's chalk arches are best photographed in the first hour after sunrise, when the light strikes obliquely and the beach is empty. The cliff walk west to the Porte d'Aval arch is accessible to all and has the best vantage points. Honfleur's restaurants are significantly better than their tourist-facing menus suggest — ask for the formule.",
       },
       {
         day: 2,
@@ -619,6 +651,7 @@ export const itineraries = [
           "Mont-Saint-Michel — the tidal island abbey that has drawn pilgrims since 709 AD",
         ],
         img: "https://images.unsplash.com/photo-1531250552633-528fe896fdd4?w=800&q=80",
+        tip: "Mont-Saint-Michel tides are extreme — the causeway floods predictably but the timing changes daily. Check the official timetable before planning your arrival. The abbey interior requires a ticket and closes at 6pm; the village streets are free and atmospheric at any hour.",
       },
       {
         day: 3,
@@ -630,6 +663,7 @@ export const itineraries = [
           "Cap Fréhel — the pink granite headland between the two towns",
         ],
         img: "https://images.unsplash.com/photo-1599921614325-12c01757afb5?w=800&q=80",
+        tip: "Saint-Malo's rampart walk is best before 9am when it is empty. Dinan is almost entirely unvisited by international tourists despite being one of the most intact medieval town centres in France — give it two hours rather than a passing stop.",
       },
       {
         day: 4,
@@ -641,6 +675,7 @@ export const itineraries = [
           "Loire vineyards — Vouvray and Sancerre country, worth a stop",
         ],
         img: "https://images.unsplash.com/photo-1705591933154-f7ee750ba338?w=800&q=80",
+        tip: "Chenonceau opens at 9am and the first hour is quieter than any other time. The château is approached through a tree-lined avenue of plane trees — magnificent in any season. Chambord's roof terraces are its most overlooked feature: the viewing platforms above the double-helix staircase offer views of the Loire countryside for miles.",
       },
     ],
     whySpecial: "Northwestern France resists the single-note itinerary. Within 400 kilometres you move through three distinct cultures, three coastlines, and several centuries of architecture. The D-Day coast sits an hour from the most photographed sea arches in France. Mont-Saint-Michel is an hour from the Loire. This route holds them together in a way that makes each one mean more.",
@@ -686,6 +721,7 @@ export const itineraries = [
           "Ringstrasse — the boulevard of monumental buildings Franz Joseph I commissioned in 1857",
         ],
         img: "https://images.unsplash.com/photo-1713731064941-effd1178071a?w=800&q=80",
+        tip: "The Spanish Riding School morning exercise sessions (Morgenarbeit) are cheaper and more intimate than the formal performances — book well in advance. St Stephen's south tower climb is 343 steps with no lift; the north tower has a lift to the Pummerin bell. The Ringstrasse is most photogenic in late afternoon light.",
       },
       {
         day: 2,
@@ -698,6 +734,7 @@ export const itineraries = [
           "Vienna Zentralfriedhof — the cemetery where Beethoven, Brahms and Schubert are buried",
         ],
         img: "https://images.unsplash.com/photo-1662119431157-40e08341aff5?w=800&q=80",
+        tip: "Schönbrunn opens at 8am — the first hour is dramatically quieter than mid-morning. The Gloriette hilltop is a 15-minute walk through the formal gardens and has the best panoramic view of Vienna. The Zentralfriedhof (Central Cemetery), where Beethoven, Brahms and Schubert are buried, is a 20-minute tram ride from the centre.",
       },
       {
         day: 3,
@@ -710,6 +747,7 @@ export const itineraries = [
           "Kunsthistorisches Museum — one of the great encyclopaedic art collections of Europe",
         ],
         img: "https://images.unsplash.com/photo-1578391823548-6ecae6122803?w=800&q=80",
+        tip: "The Beethoven Frieze in the Vienna Secession basement should be studied slowly — read the programme notes before entering the small room. The Upper Belvedere sells timed entry tickets; the first slot at 9am is the most rewarding. The Kunsthistorisches Museum's Bruegel room holds more Bruegels than anywhere else in the world.",
       },
       {
         day: 4,
@@ -722,6 +760,7 @@ export const itineraries = [
           "Vienna State Opera — the neo-Renaissance opera house completed in 1869",
         ],
         img: "https://images.unsplash.com/photo-1507935331997-57d36bbd46ce?w=800&q=80",
+        tip: "The Naschmarkt Saturday flea market extends the full length of the regular market — arrive by 8am before the best pieces disappear. The Wiener Riesenrad operates year-round; the original 1897 wooden gondolas are heated in winter. A cycle along the Prater's Hauptallee takes 20 minutes and gives a completely different sense of the park's scale.",
       },
     ],
     whySpecial: "Vienna is the only European capital that was built as an explicitly imperial project and then preserved largely intact. The Ringstrasse is not nostalgia — it is genuine urban planning at a scale and quality that has not been repeated. Add the coffee house culture (still the best in the world), the Secession art, the concert halls and the Naschmarkt, and you have a city that rewards every additional day you give it.",

@@ -7,6 +7,7 @@ import { Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/render
 // ── Colour tokens ─────────────────────────────────────────────────────────────
 const C = {
   teal:    '#1B6B65',
+  tealDim: '#164F4A',
   gold:    '#C9A96E',
   cream:   '#F4F1EC',
   stone:   '#FAFAF8',
@@ -325,19 +326,103 @@ const s = StyleSheet.create({
     lineHeight: 1.5,
   },
 
+  // ── Route Map page ─────────────────────────────────────────────────────────
+  routeMapPage: {
+    backgroundColor: C.stone,
+  },
+  routeMapBanner: {
+    backgroundColor: C.tealDim,
+    paddingHorizontal: 48,
+    paddingTop: 28,
+    paddingBottom: 28,
+    marginBottom: 36,
+  },
+  routeMapEyebrow: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 8,
+    letterSpacing: 2.5,
+    color: 'rgba(255,255,255,0.5)',
+    marginBottom: 8,
+  },
+  routeMapTitle: {
+    fontFamily: 'Times-Bold',
+    fontSize: 28,
+    color: C.white,
+    lineHeight: 1.2,
+  },
+  routeMapBody: {
+    paddingHorizontal: 48,
+    flex: 1,
+  },
+  // Two-column container for > 6 stops
+  stopsColumns: {
+    flexDirection: 'row',
+    gap: 32,
+  },
+  stopsColumn: {
+    flex: 1,
+  },
+  // Single stop row
+  stopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 0,
+  },
+  stopLeft: {
+    width: 32,
+    alignItems: 'center',
+  },
+  stopCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: C.teal,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stopNumber: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 8,
+    color: C.white,
+  },
+  stopConnector: {
+    width: 1.5,
+    height: 16,
+    backgroundColor: C.border,
+    marginTop: 0,
+  },
+  stopRight: {
+    flex: 1,
+    paddingTop: 4,
+    paddingLeft: 12,
+    paddingBottom: 16,
+  },
+  stopName: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 10.5,
+    color: C.charcoal,
+    lineHeight: 1.3,
+  },
+  stopDay: {
+    fontFamily: 'Helvetica',
+    fontSize: 8.5,
+    color: C.muted,
+    marginTop: 2,
+  },
+
   // ── Day pages ──────────────────────────────────────────────────────────────
   dayPage: {
     backgroundColor: C.white,
   },
   dayImageStrip: {
     width: '100%',
-    height: 210,
+    height: 200,
     objectFit: 'cover',
     objectPosition: 'center',
   },
   dayImagePlaceholder: {
     width: '100%',
-    height: 210,
+    height: 200,
     backgroundColor: C.cream,
     alignItems: 'center',
     justifyContent: 'center',
@@ -349,7 +434,7 @@ const s = StyleSheet.create({
     letterSpacing: 3,
   },
   dayBody: {
-    padding: '24px 48px 28px',
+    padding: '20px 48px 24px',
     flex: 1,
   },
   dayChip: {
@@ -378,16 +463,17 @@ const s = StyleSheet.create({
     fontSize: 10,
     color: C.muted,
     lineHeight: 1.75,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   dayBullets: {
     gap: 6,
+    marginBottom: 16,
   },
   dayBulletRow: {
     flexDirection: 'row',
     gap: 9,
     alignItems: 'flex-start',
-    marginBottom: 5,
+    marginBottom: 4,
   },
   dayBulletDot: {
     width: 4,
@@ -405,6 +491,30 @@ const s = StyleSheet.create({
     flex: 1,
   },
 
+  // Insider Tip box
+  tipBox: {
+    backgroundColor: C.light,
+    borderLeftWidth: 3,
+    borderLeftColor: C.gold,
+    borderRadius: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  tipLabel: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 7,
+    letterSpacing: 2,
+    color: C.gold,
+    marginBottom: 6,
+  },
+  tipText: {
+    fontFamily: 'Helvetica',
+    fontSize: 9.5,
+    color: C.charcoal,
+    lineHeight: 1.65,
+  },
+
   // ── CTA page ───────────────────────────────────────────────────────────────
   ctaPage: {
     backgroundColor: C.teal,
@@ -412,7 +522,7 @@ const s = StyleSheet.create({
   },
   ctaContent: {
     flex: 1,
-    padding: '80px 60px 60px',
+    padding: '72px 60px 60px',
     justifyContent: 'center',
   },
   ctaBrand: {
@@ -441,8 +551,34 @@ const s = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255,255,255,0.72)',
     lineHeight: 1.8,
-    marginBottom: 40,
+    marginBottom: 28,
     maxWidth: 420,
+  },
+  // CTA bullet list
+  ctaBulletList: {
+    marginBottom: 36,
+    gap: 0,
+  },
+  ctaBulletRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 10,
+  },
+  ctaBulletDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: C.gold,
+    marginTop: 4,
+    flexShrink: 0,
+  },
+  ctaBulletText: {
+    fontFamily: 'Helvetica',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.85)',
+    lineHeight: 1.5,
+    flex: 1,
   },
   // CTA button block
   ctaButton: {
@@ -492,6 +628,11 @@ function imgUrl(src, w = 1000) {
     ? src.replace(/\?.*/, '')
     : `https://images.unsplash.com/photo-${src}`;
   return `${base}?w=${w}&q=80`;
+}
+
+/** Extract primary location name from a day title (text before ' — ') */
+function stopName(title) {
+  return title.split(' — ')[0].trim();
 }
 
 /** Running header shared by all inner pages */
@@ -651,9 +792,78 @@ function OverviewPage({ itinerary }) {
   );
 }
 
+function RouteMapPage({ itinerary }) {
+  const { title, country, days = [] } = itinerary;
+  const stops = days.map((d) => stopName(d.title));
+  const isTwoCol = stops.length > 6;
+
+  const half = Math.ceil(stops.length / 2);
+  const col1 = isTwoCol ? stops.slice(0, half) : stops;
+  const col2 = isTwoCol ? stops.slice(half) : [];
+
+  function StopList({ items, startIndex = 0 }) {
+    return (
+      <View style={isTwoCol ? s.stopsColumn : { flex: 1 }}>
+        {items.map((name, i) => {
+          const n = startIndex + i;
+          const isLast = n === stops.length - 1;
+          return (
+            <View key={n}>
+              <View style={s.stopRow}>
+                <View style={s.stopLeft}>
+                  <View style={s.stopCircle}>
+                    <Text style={s.stopNumber}>{n + 1}</Text>
+                  </View>
+                </View>
+                <View style={s.stopRight}>
+                  <Text style={s.stopName}>{name}</Text>
+                  <Text style={s.stopDay}>Day {n + 1}</Text>
+                </View>
+              </View>
+              {!isLast && (
+                <View style={s.stopRow}>
+                  <View style={s.stopLeft}>
+                    <View style={s.stopConnector} />
+                  </View>
+                  <View style={{ flex: 1 }} />
+                </View>
+              )}
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
+
+  return (
+    <Page size="A4" style={s.routeMapPage}>
+      <RunHeader country={country} title={title} />
+
+      {/* Dark teal banner */}
+      <View style={s.routeMapBanner}>
+        <Text style={s.routeMapEyebrow}>YOUR JOURNEY</Text>
+        <Text style={s.routeMapTitle}>Route Map</Text>
+      </View>
+
+      <View style={s.routeMapBody}>
+        {isTwoCol ? (
+          <View style={s.stopsColumns}>
+            <StopList items={col1} startIndex={0} />
+            <StopList items={col2} startIndex={half} />
+          </View>
+        ) : (
+          <StopList items={col1} startIndex={0} />
+        )}
+      </View>
+
+      <Text style={s.pageNum} render={({ pageNumber }) => String(pageNumber)} fixed />
+    </Page>
+  );
+}
+
 function DayPage({ day, index, itinerary }) {
   const { title: itinTitle, country } = itinerary;
-  const { title, desc, description, bullets = [], activities = [], stay, img } = day;
+  const { title, desc, description, bullets = [], activities = [], stay, img, tip } = day;
   const dayDesc = desc || description || null;
   const dayActivities = bullets.length ? bullets : activities;
   const hero = imgUrl(img);
@@ -689,8 +899,16 @@ function DayPage({ day, index, itinerary }) {
           </View>
         ) : null}
 
+        {/* Insider Tip */}
+        {tip ? (
+          <View style={s.tipBox}>
+            <Text style={s.tipLabel}>INSIDER TIP</Text>
+            <Text style={s.tipText}>{tip}</Text>
+          </View>
+        ) : null}
+
         {stay ? (
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.border, alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.border, alignItems: 'center' }}>
             <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 1.5, color: C.muted }}>TONIGHT'S STAY:</Text>
             <Text style={{ fontFamily: 'Helvetica', fontSize: 10, color: C.charcoal }}>{stay}</Text>
           </View>
@@ -704,6 +922,12 @@ function DayPage({ day, index, itinerary }) {
 
 function CTAPage({ itinerary }) {
   const { title } = itinerary;
+  const bullets = [
+    'Handpicked boutique hotels — personally vetted, never generic',
+    'Restaurant reservations at the places locals actually eat',
+    'Private guides & exclusive experiences off the tourist trail',
+    'Seamless logistics and real-time support throughout your trip',
+  ];
   return (
     <Page size="A4" style={s.ctaPage}>
       <View style={s.ctaContent}>
@@ -711,8 +935,18 @@ function CTAPage({ itinerary }) {
         <Text style={s.ctaTitle}>Ready to make{'\n'}this trip yours?</Text>
         <View style={s.ctaDivider} />
         <Text style={s.ctaBody}>
-          This itinerary gives you the framework. Our expert planners can build a fully personalised version — handpicked accommodation, private guides, restaurant reservations, and real-time support throughout your journey.
+          This itinerary gives you the framework. Our expert planners build the personalised version:
         </Text>
+
+        {/* Bullet list */}
+        <View style={s.ctaBulletList}>
+          {bullets.map((b, i) => (
+            <View key={i} style={s.ctaBulletRow}>
+              <View style={s.ctaBulletDot} />
+              <Text style={s.ctaBulletText}>{b}</Text>
+            </View>
+          ))}
+        </View>
 
         {/* CTA button block */}
         <View style={s.ctaButton}>
@@ -740,6 +974,7 @@ export default function ItineraryPDF({ itinerary }) {
     >
       <CoverPage itinerary={itinerary} />
       <OverviewPage itinerary={itinerary} />
+      <RouteMapPage itinerary={itinerary} />
       {days.map((day, i) => (
         <DayPage key={i} day={day} index={i} itinerary={itinerary} />
       ))}
