@@ -1,6 +1,45 @@
 import { useState } from 'react';
 import { Check, ArrowRight, MapPin, Calendar, Users, Heart } from 'lucide-react';
 
+const ERR_COLOR = '#C97070';
+const ERR_TEXT  = '#B04040';
+
+function fieldBorder(hasError) {
+  return `1px solid ${hasError ? ERR_COLOR : '#D4CCBF'}`;
+}
+
+function ErrorMsg({ msg }) {
+  if (!msg) return null;
+  return <p style={{ fontSize: '12px', color: ERR_TEXT, marginTop: '5px' }}>{msg}</p>;
+}
+
+function validate(data) {
+  const e = {};
+  if (!data.name.trim() || data.name.trim().length < 2)
+    e.name = 'Please enter your full name';
+  if (!data.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim()))
+    e.email = 'Please enter a valid email address';
+  if (data.phone.trim() && !/^[+\d\s\-().]{7,}$/.test(data.phone.trim()))
+    e.phone = 'Please enter a valid phone number';
+  if (!data.destination.trim())
+    e.destination = 'Please enter your destination';
+  if (!data.dates.trim())
+    e.dates = 'Please enter your approximate dates';
+  if (!data.duration.trim() || !/^\d+$/.test(data.duration.trim()))
+    e.duration = 'Please enter trip duration in days';
+  if (!data.groupSize.trim() || !/^\d+$/.test(data.groupSize.trim()))
+    e.groupSize = 'Please enter group size as a number';
+  if (!data.groupType.trim())
+    e.groupType = 'Please enter your trip type';
+  if (data.style.length === 0)
+    e.style = 'Please select at least one travel style';
+  if (!data.budget)
+    e.budget = 'Please select a budget range';
+  return e;
+}
+
+const SCROLL_ORDER = ['name', 'email', 'phone', 'destination', 'dates', 'duration', 'groupSize', 'groupType', 'style', 'budget'];
+
 export default function CustomPlanningPage() {
   const [formData, setFormData] = useState({
     name: '', email: '', phone: '',
@@ -8,9 +47,20 @@ export default function CustomPlanningPage() {
     groupSize: '', groupType: '', budget: '',
     style: [], notes: '',
   });
+  const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
 
-  const handleChange = e => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  const clearError = key =>
+    setErrors(prev => { const next = { ...prev }; delete next[key]; return next; });
+
+  const handleChange = e => {
+    const { name, value } = e.target;
+    const numericFields = ['duration', 'groupSize'];
+    const newValue = numericFields.includes(name) ? value.replace(/\D/g, '') : value;
+    setFormData(prev => ({ ...prev, [name]: newValue }));
+    if (errors[name]) clearError(name);
+  };
+
   const handleStyleToggle = style => {
     setFormData(prev => ({
       ...prev,
@@ -18,9 +68,26 @@ export default function CustomPlanningPage() {
         ? prev.style.filter(s => s !== style)
         : [...prev.style, style],
     }));
+    if (errors.style) clearError('style');
   };
+
+  const handleBudgetSelect = value => {
+    setFormData(prev => ({ ...prev, budget: value }));
+    if (errors.budget) clearError('budget');
+  };
+
   const handleSubmit = async e => {
     e.preventDefault();
+    const errs = validate(formData);
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      const firstKey = SCROLL_ORDER.find(k => errs[k]);
+      if (firstKey) {
+        const el = document.getElementById(`field-${firstKey}`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
     try {
       await fetch('/api/send-brief', {
         method: 'POST',
@@ -80,6 +147,14 @@ export default function CustomPlanningPage() {
     { label: 'Premium', desc: '€350–600 / person / day', value: 'premium' },
     { label: 'Ultra-Luxury', desc: '€600+ / person / day', value: 'ultra' },
   ];
+
+  // Shared input style factory
+  const inputStyle = hasError => ({
+    width: '100%', padding: '12px 14px',
+    border: fieldBorder(hasError), borderRadius: '4px',
+    fontSize: '15px', color: '#1C1A16', background: 'white',
+    outline: 'none', transition: 'border-color 0.2s',
+  });
 
   return (
     <div style={{ background: '#FAFAF8', paddingTop: '72px' }}>
@@ -163,7 +238,7 @@ export default function CustomPlanningPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '64px', alignItems: 'start' }}>
 
             {/* Form */}
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} noValidate>
               <h2 style={{
                 fontFamily: "'Playfair Display', Georgia, serif",
                 fontSize: '32px', fontWeight: '600', color: '#1C1A16',
@@ -181,33 +256,61 @@ export default function CustomPlanningPage() {
                   Your Details
                 </legend>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  {[
-                    { name: 'name', label: 'Full Name', type: 'text', placeholder: 'Jane Smith', required: true },
-                    { name: 'email', label: 'Email Address', type: 'email', placeholder: 'jane@example.com', required: true },
-                    { name: 'phone', label: 'Phone (optional)', type: 'tel', placeholder: '+1 555 000 0000', required: false },
-                  ].map(field => (
-                    <div key={field.name} style={{ gridColumn: field.name === 'phone' ? '1' : 'auto' }}>
-                      <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
-                        {field.label}
-                      </label>
-                      <input
-                        type={field.type}
-                        name={field.name}
-                        value={formData[field.name]}
-                        onChange={handleChange}
-                        placeholder={field.placeholder}
-                        required={field.required}
-                        style={{
-                          width: '100%', padding: '12px 14px',
-                          border: '1px solid #D4CCBF', borderRadius: '4px',
-                          fontSize: '15px', color: '#1C1A16', background: 'white',
-                          outline: 'none', transition: 'border-color 0.2s',
-                        }}
-                        onFocus={e => e.target.style.borderColor = '#1B6B65'}
-                        onBlur={e => e.target.style.borderColor = '#D4CCBF'}
-                      />
-                    </div>
-                  ))}
+
+                  {/* Full Name */}
+                  <div id="field-name">
+                    <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleChange}
+                      placeholder="Jane Smith"
+                      style={inputStyle(!!errors.name)}
+                      onFocus={e => e.target.style.borderColor = '#1B6B65'}
+                      onBlur={e => { e.target.style.borderColor = errors.name ? ERR_COLOR : '#D4CCBF'; }}
+                    />
+                    <ErrorMsg msg={errors.name} />
+                  </div>
+
+                  {/* Email */}
+                  <div id="field-email">
+                    <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      placeholder="jane@example.com"
+                      style={inputStyle(!!errors.email)}
+                      onFocus={e => e.target.style.borderColor = '#1B6B65'}
+                      onBlur={e => { e.target.style.borderColor = errors.email ? ERR_COLOR : '#D4CCBF'; }}
+                    />
+                    <ErrorMsg msg={errors.email} />
+                  </div>
+
+                  {/* Phone (optional) */}
+                  <div id="field-phone">
+                    <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
+                      Phone <span style={{ color: '#8C8070', fontWeight: '400' }}>(optional)</span>
+                    </label>
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      placeholder="+1 555 000 0000"
+                      style={inputStyle(!!errors.phone)}
+                      onFocus={e => e.target.style.borderColor = '#1B6B65'}
+                      onBlur={e => { e.target.style.borderColor = errors.phone ? ERR_COLOR : '#D4CCBF'; }}
+                    />
+                    <ErrorMsg msg={errors.phone} />
+                  </div>
+
                 </div>
               </fieldset>
 
@@ -217,39 +320,106 @@ export default function CustomPlanningPage() {
                   Trip Details
                 </legend>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  {[
-                    { name: 'destination', label: 'Where do you want to go?', type: 'text', placeholder: 'e.g. Southern Italy, Japan, Morocco...', span: 2 },
-                    { name: 'dates', label: 'Approximate dates', type: 'text', placeholder: 'e.g. October 2025, flexible in spring' },
-                    { name: 'duration', label: 'Trip duration', type: 'text', placeholder: 'e.g. 10 days, 2 weeks' },
-                    { name: 'groupSize', label: 'Group size', type: 'text', placeholder: 'e.g. 2 adults, family of 4' },
-                    { name: 'groupType', label: 'Trip type', type: 'text', placeholder: 'e.g. Family holiday, honeymoon, friends reunion, anniversary' },
-                  ].map(field => (
-                    <div key={field.name} style={{ gridColumn: field.span === 2 ? '1 / -1' : 'auto' }}>
-                      <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
-                        {field.label}
-                      </label>
-                      <input
-                        type={field.type}
-                        name={field.name}
-                        value={formData[field.name]}
-                        onChange={handleChange}
-                        placeholder={field.placeholder}
-                        style={{
-                          width: '100%', padding: '12px 14px',
-                          border: '1px solid #D4CCBF', borderRadius: '4px',
-                          fontSize: '15px', color: '#1C1A16', background: 'white',
-                          outline: 'none',
-                        }}
-                        onFocus={e => e.target.style.borderColor = '#1B6B65'}
-                        onBlur={e => e.target.style.borderColor = '#D4CCBF'}
-                      />
-                    </div>
-                  ))}
+
+                  {/* Destination */}
+                  <div id="field-destination" style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
+                      Where do you want to go?
+                    </label>
+                    <input
+                      type="text"
+                      name="destination"
+                      value={formData.destination}
+                      onChange={handleChange}
+                      placeholder="e.g. Southern Italy, Japan, Morocco..."
+                      style={inputStyle(!!errors.destination)}
+                      onFocus={e => e.target.style.borderColor = '#1B6B65'}
+                      onBlur={e => { e.target.style.borderColor = errors.destination ? ERR_COLOR : '#D4CCBF'; }}
+                    />
+                    <ErrorMsg msg={errors.destination} />
+                  </div>
+
+                  {/* Dates */}
+                  <div id="field-dates">
+                    <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
+                      Approximate dates
+                    </label>
+                    <input
+                      type="text"
+                      name="dates"
+                      value={formData.dates}
+                      onChange={handleChange}
+                      placeholder="e.g. October 2025, flexible in spring"
+                      style={inputStyle(!!errors.dates)}
+                      onFocus={e => e.target.style.borderColor = '#1B6B65'}
+                      onBlur={e => { e.target.style.borderColor = errors.dates ? ERR_COLOR : '#D4CCBF'; }}
+                    />
+                    <ErrorMsg msg={errors.dates} />
+                  </div>
+
+                  {/* Duration — numeric only */}
+                  <div id="field-duration">
+                    <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
+                      Trip duration (days)
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      name="duration"
+                      value={formData.duration}
+                      onChange={handleChange}
+                      placeholder="e.g. 10"
+                      style={inputStyle(!!errors.duration)}
+                      onFocus={e => e.target.style.borderColor = '#1B6B65'}
+                      onBlur={e => { e.target.style.borderColor = errors.duration ? ERR_COLOR : '#D4CCBF'; }}
+                    />
+                    <ErrorMsg msg={errors.duration} />
+                  </div>
+
+                  {/* Group size — numeric only */}
+                  <div id="field-groupSize">
+                    <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
+                      Group size
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      name="groupSize"
+                      value={formData.groupSize}
+                      onChange={handleChange}
+                      placeholder="e.g. 2"
+                      style={inputStyle(!!errors.groupSize)}
+                      onFocus={e => e.target.style.borderColor = '#1B6B65'}
+                      onBlur={e => { e.target.style.borderColor = errors.groupSize ? ERR_COLOR : '#D4CCBF'; }}
+                    />
+                    <ErrorMsg msg={errors.groupSize} />
+                  </div>
+
+                  {/* Trip type */}
+                  <div id="field-groupType" style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
+                      Trip type
+                    </label>
+                    <input
+                      type="text"
+                      name="groupType"
+                      value={formData.groupType}
+                      onChange={handleChange}
+                      placeholder="e.g. Family holiday, honeymoon, friends reunion, anniversary"
+                      style={inputStyle(!!errors.groupType)}
+                      onFocus={e => e.target.style.borderColor = '#1B6B65'}
+                      onBlur={e => { e.target.style.borderColor = errors.groupType ? ERR_COLOR : '#D4CCBF'; }}
+                    />
+                    <ErrorMsg msg={errors.groupType} />
+                  </div>
+
                 </div>
               </fieldset>
 
               {/* Travel Style */}
-              <fieldset style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
+              <fieldset id="field-style" style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
                 <legend style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#1B6B65', marginBottom: '20px' }}>
                   Travel Style (select all that apply)
                 </legend>
@@ -265,7 +435,7 @@ export default function CustomPlanningPage() {
                           padding: '8px 16px',
                           borderRadius: '4px',
                           border: '1px solid',
-                          borderColor: active ? '#1B6B65' : '#D4CCBF',
+                          borderColor: active ? '#1B6B65' : (errors.style ? ERR_COLOR : '#D4CCBF'),
                           background: active ? '#EFF6F5' : 'transparent',
                           color: active ? '#1B6B65' : '#6B6156',
                           fontSize: '14px', fontWeight: '500',
@@ -277,10 +447,11 @@ export default function CustomPlanningPage() {
                     );
                   })}
                 </div>
+                <ErrorMsg msg={errors.style} />
               </fieldset>
 
               {/* Budget */}
-              <fieldset style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
+              <fieldset id="field-budget" style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
                 <legend style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#1B6B65', marginBottom: '20px' }}>
                   Daily Budget Range
                 </legend>
@@ -291,12 +462,12 @@ export default function CustomPlanningPage() {
                       <button
                         key={b.value}
                         type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, budget: b.value }))}
+                        onClick={() => handleBudgetSelect(b.value)}
                         style={{
                           padding: '16px',
                           borderRadius: '6px',
                           border: '2px solid',
-                          borderColor: active ? '#1B6B65' : '#D4CCBF',
+                          borderColor: active ? '#1B6B65' : (errors.budget ? ERR_COLOR : '#D4CCBF'),
                           background: active ? '#EFF6F5' : 'white',
                           textAlign: 'left', cursor: 'pointer', transition: 'all 0.15s',
                         }}
@@ -309,12 +480,13 @@ export default function CustomPlanningPage() {
                     );
                   })}
                 </div>
+                <ErrorMsg msg={errors.budget} />
               </fieldset>
 
-              {/* Notes */}
+              {/* Notes — optional */}
               <fieldset style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
                 <legend style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#1B6B65', marginBottom: '20px' }}>
-                  Anything else we should know?
+                  Anything else we should know? <span style={{ color: '#8C8070', fontWeight: '400', textTransform: 'none', letterSpacing: 0, fontSize: '11px' }}>(optional)</span>
                 </legend>
                 <textarea
                   name="notes"
@@ -408,6 +580,7 @@ export default function CustomPlanningPage() {
                 </div>
               </div>
             </div>
+
           </div>
         </div>
       </section>
