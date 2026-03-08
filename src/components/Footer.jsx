@@ -18,15 +18,18 @@ export default function Footer() {
           {/* Brand */}
           <div style={{ gridColumn: 'span 1' }}>
             <Link to="/" style={{ display: 'inline-block', marginBottom: '16px' }}>
-              <span style={{
-                fontFamily: "'Playfair Display', Georgia, serif",
-                fontSize: '22px',
-                fontWeight: '600',
-                color: 'white',
-                letterSpacing: '-0.3px',
-              }}>
-                HiddenAtlas
-              </span>
+              <img
+                src="/assets/logo-hiddenatlas.svg"
+                alt="HiddenAtlas"
+                style={{
+                  height: '28px',
+                  width: 'auto',
+                  display: 'block',
+                  // Convert to white so both the star and text are readable
+                  // against the dark footer background (#1C1A16).
+                  filter: 'brightness(0) invert(1)',
+                }}
+              />
             </Link>
             <p style={{ fontSize: '14px', lineHeight: '1.7', color: '#8C8070', maxWidth: '240px' }}>
               Curated travel itineraries for people who want extraordinary experiences without the ordinary effort.

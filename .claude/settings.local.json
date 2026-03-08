@@ -25,7 +25,8 @@
       "WebFetch(domain:www.thebrokebackpacker.com)",
       "WebFetch(domain:voyeglobal.com)",
       "WebFetch(domain:www.moonhoneytravel.com)",
-      "WebFetch(domain:wanderwithlaura.com)"
+      "WebFetch(domain:wanderwithlaura.com)",
+      "Bash(sips:*)"
     ]
   }
 }

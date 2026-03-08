@@ -4,7 +4,7 @@
 
 import {
   Document, Page, Text, View, Image, StyleSheet,
-  Svg, Rect, Circle, Line,
+  Svg, Rect, Circle, Line, Polygon,
 } from '@react-pdf/renderer';
 
 // ── Colour tokens ─────────────────────────────────────────────────────────────
@@ -484,11 +484,31 @@ function placeName(title) {
   return title.split(' — ')[0].trim();
 }
 
+/**
+ * Compass-star mark — same polygon as logo-hiddenatlas.svg.
+ * @react-pdf/renderer cannot load external SVG via Image, so we
+ * reconstruct the mark with SVG primitives.
+ * Original points live in a 0–20 x 2–22 box; viewBox="0 2 20 20" crops it.
+ */
+function StarMark({ size = 12, color = C.gold }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 2 20 20">
+      <Polygon
+        points="10,2 12,10 20,12 12,14 10,22 8,14 0,12 8,10"
+        fill={color}
+      />
+    </Svg>
+  );
+}
+
 /** Thin running header shared by all inner pages */
 function RunHeader({ country, title }) {
   return (
     <View style={s.header}>
-      <Text style={s.headerBrand}>HiddenAtlas</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <StarMark size={11} color={C.gold} />
+        <Text style={s.headerBrand}>HiddenAtlas</Text>
+      </View>
       <Text style={s.headerSection}>{country.toUpperCase()} — {title.toUpperCase()}</Text>
     </View>
   );
@@ -787,8 +807,10 @@ function CTAPage({ itinerary }) {
     <Page size="A4" style={s.ctaPage}>
       <View style={s.ctaWrapper}>
 
-        {/* Typographic logo */}
+        {/* Logo mark + wordmark */}
         <View style={s.ctaLogoRow}>
+          <StarMark size={18} color={C.gold} />
+          <View style={{ width: 10 }} />
           <Text style={s.ctaLogoHidden}>HIDDEN</Text>
           <Text style={s.ctaLogoAtlas}>ATLAS</Text>
         </View>

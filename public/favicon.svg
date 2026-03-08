@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Teal rounded-square background -->
+  <rect width="32" height="32" rx="5" fill="#1B6B65"/>
+  <!-- Compass-star polygon, same shape as logo, centred in 32×32.
+       Original points live in a 0–20 x 2–22 bounding box;
+       translate(6, 4) shifts them into the 6–26 x 6–26 region. -->
+  <polygon
+    points="10,2 12,10 20,12 12,14 10,22 8,14 0,12 8,10"
+    fill="#C9A96E"
+    transform="translate(6, 4)"
+  />
+</svg>

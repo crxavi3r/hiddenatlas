@@ -46,29 +46,21 @@ export default function Navbar() {
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '72px' }}>
           {/* Logo */}
-          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
-            <div style={{
-              width: '28px', height: '28px', borderRadius: '50%',
-              background: isTransparent ? 'rgba(255,255,255,0.9)' : '#1B6B65',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'background 0.4s'
-            }}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M7 1C3.686 1 1 3.686 1 7s2.686 6 6 6 6-2.686 6-6-2.686-6-6-6zm0 10.5A4.5 4.5 0 1 1 7 2.5a4.5 4.5 0 0 1 0 9z"
-                  fill={isTransparent ? '#1B6B65' : 'white'} />
-                <circle cx="7" cy="7" r="1.5" fill={isTransparent ? '#1B6B65' : 'white'} />
-              </svg>
-            </div>
-            <span style={{
-              fontFamily: "'Playfair Display', Georgia, serif",
-              fontSize: '20px',
-              fontWeight: '600',
-              letterSpacing: '-0.3px',
-              color: isTransparent ? 'white' : '#1C1A16',
-              transition: 'color 0.4s',
-            }}>
-              HiddenAtlas
-            </span>
+          <Link to="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
+            <img
+              src="/assets/logo-hiddenatlas.svg"
+              alt="HiddenAtlas"
+              style={{
+                height: '28px',
+                width: 'auto',
+                display: 'block',
+                // Dark teal text in SVG is unreadable on dark hero backgrounds.
+                // brightness(0) invert(1) converts all colours to white for the
+                // transparent-over-hero state; no filter on the solid white navbar.
+                filter: isTransparent ? 'brightness(0) invert(1)' : 'none',
+                transition: 'filter 0.4s ease',
+              }}
+            />
           </Link>
 
           {/* Desktop Nav */}

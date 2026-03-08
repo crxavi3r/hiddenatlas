@@ -1,0 +1,8 @@
+<svg width="220" height="40" viewBox="0 0 220 40" xmlns="http://www.w3.org/2000/svg">
+  <g fill="#C8A96A">
+    <polygon points="10,2 12,10 20,12 12,14 10,22 8,14 0,12 8,10"></polygon>
+  </g>
+  <text x="30" y="26" font-family="Playfair Display, serif" font-size="24" fill="#0F3D36">
+    HiddenAtlas
+  </text>
+</svg>
