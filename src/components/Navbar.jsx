@@ -50,13 +50,10 @@ export default function Navbar() {
             <img
               src="/assets/logo-hiddenatlas.svg"
               alt="HiddenAtlas"
+              className="ha-logo"
               style={{
-                height: '28px',
-                width: 'auto',
-                display: 'block',
-                // Dark teal text in SVG is unreadable on dark hero backgrounds.
-                // brightness(0) invert(1) converts all colours to white for the
-                // transparent-over-hero state; no filter on the solid white navbar.
+                // height/width controlled by .ha-logo in <style> below
+                // so the mobile media query can override without !important
                 filter: isTransparent ? 'brightness(0) invert(1)' : 'none',
                 transition: 'filter 0.4s ease',
               }}
@@ -179,7 +176,14 @@ export default function Navbar() {
       )}
 
       <style>{`
+        /* Logo sizing — height set here so mobile media query can override */
+        .ha-logo {
+          height: 32px;
+          width: auto;
+          display: block;
+        }
         @media (max-width: 768px) {
+          .ha-logo { height: 28px; }
           .hidden-mobile { display: none !important; }
           .show-mobile { display: block !important; }
         }
