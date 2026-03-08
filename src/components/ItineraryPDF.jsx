@@ -1,134 +1,229 @@
-// @react-pdf/renderer only supports TTF/OTF — no WOFF.
-// We use built-in PDF fonts to guarantee zero network dependency:
-//   Times-Roman / Times-Bold  → headings (Playfair Display equivalent)
-//   Helvetica / Helvetica-Bold → body (Inter equivalent)
+// @react-pdf/renderer — built-in PDF fonts only (TTF/OTF required; WOFF unsupported by fontkit)
+//   Times-Roman / Times-Bold  → headings
+//   Helvetica / Helvetica-Bold → body
 
 import { Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
 
+// ── Colour tokens ─────────────────────────────────────────────────────────────
 const C = {
-  teal: '#1B6B65',
-  gold: '#C9A96E',
-  cream: '#F4F1EC',
-  stone: '#FAFAF8',
-  charcoal: '#1C1A16',
-  muted: '#6B6156',
-  border: '#E8E3DA',
-  white: '#FFFFFF',
-  darkBg: '#111510',
+  teal:    '#1B6B65',
+  gold:    '#C9A96E',
+  cream:   '#F4F1EC',
+  stone:   '#FAFAF8',
+  charcoal:'#1C1A16',
+  muted:   '#6B6156',
+  border:  '#E8E3DA',
+  light:   '#EFF6F5',
+  white:   '#FFFFFF',
+  darkBg:  '#0D1410',
+  overlay: 'rgba(13,20,16,0.62)',
 };
 
+// A4 dimensions in points
+const PAGE_W = 595.28;
+const PAGE_H = 841.89;
+
+// ── Styles ────────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  // --- Cover ---
+
+  // ── Cover ──────────────────────────────────────────────────────────────────
   coverPage: {
     backgroundColor: C.darkBg,
-    padding: 0,
-    position: 'relative',
-    width: '100%',
-    height: '100%',
+    width: PAGE_W,
+    height: PAGE_H,
   },
-  coverImage: {
+  coverBgImage: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
+    top: 0, left: 0,
+    width: PAGE_W,
+    height: PAGE_H,
     objectFit: 'cover',
-    opacity: 0.45,
   },
-  coverOverlay: {
+  coverGradient: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'rgba(17,21,16,0.55)',
+    top: 0, left: 0,
+    width: PAGE_W,
+    height: PAGE_H,
+    backgroundColor: C.overlay,
   },
-  coverContent: {
+  // Top brand bar
+  coverTopBar: {
     position: 'absolute',
-    bottom: 72,
-    left: 56,
-    right: 56,
+    top: 0, left: 0, right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 52,
+    paddingTop: 36,
+    paddingBottom: 20,
   },
-  coverBrand: {
+  coverTopBrand: {
     fontFamily: 'Helvetica-Bold',
     fontSize: 9,
+    letterSpacing: 2.5,
+    color: C.gold,
+  },
+  coverTopLabel: {
+    fontFamily: 'Helvetica',
+    fontSize: 8,
+    letterSpacing: 1.5,
+    color: 'rgba(255,255,255,0.45)',
+  },
+  // Center hero text
+  coverCenter: {
+    position: 'absolute',
+    top: 0, left: 0,
+    width: PAGE_W,
+    height: PAGE_H,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 52,
+  },
+  coverEyebrow: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 8,
     letterSpacing: 3,
     color: C.gold,
-    marginBottom: 24,
+    marginBottom: 20,
+    textAlign: 'center',
   },
   coverTitle: {
     fontFamily: 'Times-Bold',
-    fontSize: 44,
+    fontSize: 56,
     color: C.white,
-    lineHeight: 1.15,
-    marginBottom: 14,
+    lineHeight: 1.1,
+    marginBottom: 12,
+    textAlign: 'center',
   },
   coverSubtitle: {
     fontFamily: 'Helvetica',
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
-    marginBottom: 32,
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.75)',
+    textAlign: 'center',
     lineHeight: 1.5,
+    marginBottom: 36,
   },
-  coverMeta: {
+  coverDivider: {
+    width: 48,
+    height: 2,
+    backgroundColor: C.gold,
+    marginBottom: 32,
+  },
+  // Bottom meta strip
+  coverBottomBar: {
+    position: 'absolute',
+    bottom: 0, left: 0, right: 0,
     flexDirection: 'row',
-    gap: 24,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 52,
+    paddingVertical: 24,
   },
   coverMetaItem: {
-    flexDirection: 'column',
-    gap: 3,
+    flex: 1,
+  },
+  coverMetaSep: {
+    width: 1,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    marginHorizontal: 0,
   },
   coverMetaLabel: {
     fontFamily: 'Helvetica-Bold',
-    fontSize: 8,
+    fontSize: 7,
     letterSpacing: 1.5,
     color: C.gold,
+    marginBottom: 4,
   },
   coverMetaValue: {
     fontFamily: 'Helvetica',
-    fontSize: 12,
-    color: C.white,
-  },
-  coverDivider: {
-    width: 40,
-    height: 2,
-    backgroundColor: C.gold,
-    marginBottom: 28,
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.85)',
+    lineHeight: 1.4,
   },
 
-  // --- Standard page ---
-  page: {
-    backgroundColor: C.stone,
-    padding: 0,
-  },
-  pageHeader: {
+  // ── Running header (all inner pages) ───────────────────────────────────────
+  runHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 48,
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
     backgroundColor: C.white,
   },
-  pageHeaderBrand: {
+  runHeaderBrand: {
     fontFamily: 'Times-Bold',
-    fontSize: 11,
+    fontSize: 10,
     color: C.teal,
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
-  pageHeaderSection: {
-    fontFamily: 'Helvetica-Bold',
+  runHeaderSection: {
+    fontFamily: 'Helvetica',
     fontSize: 8,
-    letterSpacing: 2,
+    letterSpacing: 1.5,
     color: C.muted,
   },
-  pageBody: {
-    padding: '32px 48px',
+
+  // ── Info / Overview page ───────────────────────────────────────────────────
+  infoPage: {
+    backgroundColor: C.stone,
+  },
+  infoBody: {
+    padding: '0 48px 36px',
     flex: 1,
   },
+  // Hero banner on overview page (teal strip)
+  infoBanner: {
+    backgroundColor: C.teal,
+    paddingHorizontal: 48,
+    paddingTop: 32,
+    paddingBottom: 32,
+    marginBottom: 32,
+  },
+  infoEyebrow: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 8,
+    letterSpacing: 2.5,
+    color: 'rgba(255,255,255,0.55)',
+    marginBottom: 10,
+  },
+  infoTitle: {
+    fontFamily: 'Times-Bold',
+    fontSize: 32,
+    color: C.white,
+    lineHeight: 1.15,
+    marginBottom: 6,
+  },
+  infoSubtitle: {
+    fontFamily: 'Helvetica',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
+    marginBottom: 24,
+    lineHeight: 1.4,
+  },
+  // Meta row inside banner
+  infoMetaRow: {
+    flexDirection: 'row',
+    gap: 0,
+  },
+  infoMetaBlock: {
+    marginRight: 32,
+  },
+  infoMetaLabel: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 7,
+    letterSpacing: 1.5,
+    color: C.gold,
+    marginBottom: 3,
+  },
+  infoMetaValue: {
+    fontFamily: 'Helvetica',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.9)',
+  },
 
-  // --- Section headings ---
+  // Section label
   sectionLabel: {
     fontFamily: 'Helvetica-Bold',
     fontSize: 8,
@@ -136,110 +231,91 @@ const s = StyleSheet.create({
     color: C.teal,
     marginBottom: 10,
   },
-  sectionTitle: {
-    fontFamily: 'Times-Bold',
-    fontSize: 28,
-    color: C.charcoal,
-    lineHeight: 1.2,
-    marginBottom: 16,
-  },
   sectionDivider: {
-    width: 32,
+    width: 28,
     height: 2,
     backgroundColor: C.gold,
-    marginBottom: 20,
+    marginBottom: 16,
   },
 
-  // --- Overview page ---
-  overviewDescription: {
+  // Description paragraph
+  descText: {
     fontFamily: 'Helvetica',
-    fontSize: 11,
+    fontSize: 10.5,
     color: C.muted,
-    lineHeight: 1.75,
+    lineHeight: 1.8,
     marginBottom: 28,
   },
-  highlightsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+
+  // Highlights list
+  highlightsList: {
+    marginBottom: 28,
     gap: 8,
-    marginBottom: 28,
   },
-  highlightPill: {
-    backgroundColor: '#EFF6F5',
-    borderWidth: 1,
-    borderColor: '#A8D5D1',
+  highlightItem: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+  },
+  highlightDot: {
+    width: 5,
+    height: 5,
     borderRadius: 3,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    backgroundColor: C.gold,
+    marginTop: 4,
+    flexShrink: 0,
   },
   highlightText: {
-    fontFamily: 'Helvetica-Bold',
-    fontSize: 9,
-    color: C.teal,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 28,
-  },
-  metaCard: {
-    flex: 1,
-    backgroundColor: C.white,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: C.border,
-    padding: 16,
-  },
-  metaCardLabel: {
-    fontFamily: 'Helvetica-Bold',
-    fontSize: 8,
-    letterSpacing: 1.5,
-    color: C.muted,
-    marginBottom: 6,
-  },
-  metaCardValue: {
-    fontFamily: 'Times-Bold',
-    fontSize: 16,
+    fontFamily: 'Helvetica',
+    fontSize: 10,
     color: C.charcoal,
+    lineHeight: 1.6,
+    flex: 1,
   },
+
+  // Route box
   routeBox: {
     backgroundColor: C.white,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: C.border,
-    padding: 20,
+    borderRadius: 5,
+    borderLeftWidth: 3,
+    borderLeftColor: C.teal,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     marginBottom: 24,
   },
-  routeBoxTitle: {
+  routeLabel: {
     fontFamily: 'Helvetica-Bold',
-    fontSize: 9,
+    fontSize: 7.5,
     letterSpacing: 2,
     color: C.teal,
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  routeBoxText: {
+  routeText: {
     fontFamily: 'Helvetica',
     fontSize: 10,
     color: C.muted,
     lineHeight: 1.7,
   },
+
+  // Included grid
   includedGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
   },
   includedItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    width: '48%',
-    marginBottom: 6,
+    gap: 7,
+    width: '50%',
+    marginBottom: 7,
+    paddingRight: 8,
   },
   includedDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
     backgroundColor: C.gold,
+    flexShrink: 0,
   },
   includedText: {
     fontFamily: 'Helvetica',
@@ -249,208 +325,232 @@ const s = StyleSheet.create({
     lineHeight: 1.5,
   },
 
-  // --- Day page ---
+  // ── Day pages ──────────────────────────────────────────────────────────────
   dayPage: {
     backgroundColor: C.white,
-    padding: 0,
   },
   dayImageStrip: {
     width: '100%',
-    height: 200,
+    height: 210,
     objectFit: 'cover',
     objectPosition: 'center',
   },
   dayImagePlaceholder: {
     width: '100%',
-    height: 200,
+    height: 210,
     backgroundColor: C.cream,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dayImagePlaceholderText: {
-    fontFamily: 'Helvetica',
-    fontSize: 9,
-    color: C.border,
-    letterSpacing: 2,
-  },
-  dayContent: {
-    padding: '28px 48px',
-  },
-  dayNumber: {
+  dayPlaceholderText: {
     fontFamily: 'Helvetica-Bold',
     fontSize: 8,
+    color: C.border,
+    letterSpacing: 3,
+  },
+  dayBody: {
+    padding: '24px 48px 28px',
+    flex: 1,
+  },
+  dayChip: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 7.5,
     letterSpacing: 2.5,
     color: C.gold,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   dayTitle: {
     fontFamily: 'Times-Bold',
-    fontSize: 22,
+    fontSize: 20,
     color: C.charcoal,
-    marginBottom: 6,
-    lineHeight: 1.2,
-  },
-  daySubtitle: {
-    fontFamily: 'Helvetica',
-    fontSize: 10,
-    color: C.muted,
-    marginBottom: 14,
+    lineHeight: 1.25,
+    marginBottom: 4,
   },
   dayDivider: {
-    width: 28,
+    width: 24,
     height: 1.5,
     backgroundColor: C.gold,
-    marginBottom: 16,
+    marginTop: 12,
+    marginBottom: 14,
   },
-  dayDescription: {
+  dayDesc: {
     fontFamily: 'Helvetica',
     fontSize: 10,
     color: C.muted,
     lineHeight: 1.75,
-    marginBottom: 20,
+    marginBottom: 16,
   },
-  dayActivities: {
-    gap: 8,
+  dayBullets: {
+    gap: 6,
   },
-  dayActivity: {
+  dayBulletRow: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 6,
+    gap: 9,
+    alignItems: 'flex-start',
+    marginBottom: 5,
   },
-  dayActivityBullet: {
+  dayBulletDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
     backgroundColor: C.teal,
-    marginTop: 4,
+    marginTop: 3.5,
     flexShrink: 0,
   },
-  dayActivityText: {
+  dayBulletText: {
     fontFamily: 'Helvetica',
-    fontSize: 10,
+    fontSize: 9.5,
     color: C.charcoal,
     lineHeight: 1.6,
     flex: 1,
   },
-  dayStayRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-  },
-  dayStayLabel: {
-    fontFamily: 'Helvetica-Bold',
-    fontSize: 8,
-    letterSpacing: 1.5,
-    color: C.muted,
-  },
-  dayStayValue: {
-    fontFamily: 'Helvetica',
-    fontSize: 10,
-    color: C.charcoal,
-  },
 
-  // --- CTA page ---
+  // ── CTA page ───────────────────────────────────────────────────────────────
   ctaPage: {
     backgroundColor: C.teal,
-    padding: '72px 56px',
+    padding: '0 0 0 0',
+  },
+  ctaContent: {
+    flex: 1,
+    padding: '80px 60px 60px',
     justifyContent: 'center',
   },
   ctaBrand: {
     fontFamily: 'Helvetica-Bold',
-    fontSize: 9,
+    fontSize: 8,
     letterSpacing: 3,
-    color: 'rgba(255,255,255,0.5)',
-    marginBottom: 16,
+    color: 'rgba(255,255,255,0.4)',
+    marginBottom: 20,
   },
   ctaTitle: {
     fontFamily: 'Times-Bold',
-    fontSize: 34,
+    fontSize: 38,
     color: C.white,
     lineHeight: 1.2,
-    marginBottom: 20,
+    marginBottom: 8,
   },
   ctaDivider: {
-    width: 40,
+    width: 44,
     height: 2,
     backgroundColor: C.gold,
+    marginTop: 20,
     marginBottom: 24,
   },
   ctaBody: {
     fontFamily: 'Helvetica',
     fontSize: 12,
-    color: 'rgba(255,255,255,0.75)',
-    lineHeight: 1.75,
-    marginBottom: 36,
-    maxWidth: 400,
+    color: 'rgba(255,255,255,0.72)',
+    lineHeight: 1.8,
+    marginBottom: 40,
+    maxWidth: 420,
   },
-  ctaUrl: {
+  // CTA button block
+  ctaButton: {
+    backgroundColor: C.gold,
+    borderRadius: 4,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    alignSelf: 'flex-start',
+    marginBottom: 40,
+  },
+  ctaButtonLabel: {
     fontFamily: 'Helvetica-Bold',
-    fontSize: 13,
-    color: C.gold,
+    fontSize: 11,
+    letterSpacing: 1.5,
+    color: C.white,
+    marginBottom: 2,
+  },
+  ctaButtonUrl: {
+    fontFamily: 'Helvetica',
+    fontSize: 9,
+    color: 'rgba(255,255,255,0.75)',
     letterSpacing: 0.5,
   },
-  ctaNote: {
+  ctaFooter: {
     fontFamily: 'Helvetica',
     fontSize: 9,
-    color: 'rgba(255,255,255,0.4)',
-    marginTop: 48,
+    color: 'rgba(255,255,255,0.3)',
   },
-  pageNumber: {
+
+  // ── Page number ─────────────────────────────────────────────────────────────
+  pageNum: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 18,
     right: 48,
     fontFamily: 'Helvetica',
-    fontSize: 9,
+    fontSize: 8,
     color: C.muted,
   },
 });
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-function PageHeader({ section, title }) {
+/** Normalise image URL — strip query string and re-append w/q params */
+function imgUrl(src, w = 1000) {
+  if (!src) return null;
+  const base = src.startsWith('http')
+    ? src.replace(/\?.*/, '')
+    : `https://images.unsplash.com/photo-${src}`;
+  return `${base}?w=${w}&q=80`;
+}
+
+/** Running header shared by all inner pages */
+function RunHeader({ country, title }) {
   return (
-    <View style={s.pageHeader}>
-      <Text style={s.pageHeaderBrand}>HiddenAtlas</Text>
-      <Text style={s.pageHeaderSection}>{section} — {title}</Text>
+    <View style={s.runHeader}>
+      <Text style={s.runHeaderBrand}>HiddenAtlas</Text>
+      <Text style={s.runHeaderSection}>{country.toUpperCase()} — {title.toUpperCase()}</Text>
     </View>
   );
 }
 
+// ── Page components ───────────────────────────────────────────────────────────
+
 function CoverPage({ itinerary }) {
   const { title, subtitle, country, region, duration, groupSize, coverImage, image } = itinerary;
-  const heroUrl = (coverImage || image || '').replace(/\?.*/, '') + '?w=1200&q=80';
+  const hero = imgUrl(coverImage || image, 1400);
 
   return (
     <Page size="A4" style={s.coverPage}>
-      {heroUrl ? <Image src={heroUrl} style={s.coverImage} /> : null}
-      <View style={s.coverOverlay} />
-      <View style={s.coverContent}>
-        <Text style={s.coverBrand}>HIDDENATLAS · CURATED TRAVEL</Text>
-        <View style={s.coverDivider} />
+      {/* Full-bleed background image */}
+      {hero ? <Image src={hero} style={s.coverBgImage} /> : null}
+
+      {/* Dark overlay */}
+      <View style={s.coverGradient} />
+
+      {/* Top brand bar */}
+      <View style={s.coverTopBar}>
+        <Text style={s.coverTopBrand}>HIDDENATLAS</Text>
+        <Text style={s.coverTopLabel}>CURATED TRAVEL GUIDE</Text>
+      </View>
+
+      {/* Centre hero text */}
+      <View style={s.coverCenter}>
+        <Text style={s.coverEyebrow}>{country.toUpperCase()}{region ? ` · ${region.toUpperCase()}` : ''}</Text>
         <Text style={s.coverTitle}>{title}</Text>
-        <Text style={s.coverSubtitle}>{subtitle || [country, region].filter(Boolean).join(' · ')}</Text>
-        <View style={s.coverMeta}>
-          <View style={s.coverMetaItem}>
-            <Text style={s.coverMetaLabel}>DESTINATION</Text>
-            <Text style={s.coverMetaValue}>{country}{region ? `, ${region}` : ''}</Text>
-          </View>
-          {duration ? (
-            <View style={s.coverMetaItem}>
-              <Text style={s.coverMetaLabel}>DURATION</Text>
-              <Text style={s.coverMetaValue}>{duration} days</Text>
-            </View>
-          ) : null}
-          {groupSize ? (
-            <View style={s.coverMetaItem}>
-              <Text style={s.coverMetaLabel}>IDEAL FOR</Text>
-              <Text style={s.coverMetaValue}>{groupSize}</Text>
-            </View>
-          ) : null}
+        <Text style={s.coverSubtitle}>{subtitle}</Text>
+        <View style={s.coverDivider} />
+      </View>
+
+      {/* Bottom meta strip */}
+      <View style={s.coverBottomBar}>
+        <View style={s.coverMetaItem}>
+          <Text style={s.coverMetaLabel}>DESTINATION</Text>
+          <Text style={s.coverMetaValue}>{country}{region ? `, ${region}` : ''}</Text>
         </View>
+        <View style={s.coverMetaSep} />
+        {duration ? (
+          <View style={[s.coverMetaItem, { paddingLeft: 28 }]}>
+            <Text style={s.coverMetaLabel}>DURATION</Text>
+            <Text style={s.coverMetaValue}>{duration}</Text>
+          </View>
+        ) : null}
+        {groupSize ? (
+          <View style={[s.coverMetaItem, { paddingLeft: 28 }]}>
+            <Text style={s.coverMetaLabel}>IDEAL FOR</Text>
+            <Text style={s.coverMetaValue}>{groupSize}</Text>
+          </View>
+        ) : null}
       </View>
     </Page>
   );
@@ -458,47 +558,63 @@ function CoverPage({ itinerary }) {
 
 function OverviewPage({ itinerary }) {
   const {
-    title, country, description, highlights = [],
-    routeOverview, included = [], duration, difficulty, bestFor = [],
+    title, subtitle, country, region, description,
+    highlights = [], routeOverview, included = [],
+    duration, difficulty, bestFor = [],
   } = itinerary;
 
   return (
-    <Page size="A4" style={s.page}>
-      <PageHeader section={country} title={title} />
-      <View style={s.pageBody}>
-        <Text style={s.sectionLabel}>TRIP OVERVIEW</Text>
-        <Text style={s.sectionTitle}>{title}</Text>
-        <View style={s.sectionDivider} />
+    <Page size="A4" style={s.infoPage}>
+      <RunHeader country={country} title={title} />
 
-        {description ? <Text style={s.overviewDescription}>{description}</Text> : null}
-
-        <View style={s.metaRow}>
+      {/* Teal info banner */}
+      <View style={s.infoBanner}>
+        <Text style={s.infoEyebrow}>TRIP OVERVIEW</Text>
+        <Text style={s.infoTitle}>{title}</Text>
+        {subtitle ? <Text style={s.infoSubtitle}>{subtitle}</Text> : null}
+        <View style={s.infoMetaRow}>
+          <View style={s.infoMetaBlock}>
+            <Text style={s.infoMetaLabel}>DESTINATION</Text>
+            <Text style={s.infoMetaValue}>{country}{region ? `, ${region}` : ''}</Text>
+          </View>
           {duration ? (
-            <View style={s.metaCard}>
-              <Text style={s.metaCardLabel}>DURATION</Text>
-              <Text style={s.metaCardValue}>{duration} days</Text>
+            <View style={s.infoMetaBlock}>
+              <Text style={s.infoMetaLabel}>DURATION</Text>
+              <Text style={s.infoMetaValue}>{duration}</Text>
             </View>
           ) : null}
           {difficulty ? (
-            <View style={s.metaCard}>
-              <Text style={s.metaCardLabel}>PACE</Text>
-              <Text style={s.metaCardValue}>{difficulty}</Text>
+            <View style={s.infoMetaBlock}>
+              <Text style={s.infoMetaLabel}>PACE</Text>
+              <Text style={s.infoMetaValue}>{difficulty}</Text>
             </View>
           ) : null}
           {bestFor.length > 0 ? (
-            <View style={s.metaCard}>
-              <Text style={s.metaCardLabel}>BEST FOR</Text>
-              <Text style={s.metaCardValue}>{bestFor.join(', ')}</Text>
+            <View style={s.infoMetaBlock}>
+              <Text style={s.infoMetaLabel}>BEST FOR</Text>
+              <Text style={s.infoMetaValue}>{bestFor.join(', ')}</Text>
             </View>
           ) : null}
         </View>
+      </View>
 
+      <View style={s.infoBody}>
+        {/* Description */}
+        {description ? (
+          <>
+            <View style={s.sectionDivider} />
+            <Text style={s.descText}>{description}</Text>
+          </>
+        ) : null}
+
+        {/* Highlights */}
         {highlights.length > 0 ? (
           <>
-            <Text style={[s.sectionLabel, { marginBottom: 8 }]}>HIGHLIGHTS</Text>
-            <View style={s.highlightsGrid}>
+            <Text style={s.sectionLabel}>HIGHLIGHTS</Text>
+            <View style={s.highlightsList}>
               {highlights.map((h, i) => (
-                <View key={i} style={s.highlightPill}>
+                <View key={i} style={s.highlightItem}>
+                  <View style={s.highlightDot} />
                   <Text style={s.highlightText}>{h}</Text>
                 </View>
               ))}
@@ -506,16 +622,18 @@ function OverviewPage({ itinerary }) {
           </>
         ) : null}
 
+        {/* Route */}
         {routeOverview ? (
           <View style={s.routeBox}>
-            <Text style={s.routeBoxTitle}>ROUTE OVERVIEW</Text>
-            <Text style={s.routeBoxText}>{routeOverview}</Text>
+            <Text style={s.routeLabel}>ROUTE OVERVIEW</Text>
+            <Text style={s.routeText}>{routeOverview}</Text>
           </View>
         ) : null}
 
+        {/* Included */}
         {included.length > 0 ? (
           <>
-            <Text style={[s.sectionLabel, { marginBottom: 10 }]}>WHAT'S INCLUDED</Text>
+            <Text style={[s.sectionLabel, { marginTop: 4 }]}>WHAT'S INCLUDED</Text>
             <View style={s.includedGrid}>
               {included.map((item, i) => (
                 <View key={i} style={s.includedItem}>
@@ -527,62 +645,59 @@ function OverviewPage({ itinerary }) {
           </>
         ) : null}
       </View>
-      <Text style={s.pageNumber} render={({ pageNumber }) => `${pageNumber}`} fixed />
+
+      <Text style={s.pageNum} render={({ pageNumber }) => String(pageNumber)} fixed />
     </Page>
   );
 }
 
 function DayPage({ day, index, itinerary }) {
   const { title: itinTitle, country } = itinerary;
-  const { title, subtitle, desc, description, bullets = [], activities = [], stay, img } = day;
+  const { title, desc, description, bullets = [], activities = [], stay, img } = day;
   const dayDesc = desc || description || null;
   const dayActivities = bullets.length ? bullets : activities;
-  const imgUrl = img
-    ? img.startsWith('http')
-      ? img.replace(/\?.*/, '') + '?w=1000&q=80'
-      : `https://images.unsplash.com/photo-${img}?w=1000&q=80`
-    : null;
+  const hero = imgUrl(img);
 
   return (
     <Page size="A4" style={s.dayPage}>
-      <PageHeader section={country} title={itinTitle} />
+      <RunHeader country={country} title={itinTitle} />
 
-      {imgUrl ? (
-        <Image src={imgUrl} style={s.dayImageStrip} />
+      {/* Banner image */}
+      {hero ? (
+        <Image src={hero} style={s.dayImageStrip} />
       ) : (
         <View style={s.dayImagePlaceholder}>
-          <Text style={s.dayImagePlaceholderText}>{country.toUpperCase()}</Text>
+          <Text style={s.dayPlaceholderText}>{country.toUpperCase()}</Text>
         </View>
       )}
 
-      <View style={s.dayContent}>
-        <Text style={s.dayNumber}>DAY {index + 1}</Text>
+      <View style={s.dayBody}>
+        <Text style={s.dayChip}>DAY {index + 1}</Text>
         <Text style={s.dayTitle}>{title}</Text>
-        {subtitle ? <Text style={s.daySubtitle}>{subtitle}</Text> : null}
         <View style={s.dayDivider} />
 
-        {dayDesc ? <Text style={s.dayDescription}>{dayDesc}</Text> : null}
+        {dayDesc ? <Text style={s.dayDesc}>{dayDesc}</Text> : null}
 
         {dayActivities.length > 0 ? (
-          <View style={s.dayActivities}>
+          <View style={s.dayBullets}>
             {dayActivities.map((act, i) => (
-              <View key={i} style={s.dayActivity}>
-                <View style={s.dayActivityBullet} />
-                <Text style={s.dayActivityText}>{act}</Text>
+              <View key={i} style={s.dayBulletRow}>
+                <View style={s.dayBulletDot} />
+                <Text style={s.dayBulletText}>{act}</Text>
               </View>
             ))}
           </View>
         ) : null}
 
         {stay ? (
-          <View style={s.dayStayRow}>
-            <Text style={s.dayStayLabel}>TONIGHT'S STAY:</Text>
-            <Text style={s.dayStayValue}>{stay}</Text>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.border, alignItems: 'center' }}>
+            <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 1.5, color: C.muted }}>TONIGHT'S STAY:</Text>
+            <Text style={{ fontFamily: 'Helvetica', fontSize: 10, color: C.charcoal }}>{stay}</Text>
           </View>
         ) : null}
       </View>
 
-      <Text style={s.pageNumber} render={({ pageNumber }) => `${pageNumber}`} fixed />
+      <Text style={s.pageNum} render={({ pageNumber }) => String(pageNumber)} fixed />
     </Page>
   );
 }
@@ -591,14 +706,22 @@ function CTAPage({ itinerary }) {
   const { title } = itinerary;
   return (
     <Page size="A4" style={s.ctaPage}>
-      <Text style={s.ctaBrand}>HIDDENATLAS</Text>
-      <Text style={s.ctaTitle}>Ready to make{'\n'}this trip yours?</Text>
-      <View style={s.ctaDivider} />
-      <Text style={s.ctaBody}>
-        This itinerary gives you the framework. If you'd like a fully personalised version — with handpicked accommodation, restaurant reservations, and real-time logistics — our team of expert planners would love to help.
-      </Text>
-      <Text style={s.ctaUrl}>hiddenatlas.travel/custom</Text>
-      <Text style={s.ctaNote}>{title} · Free Itinerary · hiddenatlas.travel</Text>
+      <View style={s.ctaContent}>
+        <Text style={s.ctaBrand}>HIDDENATLAS · CURATED TRAVEL</Text>
+        <Text style={s.ctaTitle}>Ready to make{'\n'}this trip yours?</Text>
+        <View style={s.ctaDivider} />
+        <Text style={s.ctaBody}>
+          This itinerary gives you the framework. Our expert planners can build a fully personalised version — handpicked accommodation, private guides, restaurant reservations, and real-time support throughout your journey.
+        </Text>
+
+        {/* CTA button block */}
+        <View style={s.ctaButton}>
+          <Text style={s.ctaButtonLabel}>PLAN YOUR TRIP</Text>
+          <Text style={s.ctaButtonUrl}>hiddenatlas.travel/custom</Text>
+        </View>
+
+        <Text style={s.ctaFooter}>{title} · Free Itinerary · hiddenatlas.travel</Text>
+      </View>
     </Page>
   );
 }
