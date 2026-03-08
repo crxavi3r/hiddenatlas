@@ -5,9 +5,19 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // TEMPORARY DEBUG — remove after confirming env var is present
   if (!process.env.RESEND_API_KEY) {
-    return res.status(500).json({ error: 'Email service not configured.' });
+    return res.status(500).json({
+      error: 'RESEND_API_KEY is not set in this runtime environment.',
+      debug: {
+        hasResendKey: false,
+        envNameUsed: 'RESEND_API_KEY',
+        routeFile: '/api/send-brief.js',
+        note: 'Check Vercel dashboard: Settings → Environment Variables → confirm name is exactly RESEND_API_KEY and is enabled for Production.',
+      },
+    });
   }
+  // END TEMPORARY DEBUG
 
   const {
     name,
@@ -30,6 +40,11 @@ export default async function handler(req, res) {
   const resend = new Resend(process.env.RESEND_API_KEY);
 
   const travelStyle = Array.isArray(style) && style.length ? style.join(', ') : 'Not selected';
+
+  // TEMPORARY DEBUG
+  console.log('[send-brief] RESEND_API_KEY present:', !!process.env.RESEND_API_KEY);
+  console.log('[send-brief] Attempting resend.emails.send...');
+  // END TEMPORARY DEBUG
 
   try {
     await resend.emails.send({
