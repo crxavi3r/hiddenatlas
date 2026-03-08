@@ -58,7 +58,7 @@ export default function ItinerariesPage() {
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 style={{
-                  height: '52px',
+                  height: '54px',
                   padding: '0 20px 0 52px',
                   border: '1px solid #E8E5DF',
                   borderRadius: '14px',
@@ -72,7 +72,39 @@ export default function ItinerariesPage() {
               />
             </div>
           </div>
-          <p style={{ marginTop: '14px', fontSize: '13px', color: 'rgba(255,255,255,0.38)', letterSpacing: '0.2px' }}>
+
+          {/* Popular searches */}
+          <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.42)', letterSpacing: '0.3px' }}>
+              Popular:
+            </span>
+            {['Japan', 'Bali', 'Italy', 'Morocco'].map((term, i, arr) => (
+              <span key={term} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  onClick={() => setSearchQuery(term)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: '0',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    color: 'rgba(255,255,255,0.62)',
+                    letterSpacing: '0.3px',
+                    transition: 'color 0.2s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,0.95)'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.62)'}
+                >
+                  {term}
+                </button>
+                {i < arr.length - 1 && (
+                  <span style={{ color: 'rgba(255,255,255,0.22)', fontSize: '11px' }}>•</span>
+                )}
+              </span>
+            ))}
+          </div>
+
+          <p style={{ marginTop: '12px', fontSize: '12px', color: 'rgba(255,255,255,0.28)', letterSpacing: '0.2px' }}>
             {freeJourneys.length + premiumJourneys.length} curated journeys
           </p>
         </div>
