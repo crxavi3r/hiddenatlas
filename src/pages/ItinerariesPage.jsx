@@ -18,13 +18,13 @@ export default function ItinerariesPage() {
   return (
     <div style={{ background: '#FAFAF8', paddingTop: '72px' }}>
 
-      {/* Hero */}
+      {/* Hero + search — combined so the input feels anchored to the heading */}
       <section style={{
         background: 'linear-gradient(180deg, #091E1B 0%, #0F3D36 45%, #1B6B65 100%)',
-        padding: 'clamp(48px, 8vw, 100px) 24px 0',
+        padding: 'clamp(48px, 8vw, 100px) 24px clamp(48px, 7vw, 88px)',
         textAlign: 'center',
       }}>
-        <div style={{ maxWidth: '720px', margin: '0 auto', paddingBottom: '64px' }}>
+        <div style={{ maxWidth: '720px', margin: '0 auto' }}>
           <span style={{
             fontSize: '11px', fontWeight: '600', letterSpacing: '2px', textTransform: 'uppercase',
             color: '#C9A96E', display: 'block', marginBottom: '16px',
@@ -40,54 +40,46 @@ export default function ItinerariesPage() {
           }}>
             Itineraries worth the journey.
           </h1>
-          <p style={{ fontSize: '17px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.7', maxWidth: '520px', margin: '0 auto' }}>
+          <p style={{ fontSize: '17px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.7', maxWidth: '520px', margin: '0 auto 40px' }}>
             Every route is researched on the ground by someone who has actually been there. Browse free and premium plans for your next extraordinary trip.
           </p>
-        </div>
-      </section>
 
-      {/* Search bar */}
-      <section style={{ background: 'white', borderBottom: '1px solid #E8E3DA', position: 'sticky', top: '72px', zIndex: 10 }}>
-        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '14px 24px' }}>
-          {/*
-            3-column grid: spacer | search | count
-            The spacer (col 1) mirrors the count (col 3) so the input (col 2) is
-            truly centred regardless of the count text length.
-          */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '16px' }}>
-            <div />
+          {/* Search input — sits directly below the heading copy */}
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
             <div style={{ position: 'relative' }}>
               <Search
-                size={16}
-                style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#8C8070', pointerEvents: 'none' }}
+                size={18}
+                style={{ position: 'absolute', left: '18px', top: '50%', transform: 'translateY(-50%)', color: '#9C9488', pointerEvents: 'none' }}
               />
               <input
                 type="text"
                 className="ha-search-input"
-                placeholder="Search destinations..."
+                placeholder="Where would you like to go?"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 style={{
-                  height: '44px',
-                  padding: '0 16px 0 46px',
-                  border: '1px solid #E8E3DA',
-                  borderRadius: '10px',
-                  fontSize: '15px',
+                  height: '52px',
+                  padding: '0 20px 0 52px',
+                  border: '1px solid #E8E5DF',
+                  borderRadius: '14px',
+                  fontSize: '16px',
                   color: '#1C1A16',
-                  background: '#FAFAF8',
+                  background: 'white',
                   outline: 'none',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.04)',
                   display: 'block',
                 }}
               />
             </div>
-            <span style={{ fontSize: '13px', color: '#8C8070', textAlign: 'right', whiteSpace: 'nowrap' }}>
-              {freeJourneys.length + premiumJourneys.length} journeys
-            </span>
           </div>
+          <p style={{ marginTop: '14px', fontSize: '13px', color: 'rgba(255,255,255,0.38)', letterSpacing: '0.2px' }}>
+            {freeJourneys.length + premiumJourneys.length} curated journeys
+          </p>
         </div>
+
         <style>{`
-          .ha-search-input { width: 420px; }
-          @media (max-width: 600px) { .ha-search-input { width: calc(100vw - 96px); } }
+          .ha-search-input { width: 520px; }
+          @media (max-width: 600px) { .ha-search-input { width: calc(100vw - 64px); } }
         `}</style>
       </section>
 

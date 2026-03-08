@@ -178,7 +178,7 @@ export default function Navbar() {
       <style>{`
         /* Logo sizing — height set here so mobile media query can override */
         .ha-logo {
-          height: 32px;
+          height: 34px;
           width: auto;
           display: block;
         }
