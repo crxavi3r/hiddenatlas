@@ -2,7 +2,30 @@
   "permissions": {
     "allow": [
       "Bash(npm run:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git:*)",
+      "Bash(curl:*)",
+      "WebSearch",
+      "Bash(echo === Checking for broken short IDs ===:*)",
+      "Bash(__NEW_LINE_5844784e9631d3fb__ python3:*)",
+      "Bash(__NEW_LINE_ecdf2287fd041a6a__ python3:*)",
+      "Bash(__NEW_LINE_9a75593789bc7579__ python3:*)",
+      "Bash(__NEW_LINE_5e3d0135868b7ba8__ echo:*)",
+      "Bash(python3:*)",
+      "Bash(__NEW_LINE_41198d34d73b630a__ echo:*)",
+      "Bash(npm install:*)",
+      "WebFetch(domain:unsplash.com)",
+      "Bash(do:*)",
+      "Read(//Users/cristianoxavier/Documents/Projects/HiddenAtlas/**)",
+      "Bash(done)",
+      "Bash(node:*)",
+      "WebFetch(domain:images.unsplash.com)",
+      "WebFetch(domain:johnnyafrica.com)",
+      "WebFetch(domain:www.wanderlustingk.com)",
+      "WebFetch(domain:www.thebrokebackpacker.com)",
+      "WebFetch(domain:voyeglobal.com)",
+      "WebFetch(domain:www.moonhoneytravel.com)",
+      "WebFetch(domain:wanderwithlaura.com)"
     ]
   }
 }
