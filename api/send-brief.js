@@ -48,9 +48,9 @@ export default async function handler(req, res) {
 
   try {
     await resend.emails.send({
-      from: 'HiddenAtlas <brief@hiddenatlas.travel>',
-      to: ['cristiano.xavier@outlook.com'],
-      subject: 'New Custom Trip Request — HiddenAtlas',
+      from: 'onboarding@resend.dev',
+      to: 'cristiano.xavier@outlook.com',
+      subject: `HiddenAtlas Trip Request – ${destination || 'New Inquiry'}`,
       html: `
         <p><strong>Name:</strong> ${name}</p>
         <p><strong>Email:</strong> ${email}</p>
@@ -73,6 +73,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true });
   } catch (err) {
     console.error('[send-brief]', err);
-    return res.status(500).json({ error: 'Failed to send your request. Please try again.' });
+    return res.status(500).json({ error: err.message });
   }
 }
