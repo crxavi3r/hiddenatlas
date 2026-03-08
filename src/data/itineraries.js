@@ -63,7 +63,7 @@ export const itineraries = [
           "Padang Padang Beach — the small cove below the cliffs, accessible through a rock crevice",
           "Bingin Beach — the tiered clifftop warung cafés above the surf break",
         ],
-        img: "https://images.unsplash.com/photo-1555400038-63f5ba517a47?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1576019206484-54273acdfa89?w=800&q=80",
       },
       {
         day: 2,
@@ -75,7 +75,7 @@ export const itineraries = [
           "Ubud Palace (Puri Saren) — the royal palace where traditional dance is still performed",
           "Ubud Art Market — the covered market for textiles, carvings and silver work",
         ],
-        img: "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1576796225952-44192ed176ad?w=800&q=80",
       },
       {
         day: 3,
@@ -97,7 +97,7 @@ export const itineraries = [
           "Batur caldera — the 13-kilometre-wide ancient caldera containing Lake Batur",
           "Kintamani viewpoint — the ridge town overlooking the volcano and crater lake",
         ],
-        img: "https://images.unsplash.com/photo-1555993539-1732b0258235?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1532186651327-6ac23687d189?w=800&q=80",
       },
       {
         day: 5,
@@ -132,7 +132,7 @@ export const itineraries = [
           "USS Liberty shipwreck, Tulamben — a WWII cargo ship sunk in 1963 by volcanic activity",
           "Mount Agung — Bali's highest peak and holiest volcano, visible from the coast road",
         ],
-        img: "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=800&q=80",
+        img: null,
       },
       {
         day: 8,
@@ -143,7 +143,7 @@ export const itineraries = [
           "Canggu beach — the black volcanic sand beach with consistent surf breaks",
           "Echo Beach — the most photogenic of the Canggu beaches at dusk",
         ],
-        img: "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1555865138-193ba536d7e0?w=800&q=80",
       },
       {
         day: 9,
@@ -154,7 +154,7 @@ export const itineraries = [
           "Jalan Petitenget — the gallery and design strip with the best boutique shopping on the island",
           "Traditional Balinese massage — the four-hand technique with coconut and frangipani oil",
         ],
-        img: "https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1484994223141-cd796f3c3c14?w=800&q=80",
       },
       {
         day: 10,
@@ -164,7 +164,7 @@ export const itineraries = [
           "Jimbaran Bay — the fishing beach and seafood restaurant strip south of Seminyak",
           "Ngurah Rai International Airport — 20 minutes from Jimbaran, 45 from Seminyak",
         ],
-        img: "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=800&q=80",
+        img: null,
       },
     ],
     whySpecial: "Bali is one of the most visited islands in the world, which makes it easy to visit it badly. This route is structured around the version of Bali that exists between the obvious stops: the highland temples at dawn before the coaches arrive, the offshore island that most visitors skip, the east coast fishing villages that haven't changed their shape since the 1970s. The structure gives you everything the island is famous for while sidestepping the version of it that Instagram built.",
@@ -225,7 +225,7 @@ export const itineraries = [
           "Chain Bridge — the first permanent bridge to connect Buda and Pest, opened in 1849",
           "Hungarian State Opera — one of the most ornate opera houses in Europe",
         ],
-        img: "https://images.unsplash.com/photo-1566132127697-4524fea60007?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1557846699-4d18ac9898a6?w=800&q=80",
       },
       {
         day: 3,
@@ -282,7 +282,7 @@ export const itineraries = [
           "Gordale Scar — the ravine that stopped the Romantics mid-sentence",
           "Yorkshire Dales — 841 square miles of moorland, rivers and dry-stone walls",
         ],
-        img: "https://images.unsplash.com/photo-1501854140801-50d01698950b?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1570131727684-7bcd493cc529?w=800&q=80",
       },
       {
         day: 2,
@@ -294,7 +294,7 @@ export const itineraries = [
           "Castlerigg Stone Circle — among Britain's earliest and most atmospheric stone circles",
           "Honister Pass — the most dramatic road in the Lake District",
         ],
-        img: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1568576411512-946a1a201093?w=800&q=80",
       },
       {
         day: 3,
@@ -306,7 +306,7 @@ export const itineraries = [
           "Latrigg — an easily-reached fell summit with panoramic views over Derwentwater",
           "Windermere — the largest natural lake in England",
         ],
-        img: "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1629499883398-9d2ad4b6ac63?w=800&q=80",
       },
       {
         day: 4,
@@ -444,7 +444,7 @@ export const itineraries = [
           "Étretat — the chalk sea arches and needle spire of the Alabaster Coast",
           "Honfleur Vieux Bassin — the 17th-century harbour that launched a school of painting",
         ],
-        img: "https://images.unsplash.com/photo-1566694271453-390536dd1f0d?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1575651133704-76021f71cc32?w=800&q=80",
       },
       {
         day: 2,
@@ -456,7 +456,7 @@ export const itineraries = [
           "Pointe du Hoc — the German gun battery the Rangers climbed under fire",
           "Mont-Saint-Michel — the tidal island abbey that has drawn pilgrims since 709 AD",
         ],
-        img: "https://images.unsplash.com/photo-1500462918059-b1a0cb512f1d?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1531250552633-528fe896fdd4?w=800&q=80",
       },
       {
         day: 3,
@@ -523,7 +523,7 @@ export const itineraries = [
           "Spanish Riding School — the 16th-century equestrian institution still in its original hall",
           "Ringstrasse — the boulevard of monumental buildings Franz Joseph I commissioned in 1857",
         ],
-        img: "https://images.unsplash.com/photo-1516026672322-bc52d61a55d5?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1713731064941-effd1178071a?w=800&q=80",
       },
       {
         day: 2,
@@ -547,7 +547,7 @@ export const itineraries = [
           "Klimt's Beethoven Frieze — the 34-metre painting cycle in the Secession basement",
           "Kunsthistorisches Museum — one of the great encyclopaedic art collections of Europe",
         ],
-        img: "https://images.unsplash.com/photo-1577495508326-19a1b3cf65b7?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1578391823548-6ecae6122803?w=800&q=80",
       },
       {
         day: 4,
@@ -613,7 +613,7 @@ export const itineraries = [
           "Omoide Yokocho — the narrow alley of yakitori stalls under the Shinjuku railway arches",
           "Tokyo Metropolitan Government Building observation deck — free, open until 10.30pm",
         ],
-        img: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1518343948751-b394fa54ac39?w=800&q=80",
       },
       {
         day: 2,
@@ -625,7 +625,7 @@ export const itineraries = [
           "Yanaka — the Edo-period neighbourhood with wooden temples and old Tokyo scale",
           "Akihabara — the electronics and anime district, a genuine subculture, not a theme park",
         ],
-        img: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1529371509997-f4ea8c556b46?w=800&q=80",
       },
       {
         day: 3,
@@ -637,7 +637,7 @@ export const itineraries = [
           "Omotesando Hills — the Tadao Ando shopping complex, the architecture is the attraction",
           "Harajuku Takeshita Street — the youth fashion street, fascinating regardless of age",
         ],
-        img: "https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1462566510695-b1ee71173bee?w=800&q=80",
       },
       {
         day: 4,
@@ -649,7 +649,7 @@ export const itineraries = [
           "Higashi Chaya district — the best-preserved geisha quarter outside Kyoto",
           "Kanazawa Castle — the reconstructed castle of the Maeda domain",
         ],
-        img: "https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1548165159-2b578cad0dac?w=800&q=80",
       },
       {
         day: 5,
@@ -661,7 +661,7 @@ export const itineraries = [
           "Kanazawa gold leaf workshop — Kanazawa produces 98% of Japan's gold leaf",
           "Nagamachi samurai district — earthen walls and water channels from the Edo period",
         ],
-        img: "https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=800&q=80",
+        img: null,
       },
       {
         day: 6,
@@ -673,7 +673,7 @@ export const itineraries = [
           "Shiroyama viewpoint — the hillside overlook above the village, best in autumn",
           "Gassho-zukuri farmhouse stay — sleeping in a working farmhouse above the hearth room",
         ],
-        img: "https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1584805688284-05fe38f95b3b?w=800&q=80",
       },
       {
         day: 7,
@@ -685,7 +685,7 @@ export const itineraries = [
           "Miyagawa morning market — the river market running daily along the Miyagawa bank",
           "Hida Beef — the local Wagyu cattle raised in the Hida mountains, Takayama's greatest export",
         ],
-        img: "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1667113011016-2bebe821f41b?w=800&q=80",
       },
       {
         day: 8,
@@ -696,7 +696,7 @@ export const itineraries = [
           "Hida Express — the scenic limited express through the Hida mountain gorges",
           "Gion, Kyoto — the traditional entertainment district, best at dusk",
         ],
-        img: "https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=800&q=80",
+        img: null,
       },
       {
         day: 9,
@@ -708,7 +708,7 @@ export const itineraries = [
           "Ninenzaka and Sannenzaka — the best-preserved historic lanes in Kyoto",
           "Higashiyama — the traditional crafts and machiya district of eastern Kyoto",
         ],
-        img: "https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1600786635755-4b7b9d5d3a29?w=800&q=80",
       },
       {
         day: 10,
@@ -720,7 +720,7 @@ export const itineraries = [
           "Arashiyama Bamboo Grove — the towering bamboo corridor behind the Tenryu-ji garden",
           "Tenryu-ji — the 14th-century Zen temple with its borrowed landscape garden",
         ],
-        img: "https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1636817154713-015d6f7b0330?w=800&q=80",
       },
       {
         day: 11,
@@ -732,7 +732,7 @@ export const itineraries = [
           "Great Buddha — the 15-metre bronze Vairocana Buddha, cast in 752 AD",
           "Kasuga Taisha — the Shinto shrine with 3,000 stone and hanging lanterns",
         ],
-        img: "https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1585707095880-4b2387487727?w=800&q=80",
       },
       {
         day: 12,
@@ -744,7 +744,7 @@ export const itineraries = [
           "Nanzen-ji — the Zen temple complex with its incongruous brick aqueduct",
           "Ginkaku-ji — the Silver Pavilion, the sand garden and its sculpted cone",
         ],
-        img: "https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1589870229205-c6c9f54db7b8?w=800&q=80",
       },
       {
         day: 13,
@@ -756,7 +756,7 @@ export const itineraries = [
           "Osaka Castle — the 1583 fortress reconstructed in 1931, Osaka's civic monument",
           "Shinsekai — the 1912 entertainment district that time partially forgot",
         ],
-        img: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1648129866953-cb22eec73d26?w=800&q=80",
       },
       {
         day: 14,
@@ -768,7 +768,7 @@ export const itineraries = [
           "Kongobu-ji — the main temple of Koyasan, housing Japan's largest rock garden",
           "Shukubo — overnight temple lodging with morning prayers and shojin ryori cuisine",
         ],
-        img: "https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1550925737-867b10688787?w=800&q=80",
       },
       {
         day: 15,
@@ -779,7 +779,7 @@ export const itineraries = [
           "Koko-en Garden — the reconstructed Edo-period garden adjacent to the castle grounds",
           "Himeji city centre — quieter than Kyoto, the castle visible from every street",
         ],
-        img: "https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1575887984548-ada6d061f1ce?w=800&q=80",
       },
       {
         day: 16,
@@ -791,7 +791,7 @@ export const itineraries = [
           "Kurashiki Bikan quarter — a canal district of white-walled Edo storehouses",
           "Ohara Museum of Art — the first Western art museum in Japan, opened 1930",
         ],
-        img: "https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1496430598224-bfe65f200517?w=800&q=80",
       },
       {
         day: 17,
@@ -814,7 +814,7 @@ export const itineraries = [
           "Shibuya Sky — the rooftop observation deck with a 360-degree view of the Tokyo basin",
           "Narita Express or Limousine Bus — the two airport transfer options from central Tokyo",
         ],
-        img: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80",
+        img: null,
       },
     ],
     whySpecial: "Japan rewards preparation more than almost any other country. The ryokan that you remember forever requires booking four months ahead. The tea ceremony that changes how you think about time takes thirty minutes with the right person and is impossible to find through a travel agency. Fushimi Inari at five in the morning is one of the most extraordinary experiences available on earth, and no one else is there because it requires an alarm clock. This itinerary is built around those moments — the ones that require knowing when, and knowing who.",
@@ -926,7 +926,7 @@ export const itineraries = [
           "Twin Beaches viewpoint — the hill above where Nacpan and Calitang beaches converge",
           "Calitang Beach — the neighbouring beach that Nacpan connects to at low tide",
         ],
-        img: "https://images.unsplash.com/photo-1567335991483-fc7088c63506?w=800&q=80",
+        img: null,
       },
       {
         day: 7,
@@ -961,7 +961,7 @@ export const itineraries = [
           "Morazan Maru — the largest of the Coron wrecks at 33m",
           "Lusong Gunboat — the Japanese gunboat wreck in 10m, accessible by snorkel",
         ],
-        img: "https://images.unsplash.com/photo-1757264483792-16ef6606b2fd?w=800&q=80",
+        img: null,
       },
       {
         day: 10,
@@ -972,7 +972,7 @@ export const itineraries = [
           "Malcapuya Beach — the uninhabited island with undeveloped white sand",
           "Banana Island — the long sandy islet visible from the Malcapuya approach",
         ],
-        img: "https://images.unsplash.com/photo-1749468373572-8294fef5dd80?w=800&q=80",
+        img: null,
       },
       {
         day: 11,
@@ -996,7 +996,7 @@ export const itineraries = [
           "Boracay paraw sailing — the traditional outrigger at sunset on White Beach",
           "Willy's Rock — the small volcanic rock with a Marian shrine in the White Beach shallows",
         ],
-        img: "https://images.unsplash.com/photo-1757258632083-e9b8a5345047?w=800&q=80",
+        img: null,
       },
       {
         day: 13,
@@ -1007,7 +1007,7 @@ export const itineraries = [
           "White Beach sunset — the Boracay institution, the reason the island became famous",
           "Station 1 dining — the quieter end of White Beach with the island's better restaurants",
         ],
-        img: "https://images.unsplash.com/photo-1462557522227-30b31bfb0db9?w=800&q=80",
+        img: null,
       },
       {
         day: 14,
@@ -1018,7 +1018,7 @@ export const itineraries = [
           "Caticlan to Manila — 1-hour domestic flight on Cebu Pacific or Philippine Airlines",
           "Manila BGC — the modern Bonifacio Global City dining district near the airport",
         ],
-        img: "https://images.unsplash.com/photo-1531761535209-180857e963b9?w=800&q=80",
+        img: null,
       },
     ],
     whySpecial: "The Philippines is uniquely difficult to do well because its best places require planning, patience, and a willingness to accept that the infrastructure will occasionally fail you in ways that a European destination wouldn't. This itinerary is built around what the country actually offers at its best: lagoons of a colour and clarity that exist nowhere else, a wreck dive site that has no equal in Southeast Asia, and a beach culture that remains, in its northernmost expressions, as close to unspoiled as anything still accessible. Getting here is the commitment. The rest is the reward.",
