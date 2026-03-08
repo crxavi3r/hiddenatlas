@@ -20,7 +20,7 @@ export default function ItinerariesPage() {
 
       {/* Hero */}
       <section style={{
-        background: 'linear-gradient(to bottom, #0E3D39, #1B6B65)',
+        background: 'linear-gradient(180deg, #091E1B 0%, #0F3D36 45%, #1B6B65 100%)',
         padding: 'clamp(48px, 8vw, 100px) 24px 0',
         textAlign: 'center',
       }}>
@@ -48,33 +48,47 @@ export default function ItinerariesPage() {
 
       {/* Search bar */}
       <section style={{ background: 'white', borderBottom: '1px solid #E8E3DA', position: 'sticky', top: '72px', zIndex: 10 }}>
-        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '20px 24px' }}>
-          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <div style={{ position: 'relative', flexShrink: 0 }}>
-              <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#8C8070' }} />
+        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '14px 24px' }}>
+          {/*
+            3-column grid: spacer | search | count
+            The spacer (col 1) mirrors the count (col 3) so the input (col 2) is
+            truly centred regardless of the count text length.
+          */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '16px' }}>
+            <div />
+            <div style={{ position: 'relative' }}>
+              <Search
+                size={16}
+                style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#8C8070', pointerEvents: 'none' }}
+              />
               <input
                 type="text"
-                className="resp-search-input"
+                className="ha-search-input"
                 placeholder="Search destinations..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 style={{
-                  padding: '9px 12px 9px 36px',
+                  height: '44px',
+                  padding: '0 16px 0 46px',
                   border: '1px solid #E8E3DA',
-                  borderRadius: '4px',
-                  fontSize: '14px',
+                  borderRadius: '10px',
+                  fontSize: '15px',
                   color: '#1C1A16',
                   background: '#FAFAF8',
                   outline: 'none',
-                  width: '220px',
+                  display: 'block',
                 }}
               />
             </div>
-            <span style={{ fontSize: '13px', color: '#8C8070' }}>
+            <span style={{ fontSize: '13px', color: '#8C8070', textAlign: 'right', whiteSpace: 'nowrap' }}>
               {freeJourneys.length + premiumJourneys.length} journeys
             </span>
           </div>
         </div>
+        <style>{`
+          .ha-search-input { width: 420px; }
+          @media (max-width: 600px) { .ha-search-input { width: calc(100vw - 96px); } }
+        `}</style>
       </section>
 
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: 'clamp(40px, 5vw, 80px) 24px' }}>

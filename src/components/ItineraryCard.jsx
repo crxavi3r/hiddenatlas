@@ -29,7 +29,7 @@ export default function ItineraryCard({ itinerary, variant = 'default' }) {
           flexDirection: 'column',
         }}>
           {/* Image */}
-          <div style={{ position: 'relative', paddingTop: '62%', overflow: 'hidden', flexShrink: 0 }}>
+          <div style={{ position: 'relative', height: '220px', overflow: 'hidden', flexShrink: 0 }}>
             <img
               src={image}
               alt={title}
