@@ -1,10 +1,23 @@
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Clock, Users, MapPin, Check, Star, ArrowRight, Lock, Download, ChevronRight, Route } from 'lucide-react';
 import { itineraries } from '../data/itineraries';
+import { downloadItineraryPDF } from '../utils/downloadPDF';
 
 export default function ItineraryDetailPage() {
   const { id } = useParams();
   const itinerary = itineraries.find(it => it.id === id);
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownload() {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      await downloadItineraryPDF(itinerary);
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   if (!itinerary) {
     return (
@@ -347,19 +360,22 @@ export default function ItineraryDetailPage() {
                   </button>
                 ) : (
                   <button
+                    onClick={handleDownload}
+                    disabled={downloading}
                     style={{
                       width: '100%', padding: '16px',
-                      background: '#1B6B65', color: 'white',
+                      background: downloading ? '#4A9E98' : '#1B6B65', color: 'white',
                       border: 'none', borderRadius: '4px',
                       fontSize: '14px', fontWeight: '600',
                       letterSpacing: '0.5px', textTransform: 'uppercase',
-                      cursor: 'pointer',
+                      cursor: downloading ? 'wait' : 'pointer',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                       marginBottom: '12px',
+                      transition: 'background 0.2s',
                     }}
                   >
                     <Download size={15} />
-                    Download Free
+                    {downloading ? 'Preparing PDF…' : 'Download Free'}
                   </button>
                 )}
 
