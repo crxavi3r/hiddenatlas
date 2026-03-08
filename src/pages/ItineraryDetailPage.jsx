@@ -8,12 +8,17 @@ export default function ItineraryDetailPage() {
   const { id } = useParams();
   const itinerary = itineraries.find(it => it.id === id);
   const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState(null);
 
   async function handleDownload() {
     if (downloading) return;
     setDownloading(true);
+    setDownloadError(null);
     try {
       await downloadItineraryPDF(itinerary);
+    } catch (err) {
+      console.error('[download-free] PDF generation failed:', err);
+      setDownloadError('PDF generation failed. Please try again.');
     } finally {
       setDownloading(false);
     }
@@ -377,6 +382,11 @@ export default function ItineraryDetailPage() {
                     <Download size={15} />
                     {downloading ? 'Preparing PDF…' : 'Download Free'}
                   </button>
+                )}
+                {downloadError && (
+                  <p style={{ fontSize: '12px', color: '#B04040', textAlign: 'center', margin: '-4px 0 12px' }}>
+                    {downloadError}
+                  </p>
                 )}
 
                 <Link

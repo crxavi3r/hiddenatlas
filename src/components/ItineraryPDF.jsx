@@ -1,33 +1,9 @@
-import { Document, Page, Text, View, Image, StyleSheet, Font } from '@react-pdf/renderer';
+// @react-pdf/renderer only supports TTF/OTF — no WOFF.
+// We use built-in PDF fonts to guarantee zero network dependency:
+//   Times-Roman / Times-Bold  → headings (Playfair Display equivalent)
+//   Helvetica / Helvetica-Bold → body (Inter equivalent)
 
-// Register fonts from CDN
-Font.register({
-  family: 'PlayfairDisplay',
-  fonts: [
-    {
-      src: 'https://cdn.jsdelivr.net/npm/@fontsource/playfair-display@5.0.8/files/playfair-display-latin-400-normal.woff',
-      fontWeight: 400,
-    },
-    {
-      src: 'https://cdn.jsdelivr.net/npm/@fontsource/playfair-display@5.0.8/files/playfair-display-latin-600-normal.woff',
-      fontWeight: 600,
-    },
-  ],
-});
-
-Font.register({
-  family: 'Inter',
-  fonts: [
-    {
-      src: 'https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.16/files/inter-latin-400-normal.woff',
-      fontWeight: 400,
-    },
-    {
-      src: 'https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.16/files/inter-latin-600-normal.woff',
-      fontWeight: 600,
-    },
-  ],
-});
+import { Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/renderer';
 
 const C = {
   teal: '#1B6B65',
@@ -74,24 +50,21 @@ const s = StyleSheet.create({
     right: 56,
   },
   coverBrand: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica-Bold',
     fontSize: 9,
-    fontWeight: 600,
     letterSpacing: 3,
-    textTransform: 'uppercase',
     color: C.gold,
     marginBottom: 24,
   },
   coverTitle: {
-    fontFamily: 'PlayfairDisplay',
+    fontFamily: 'Times-Bold',
     fontSize: 44,
-    fontWeight: 600,
     color: C.white,
     lineHeight: 1.15,
     marginBottom: 14,
   },
   coverSubtitle: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica',
     fontSize: 14,
     color: 'rgba(255,255,255,0.7)',
     marginBottom: 32,
@@ -106,15 +79,13 @@ const s = StyleSheet.create({
     gap: 3,
   },
   coverMetaLabel: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica-Bold',
     fontSize: 8,
-    fontWeight: 600,
     letterSpacing: 1.5,
-    textTransform: 'uppercase',
     color: C.gold,
   },
   coverMetaValue: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica',
     fontSize: 12,
     color: C.white,
   },
@@ -129,7 +100,6 @@ const s = StyleSheet.create({
   page: {
     backgroundColor: C.stone,
     padding: 0,
-    fontFamily: 'Inter',
   },
   pageHeader: {
     flexDirection: 'row',
@@ -142,18 +112,15 @@ const s = StyleSheet.create({
     backgroundColor: C.white,
   },
   pageHeaderBrand: {
-    fontFamily: 'PlayfairDisplay',
+    fontFamily: 'Times-Bold',
     fontSize: 11,
-    fontWeight: 600,
     color: C.teal,
     letterSpacing: 1,
   },
   pageHeaderSection: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica-Bold',
     fontSize: 8,
-    fontWeight: 600,
     letterSpacing: 2,
-    textTransform: 'uppercase',
     color: C.muted,
   },
   pageBody: {
@@ -163,18 +130,15 @@ const s = StyleSheet.create({
 
   // --- Section headings ---
   sectionLabel: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica-Bold',
     fontSize: 8,
-    fontWeight: 600,
     letterSpacing: 2.5,
-    textTransform: 'uppercase',
     color: C.teal,
     marginBottom: 10,
   },
   sectionTitle: {
-    fontFamily: 'PlayfairDisplay',
+    fontFamily: 'Times-Bold',
     fontSize: 28,
-    fontWeight: 600,
     color: C.charcoal,
     lineHeight: 1.2,
     marginBottom: 16,
@@ -188,7 +152,7 @@ const s = StyleSheet.create({
 
   // --- Overview page ---
   overviewDescription: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica',
     fontSize: 11,
     color: C.muted,
     lineHeight: 1.75,
@@ -209,9 +173,8 @@ const s = StyleSheet.create({
     paddingVertical: 5,
   },
   highlightText: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica-Bold',
     fontSize: 9,
-    fontWeight: 600,
     color: C.teal,
   },
   metaRow: {
@@ -228,18 +191,15 @@ const s = StyleSheet.create({
     padding: 16,
   },
   metaCardLabel: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica-Bold',
     fontSize: 8,
-    fontWeight: 600,
     letterSpacing: 1.5,
-    textTransform: 'uppercase',
     color: C.muted,
     marginBottom: 6,
   },
   metaCardValue: {
-    fontFamily: 'PlayfairDisplay',
+    fontFamily: 'Times-Bold',
     fontSize: 16,
-    fontWeight: 600,
     color: C.charcoal,
   },
   routeBox: {
@@ -251,16 +211,14 @@ const s = StyleSheet.create({
     marginBottom: 24,
   },
   routeBoxTitle: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica-Bold',
     fontSize: 9,
-    fontWeight: 600,
     letterSpacing: 2,
-    textTransform: 'uppercase',
     color: C.teal,
     marginBottom: 10,
   },
   routeBoxText: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica',
     fontSize: 10,
     color: C.muted,
     lineHeight: 1.7,
@@ -284,7 +242,7 @@ const s = StyleSheet.create({
     backgroundColor: C.gold,
   },
   includedText: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica',
     fontSize: 9,
     color: C.charcoal,
     flex: 1,
@@ -310,34 +268,30 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   dayImagePlaceholderText: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica',
     fontSize: 9,
     color: C.border,
     letterSpacing: 2,
-    textTransform: 'uppercase',
   },
   dayContent: {
     padding: '28px 48px',
   },
   dayNumber: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica-Bold',
     fontSize: 8,
-    fontWeight: 600,
     letterSpacing: 2.5,
-    textTransform: 'uppercase',
     color: C.gold,
     marginBottom: 6,
   },
   dayTitle: {
-    fontFamily: 'PlayfairDisplay',
+    fontFamily: 'Times-Bold',
     fontSize: 22,
-    fontWeight: 600,
     color: C.charcoal,
     marginBottom: 6,
     lineHeight: 1.2,
   },
   daySubtitle: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica',
     fontSize: 10,
     color: C.muted,
     marginBottom: 14,
@@ -349,7 +303,7 @@ const s = StyleSheet.create({
     marginBottom: 16,
   },
   dayDescription: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica',
     fontSize: 10,
     color: C.muted,
     lineHeight: 1.75,
@@ -372,7 +326,7 @@ const s = StyleSheet.create({
     flexShrink: 0,
   },
   dayActivityText: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica',
     fontSize: 10,
     color: C.charcoal,
     lineHeight: 1.6,
@@ -388,38 +342,33 @@ const s = StyleSheet.create({
     borderTopColor: C.border,
   },
   dayStayLabel: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica-Bold',
     fontSize: 8,
-    fontWeight: 600,
     letterSpacing: 1.5,
-    textTransform: 'uppercase',
     color: C.muted,
   },
   dayStayValue: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica',
     fontSize: 10,
     color: C.charcoal,
   },
 
-  // --- CTA / final page ---
+  // --- CTA page ---
   ctaPage: {
     backgroundColor: C.teal,
     padding: '72px 56px',
     justifyContent: 'center',
   },
   ctaBrand: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica-Bold',
     fontSize: 9,
-    fontWeight: 600,
     letterSpacing: 3,
-    textTransform: 'uppercase',
     color: 'rgba(255,255,255,0.5)',
     marginBottom: 16,
   },
   ctaTitle: {
-    fontFamily: 'PlayfairDisplay',
+    fontFamily: 'Times-Bold',
     fontSize: 34,
-    fontWeight: 600,
     color: C.white,
     lineHeight: 1.2,
     marginBottom: 20,
@@ -431,7 +380,7 @@ const s = StyleSheet.create({
     marginBottom: 24,
   },
   ctaBody: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica',
     fontSize: 12,
     color: 'rgba(255,255,255,0.75)',
     lineHeight: 1.75,
@@ -439,14 +388,13 @@ const s = StyleSheet.create({
     maxWidth: 400,
   },
   ctaUrl: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica-Bold',
     fontSize: 13,
-    fontWeight: 600,
     color: C.gold,
     letterSpacing: 0.5,
   },
   ctaNote: {
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica',
     fontSize: 9,
     color: 'rgba(255,255,255,0.4)',
     marginTop: 48,
@@ -455,13 +403,13 @@ const s = StyleSheet.create({
     position: 'absolute',
     bottom: 20,
     right: 48,
-    fontFamily: 'Inter',
+    fontFamily: 'Helvetica',
     fontSize: 9,
     color: C.muted,
   },
 });
 
-// ── Sub-components ─────────────────────────────────────────────────────────────
+// ── Sub-components ────────────────────────────────────────────────────────────
 
 function PageHeader({ section, title }) {
   return (
@@ -478,29 +426,27 @@ function CoverPage({ itinerary }) {
 
   return (
     <Page size="A4" style={s.coverPage}>
-      {heroUrl ? (
-        <Image src={heroUrl} style={s.coverImage} />
-      ) : null}
+      {heroUrl ? <Image src={heroUrl} style={s.coverImage} /> : null}
       <View style={s.coverOverlay} />
       <View style={s.coverContent}>
-        <Text style={s.coverBrand}>HiddenAtlas · Curated Travel</Text>
+        <Text style={s.coverBrand}>HIDDENATLAS · CURATED TRAVEL</Text>
         <View style={s.coverDivider} />
         <Text style={s.coverTitle}>{title}</Text>
         <Text style={s.coverSubtitle}>{subtitle || [country, region].filter(Boolean).join(' · ')}</Text>
         <View style={s.coverMeta}>
           <View style={s.coverMetaItem}>
-            <Text style={s.coverMetaLabel}>Destination</Text>
+            <Text style={s.coverMetaLabel}>DESTINATION</Text>
             <Text style={s.coverMetaValue}>{country}{region ? `, ${region}` : ''}</Text>
           </View>
           {duration ? (
             <View style={s.coverMetaItem}>
-              <Text style={s.coverMetaLabel}>Duration</Text>
+              <Text style={s.coverMetaLabel}>DURATION</Text>
               <Text style={s.coverMetaValue}>{duration} days</Text>
             </View>
           ) : null}
           {groupSize ? (
             <View style={s.coverMetaItem}>
-              <Text style={s.coverMetaLabel}>Ideal for</Text>
+              <Text style={s.coverMetaLabel}>IDEAL FOR</Text>
               <Text style={s.coverMetaValue}>{groupSize}</Text>
             </View>
           ) : null}
@@ -511,36 +457,37 @@ function CoverPage({ itinerary }) {
 }
 
 function OverviewPage({ itinerary }) {
-  const { title, country, description, highlights = [], routeOverview, included = [], duration, difficulty, bestFor = [] } = itinerary;
+  const {
+    title, country, description, highlights = [],
+    routeOverview, included = [], duration, difficulty, bestFor = [],
+  } = itinerary;
 
   return (
     <Page size="A4" style={s.page}>
       <PageHeader section={country} title={title} />
       <View style={s.pageBody}>
-        <Text style={s.sectionLabel}>Trip Overview</Text>
+        <Text style={s.sectionLabel}>TRIP OVERVIEW</Text>
         <Text style={s.sectionTitle}>{title}</Text>
         <View style={s.sectionDivider} />
 
-        {description ? (
-          <Text style={s.overviewDescription}>{description}</Text>
-        ) : null}
+        {description ? <Text style={s.overviewDescription}>{description}</Text> : null}
 
         <View style={s.metaRow}>
           {duration ? (
             <View style={s.metaCard}>
-              <Text style={s.metaCardLabel}>Duration</Text>
+              <Text style={s.metaCardLabel}>DURATION</Text>
               <Text style={s.metaCardValue}>{duration} days</Text>
             </View>
           ) : null}
           {difficulty ? (
             <View style={s.metaCard}>
-              <Text style={s.metaCardLabel}>Pace</Text>
+              <Text style={s.metaCardLabel}>PACE</Text>
               <Text style={s.metaCardValue}>{difficulty}</Text>
             </View>
           ) : null}
           {bestFor.length > 0 ? (
             <View style={s.metaCard}>
-              <Text style={s.metaCardLabel}>Best for</Text>
+              <Text style={s.metaCardLabel}>BEST FOR</Text>
               <Text style={s.metaCardValue}>{bestFor.join(', ')}</Text>
             </View>
           ) : null}
@@ -548,7 +495,7 @@ function OverviewPage({ itinerary }) {
 
         {highlights.length > 0 ? (
           <>
-            <Text style={[s.sectionLabel, { marginBottom: 8 }]}>Highlights</Text>
+            <Text style={[s.sectionLabel, { marginBottom: 8 }]}>HIGHLIGHTS</Text>
             <View style={s.highlightsGrid}>
               {highlights.map((h, i) => (
                 <View key={i} style={s.highlightPill}>
@@ -561,14 +508,14 @@ function OverviewPage({ itinerary }) {
 
         {routeOverview ? (
           <View style={s.routeBox}>
-            <Text style={s.routeBoxTitle}>Route Overview</Text>
+            <Text style={s.routeBoxTitle}>ROUTE OVERVIEW</Text>
             <Text style={s.routeBoxText}>{routeOverview}</Text>
           </View>
         ) : null}
 
         {included.length > 0 ? (
           <>
-            <Text style={[s.sectionLabel, { marginBottom: 10 }]}>What's included</Text>
+            <Text style={[s.sectionLabel, { marginBottom: 10 }]}>WHAT'S INCLUDED</Text>
             <View style={s.includedGrid}>
               {included.map((item, i) => (
                 <View key={i} style={s.includedItem}>
@@ -590,7 +537,6 @@ function DayPage({ day, index, itinerary }) {
   const { title, subtitle, desc, description, bullets = [], activities = [], stay, img } = day;
   const dayDesc = desc || description || null;
   const dayActivities = bullets.length ? bullets : activities;
-  // img may be a full URL or just an ID
   const imgUrl = img
     ? img.startsWith('http')
       ? img.replace(/\?.*/, '') + '?w=1000&q=80'
@@ -605,19 +551,17 @@ function DayPage({ day, index, itinerary }) {
         <Image src={imgUrl} style={s.dayImageStrip} />
       ) : (
         <View style={s.dayImagePlaceholder}>
-          <Text style={s.dayImagePlaceholderText}>{country}</Text>
+          <Text style={s.dayImagePlaceholderText}>{country.toUpperCase()}</Text>
         </View>
       )}
 
       <View style={s.dayContent}>
-        <Text style={s.dayNumber}>Day {index + 1}</Text>
+        <Text style={s.dayNumber}>DAY {index + 1}</Text>
         <Text style={s.dayTitle}>{title}</Text>
         {subtitle ? <Text style={s.daySubtitle}>{subtitle}</Text> : null}
         <View style={s.dayDivider} />
 
-        {dayDesc ? (
-          <Text style={s.dayDescription}>{dayDesc}</Text>
-        ) : null}
+        {dayDesc ? <Text style={s.dayDescription}>{dayDesc}</Text> : null}
 
         {dayActivities.length > 0 ? (
           <View style={s.dayActivities}>
@@ -632,7 +576,7 @@ function DayPage({ day, index, itinerary }) {
 
         {stay ? (
           <View style={s.dayStayRow}>
-            <Text style={s.dayStayLabel}>Tonight's stay:</Text>
+            <Text style={s.dayStayLabel}>TONIGHT'S STAY:</Text>
             <Text style={s.dayStayValue}>{stay}</Text>
           </View>
         ) : null}
@@ -647,21 +591,19 @@ function CTAPage({ itinerary }) {
   const { title } = itinerary;
   return (
     <Page size="A4" style={s.ctaPage}>
-      <Text style={s.ctaBrand}>HiddenAtlas</Text>
+      <Text style={s.ctaBrand}>HIDDENATLAS</Text>
       <Text style={s.ctaTitle}>Ready to make{'\n'}this trip yours?</Text>
       <View style={s.ctaDivider} />
       <Text style={s.ctaBody}>
         This itinerary gives you the framework. If you'd like a fully personalised version — with handpicked accommodation, restaurant reservations, and real-time logistics — our team of expert planners would love to help.
       </Text>
       <Text style={s.ctaUrl}>hiddenatlas.travel/custom</Text>
-      <Text style={s.ctaNote}>
-        {title} · Free Itinerary · hiddenatlas.travel
-      </Text>
+      <Text style={s.ctaNote}>{title} · Free Itinerary · hiddenatlas.travel</Text>
     </Page>
   );
 }
 
-// ── Main PDF document ──────────────────────────────────────────────────────────
+// ── Main document ─────────────────────────────────────────────────────────────
 
 export default function ItineraryPDF({ itinerary }) {
   const { days = [] } = itinerary;
