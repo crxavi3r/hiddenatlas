@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Instagram, Twitter, Mail } from 'lucide-react';
+import { Instagram, Mail } from 'lucide-react';
 
 export default function Footer() {
   return (
@@ -34,31 +34,55 @@ export default function Footer() {
             <p style={{ fontSize: '14px', lineHeight: '1.7', color: '#8C8070', maxWidth: '240px' }}>
               Curated travel itineraries for people who want extraordinary experiences without the ordinary effort.
             </p>
-            <div style={{ display: 'flex', gap: '16px', marginTop: '24px' }}>
-              {[Instagram, Twitter, Mail].map((Icon, i) => (
-                <a
-                  key={i}
-                  href="#"
-                  style={{
-                    width: '36px', height: '36px',
-                    border: '1px solid #2E2922',
-                    borderRadius: '4px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#8C8070',
-                    transition: 'border-color 0.2s, color 0.2s',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = '#C9A96E';
-                    e.currentTarget.style.color = '#C9A96E';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = '#2E2922';
-                    e.currentTarget.style.color = '#8C8070';
-                  }}
-                >
-                  <Icon size={15} />
-                </a>
-              ))}
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <a
+                href="https://www.instagram.com/hiddenatlas.travel/"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  width: '36px', height: '36px',
+                  border: '1px solid #2E2922',
+                  borderRadius: '4px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#8C8070',
+                  transition: 'border-color 0.2s, color 0.2s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.borderColor = '#C9A96E';
+                  e.currentTarget.style.color = '#C9A96E';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = '#2E2922';
+                  e.currentTarget.style.color = '#8C8070';
+                }}
+                aria-label="HiddenAtlas on Instagram"
+              >
+                <Instagram size={15} />
+              </a>
+              <a
+                href="mailto:hiddenatlas.travel@outlook.com"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  padding: '0 12px', height: '36px',
+                  border: '1px solid #2E2922',
+                  borderRadius: '4px',
+                  color: '#8C8070', fontSize: '12.5px',
+                  textDecoration: 'none',
+                  transition: 'border-color 0.2s, color 0.2s',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.borderColor = '#C9A96E';
+                  e.currentTarget.style.color = '#C9A96E';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = '#2E2922';
+                  e.currentTarget.style.color = '#8C8070';
+                }}
+              >
+                <Mail size={13} />
+                hiddenatlas.travel@outlook.com
+              </a>
             </div>
           </div>
 

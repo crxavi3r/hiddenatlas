@@ -8,7 +8,6 @@ const navLinks = [
   { label: 'Custom Planning', href: '/custom' },
   { label: 'Pricing', href: '/pricing' },
   { label: 'Journal', href: '/journal' },
-  { label: 'About', href: '/about' },
 ];
 
 export default function Navbar() {
