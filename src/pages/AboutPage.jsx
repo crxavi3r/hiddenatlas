@@ -20,15 +20,9 @@ export default function AboutPage() {
             {/* Portrait */}
             <div className="ha-about-portrait-wrap">
               <img
-                src="/assets/cristiano-xavier.jpg"
-                alt="Cristiano Xavier — founder of HiddenAtlas"
-                style={{
-                  width: '100%', height: '100%',
-                  objectFit: 'cover', objectPosition: 'center top',
-                  borderRadius: '8px',
-                  boxShadow: '0 24px 80px rgba(28,26,22,0.14)',
-                  display: 'block',
-                }}
+                src="/assets/cristiano-xavier.png"
+                alt="Cristiano Xavier — Founder of HiddenAtlas"
+                className="founder-photo"
               />
             </div>
 
@@ -176,31 +170,37 @@ export default function AboutPage() {
       <style>{`
         .ha-about-hero {
           display: grid;
-          grid-template-columns: 420px 1fr;
+          grid-template-columns: 360px 1fr;
           gap: 80px;
           align-items: start;
         }
         .ha-about-portrait-wrap {
+          display: flex;
+          justify-content: center;
+          align-items: flex-start;
+        }
+        .founder-photo {
           width: 100%;
-          aspect-ratio: 3 / 4;
+          max-width: 360px;
           border-radius: 8px;
-          overflow: hidden;
+          display: block;
+          box-shadow: 0 24px 80px rgba(28,26,22,0.14);
+          object-fit: cover;
+          object-position: center top;
         }
         @media (max-width: 900px) {
           .ha-about-hero {
             grid-template-columns: 1fr;
             gap: 40px;
           }
-          .ha-about-portrait-wrap {
-            max-width: 380px;
+          .founder-photo {
+            max-width: 320px;
             margin: 0 auto;
-            aspect-ratio: 4 / 5;
           }
         }
         @media (max-width: 480px) {
-          .ha-about-portrait-wrap {
+          .founder-photo {
             max-width: 100%;
-            aspect-ratio: 3 / 4;
           }
         }
       `}</style>
