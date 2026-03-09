@@ -13,6 +13,10 @@ function ErrorMsg({ msg }) {
   return <p style={{ fontSize: '12px', color: ERR_TEXT, marginTop: '5px' }}>{msg}</p>;
 }
 
+function FieldHelper({ text }) {
+  return <p style={{ fontSize: '12px', color: '#9C9488', marginTop: '5px', lineHeight: '1.4' }}>{text}</p>;
+}
+
 function validate(data) {
   const e = {};
   if (!data.name.trim() || data.name.trim().length < 2)
@@ -30,7 +34,7 @@ function validate(data) {
   if (!data.groupSize.trim() || !/^\d+$/.test(data.groupSize.trim()))
     e.groupSize = 'Please enter group size as a number';
   if (!data.groupType.trim())
-    e.groupType = 'Please enter your trip type';
+    e.groupType = 'Please tell us how to describe the trip';
   if (data.style.length === 0)
     e.style = 'Please select at least one travel style';
   if (!data.budget)
@@ -39,6 +43,101 @@ function validate(data) {
 }
 
 const SCROLL_ORDER = ['name', 'email', 'phone', 'destination', 'dates', 'duration', 'groupSize', 'groupType', 'style', 'budget'];
+
+const pricingTiers = [
+  { label: 'Couple / Duo', price: '€349', desc: '2 people · up to 14 days' },
+  { label: 'Small Group', price: '€549', desc: '3–6 people · up to 14 days' },
+  { label: 'Large Group / Family', price: 'From €849', desc: '7+ people · custom scope' },
+];
+
+const nextSteps = [
+  'We review your brief and confirm scope (within 24h)',
+  'Your planner reaches out to discuss the details',
+  'We design your itinerary (7–10 working days)',
+  'You review — revisions included',
+  'Final delivery, ready to book',
+];
+
+/* ─── Mobile-only pricing block ─── */
+function MobilePricingBlock() {
+  return (
+    <div className="ha-mobile-only" style={{
+      background: '#1C1A16',
+      borderRadius: '12px',
+      padding: '28px 24px',
+      marginBottom: '36px',
+    }}>
+      <h3 style={{
+        fontFamily: "'Playfair Display', Georgia, serif",
+        fontSize: '20px', fontWeight: '600',
+        color: 'white', marginBottom: '8px',
+      }}>
+        The custom planning fee
+      </h3>
+      <p style={{ fontSize: '13.5px', color: 'rgba(255,255,255,0.55)', lineHeight: '1.6', marginBottom: '24px' }}>
+        A bespoke itinerary, thoughtfully designed around your style, pace and priorities.
+      </p>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+        {pricingTiers.map((tier, i) => (
+          <div key={i} style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            paddingTop: i === 0 ? '0' : '16px',
+            paddingBottom: i < pricingTiers.length - 1 ? '16px' : '0',
+            borderBottom: i < pricingTiers.length - 1 ? '1px solid #2E2922' : 'none',
+          }}>
+            <div>
+              <p style={{ fontSize: '14px', fontWeight: '600', color: 'white', marginBottom: '2px' }}>{tier.label}</p>
+              <p style={{ fontSize: '11.5px', color: '#8C8070' }}>{tier.desc}</p>
+            </div>
+            <span style={{
+              fontSize: '19px', fontWeight: '700',
+              color: '#C9A96E',
+              fontFamily: "'Playfair Display', Georgia, serif",
+              flexShrink: 0, marginLeft: '16px',
+            }}>
+              {tier.price}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <p style={{
+        fontSize: '11.5px', color: 'rgba(255,255,255,0.3)',
+        marginTop: '20px', lineHeight: '1.5',
+        borderTop: '1px solid #2E2922', paddingTop: '16px',
+      }}>
+        One-time itinerary fee · Not per person · No booking commissions
+      </p>
+
+      <a href="/pricing" style={{
+        display: 'inline-flex', alignItems: 'center', gap: '4px',
+        marginTop: '12px', fontSize: '12px', fontWeight: '600',
+        color: '#C9A96E', textDecoration: 'none', letterSpacing: '0.3px',
+      }}>
+        View full pricing details <ArrowRight size={11} />
+      </a>
+    </div>
+  );
+}
+
+/* ─── Section legend ─── */
+function SectionLegend({ label, helper }) {
+  return (
+    <div style={{ marginBottom: '20px' }}>
+      <legend style={{
+        fontSize: '11px', fontWeight: '700', letterSpacing: '1.8px',
+        textTransform: 'uppercase', color: '#1B6B65',
+        display: 'block',
+      }}>
+        {label}
+      </legend>
+      {helper && (
+        <p style={{ fontSize: '12.5px', color: '#9C9488', marginTop: '5px' }}>{helper}</p>
+      )}
+    </div>
+  );
+}
 
 export default function CustomPlanningPage() {
   const [formData, setFormData] = useState({
@@ -148,12 +247,12 @@ export default function CustomPlanningPage() {
     { label: 'Ultra-Luxury', desc: '€600+ / person / day', value: 'ultra' },
   ];
 
-  // Shared input style factory
   const inputStyle = hasError => ({
-    width: '100%', padding: '12px 14px',
-    border: fieldBorder(hasError), borderRadius: '4px',
+    width: '100%', padding: '13px 14px',
+    border: fieldBorder(hasError), borderRadius: '6px',
     fontSize: '15px', color: '#1C1A16', background: 'white',
     outline: 'none', transition: 'border-color 0.2s',
+    boxSizing: 'border-box',
   });
 
   return (
@@ -183,10 +282,10 @@ export default function CustomPlanningPage() {
             fontWeight: '600', color: 'white',
             lineHeight: '1.15', letterSpacing: '-0.5px', marginBottom: '20px',
           }}>
-            A trip planned around<br />your family, your way.
+            A trip built entirely<br />around you.
           </h1>
           <p style={{ fontSize: '17px', color: 'rgba(255,255,255,0.72)', lineHeight: '1.75', maxWidth: '540px', margin: '0 auto 24px' }}>
-            For families, couples, and friend groups who want something genuinely tailored — not a template with your name on it. One dedicated planner. No shortcuts. Built around how you actually travel.
+            For families, couples, and friend groups who want something genuinely tailored — not a template with your name on it. One dedicated planner. No shortcuts.
           </p>
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
             {['Families', 'Couples', 'Friend Groups'].map(label => (
@@ -205,13 +304,13 @@ export default function CustomPlanningPage() {
       </section>
 
       {/* Value Props */}
-      <section style={{ padding: 'clamp(48px, 6vw, 80px) 24px', background: 'white', borderBottom: '1px solid #E8E3DA' }}>
+      <section style={{ padding: 'clamp(40px, 5vw, 72px) 24px', background: 'white', borderBottom: '1px solid #E8E3DA' }}>
         <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '40px' }}>
+          <div className="ha-value-props">
             {[
               { icon: <MapPin size={20} color="#1B6B65" />, title: 'Any Destination', desc: '70+ countries, researched on the ground. If you can dream it, we know how to get you there.' },
-              { icon: <Calendar size={20} color="#1B6B65" />, title: 'Built Around You', desc: 'Your dates, your pace, your group\'s needs — the plan shapes itself around your life, not the other way around.' },
-              { icon: <Users size={20} color="#1B6B65" />, title: 'Families, Couples, Groups', desc: 'Whether it\'s a first family adventure, a honeymoon, or a friends reunion trip — we\'ve planned it before.' },
+              { icon: <Calendar size={20} color="#1B6B65" />, title: 'Built Around You', desc: 'Your dates, your pace, your group\'s needs — the plan shapes itself around your life.' },
+              { icon: <Users size={20} color="#1B6B65" />, title: 'Families, Couples, Groups', desc: 'Whether it\'s a honeymoon, a family adventure, or a friends reunion — we\'ve planned it before.' },
               { icon: <Heart size={20} color="#1B6B65" />, title: 'Boutique All the Way', desc: 'Private villas, handpicked ryokans, boutique riads. No chain hotels, no generic itineraries.' },
             ].map((item, i) => (
               <div key={i} style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
@@ -223,8 +322,8 @@ export default function CustomPlanningPage() {
                   {item.icon}
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#1C1A16', marginBottom: '4px' }}>{item.title}</h3>
-                  <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.5' }}>{item.desc}</p>
+                  <h3 style={{ fontSize: '15px', fontWeight: '600', color: '#1C1A16', marginBottom: '4px' }}>{item.title}</h3>
+                  <p style={{ fontSize: '13.5px', color: '#6B6156', lineHeight: '1.55' }}>{item.desc}</p>
                 </div>
               </div>
             ))}
@@ -232,42 +331,39 @@ export default function CustomPlanningPage() {
         </div>
       </section>
 
-      {/* Form + Info */}
-      <section style={{ padding: 'clamp(48px, 6vw, 80px) 24px' }}>
+      {/* Form + Sidebar */}
+      <section style={{ padding: 'clamp(40px, 6vw, 80px) 24px' }}>
         <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '64px', alignItems: 'start' }}>
+          <div className="ha-custom-grid">
 
-            {/* Form */}
+            {/* ── FORM ── */}
             <form onSubmit={handleSubmit} noValidate>
               <h2 style={{
                 fontFamily: "'Playfair Display', Georgia, serif",
-                fontSize: '32px', fontWeight: '600', color: '#1C1A16',
+                fontSize: 'clamp(26px, 3vw, 34px)', fontWeight: '600', color: '#1C1A16',
                 marginBottom: '8px',
               }}>
                 Tell us about your trip
               </h2>
-              <p style={{ fontSize: '15px', color: '#6B6156', marginBottom: '40px', lineHeight: '1.7' }}>
-                The more detail you share, the better we can plan. Whether it's a family holiday, a couples escape, or a group adventure — we'll get back to you within 48 hours.
+              <p style={{ fontSize: '15px', color: '#6B6156', marginBottom: '36px', lineHeight: '1.7', maxWidth: '560px' }}>
+                The more you share, the better we can plan. We'll reply within 48 hours with a call or message to discuss your itinerary.
               </p>
 
-              {/* Contact */}
-              <fieldset style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
-                <legend style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#1B6B65', marginBottom: '20px' }}>
-                  Your Details
-                </legend>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              {/* Mobile pricing block — shown above form on small screens */}
+              <MobilePricingBlock />
 
-                  {/* Full Name */}
+              {/* ── Your Details ── */}
+              <fieldset style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
+                <SectionLegend label="Your Details" />
+                <div className="ha-form-2col">
+
                   <div id="field-name">
                     <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
                       Full Name
                     </label>
                     <input
-                      type="text"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleChange}
-                      placeholder="Jane Smith"
+                      type="text" name="name" value={formData.name}
+                      onChange={handleChange} placeholder="Jane Smith"
                       style={inputStyle(!!errors.name)}
                       onFocus={e => e.target.style.borderColor = '#1B6B65'}
                       onBlur={e => { e.target.style.borderColor = errors.name ? ERR_COLOR : '#D4CCBF'; }}
@@ -275,17 +371,13 @@ export default function CustomPlanningPage() {
                     <ErrorMsg msg={errors.name} />
                   </div>
 
-                  {/* Email */}
                   <div id="field-email">
                     <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
                       Email Address
                     </label>
                     <input
-                      type="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleChange}
-                      placeholder="jane@example.com"
+                      type="email" name="email" value={formData.email}
+                      onChange={handleChange} placeholder="jane@example.com"
                       style={inputStyle(!!errors.email)}
                       onFocus={e => e.target.style.borderColor = '#1B6B65'}
                       onBlur={e => { e.target.style.borderColor = errors.email ? ERR_COLOR : '#D4CCBF'; }}
@@ -293,45 +385,37 @@ export default function CustomPlanningPage() {
                     <ErrorMsg msg={errors.email} />
                   </div>
 
-                  {/* Phone (optional) */}
-                  <div id="field-phone">
+                  <div id="field-phone" style={{ gridColumn: '1 / -1' }}>
                     <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
-                      Phone <span style={{ color: '#8C8070', fontWeight: '400' }}>(optional)</span>
+                      Phone <span style={{ color: '#9C9488', fontWeight: '400' }}>(optional)</span>
                     </label>
                     <input
-                      type="tel"
-                      name="phone"
-                      value={formData.phone}
-                      onChange={handleChange}
-                      placeholder="+1 555 000 0000"
-                      style={inputStyle(!!errors.phone)}
+                      type="tel" name="phone" value={formData.phone}
+                      onChange={handleChange} placeholder="+1 555 000 0000"
+                      style={{ ...inputStyle(!!errors.phone), maxWidth: '320px' }}
                       onFocus={e => e.target.style.borderColor = '#1B6B65'}
                       onBlur={e => { e.target.style.borderColor = errors.phone ? ERR_COLOR : '#D4CCBF'; }}
                     />
+                    <FieldHelper text="Useful if you'd prefer a quick call to get started." />
                     <ErrorMsg msg={errors.phone} />
                   </div>
 
                 </div>
               </fieldset>
 
-              {/* Trip Details */}
+              {/* ── Trip Details ── */}
               <fieldset style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
-                <legend style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#1B6B65', marginBottom: '20px' }}>
-                  Trip Details
-                </legend>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <SectionLegend label="Trip Details" helper="Be as specific or open-ended as you like — we work from wherever you are." />
+                <div className="ha-form-2col">
 
-                  {/* Destination */}
                   <div id="field-destination" style={{ gridColumn: '1 / -1' }}>
                     <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
-                      Where do you want to go?
+                      Where would you like to go?
                     </label>
                     <input
-                      type="text"
-                      name="destination"
-                      value={formData.destination}
+                      type="text" name="destination" value={formData.destination}
                       onChange={handleChange}
-                      placeholder="e.g. Southern Italy, Japan, Morocco..."
+                      placeholder="e.g. Southern Italy, Japan, Morocco, open to suggestions..."
                       style={inputStyle(!!errors.destination)}
                       onFocus={e => e.target.style.borderColor = '#1B6B65'}
                       onBlur={e => { e.target.style.borderColor = errors.destination ? ERR_COLOR : '#D4CCBF'; }}
@@ -339,37 +423,30 @@ export default function CustomPlanningPage() {
                     <ErrorMsg msg={errors.destination} />
                   </div>
 
-                  {/* Dates */}
                   <div id="field-dates">
                     <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
                       Approximate dates
                     </label>
                     <input
-                      type="text"
-                      name="dates"
-                      value={formData.dates}
+                      type="text" name="dates" value={formData.dates}
                       onChange={handleChange}
                       placeholder="e.g. October 2025, flexible in spring"
                       style={inputStyle(!!errors.dates)}
                       onFocus={e => e.target.style.borderColor = '#1B6B65'}
                       onBlur={e => { e.target.style.borderColor = errors.dates ? ERR_COLOR : '#D4CCBF'; }}
                     />
+                    <FieldHelper text="Flexible is fine — even a rough season helps." />
                     <ErrorMsg msg={errors.dates} />
                   </div>
 
-                  {/* Duration — numeric only */}
                   <div id="field-duration">
                     <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
                       Trip duration (days)
                     </label>
                     <input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      name="duration"
-                      value={formData.duration}
-                      onChange={handleChange}
-                      placeholder="e.g. 10"
+                      type="text" inputMode="numeric" pattern="[0-9]*"
+                      name="duration" value={formData.duration}
+                      onChange={handleChange} placeholder="e.g. 10"
                       style={inputStyle(!!errors.duration)}
                       onFocus={e => e.target.style.borderColor = '#1B6B65'}
                       onBlur={e => { e.target.style.borderColor = errors.duration ? ERR_COLOR : '#D4CCBF'; }}
@@ -377,19 +454,14 @@ export default function CustomPlanningPage() {
                     <ErrorMsg msg={errors.duration} />
                   </div>
 
-                  {/* Group size — numeric only */}
                   <div id="field-groupSize">
                     <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
                       Group size
                     </label>
                     <input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      name="groupSize"
-                      value={formData.groupSize}
-                      onChange={handleChange}
-                      placeholder="e.g. 2"
+                      type="text" inputMode="numeric" pattern="[0-9]*"
+                      name="groupSize" value={formData.groupSize}
+                      onChange={handleChange} placeholder="e.g. 2"
                       style={inputStyle(!!errors.groupSize)}
                       onFocus={e => e.target.style.borderColor = '#1B6B65'}
                       onBlur={e => { e.target.style.borderColor = errors.groupSize ? ERR_COLOR : '#D4CCBF'; }}
@@ -397,17 +469,14 @@ export default function CustomPlanningPage() {
                     <ErrorMsg msg={errors.groupSize} />
                   </div>
 
-                  {/* Trip type */}
                   <div id="field-groupType" style={{ gridColumn: '1 / -1' }}>
                     <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
-                      Trip type
+                      How would you describe the trip?
                     </label>
                     <input
-                      type="text"
-                      name="groupType"
-                      value={formData.groupType}
+                      type="text" name="groupType" value={formData.groupType}
                       onChange={handleChange}
-                      placeholder="e.g. Family holiday, honeymoon, friends reunion, anniversary"
+                      placeholder="e.g. Family holiday, honeymoon, friends reunion, anniversary trip..."
                       style={inputStyle(!!errors.groupType)}
                       onFocus={e => e.target.style.borderColor = '#1B6B65'}
                       onBlur={e => { e.target.style.borderColor = errors.groupType ? ERR_COLOR : '#D4CCBF'; }}
@@ -418,12 +487,13 @@ export default function CustomPlanningPage() {
                 </div>
               </fieldset>
 
-              {/* Travel Style */}
+              {/* ── Travel Style ── */}
               <fieldset id="field-style" style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
-                <legend style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#1B6B65', marginBottom: '20px' }}>
-                  Travel Style (select all that apply)
-                </legend>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                <SectionLegend
+                  label="How do you like to travel?"
+                  helper="Select everything that resonates — your planner will use this to shape the tone of the itinerary."
+                />
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {travelStyles.map(style => {
                     const active = formData.style.includes(style);
                     return (
@@ -432,17 +502,21 @@ export default function CustomPlanningPage() {
                         type="button"
                         onClick={() => handleStyleToggle(style)}
                         style={{
-                          padding: '8px 16px',
-                          borderRadius: '4px',
+                          padding: '9px 16px',
+                          borderRadius: '6px',
                           border: '1px solid',
                           borderColor: active ? '#1B6B65' : (errors.style ? ERR_COLOR : '#D4CCBF'),
-                          background: active ? '#EFF6F5' : 'transparent',
-                          color: active ? '#1B6B65' : '#6B6156',
-                          fontSize: '14px', fontWeight: '500',
+                          background: active ? '#EFF6F5' : 'white',
+                          color: active ? '#1B6B65' : '#4A433A',
+                          fontSize: '13.5px', fontWeight: active ? '600' : '400',
                           cursor: 'pointer', transition: 'all 0.15s',
+                          display: 'flex', alignItems: 'center', gap: '6px',
                         }}
                       >
-                        {active && '✓ '}{style}
+                        {active && (
+                          <span style={{ fontSize: '10px', color: '#1B6B65' }}>✓</span>
+                        )}
+                        {style}
                       </button>
                     );
                   })}
@@ -450,12 +524,13 @@ export default function CustomPlanningPage() {
                 <ErrorMsg msg={errors.style} />
               </fieldset>
 
-              {/* Budget */}
+              {/* ── Daily Budget ── */}
               <fieldset id="field-budget" style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
-                <legend style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#1B6B65', marginBottom: '20px' }}>
-                  Daily Budget Range
-                </legend>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                <SectionLegend
+                  label="Daily Budget Range"
+                  helper="Per person, per day — excluding flights and planning fee."
+                />
+                <div className="ha-budget-grid">
                   {budgets.map(b => {
                     const active = formData.budget === b.value;
                     return (
@@ -464,8 +539,8 @@ export default function CustomPlanningPage() {
                         type="button"
                         onClick={() => handleBudgetSelect(b.value)}
                         style={{
-                          padding: '16px',
-                          borderRadius: '6px',
+                          padding: '18px 16px',
+                          borderRadius: '8px',
                           border: '2px solid',
                           borderColor: active ? '#1B6B65' : (errors.budget ? ERR_COLOR : '#D4CCBF'),
                           background: active ? '#EFF6F5' : 'white',
@@ -483,107 +558,238 @@ export default function CustomPlanningPage() {
                 <ErrorMsg msg={errors.budget} />
               </fieldset>
 
-              {/* Notes — optional */}
+              {/* ── Notes ── */}
               <fieldset style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
-                <legend style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#1B6B65', marginBottom: '20px' }}>
-                  Anything else we should know? <span style={{ color: '#8C8070', fontWeight: '400', textTransform: 'none', letterSpacing: 0, fontSize: '11px' }}>(optional)</span>
-                </legend>
+                <SectionLegend
+                  label="Anything else we should know?"
+                />
                 <textarea
                   name="notes"
                   value={formData.notes}
                   onChange={handleChange}
                   rows={5}
-                  placeholder="Special occasions, dietary needs, mobility considerations, things you absolutely want (or want to avoid)..."
+                  placeholder="Special occasions, dietary needs, mobility considerations, specific experiences you have in mind — or things you'd rather avoid..."
                   style={{
                     width: '100%', padding: '14px',
-                    border: '1px solid #D4CCBF', borderRadius: '4px',
+                    border: '1px solid #D4CCBF', borderRadius: '6px',
                     fontSize: '15px', color: '#1C1A16',
                     resize: 'vertical', outline: 'none',
                     fontFamily: 'inherit', lineHeight: '1.6',
+                    boxSizing: 'border-box',
                   }}
                   onFocus={e => e.target.style.borderColor = '#1B6B65'}
                   onBlur={e => e.target.style.borderColor = '#D4CCBF'}
                 />
+                <FieldHelper text="Optional but genuinely useful — the more context you give, the better the first draft." />
               </fieldset>
 
-              <button
-                type="submit"
-                style={{
-                  width: '100%', padding: '18px',
-                  background: '#1B6B65', color: 'white',
-                  border: 'none', borderRadius: '4px',
-                  fontSize: '15px', fontWeight: '600',
-                  letterSpacing: '0.5px', textTransform: 'uppercase',
-                  cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                  transition: 'background 0.2s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = '#145550'}
-                onMouseLeave={e => e.currentTarget.style.background = '#1B6B65'}
-              >
-                Submit My Brief <ArrowRight size={16} />
-              </button>
-              <p style={{ fontSize: '13px', color: '#8C8070', textAlign: 'center', marginTop: '12px' }}>
-                No payment required now. We'll review your brief and get back to you within 48 hours.
-              </p>
+              {/* ── Submit ── */}
+              <div style={{
+                background: '#F4F1EC',
+                borderRadius: '10px',
+                padding: '28px',
+              }}>
+                <button
+                  type="submit"
+                  style={{
+                    width: '100%', padding: '18px',
+                    background: '#1B6B65', color: 'white',
+                    border: 'none', borderRadius: '6px',
+                    fontSize: '15px', fontWeight: '600',
+                    letterSpacing: '0.5px', textTransform: 'uppercase',
+                    cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    transition: 'background 0.2s',
+                    marginBottom: '16px',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#145550'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#1B6B65'}
+                >
+                  Send My Brief <ArrowRight size={16} />
+                </button>
+                <p style={{ fontSize: '13px', color: '#6B6156', textAlign: 'center', lineHeight: '1.6' }}>
+                  No payment required now — we'll review your brief and reply within 48 hours.
+                </p>
+              </div>
             </form>
 
-            {/* Sidebar Info */}
+            {/* ── SIDEBAR ── */}
             <div style={{ position: 'sticky', top: '100px' }}>
-              <div style={{ background: '#1C1A16', borderRadius: '12px', padding: '36px', marginBottom: '24px' }}>
-                <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600', color: 'white', marginBottom: '20px' }}>
+
+              {/* Pricing card — hidden on mobile since it's shown above the form */}
+              <div className="ha-desktop-sidebar-pricing" style={{
+                background: '#1C1A16',
+                borderRadius: '12px',
+                padding: '36px',
+                marginBottom: '24px',
+              }}>
+                <h3 style={{
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                  fontSize: '22px', fontWeight: '600',
+                  color: 'white', marginBottom: '8px',
+                }}>
                   The custom planning fee
                 </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '28px' }}>
-                  {[
-                    { label: 'Couple / Duo', price: '€349', desc: '2 people, up to 14 days' },
-                    { label: 'Small Group', price: '€549', desc: '3–6 people, up to 14 days' },
-                    { label: 'Large Group / Family', price: 'From €849', desc: '7+ people, custom scope' },
-                  ].map((tier, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '20px', borderBottom: i < 2 ? '1px solid #2E2922' : 'none' }}>
+                <p style={{ fontSize: '13.5px', color: 'rgba(255,255,255,0.45)', lineHeight: '1.6', marginBottom: '28px' }}>
+                  A bespoke itinerary, thoughtfully designed around your style, pace and priorities.
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0', marginBottom: '28px' }}>
+                  {pricingTiers.map((tier, i) => (
+                    <div key={i} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                      paddingTop: i === 0 ? '0' : '20px',
+                      paddingBottom: i < pricingTiers.length - 1 ? '20px' : '0',
+                      borderBottom: i < pricingTiers.length - 1 ? '1px solid #2E2922' : 'none',
+                    }}>
                       <div>
                         <p style={{ fontSize: '15px', fontWeight: '600', color: 'white' }}>{tier.label}</p>
                         <p style={{ fontSize: '12px', color: '#8C8070', marginTop: '2px' }}>{tier.desc}</p>
                       </div>
-                      <span style={{ fontSize: '18px', fontWeight: '700', color: '#C9A96E', fontFamily: "'Playfair Display', Georgia, serif" }}>
+                      <span style={{
+                        fontSize: '18px', fontWeight: '700',
+                        color: '#C9A96E',
+                        fontFamily: "'Playfair Display', Georgia, serif",
+                        flexShrink: 0, marginLeft: '16px',
+                      }}>
                         {tier.price}
                       </span>
                     </div>
                   ))}
                 </div>
-                <a href="/pricing" style={{ fontSize: '13px', color: '#C9A96E', display: 'flex', alignItems: 'center', gap: '4px' }}>
+
+                <p style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.28)', lineHeight: '1.6', marginBottom: '12px' }}>
+                  One-time itinerary fee · Not per person · No booking commissions
+                </p>
+                <a href="/pricing" style={{
+                  fontSize: '13px', color: '#C9A96E',
+                  display: 'flex', alignItems: 'center', gap: '4px',
+                  textDecoration: 'none', fontWeight: '500',
+                }}>
                   Full pricing details <ArrowRight size={12} />
                 </a>
               </div>
 
-              <div style={{ background: 'white', border: '1px solid #E8E3DA', borderRadius: '12px', padding: '28px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#1C1A16', marginBottom: '16px' }}>What happens next?</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  {[
-                    { n: '1', text: 'We review your brief (within 24h)' },
-                    { n: '2', text: 'Your planner calls or emails to discuss details' },
-                    { n: '3', text: 'We build your custom itinerary (7–10 days)' },
-                    { n: '4', text: 'Review & revision rounds until it\'s perfect' },
-                    { n: '5', text: 'Final delivery — ready to book and go' },
-                  ].map(step => (
-                    <div key={step.n} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+              {/* What happens next */}
+              <div style={{
+                background: 'white',
+                border: '1px solid #E8E3DA',
+                borderRadius: '12px',
+                padding: '28px',
+              }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#1C1A16', marginBottom: '20px' }}>
+                  What happens next?
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {nextSteps.map((text, i) => (
+                    <div key={i} style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
                       <div style={{
-                        width: '22px', height: '22px', borderRadius: '50%',
-                        background: '#EFF6F5', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '11px', fontWeight: '700', color: '#1B6B65', flexShrink: 0,
+                        width: '24px', height: '24px', borderRadius: '50%',
+                        background: '#EFF6F5',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '11px', fontWeight: '700', color: '#1B6B65',
+                        flexShrink: 0,
                       }}>
-                        {step.n}
+                        {i + 1}
                       </div>
-                      <span style={{ fontSize: '14px', color: '#4A433A', lineHeight: '1.5' }}>{step.text}</span>
+                      <span style={{ fontSize: '13.5px', color: '#4A433A', lineHeight: '1.55', paddingTop: '3px' }}>{text}</span>
                     </div>
                   ))}
                 </div>
               </div>
-            </div>
 
+            </div>
           </div>
         </div>
       </section>
+
+      <style>{`
+        /* Main form + sidebar grid */
+        .ha-custom-grid {
+          display: grid;
+          grid-template-columns: 1fr 380px;
+          gap: 64px;
+          align-items: start;
+        }
+
+        /* 2-column form field grid */
+        .ha-form-2col {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+        }
+
+        /* 3-column budget grid */
+        .ha-budget-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+        }
+
+        /* Value props grid */
+        .ha-value-props {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 36px;
+        }
+
+        /* Mobile-only pricing block — hidden on desktop */
+        .ha-mobile-only {
+          display: none;
+        }
+
+        /* Desktop sidebar pricing — always visible on desktop */
+        .ha-desktop-sidebar-pricing {
+          display: block;
+        }
+
+        @media (max-width: 900px) {
+          /* Stack form and sidebar vertically */
+          .ha-custom-grid {
+            grid-template-columns: 1fr;
+            gap: 0;
+          }
+
+          /* Show mobile pricing block above form */
+          .ha-mobile-only {
+            display: block;
+          }
+
+          /* Hide sidebar pricing on mobile (shown by mobile block above) */
+          .ha-desktop-sidebar-pricing {
+            display: none;
+          }
+        }
+
+        @media (max-width: 640px) {
+          /* Collapse 2-col form fields to single column */
+          .ha-form-2col {
+            grid-template-columns: 1fr;
+          }
+
+          /* On single-column form, full-width fields don't need the span */
+          .ha-form-2col > [style*="gridColumn"] {
+            grid-column: 1 / -1;
+          }
+
+          /* Stack budget cards vertically */
+          .ha-budget-grid {
+            grid-template-columns: 1fr;
+          }
+
+          /* Phone field max-width full on mobile */
+          #field-phone input {
+            max-width: 100% !important;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .ha-value-props {
+            grid-template-columns: 1fr;
+            gap: 28px;
+          }
+        }
+      `}</style>
     </div>
   );
 }
