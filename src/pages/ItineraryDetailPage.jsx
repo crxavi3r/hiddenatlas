@@ -1,35 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Clock, Users, MapPin, Check, Star, ArrowRight, Lock, Download, ChevronRight, Route } from 'lucide-react';
+import { useAuth, useUser, SignInButton } from '@clerk/clerk-react';
 import { itineraries } from '../data/itineraries';
 import { downloadItineraryPDF } from '../utils/downloadPDF';
-
-const API_BASE          = 'http://localhost:4000';
-const PLACEHOLDER_USER  = '00000000-0000-0000-0000-000000000000';
-
-// ─────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────
-async function checkAccess(slug) {
-  const res = await fetch(`${API_BASE}/api/itineraries/${slug}/access?userId=${PLACEHOLDER_USER}`);
-  if (!res.ok) return { hasAccess: false, pdfUrl: null };
-  return res.json();
-}
-
-async function simulatePurchase(slug, amount, title, coverImage) {
-  const res = await fetch(`${API_BASE}/api/itineraries/${slug}/purchase`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId: PLACEHOLDER_USER, amount, title, coverImage }),
-  });
-  if (!res.ok) throw new Error('Purchase failed');
-  return res.json();
-}
+import { useApi } from '../lib/api';
 
 // ─────────────────────────────────────────────────────────────
 // Sidebar — locked state
 // ─────────────────────────────────────────────────────────────
-function LockedSidebar({ itinerary, onPurchase, purchasing }) {
+function LockedSidebar({ itinerary, onPurchase, purchasing, requiresAuth = false }) {
   const { price, included = [] } = itinerary;
   return (
     <div style={{
@@ -66,26 +46,39 @@ function LockedSidebar({ itinerary, onPurchase, purchasing }) {
           </>
         )}
 
-        <button
-          onClick={onPurchase}
-          disabled={purchasing}
-          style={{
-            width: '100%', padding: '16px',
-            background: purchasing ? '#8C8070' : '#C9A96E',
-            color: 'white', border: 'none', borderRadius: '4px',
-            fontSize: '14px', fontWeight: '600',
-            letterSpacing: '0.5px', textTransform: 'uppercase',
-            cursor: purchasing ? 'wait' : 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-            marginBottom: '12px', transition: 'background 0.2s',
-          }}
-        >
-          {purchasing ? (
-            'Processing…'
-          ) : (
-            <><Lock size={14} /> Unlock for €{price}</>
-          )}
-        </button>
+        {requiresAuth ? (
+          <SignInButton mode="modal">
+            <button style={{
+              width: '100%', padding: '16px',
+              background: '#1B6B65', color: 'white',
+              border: 'none', borderRadius: '4px',
+              fontSize: '14px', fontWeight: '600',
+              letterSpacing: '0.5px', textTransform: 'uppercase',
+              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              marginBottom: '12px',
+            }}>
+              <Lock size={14} /> Sign in to Unlock
+            </button>
+          </SignInButton>
+        ) : (
+          <button
+            onClick={onPurchase}
+            disabled={purchasing}
+            style={{
+              width: '100%', padding: '16px',
+              background: purchasing ? '#8C8070' : '#C9A96E',
+              color: 'white', border: 'none', borderRadius: '4px',
+              fontSize: '14px', fontWeight: '600',
+              letterSpacing: '0.5px', textTransform: 'uppercase',
+              cursor: purchasing ? 'wait' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              marginBottom: '12px', transition: 'background 0.2s',
+            }}
+          >
+            {purchasing ? 'Processing…' : <><Lock size={14} /> Unlock for €{price}</>}
+          </button>
+        )}
 
         <Link
           to="/custom"
@@ -299,7 +292,10 @@ export default function ItineraryDetailPage() {
   const { id } = useParams();
   const itinerary = itineraries.find(it => it.id === id);
 
-  const [accessState, setAccessState] = useState('checking'); // 'checking' | 'locked' | 'unlocked'
+  const { isLoaded, isSignedIn } = useAuth();
+  const api = useApi();
+
+  const [accessState, setAccessState] = useState('checking'); // 'checking' | 'locked' | 'unlocked' | 'unauthenticated'
   const [pdfUrl, setPdfUrl]           = useState(null);
   const [purchasing, setPurchasing]   = useState(false);
   const [purchaseError, setPurchaseError] = useState(null);
@@ -307,28 +303,34 @@ export default function ItineraryDetailPage() {
   const isPremium = itinerary?.isPremium;
 
   useEffect(() => {
-    if (!itinerary) return;
+    if (!itinerary || !isLoaded) return;
     if (!isPremium) { setAccessState('unlocked'); return; }
 
-    checkAccess(itinerary.id)
+    // Not signed in — show locked with sign-in prompt
+    if (!isSignedIn) { setAccessState('unauthenticated'); return; }
+
+    api.get(`/api/itineraries/${itinerary.id}/access`)
+      .then(res => res.ok ? res.json() : { hasAccess: false, pdfUrl: null })
       .then(({ hasAccess, pdfUrl }) => {
         setAccessState(hasAccess ? 'unlocked' : 'locked');
         setPdfUrl(pdfUrl);
       })
       .catch(() => setAccessState('locked'));
-  }, [itinerary?.id]);
+  }, [itinerary?.id, isLoaded, isSignedIn]);
 
   async function handlePurchase() {
     if (!itinerary || purchasing) return;
+    if (!isSignedIn) return; // shouldn't happen — UI prevents this
     setPurchasing(true);
     setPurchaseError(null);
     try {
-      const result = await simulatePurchase(
-        itinerary.id,
-        itinerary.price,
-        itinerary.title,
-        itinerary.coverImage || itinerary.image,
-      );
+      const res = await api.post(`/api/itineraries/${itinerary.id}/purchase`, {
+        amount:     itinerary.price,
+        title:      itinerary.title,
+        coverImage: itinerary.coverImage || itinerary.image,
+      });
+      if (!res.ok) throw new Error('Purchase failed');
+      const result = await res.json();
       setPdfUrl(result.pdfUrl);
       setAccessState('unlocked');
     } catch (err) {
@@ -479,44 +481,34 @@ export default function ItineraryDetailPage() {
 
               {/* Lock gate — shown below the preview days */}
               {isPremium && !hasAccess && (
-                <div style={{
-                  background: 'linear-gradient(to bottom, rgba(250,250,248,0) 0%, #FAFAF8 30%)',
-                  marginTop: '-60px', paddingTop: '60px',
-                  position: 'relative',
-                }}>
-                  <div style={{
-                    background: 'white', borderRadius: '10px',
-                    padding: '36px', textAlign: 'center',
-                    border: '1px solid #E8E3DA',
-                    boxShadow: '0 4px 24px rgba(28,26,22,0.06)',
-                  }}>
+                <div style={{ background: 'linear-gradient(to bottom, rgba(250,250,248,0) 0%, #FAFAF8 30%)', marginTop: '-60px', paddingTop: '60px', position: 'relative' }}>
+                  <div style={{ background: 'white', borderRadius: '10px', padding: '36px', textAlign: 'center', border: '1px solid #E8E3DA', boxShadow: '0 4px 24px rgba(28,26,22,0.06)' }}>
                     <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F4F1EC', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                       <Lock size={20} color="#8C8070" />
                     </div>
                     <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600', color: '#1C1A16', marginBottom: '8px' }}>
                       Unlock the full {duration} itinerary
                     </h3>
-                    <p style={{ fontSize: '15px', color: '#6B6156', marginBottom: '24px', maxWidth: '400px', margin: '0 auto 24px', lineHeight: '1.7' }}>
+                    <p style={{ fontSize: '15px', color: '#6B6156', maxWidth: '400px', margin: '0 auto 24px', lineHeight: '1.7' }}>
                       Get every day, every recommendation, logistics, insider tips and the PDF — all for a one-time fee.
                     </p>
-                    <button
-                      onClick={handlePurchase}
-                      disabled={purchasing}
-                      style={{
-                        padding: '15px 40px',
-                        background: purchasing ? '#8C8070' : '#C9A96E',
-                        color: 'white', border: 'none', borderRadius: '4px',
-                        fontSize: '14px', fontWeight: '600',
-                        letterSpacing: '0.5px', textTransform: 'uppercase',
-                        cursor: purchasing ? 'wait' : 'pointer',
-                        transition: 'background 0.2s',
-                      }}
-                    >
-                      {purchasing ? 'Processing…' : `Unlock for €${price}`}
-                    </button>
-                    {purchaseError && (
-                      <p style={{ fontSize: '13px', color: '#B04040', marginTop: '12px' }}>{purchaseError}</p>
+
+                    {accessState === 'unauthenticated' ? (
+                      <SignInButton mode="modal">
+                        <button style={{ padding: '15px 40px', background: '#1B6B65', color: 'white', border: 'none', borderRadius: '4px', fontSize: '14px', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase', cursor: 'pointer' }}>
+                          Sign in to Unlock
+                        </button>
+                      </SignInButton>
+                    ) : (
+                      <button
+                        onClick={handlePurchase}
+                        disabled={purchasing}
+                        style={{ padding: '15px 40px', background: purchasing ? '#8C8070' : '#C9A96E', color: 'white', border: 'none', borderRadius: '4px', fontSize: '14px', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase', cursor: purchasing ? 'wait' : 'pointer', transition: 'background 0.2s' }}
+                      >
+                        {purchasing ? 'Processing…' : `Unlock for €${price}`}
+                      </button>
                     )}
+                    {purchaseError && <p style={{ fontSize: '13px', color: '#B04040', marginTop: '12px' }}>{purchaseError}</p>}
                   </div>
                 </div>
               )}
@@ -557,14 +549,15 @@ export default function ItineraryDetailPage() {
 
           {/* ── Right: Sidebar ── */}
           <div className="resp-sidebar" style={{ position: 'sticky', top: '100px' }}>
-            {accessState === 'checking' && (
+            {(accessState === 'checking') && (
               <div style={{ height: '200px', background: 'white', borderRadius: '12px', border: '1px solid #E8E3DA' }} />
             )}
-            {accessState === 'locked' && (
+            {(accessState === 'locked' || accessState === 'unauthenticated') && (
               <LockedSidebar
                 itinerary={itinerary}
                 onPurchase={handlePurchase}
                 purchasing={purchasing}
+                requiresAuth={accessState === 'unauthenticated'}
               />
             )}
             {accessState === 'unlocked' && (

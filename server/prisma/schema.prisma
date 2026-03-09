@@ -15,6 +15,7 @@ datasource db {
 // ─────────────────────────────────────────────
 model User {
   id        String     @id @default(uuid())
+  clerkId   String?    @unique   // Clerk's user_xxx ID — set on first sign-in
   email     String     @unique
   name      String
   createdAt DateTime   @default(now())

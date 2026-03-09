@@ -1,22 +1,16 @@
 const { Router } = require('express');
 const prisma = require('../lib/prisma');
+const { protect, syncUser } = require('../middleware/auth');
 
 const router = Router();
 
 // ── GET /api/itineraries ──────────────────────────────────────
-// Published itinerary listing (no full content)
+// Public — published listing only (no full content)
 router.get('/', async (_req, res) => {
   try {
     const itineraries = await prisma.itinerary.findMany({
       where: { isPublished: true },
-      select: {
-        id:         true,
-        title:      true,
-        slug:       true,
-        excerpt:    true,
-        price:      true,
-        coverImage: true,
-      },
+      select: { id: true, title: true, slug: true, excerpt: true, price: true, coverImage: true },
       orderBy: { createdAt: 'desc' },
     });
     res.json(itineraries);
@@ -26,55 +20,40 @@ router.get('/', async (_req, res) => {
   }
 });
 
-// ── GET /api/itineraries/:slug/access?userId= ─────────────────
-// Returns whether a user has purchased a given itinerary.
-// Safe to call without userId — just returns hasAccess: false.
-router.get('/:slug/access', async (req, res) => {
+// ── GET /api/itineraries/:slug/access ────────────────────────
+// Protected — checks whether the authenticated user has purchased
+// this itinerary. Returns { hasAccess, pdfUrl }.
+router.get('/:slug/access', protect, syncUser, async (req, res) => {
   const { slug } = req.params;
-  const { userId } = req.query;
-
-  if (!userId) {
-    return res.json({ hasAccess: false, pdfUrl: null });
-  }
+  const userId = req.dbUser.id; // PostgreSQL UUID
 
   try {
     const purchase = await prisma.purchase.findFirst({
       where: { userId, itinerary: { slug } },
       include: { itinerary: { select: { pdfUrl: true } } },
     });
-
-    res.json({
-      hasAccess: !!purchase,
-      pdfUrl: purchase?.itinerary?.pdfUrl ?? null,
-    });
+    res.json({ hasAccess: !!purchase, pdfUrl: purchase?.itinerary?.pdfUrl ?? null });
   } catch (err) {
     console.error('[GET /itineraries/:slug/access]', err.message);
     res.status(500).json({ error: 'Access check failed' });
   }
 });
 
-// ── POST /api/itineraries/:slug/purchase ──────────────────────
-// Simulates a completed payment.
-// Upserts both the itinerary and the user so the flow works
-// without pre-seeding the database.
-// Body: { userId, amount, title?, coverImage? }
-router.post('/:slug/purchase', async (req, res) => {
+// ── POST /api/itineraries/:slug/purchase ─────────────────────
+// Protected — creates a purchase record for the authenticated user.
+// Upserts the Itinerary row so static itineraries don't need
+// to be pre-seeded in the database.
+router.post('/:slug/purchase', protect, syncUser, async (req, res) => {
   const { slug } = req.params;
-  const { userId, amount, title, coverImage } = req.body;
+  const { amount, title, coverImage } = req.body;
+  const userId = req.dbUser.id;
 
-  if (!userId || amount == null) {
-    return res.status(400).json({ error: 'userId and amount are required' });
+  if (amount == null) {
+    return res.status(400).json({ error: 'amount is required' });
   }
 
   try {
-    // Ensure the demo/placeholder user exists
-    await prisma.user.upsert({
-      where:  { id: userId },
-      update: {},
-      create: { id: userId, email: `user-${userId}@hiddenatlas.com`, name: 'HiddenAtlas User' },
-    });
-
-    // Ensure the itinerary row exists in the database
+    // Ensure the itinerary row exists
     const itinerary = await prisma.itinerary.upsert({
       where:  { slug },
       update: {},
@@ -108,7 +87,7 @@ router.post('/:slug/purchase', async (req, res) => {
 });
 
 // ── GET /api/itineraries/:slug ────────────────────────────────
-// Full itinerary by slug (kept for future CMS-driven pages)
+// Public — full itinerary by slug (CMS-driven pages)
 router.get('/:slug', async (req, res) => {
   try {
     const itinerary = await prisma.itinerary.findFirst({

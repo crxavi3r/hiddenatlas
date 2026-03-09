@@ -1,19 +1,24 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
+import {
+  SignedIn, SignedOut,
+  SignInButton, SignUpButton,
+  UserButton,
+} from '@clerk/clerk-react';
 
 const navLinks = [
-  { label: 'Itineraries', href: '/itineraries' },
-  { label: 'AI Planner', href: '/ai-planner' },
+  { label: 'Itineraries',     href: '/itineraries' },
+  { label: 'AI Planner',      href: '/ai-planner' },
   { label: 'Custom Planning', href: '/custom' },
-  { label: 'Pricing', href: '/pricing' },
-  { label: 'Journal', href: '/journal' },
-  { label: 'My Trips', href: '/my-trips' },
+  { label: 'Pricing',         href: '/pricing' },
+  { label: 'Journal',         href: '/journal' },
+  { label: 'My Trips',        href: '/my-trips' },
 ];
 
 export default function Navbar() {
-  const [scrolled, setScrolled] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled,  setScrolled]  = useState(false);
+  const [menuOpen,  setMenuOpen]  = useState(false);
   const location = useLocation();
   const isHome = location.pathname === '/';
 
@@ -23,28 +28,21 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [location]);
+  useEffect(() => { setMenuOpen(false); }, [location]);
 
   const isTransparent = isHome && !scrolled && !menuOpen;
 
   return (
-    <header
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 50,
-        transition: 'background 0.4s ease, box-shadow 0.4s ease, border-color 0.4s ease',
-        background: isTransparent ? 'transparent' : 'rgba(250, 250, 248, 0.97)',
-        boxShadow: isTransparent ? 'none' : '0 1px 0 rgba(212, 204, 191, 0.5)',
-        backdropFilter: isTransparent ? 'none' : 'blur(12px)',
-      }}
-    >
+    <header style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
+      transition: 'background 0.4s ease, box-shadow 0.4s ease',
+      background: isTransparent ? 'transparent' : 'rgba(250,250,248,0.97)',
+      boxShadow: isTransparent ? 'none' : '0 1px 0 rgba(212,204,191,0.5)',
+      backdropFilter: isTransparent ? 'none' : 'blur(12px)',
+    }}>
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '72px' }}>
+
           {/* Logo */}
           <Link to="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
             <img
@@ -52,8 +50,6 @@ export default function Navbar() {
               alt="HiddenAtlas"
               className="ha-logo"
               style={{
-                // height/width controlled by .ha-logo in <style> below
-                // so the mobile media query can override without !important
                 filter: isTransparent ? 'brightness(0) invert(1)' : 'none',
                 transition: 'filter 0.4s ease',
               }}
@@ -61,19 +57,15 @@ export default function Navbar() {
           </Link>
 
           {/* Desktop Nav */}
-          <nav style={{ display: 'flex', alignItems: 'center', gap: '36px' }} className="hidden-mobile">
+          <nav style={{ display: 'flex', alignItems: 'center', gap: '32px' }} className="hidden-mobile">
             {navLinks.map(link => (
               <Link
                 key={link.href}
                 to={link.href}
                 style={{
-                  fontSize: '13.5px',
-                  fontWeight: '500',
-                  letterSpacing: '0.3px',
+                  fontSize: '13.5px', fontWeight: '500', letterSpacing: '0.3px',
                   color: isTransparent ? 'rgba(255,255,255,0.85)' : '#4A433A',
-                  textDecoration: 'none',
-                  transition: 'color 0.2s',
-                  whiteSpace: 'nowrap',
+                  textDecoration: 'none', transition: 'color 0.2s', whiteSpace: 'nowrap',
                 }}
                 onMouseEnter={e => e.target.style.color = isTransparent ? 'white' : '#1B6B65'}
                 onMouseLeave={e => e.target.style.color = isTransparent ? 'rgba(255,255,255,0.85)' : '#4A433A'}
@@ -83,45 +75,86 @@ export default function Navbar() {
             ))}
           </nav>
 
-          {/* CTA */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {/* Right: CTA + auth */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+
+            {/* Plan My Trip CTA */}
             <Link
               to="/custom"
               className="hidden-mobile"
               style={{
-                padding: '10px 22px',
-                borderRadius: '4px',
-                fontSize: '13px',
-                fontWeight: '600',
-                letterSpacing: '0.5px',
-                textTransform: 'uppercase',
-                transition: 'all 0.2s',
+                padding: '10px 20px', borderRadius: '4px',
+                fontSize: '13px', fontWeight: '600', letterSpacing: '0.5px',
+                textTransform: 'uppercase', transition: 'all 0.2s',
                 background: isTransparent ? 'rgba(255,255,255,0.15)' : '#1B6B65',
                 color: 'white',
                 border: isTransparent ? '1px solid rgba(255,255,255,0.4)' : '1px solid #1B6B65',
                 textDecoration: 'none',
                 backdropFilter: isTransparent ? 'blur(8px)' : 'none',
               }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = isTransparent ? 'rgba(255,255,255,0.25)' : '#145550';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = isTransparent ? 'rgba(255,255,255,0.15)' : '#1B6B65';
-              }}
+              onMouseEnter={e => { e.currentTarget.style.background = isTransparent ? 'rgba(255,255,255,0.25)' : '#145550'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = isTransparent ? 'rgba(255,255,255,0.15)' : '#1B6B65'; }}
             >
               Plan My Trip
             </Link>
 
-            {/* Mobile toggle */}
+            {/* ── Auth — desktop ── */}
+            <div className="hidden-mobile" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <button style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontSize: '13px', fontWeight: '500', letterSpacing: '0.3px',
+                    color: isTransparent ? 'rgba(255,255,255,0.8)' : '#4A433A',
+                    padding: '8px 4px', transition: 'color 0.2s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.color = isTransparent ? 'white' : '#1B6B65'}
+                  onMouseLeave={e => e.currentTarget.style.color = isTransparent ? 'rgba(255,255,255,0.8)' : '#4A433A'}
+                  >
+                    Sign in
+                  </button>
+                </SignInButton>
+                <SignUpButton mode="modal">
+                  <button style={{
+                    padding: '8px 16px', borderRadius: '4px',
+                    border: isTransparent ? '1px solid rgba(255,255,255,0.35)' : '1px solid #D4CCBF',
+                    background: 'transparent',
+                    fontSize: '13px', fontWeight: '600', letterSpacing: '0.3px',
+                    color: isTransparent ? 'rgba(255,255,255,0.85)' : '#1C1A16',
+                    cursor: 'pointer', transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.borderColor = isTransparent ? 'rgba(255,255,255,0.7)' : '#1B6B65';
+                    e.currentTarget.style.color = isTransparent ? 'white' : '#1B6B65';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = isTransparent ? 'rgba(255,255,255,0.35)' : '#D4CCBF';
+                    e.currentTarget.style.color = isTransparent ? 'rgba(255,255,255,0.85)' : '#1C1A16';
+                  }}
+                  >
+                    Sign up
+                  </button>
+                </SignUpButton>
+              </SignedOut>
+
+              <SignedIn>
+                {/* Clerk's avatar + dropdown (account management + sign out) */}
+                <UserButton
+                  appearance={{
+                    elements: {
+                      avatarBox: { width: '34px', height: '34px' },
+                    },
+                  }}
+                />
+              </SignedIn>
+            </div>
+
+            {/* Mobile hamburger */}
             <button
               onClick={() => setMenuOpen(!menuOpen)}
               style={{
-                display: 'none',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: isTransparent ? 'white' : '#1C1A16',
-                padding: '4px',
+                display: 'none', background: 'none', border: 'none',
+                cursor: 'pointer', color: isTransparent ? 'white' : '#1C1A16', padding: '4px',
               }}
               className="show-mobile"
               aria-label="Toggle menu"
@@ -134,11 +167,7 @@ export default function Navbar() {
 
       {/* Mobile Menu */}
       {menuOpen && (
-        <div style={{
-          background: '#FAFAF8',
-          borderTop: '1px solid #E8E3DA',
-          padding: '24px',
-        }}>
+        <div style={{ background: '#FAFAF8', borderTop: '1px solid #E8E3DA', padding: '24px' }}>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {navLinks.map(link => (
               <Link
@@ -147,41 +176,62 @@ export default function Navbar() {
                 style={{
                   fontSize: '18px',
                   fontFamily: "'Playfair Display', Georgia, serif",
-                  color: '#1C1A16',
-                  textDecoration: 'none',
+                  color: '#1C1A16', textDecoration: 'none',
                 }}
               >
                 {link.label}
               </Link>
             ))}
+
             <Link
               to="/custom"
               style={{
-                padding: '14px 24px',
-                borderRadius: '4px',
-                background: '#1B6B65',
-                color: 'white',
-                fontSize: '14px',
-                fontWeight: '600',
-                letterSpacing: '0.5px',
-                textTransform: 'uppercase',
-                textDecoration: 'none',
-                textAlign: 'center',
+                padding: '14px 24px', borderRadius: '4px',
+                background: '#1B6B65', color: 'white',
+                fontSize: '14px', fontWeight: '600', letterSpacing: '0.5px',
+                textTransform: 'uppercase', textDecoration: 'none', textAlign: 'center',
               }}
             >
               Plan My Trip
             </Link>
+
+            {/* ── Auth — mobile ── */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '8px', borderTop: '1px solid #E8E3DA' }}>
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <button style={{
+                    padding: '13px 24px', borderRadius: '4px',
+                    border: '1px solid #D4CCBF', background: 'transparent',
+                    fontSize: '14px', fontWeight: '600', color: '#1C1A16',
+                    cursor: 'pointer', textAlign: 'center', width: '100%',
+                  }}>
+                    Sign in
+                  </button>
+                </SignInButton>
+                <SignUpButton mode="modal">
+                  <button style={{
+                    padding: '13px 24px', borderRadius: '4px',
+                    background: '#1C1A16', border: 'none',
+                    fontSize: '14px', fontWeight: '600', color: 'white',
+                    cursor: 'pointer', textAlign: 'center', width: '100%',
+                  }}>
+                    Create account
+                  </button>
+                </SignUpButton>
+              </SignedOut>
+              <SignedIn>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <UserButton appearance={{ elements: { avatarBox: { width: '36px', height: '36px' } } }} />
+                  <span style={{ fontSize: '14px', color: '#4A433A' }}>My Account</span>
+                </div>
+              </SignedIn>
+            </div>
           </nav>
         </div>
       )}
 
       <style>{`
-        /* Logo sizing — height set here so mobile media query can override */
-        .ha-logo {
-          height: 34px;
-          width: auto;
-          display: block;
-        }
+        .ha-logo { height: 34px; width: auto; display: block; }
         @media (max-width: 768px) {
           .ha-logo { height: 28px; }
           .hidden-mobile { display: none !important; }
@@ -190,6 +240,8 @@ export default function Navbar() {
         @media (min-width: 769px) {
           .show-mobile { display: none !important; }
         }
+        /* Clerk UserButton alignment */
+        .cl-userButtonBox { display: flex; align-items: center; }
       `}</style>
     </header>
   );
