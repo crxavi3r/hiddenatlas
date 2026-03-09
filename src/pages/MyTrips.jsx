@@ -193,7 +193,7 @@ export default function MyTrips() {
           {status === 'error' && (
             <div style={{ textAlign: 'center', padding: '80px 24px', background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' }}>
               <p style={{ fontSize: '15px', color: '#6B6156', marginBottom: '8px' }}>Couldn't load your trips right now.</p>
-              <p style={{ fontSize: '13px', color: '#9C9488' }}>Make sure the server is running on <code>localhost:4000</code>.</p>
+              <p style={{ fontSize: '13px', color: '#9C9488' }}>Please try again in a moment.</p>
             </div>
           )}
 

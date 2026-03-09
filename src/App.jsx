@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import './index.css';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import ErrorBoundary from './components/ErrorBoundary';
 import HomePage from './pages/HomePage';
 import ItinerariesPage from './pages/ItinerariesPage';
 import ItineraryDetailPage from './pages/ItineraryDetailPage';
@@ -37,19 +38,21 @@ export default function App() {
     <BrowserRouter>
       <ScrollToTop />
       <Layout>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/itineraries" element={<ItinerariesPage />} />
-          <Route path="/itineraries/:id" element={<ItineraryDetailPage />} />
-          <Route path="/custom" element={<CustomPlanningPage />} />
-          <Route path="/pricing" element={<PricingPage />} />
-          <Route path="/about" element={<AboutPage />} />
-          <Route path="/faq" element={<FAQPage />} />
-          <Route path="/journal" element={<JournalListPage />} />
-          <Route path="/journal/:id" element={<JournalPostPage />} />
-          <Route path="/ai-planner" element={<AIPlannerPage />} />
-          <Route path="/my-trips" element={<MyTrips />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/itineraries" element={<ItinerariesPage />} />
+            <Route path="/itineraries/:id" element={<ItineraryDetailPage />} />
+            <Route path="/custom" element={<CustomPlanningPage />} />
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/faq" element={<FAQPage />} />
+            <Route path="/journal" element={<JournalListPage />} />
+            <Route path="/journal/:id" element={<JournalPostPage />} />
+            <Route path="/ai-planner" element={<AIPlannerPage />} />
+            <Route path="/my-trips" element={<MyTrips />} />
+          </Routes>
+        </ErrorBoundary>
       </Layout>
     </BrowserRouter>
   );
