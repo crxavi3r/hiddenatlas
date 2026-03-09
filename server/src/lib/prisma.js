@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { Pool } = require('pg');
 const { PrismaPg } = require('@prisma/adapter-pg');
-const { PrismaClient } = require('../generated/prisma');
+const { PrismaClient } = require('@prisma/client');
 
 // Prisma 7 requires an explicit database adapter for direct connections
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });

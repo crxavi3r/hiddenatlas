@@ -17,8 +17,10 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'hiddenatlas-api' });
 });
 
-// ── Routes will be added here ─────────────────────────────────
-// e.g. app.use('/api/itineraries', require('./routes/itineraries'));
+// ── Routes ────────────────────────────────────────────────────
+app.use('/api/itineraries',   require('./routes/itineraries'));
+app.use('/api/purchase',      require('./routes/purchase'));
+app.use('/api/custom-request', require('./routes/customRequest'));
 
 // ── Start ─────────────────────────────────────────────────────
 app.listen(PORT, () => {
