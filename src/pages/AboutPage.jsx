@@ -80,7 +80,7 @@ export default function AboutPage() {
                   <Instagram size={14} /> @hiddenatlas.travel
                 </a>
                 <a
-                  href="mailto:hiddenatlas.travel@outlook.com"
+                  href="mailto:contact@hiddenatlas.travel"
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: '8px',
                     padding: '11px 20px',

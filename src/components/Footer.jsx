@@ -60,7 +60,7 @@ export default function Footer() {
                 <Instagram size={15} />
               </a>
               <a
-                href="mailto:hiddenatlas.travel@outlook.com"
+                href="mailto:contact@hiddenatlas.travel"
                 style={{
                   display: 'flex', alignItems: 'center', gap: '8px',
                   padding: '0 12px', height: '36px',
@@ -81,7 +81,7 @@ export default function Footer() {
                 }}
               >
                 <Mail size={13} />
-                hiddenatlas.travel@outlook.com
+                contact@hiddenatlas.travel
               </a>
             </div>
           </div>

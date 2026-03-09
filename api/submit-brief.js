@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   try {
     await resend.emails.send({
       from: 'HiddenAtlas <brief@hiddenatlas.travel>',
-      to: ['cristiano.xavier@outlook.com'],
+      to: ['contact@hiddenatlas.travel'],
       subject: 'New HiddenAtlas Custom Planning Brief',
       html: `
         <h2>New HiddenAtlas Travel Brief</h2>
