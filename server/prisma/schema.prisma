@@ -27,13 +27,17 @@ model User {
 // Itinerary
 // ─────────────────────────────────────────────
 model Itinerary {
-  id          String     @id @default(uuid())
+  id          String   @id @default(uuid())
   title       String
-  slug        String     @unique
+  slug        String   @unique
   description String
+  excerpt     String?
+  htmlContent String?
+  pdfUrl      String?
   price       Float
   coverImage  String
-  createdAt   DateTime   @default(now())
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
 
   purchases Purchase[]
 }
@@ -42,11 +46,13 @@ model Itinerary {
 // Purchase
 // ─────────────────────────────────────────────
 model Purchase {
-  id          String    @id @default(uuid())
+  id          String   @id @default(uuid())
   userId      String
   itineraryId String
   amount      Float
-  createdAt   DateTime  @default(now())
+  status      String   @default("paid")
+  purchasedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
 
   user      User      @relation(fields: [userId],      references: [id])
   itinerary Itinerary @relation(fields: [itineraryId], references: [id])

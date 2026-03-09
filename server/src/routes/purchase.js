@@ -3,8 +3,9 @@ const prisma = require('../lib/prisma');
 
 const router = Router();
 
-// POST /api/purchase
+// ── POST /api/purchase ────────────────────────────────────────
 // Body: { userId, itineraryId, amount }
+// Creates a purchase record with status "paid"
 router.post('/', async (req, res) => {
   const { userId, itineraryId, amount } = req.body;
 
@@ -14,15 +15,23 @@ router.post('/', async (req, res) => {
 
   try {
     const purchase = await prisma.purchase.create({
-      data: { userId, itineraryId, amount: parseFloat(amount) },
-      include: {
-        user: { select: { id: true, name: true, email: true } },
-        itinerary: { select: { id: true, title: true, slug: true } },
+      data: {
+        userId,
+        itineraryId,
+        amount: parseFloat(amount),
+        status: 'paid',
+      },
+      select: {
+        id:          true,
+        amount:      true,
+        status:      true,
+        purchasedAt: true,
+        user:        { select: { id: true, name: true, email: true } },
+        itinerary:   { select: { id: true, title: true, slug: true } },
       },
     });
     res.status(201).json(purchase);
   } catch (err) {
-    // P2025 = related record not found (bad userId or itineraryId)
     if (err.code === 'P2025') {
       return res.status(404).json({ error: 'User or itinerary not found' });
     }

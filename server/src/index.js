@@ -18,9 +18,10 @@ app.get('/health', (_req, res) => {
 });
 
 // ── Routes ────────────────────────────────────────────────────
-app.use('/api/itineraries',   require('./routes/itineraries'));
-app.use('/api/purchase',      require('./routes/purchase'));
+app.use('/api/itineraries',    require('./routes/itineraries'));
+app.use('/api/purchase',       require('./routes/purchase'));
 app.use('/api/custom-request', require('./routes/customRequest'));
+app.use('/api/my-trips',       require('./routes/myTrips'));
 
 // ── Start ─────────────────────────────────────────────────────
 app.listen(PORT, () => {
