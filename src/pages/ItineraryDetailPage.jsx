@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { Clock, Users, MapPin, Check, Star, ArrowRight, Lock, Download, ChevronRight, Route } from 'lucide-react';
-import { useAuth, useUser, SignInButton } from '@clerk/clerk-react';
+import { useAuth, useUser, useClerk } from '@clerk/clerk-react';
 import { itineraries } from '../data/itineraries';
 import { downloadItineraryPDF } from '../utils/downloadPDF';
 import { useApi } from '../lib/api';
@@ -9,8 +9,9 @@ import { useApi } from '../lib/api';
 // ─────────────────────────────────────────────────────────────
 // Sidebar — locked state
 // ─────────────────────────────────────────────────────────────
-function LockedSidebar({ itinerary, onPurchase, purchasing, requiresAuth = false }) {
+function LockedSidebar({ itinerary, onBuy, purchasing }) {
   const { price, included = [] } = itinerary;
+  const allFeatures = ['Save 20+ hours of travel planning', ...included];
   return (
     <div style={{
       background: 'white', border: '1px solid #E8E3DA',
@@ -27,16 +28,19 @@ function LockedSidebar({ itinerary, onPurchase, purchasing, requiresAuth = false
         <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.65)', marginTop: '4px' }}>
           One-time purchase · Digital + PDF
         </p>
+        <p style={{ fontSize: '11.5px', color: 'rgba(201,169,110,0.85)', marginTop: '8px', fontWeight: '500' }}>
+          Used by 1,200+ travellers
+        </p>
       </div>
 
       <div style={{ padding: '28px' }}>
-        {included.length > 0 && (
+        {allFeatures.length > 0 && (
           <>
             <p style={{ fontSize: '13px', fontWeight: '600', color: '#4A433A', marginBottom: '16px' }}>
               What's included:
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '28px' }}>
-              {included.map((item, i) => (
+              {allFeatures.map((item, i) => (
                 <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                   <Check size={14} color="#1B6B65" style={{ flexShrink: 0, marginTop: '2px' }} strokeWidth={2.5} />
                   <span style={{ fontSize: '13px', color: '#4A433A', lineHeight: '1.5' }}>{item}</span>
@@ -46,39 +50,28 @@ function LockedSidebar({ itinerary, onPurchase, purchasing, requiresAuth = false
           </>
         )}
 
-        {requiresAuth ? (
-          <SignInButton mode="modal">
-            <button style={{
-              width: '100%', padding: '16px',
-              background: '#1B6B65', color: 'white',
-              border: 'none', borderRadius: '4px',
-              fontSize: '14px', fontWeight: '600',
-              letterSpacing: '0.5px', textTransform: 'uppercase',
-              cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-              marginBottom: '12px',
-            }}>
-              <Lock size={14} /> Sign in to Unlock
-            </button>
-          </SignInButton>
-        ) : (
-          <button
-            onClick={onPurchase}
-            disabled={purchasing}
-            style={{
-              width: '100%', padding: '16px',
-              background: purchasing ? '#8C8070' : '#C9A96E',
-              color: 'white', border: 'none', borderRadius: '4px',
-              fontSize: '14px', fontWeight: '600',
-              letterSpacing: '0.5px', textTransform: 'uppercase',
-              cursor: purchasing ? 'wait' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-              marginBottom: '12px', transition: 'background 0.2s',
-            }}
-          >
-            {purchasing ? 'Processing…' : <><Lock size={14} /> Unlock for €{price}</>}
-          </button>
-        )}
+        <button
+          onClick={onBuy}
+          disabled={purchasing}
+          style={{
+            width: '100%', padding: '16px',
+            background: purchasing ? '#8C8070' : '#C9A96E',
+            color: 'white', border: 'none', borderRadius: '4px',
+            fontSize: '15px', fontWeight: '700',
+            letterSpacing: '0.2px',
+            cursor: purchasing ? 'wait' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+            marginBottom: '8px', transition: 'background 0.2s',
+          }}
+          onMouseEnter={e => { if (!purchasing) e.currentTarget.style.background = '#B8943A'; }}
+          onMouseLeave={e => { if (!purchasing) e.currentTarget.style.background = '#C9A96E'; }}
+        >
+          {purchasing ? 'Processing…' : `Buy itinerary — €${price}`}
+        </button>
+
+        <p style={{ fontSize: '12px', color: '#9C9488', textAlign: 'center', marginBottom: '16px' }}>
+          Instant access after purchase
+        </p>
 
         <Link
           to="/custom"
@@ -293,6 +286,7 @@ export default function ItineraryDetailPage() {
   const itinerary = itineraries.find(it => it.id === id);
 
   const { isLoaded, isSignedIn } = useAuth();
+  const { openSignIn } = useClerk();
   const api = useApi();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -303,13 +297,13 @@ export default function ItineraryDetailPage() {
   const [purchaseError, setPurchaseError] = useState(null);
 
   const isPremium = itinerary?.isPremium;
+  const PENDING_KEY = 'ha_pending_purchase';
 
   useEffect(() => {
     if (!itinerary || !isLoaded) return;
     if (!isPremium) { setAccessState('unlocked'); return; }
 
-    // Not signed in — show locked with sign-in prompt
-    if (!isSignedIn) { setAccessState('unauthenticated'); return; }
+    if (!isSignedIn) { setAccessState('locked'); return; }
 
     api.get(`/api/itineraries/${itinerary.id}/access`)
       .then(res => res.ok ? res.json() : { hasAccess: false, pdfUrl: null })
@@ -319,6 +313,16 @@ export default function ItineraryDetailPage() {
       })
       .catch(() => setAccessState('locked'));
   }, [itinerary?.id, isLoaded, isSignedIn]);
+
+  // After sign-in: auto-resume checkout if visitor clicked Buy before authenticating
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !itinerary) return;
+    const pending = sessionStorage.getItem(PENDING_KEY);
+    if (pending === itinerary.id) {
+      sessionStorage.removeItem(PENDING_KEY);
+      handlePurchase();
+    }
+  }, [isLoaded, isSignedIn, itinerary?.id]);
 
   // Detect Stripe return: ?session_id=cs_xxx → verify payment
   useEffect(() => {
@@ -332,7 +336,6 @@ export default function ItineraryDetailPage() {
         if (hasAccess) {
           setPdfUrl(pdfUrl);
           setAccessState('unlocked');
-          // Remove session_id from URL cleanly
           setSearchParams({}, { replace: true });
         } else {
           setAccessState('locked');
@@ -343,7 +346,6 @@ export default function ItineraryDetailPage() {
 
   async function handlePurchase() {
     if (!itinerary || purchasing) return;
-    if (!isSignedIn) return; // shouldn't happen — UI prevents this
     setPurchasing(true);
     setPurchaseError(null);
     try {
@@ -355,12 +357,22 @@ export default function ItineraryDetailPage() {
       });
       if (!res.ok) throw new Error('Could not create checkout session');
       const { url } = await res.json();
-      window.location.href = url; // redirect to Stripe Checkout
+      window.location.href = url;
     } catch (err) {
       setPurchaseError('Something went wrong. Please try again.');
       setPurchasing(false);
     }
-    // Note: don't set purchasing=false on success — page will redirect
+  }
+
+  // Unified buy handler: sign in first if needed, then go to Stripe
+  function handleBuyClick() {
+    if (!itinerary || purchasing) return;
+    if (!isSignedIn) {
+      sessionStorage.setItem(PENDING_KEY, itinerary.id);
+      openSignIn({ afterSignInUrl: window.location.href, afterSignUpUrl: window.location.href });
+      return;
+    }
+    handlePurchase();
   }
 
   if (!itinerary) {
@@ -579,12 +591,11 @@ export default function ItineraryDetailPage() {
                 </p>
               </div>
             )}
-            {(accessState === 'locked' || accessState === 'unauthenticated') && (
+            {accessState === 'locked' && (
               <LockedSidebar
                 itinerary={itinerary}
-                onPurchase={handlePurchase}
+                onBuy={handleBuyClick}
                 purchasing={purchasing}
-                requiresAuth={accessState === 'unauthenticated'}
               />
             )}
             {accessState === 'unlocked' && (
