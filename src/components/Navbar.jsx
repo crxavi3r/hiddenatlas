@@ -100,6 +100,8 @@ export default function Navbar() {
 
             {/* ── Auth — desktop ── */}
             <div className="hidden-mobile" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {/* DEBUG — remove once auth renders correctly */}
+              <span style={{ fontSize: '11px', color: '#9C9488', fontFamily: 'monospace' }}>Auth loading…</span>
               <SignedOut>
                 <SignInButton mode="modal">
                   <button style={{

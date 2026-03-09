@@ -6,6 +6,11 @@ import App from './App.jsx';
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
+// DEBUG — remove once Clerk is confirmed working
+console.log('[Clerk] VITE_CLERK_PUBLISHABLE_KEY present:', !!PUBLISHABLE_KEY);
+console.log('[Clerk] Key prefix:', PUBLISHABLE_KEY ? PUBLISHABLE_KEY.slice(0, 8) : 'MISSING');
+window.__clerkDebug = { keyPresent: !!PUBLISHABLE_KEY, keyPrefix: PUBLISHABLE_KEY?.slice(0, 8) ?? 'MISSING' };
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     {PUBLISHABLE_KEY ? (
