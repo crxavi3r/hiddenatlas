@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { Clock, Users, MapPin, Check, Star, ArrowRight, Lock, Download, ChevronRight, Route } from 'lucide-react';
 import { useAuth, useUser, SignInButton } from '@clerk/clerk-react';
 import { itineraries } from '../data/itineraries';
@@ -294,8 +294,10 @@ export default function ItineraryDetailPage() {
 
   const { isLoaded, isSignedIn } = useAuth();
   const api = useApi();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
-  const [accessState, setAccessState] = useState('checking'); // 'checking' | 'locked' | 'unlocked' | 'unauthenticated'
+  const [accessState, setAccessState] = useState('checking'); // 'checking' | 'locked' | 'unlocked' | 'unauthenticated' | 'verifying'
   const [pdfUrl, setPdfUrl]           = useState(null);
   const [purchasing, setPurchasing]   = useState(false);
   const [purchaseError, setPurchaseError] = useState(null);
@@ -318,26 +320,47 @@ export default function ItineraryDetailPage() {
       .catch(() => setAccessState('locked'));
   }, [itinerary?.id, isLoaded, isSignedIn]);
 
+  // Detect Stripe return: ?session_id=cs_xxx → verify payment
+  useEffect(() => {
+    const sessionId = searchParams.get('session_id');
+    if (!sessionId || !isLoaded || !isSignedIn || !itinerary) return;
+
+    setAccessState('verifying');
+    api.post('/api/checkout/verify', { sessionId })
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(({ hasAccess, pdfUrl }) => {
+        if (hasAccess) {
+          setPdfUrl(pdfUrl);
+          setAccessState('unlocked');
+          // Remove session_id from URL cleanly
+          setSearchParams({}, { replace: true });
+        } else {
+          setAccessState('locked');
+        }
+      })
+      .catch(() => setAccessState('locked'));
+  }, [searchParams, isLoaded, isSignedIn, itinerary?.id]);
+
   async function handlePurchase() {
     if (!itinerary || purchasing) return;
     if (!isSignedIn) return; // shouldn't happen — UI prevents this
     setPurchasing(true);
     setPurchaseError(null);
     try {
-      const res = await api.post(`/api/itineraries/${itinerary.id}/purchase`, {
+      const res = await api.post('/api/checkout/session', {
+        slug:       itinerary.id,
         amount:     itinerary.price,
         title:      itinerary.title,
         coverImage: itinerary.coverImage || itinerary.image,
       });
-      if (!res.ok) throw new Error('Purchase failed');
-      const result = await res.json();
-      setPdfUrl(result.pdfUrl);
-      setAccessState('unlocked');
+      if (!res.ok) throw new Error('Could not create checkout session');
+      const { url } = await res.json();
+      window.location.href = url; // redirect to Stripe Checkout
     } catch (err) {
       setPurchaseError('Something went wrong. Please try again.');
-    } finally {
       setPurchasing(false);
     }
+    // Note: don't set purchasing=false on success — page will redirect
   }
 
   if (!itinerary) {
@@ -549,8 +572,12 @@ export default function ItineraryDetailPage() {
 
           {/* ── Right: Sidebar ── */}
           <div className="resp-sidebar" style={{ position: 'sticky', top: '100px' }}>
-            {(accessState === 'checking') && (
-              <div style={{ height: '200px', background: 'white', borderRadius: '12px', border: '1px solid #E8E3DA' }} />
+            {(accessState === 'checking' || accessState === 'verifying') && (
+              <div style={{ height: '200px', background: 'white', borderRadius: '12px', border: '1px solid #E8E3DA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <p style={{ fontSize: '13px', color: '#9C9488' }}>
+                  {accessState === 'verifying' ? 'Confirming payment…' : ''}
+                </p>
+              </div>
             )}
             {(accessState === 'locked' || accessState === 'unauthenticated') && (
               <LockedSidebar

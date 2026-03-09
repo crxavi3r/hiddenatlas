@@ -11,6 +11,10 @@ app.use(cors({
   origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
   credentials: true,
 }));
+
+// Stripe webhook needs raw body — must come BEFORE express.json()
+app.use('/api/checkout/webhook', express.raw({ type: 'application/json' }));
+
 app.use(express.json());
 
 // Clerk: parses the Authorization header on every request and
@@ -29,6 +33,7 @@ app.use('/api/itineraries',   require('./routes/itineraries'));
 app.use('/api/purchase',      require('./routes/purchase'));
 app.use('/api/custom-request', require('./routes/customRequest'));
 app.use('/api/my-trips',      require('./routes/myTrips'));
+app.use('/api/checkout',      require('./routes/checkout'));
 
 // ── Start ─────────────────────────────────────────────────────
 app.listen(PORT, () => {
