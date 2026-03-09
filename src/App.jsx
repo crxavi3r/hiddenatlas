@@ -14,6 +14,8 @@ import FAQPage from './pages/FAQPage';
 import { JournalListPage, JournalPostPage } from './pages/JournalPage';
 import AIPlannerPage from './pages/AIPlannerPage';
 import MyTrips from './pages/MyTrips';
+import SignInPage from './pages/SignInPage';
+import SignUpPage from './pages/SignUpPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import TermsOfServicePage from './pages/TermsOfServicePage';
 import RefundPolicyPage from './pages/RefundPolicyPage';
@@ -54,6 +56,8 @@ export default function App() {
             <Route path="/journal/:id" element={<JournalPostPage />} />
             <Route path="/ai-planner" element={<AIPlannerPage />} />
             <Route path="/my-trips" element={<MyTrips />} />
+            <Route path="/sign-in/*" element={<SignInPage />} />
+            <Route path="/sign-up/*" element={<SignUpPage />} />
             <Route path="/privacy" element={<PrivacyPolicyPage />} />
             <Route path="/terms" element={<TermsOfServicePage />} />
             <Route path="/refunds" element={<RefundPolicyPage />} />
