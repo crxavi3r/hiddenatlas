@@ -1,8 +1,6 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// HiddenAtlas — Prisma Schema
+// Database: PostgreSQL (Neon)
+// Prisma 7: datasource URL lives in prisma.config.ts, not here
 
 generator client {
   provider = "prisma-client"
@@ -11,5 +9,60 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// User
+// ─────────────────────────────────────────────
+model User {
+  id        String     @id @default(uuid())
+  email     String     @unique
+  name      String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  purchases Purchase[]
+}
+
+// ─────────────────────────────────────────────
+// Itinerary
+// ─────────────────────────────────────────────
+model Itinerary {
+  id          String     @id @default(uuid())
+  title       String
+  slug        String     @unique
+  description String
+  price       Float
+  coverImage  String
+  createdAt   DateTime   @default(now())
+
+  purchases Purchase[]
+}
+
+// ─────────────────────────────────────────────
+// Purchase
+// ─────────────────────────────────────────────
+model Purchase {
+  id          String    @id @default(uuid())
+  userId      String
+  itineraryId String
+  amount      Float
+  createdAt   DateTime  @default(now())
+
+  user      User      @relation(fields: [userId],      references: [id])
+  itinerary Itinerary @relation(fields: [itineraryId], references: [id])
+}
+
+// ─────────────────────────────────────────────
+// CustomRequest
+// ─────────────────────────────────────────────
+model CustomRequest {
+  id          String   @id @default(uuid())
+  fullName    String
+  email       String
+  destination String
+  dates       String
+  groupSize   Int
+  notes       String?
+  createdAt   DateTime @default(now())
 }
