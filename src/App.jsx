@@ -14,6 +14,9 @@ import FAQPage from './pages/FAQPage';
 import { JournalListPage, JournalPostPage } from './pages/JournalPage';
 import AIPlannerPage from './pages/AIPlannerPage';
 import MyTrips from './pages/MyTrips';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsOfServicePage from './pages/TermsOfServicePage';
+import RefundPolicyPage from './pages/RefundPolicyPage';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -51,6 +54,9 @@ export default function App() {
             <Route path="/journal/:id" element={<JournalPostPage />} />
             <Route path="/ai-planner" element={<AIPlannerPage />} />
             <Route path="/my-trips" element={<MyTrips />} />
+            <Route path="/privacy" element={<PrivacyPolicyPage />} />
+            <Route path="/terms" element={<TermsOfServicePage />} />
+            <Route path="/refunds" element={<RefundPolicyPage />} />
           </Routes>
         </ErrorBoundary>
       </Layout>

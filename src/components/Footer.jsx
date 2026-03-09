@@ -34,6 +34,9 @@ export default function Footer() {
             <p style={{ fontSize: '14px', lineHeight: '1.7', color: '#8C8070', maxWidth: '240px' }}>
               Curated travel itineraries for people who want extraordinary experiences without the ordinary effort.
             </p>
+            <p style={{ fontSize: '13px', color: '#6B6156', marginTop: '10px', fontStyle: 'italic' }}>
+              Built from real travel experiences.
+            </p>
             <div style={{ display: 'flex', gap: '12px', marginTop: '24px', alignItems: 'center', flexWrap: 'wrap' }}>
               <a
                 href="https://www.instagram.com/hiddenatlas.travel/"
@@ -173,19 +176,23 @@ export default function Footer() {
           gap: '16px',
         }}>
           <p style={{ fontSize: '13px', color: '#6B6156' }}>
-            © 2025 HiddenAtlas. All rights reserved.
+            © {new Date().getFullYear()} HiddenAtlas. All rights reserved.
           </p>
-          <div style={{ display: 'flex', gap: '24px' }}>
-            {['Privacy Policy', 'Terms of Service'].map(label => (
-              <a
-                key={label}
-                href="#"
+          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+            {[
+              ['Privacy Policy',   '/privacy'],
+              ['Terms of Service', '/terms'],
+              ['Refund Policy',    '/refunds'],
+            ].map(([label, to]) => (
+              <Link
+                key={to}
+                to={to}
                 style={{ fontSize: '13px', color: '#6B6156', transition: 'color 0.2s' }}
                 onMouseEnter={e => e.target.style.color = '#8C8070'}
                 onMouseLeave={e => e.target.style.color = '#6B6156'}
               >
                 {label}
-              </a>
+              </Link>
             ))}
           </div>
         </div>
