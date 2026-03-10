@@ -1,5 +1,6 @@
-import { verifyToken, createClerkClient } from '@clerk/backend';
+import { createClerkClient } from '@clerk/backend';
 import pg from 'pg';
+import { verifyAuth } from '../_lib/verifyAuth.js';
 
 const { Pool } = pg;
 
@@ -8,14 +9,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // ── 1. Extract token ────────────────────────────────────────
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Missing authorization header' });
-  }
-  const token = authHeader.slice(7);
-
-  // ── 2. Guard env vars ───────────────────────────────────────
+  // ── 1. Guard env vars ───────────────────────────────────────
   if (!process.env.CLERK_SECRET_KEY) {
     return res.status(500).json({ error: 'CLERK_SECRET_KEY not configured' });
   }
@@ -23,11 +17,10 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'DATABASE_URL not configured' });
   }
 
-  // ── 3. Verify Clerk JWT — clerkId comes from the token, never from body ──
+  // ── 2. Verify Clerk JWT — clerkId comes from the token, never from body ──
   let clerkId;
   try {
-    const payload = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY });
-    clerkId = payload.sub;
+    clerkId = await verifyAuth(req.headers.authorization);
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
