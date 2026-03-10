@@ -158,14 +158,17 @@ export default function PricingPage() {
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', alignItems: 'start' }}>
+          {/* mt-14px on wrapper so absolute badge has room without shifting card height */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', alignItems: 'stretch', marginTop: '14px' }}>
             {customTiers.map((tier, i) => (
               <div
                 key={i}
                 style={{
                   background: tier.best ? '#1C1A16' : 'white',
                   border: tier.best ? 'none' : '1px solid #E8E3DA',
-                  borderRadius: '12px', padding: '36px 32px',
+                  borderRadius: '12px',
+                  padding: '36px 32px',
+                  paddingTop: '42px', /* uniform top padding absorbs badge height on all cards */
                   position: 'relative',
                   boxShadow: tier.best ? '0 24px 80px rgba(28,26,22,0.22)' : 'none',
                   display: 'flex', flexDirection: 'column',
@@ -173,7 +176,7 @@ export default function PricingPage() {
               >
                 {tier.best && (
                   <div style={{
-                    position: 'absolute', top: '-14px', left: '50%', transform: 'translateX(-50%)',
+                    position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)',
                     background: '#C9A96E', color: 'white',
                     padding: '5px 16px', borderRadius: '3px',
                     fontSize: '11px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase',
@@ -189,11 +192,21 @@ export default function PricingPage() {
                 <p style={{ fontSize: '13px', color: '#8C8070', marginBottom: '20px' }}>
                   {tier.group} · {tier.duration}
                 </p>
-                <div style={{ fontSize: '38px', fontWeight: '700', color: tier.best ? '#C9A96E' : '#1B6B65', fontFamily: "'Playfair Display', Georgia, serif", marginBottom: '28px', lineHeight: '1' }}>
+
+                {/* Fixed-height price block so "From €849" never pushes content down */}
+                <div style={{
+                  fontSize: '38px', fontWeight: '700',
+                  color: tier.best ? '#C9A96E' : '#1B6B65',
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                  lineHeight: '1', whiteSpace: 'nowrap',
+                  minHeight: '48px', marginBottom: '28px',
+                  display: 'flex', alignItems: 'flex-end',
+                }}>
                   {tier.price}
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px', flex: 1 }}>
+                {/* Features — flex:1 pushes CTA to bottom */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, marginBottom: '32px' }}>
                   {tier.features.map((f, j) => (
                     <div key={j} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                       <Check size={14} color={tier.best ? '#C9A96E' : '#1B6B65'} strokeWidth={2.5} style={{ flexShrink: 0, marginTop: '2px' }} />
@@ -202,6 +215,7 @@ export default function PricingPage() {
                   ))}
                 </div>
 
+                {/* CTA pinned to bottom via flex column */}
                 <Link
                   to="/custom"
                   style={{
@@ -212,6 +226,7 @@ export default function PricingPage() {
                     textDecoration: 'none',
                     background: tier.best ? '#C9A96E' : '#1B6B65',
                     color: 'white',
+                    marginTop: 'auto',
                   }}
                 >
                   Request Custom Planning <ArrowRight size={13} />
