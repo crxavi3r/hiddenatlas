@@ -31,5 +31,6 @@ export function useApi() {
   return {
     get:  (path)         => request(path, { method: 'GET' }),
     post: (path, body)   => request(path, { method: 'POST', body: JSON.stringify(body) }),
+    del:  (path)         => request(path, { method: 'DELETE' }),
   };
 }

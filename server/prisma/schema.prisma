@@ -23,6 +23,7 @@ model User {
 
   purchases Purchase[]
   trips     Trip[]
+  events    TripEvent[]
 }
 
 // ─────────────────────────────────────────────
@@ -95,6 +96,27 @@ model TripDay {
   trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
 
   @@index([tripId])
+}
+
+// ─────────────────────────────────────────────
+// TripEvent  (immutable audit log)
+// tripId is a plain String? with NO FK — rows survive trip deletion intentionally.
+// eventType: SAVED | DOWNLOADED | DELETED
+// ─────────────────────────────────────────────
+model TripEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  tripId    String?  // no FK — preserved after trip is deleted
+  eventType String   // SAVED | DOWNLOADED | DELETED
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([tripId])
+  @@index([eventType])
+  @@index([createdAt])
 }
 
 // ─────────────────────────────────────────────

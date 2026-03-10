@@ -1,26 +1,23 @@
 import { verifyToken } from '@clerk/backend';
 import pg from 'pg';
+import { createTripEvent } from '../_lib/audit.js';
 
 const { Pool } = pg;
 
 // POST /api/trips/save
-// Saves an AI-generated trip for the authenticated user.
-// Body: { trip: { destination, country, duration, overview, highlights, hotels, experiences, days } }
+// Saves an AI-generated trip and writes a SAVED audit event.
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // ── Auth ─────────────────────────────────────────────────────
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
-    console.log('[save] missing auth header');
     return res.status(401).json({ error: 'Unauthorized' });
   }
   const token = authHeader.slice(7);
 
   if (!process.env.CLERK_SECRET_KEY || !process.env.DATABASE_URL) {
-    console.error('[save] missing env vars — CLERK_SECRET_KEY:', !!process.env.CLERK_SECRET_KEY, 'DATABASE_URL:', !!process.env.DATABASE_URL);
     return res.status(500).json({ error: 'Server misconfigured' });
   }
 
@@ -34,16 +31,14 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
-  // ── Validate body ────────────────────────────────────────────
   const { trip } = req.body || {};
-  console.log('[save] body keys:', Object.keys(req.body || {}), '| trip.destination:', trip?.destination);
+  console.log('[save] trip.destination:', trip?.destination);
   if (!trip?.destination) {
     return res.status(400).json({ error: 'Missing trip data — expected { trip: { destination, ... } }' });
   }
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    // Resolve DB user — userId never comes from the client
     const { rows: users } = await pool.query(
       `SELECT id FROM "User" WHERE "clerkId" = $1`,
       [clerkId]
@@ -63,9 +58,9 @@ export default async function handler(req, res) {
         userId,
         trip.destination,
         trip.destination,
-        trip.country      || '',
-        trip.duration     || '',
-        trip.overview     || '',
+        trip.country     || '',
+        trip.duration    || '',
+        trip.overview    || '',
         JSON.stringify(trip.highlights   || []),
         JSON.stringify(trip.hotels       || []),
         JSON.stringify(trip.experiences  || []),
@@ -76,7 +71,6 @@ export default async function handler(req, res) {
 
     // Insert TripDay rows
     const days = Array.isArray(trip.days) ? trip.days : [];
-    console.log('[save] inserting', days.length, 'days');
     for (const day of days) {
       await pool.query(
         `INSERT INTO "TripDay" (id, "tripId", "dayNumber", title, description)
@@ -85,7 +79,21 @@ export default async function handler(req, res) {
       );
     }
 
-    console.log('[save] done — tripId:', tripId);
+    // Audit: SAVED
+    await createTripEvent(pool, {
+      userId,
+      tripId,
+      eventType: 'SAVED',
+      metadata: {
+        destination: trip.destination,
+        title:       trip.destination,
+        duration:    trip.duration || '',
+        dayCount:    days.length,
+        source:      'ai_planner',
+      },
+    });
+    console.log('[save] SAVED event written for tripId:', tripId);
+
     return res.status(200).json({ id: tripId });
   } catch (err) {
     console.error('[save] DB error:', err.message, '| code:', err.code);

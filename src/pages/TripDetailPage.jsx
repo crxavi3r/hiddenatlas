@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, Star, Check, MapPin, Calendar, Download } from 'lucide-react';
+import { ArrowLeft, Clock, Star, Check, MapPin, Calendar, Download, Trash2 } from 'lucide-react';
 import { useAuth } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
 
@@ -39,6 +39,7 @@ export default function TripDetailPage() {
   const [status, setStatus] = useState('loading');
   // 'idle' | 'downloading' | 'done' | 'error'
   const [downloadState, setDownloadState] = useState('idle');
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -71,9 +72,32 @@ export default function TripDetailPage() {
       const filename = `${trip.destination.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-itinerary.pdf`;
       triggerDownload(blob, filename);
       setDownloadState('done');
+
+      // Audit: fire-and-forget DOWNLOADED event
+      api.post(`/api/trips/${id}`, {
+        eventType: 'DOWNLOADED',
+        metadata: { source: 'trip_detail', destination: trip.destination },
+      }).catch(err => console.warn('[TripDetailPage] download audit failed:', err.message));
     } catch (err) {
       console.error('[TripDetailPage] download error:', err.message);
       setDownloadState('error');
+    }
+  }
+
+  async function handleDelete() {
+    if (!window.confirm(`Delete "${trip?.destination}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      const res = await api.del(`/api/trips/${id}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Delete failed');
+      }
+      navigate('/my-trips');
+    } catch (err) {
+      console.error('[TripDetailPage] delete error:', err.message);
+      setDeleting(false);
+      window.alert('Could not delete trip. Please try again.');
     }
   }
 
@@ -106,13 +130,29 @@ export default function TripDetailPage() {
     <div style={{ background: '#FAFAF8', paddingTop: '72px' }}>
 
       {/* Back nav */}
-      <div style={{ padding: '20px 24px 0', maxWidth: '900px', margin: '0 auto' }}>
+      <div style={{ padding: '20px 24px 0', maxWidth: '900px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Link
           to="/my-trips"
           style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#6B6156', textDecoration: 'none', fontWeight: '500' }}
         >
           <ArrowLeft size={13} /> My Trips
         </Link>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            padding: '7px 14px', background: 'transparent', color: '#B5A09A',
+            border: '1px solid #E8E3DA', borderRadius: '4px',
+            fontSize: '12px', fontWeight: '600', letterSpacing: '0.3px',
+            cursor: deleting ? 'default' : 'pointer', transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => { if (!deleting) { e.currentTarget.style.color = '#C0392B'; e.currentTarget.style.borderColor = '#C0392B'; }}}
+          onMouseLeave={e => { e.currentTarget.style.color = '#B5A09A'; e.currentTarget.style.borderColor = '#E8E3DA'; }}
+        >
+          <Trash2 size={12} />
+          {deleting ? 'Deleting…' : 'Delete trip'}
+        </button>
       </div>
 
       {/* Hero */}

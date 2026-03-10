@@ -134,6 +134,15 @@ export default function AIPlannerPage() {
       const filename = `${result.destination.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-itinerary.pdf`;
       triggerDownload(blob, filename);
       setDownloadState('done');
+
+      // Audit: fire-and-forget DOWNLOADED event (does not block the download)
+      const auditTripId = savedTripId;
+      if (isSignedIn && auditTripId) {
+        api.post(`/api/trips/${auditTripId}`, {
+          eventType: 'DOWNLOADED',
+          metadata: { source: 'ai_planner', destination: result.destination },
+        }).catch(err => console.warn('[AIPlannerPage] download audit failed:', err.message));
+      }
     } catch (err) {
       console.error('[AIPlannerPage] download error:', err.message);
       setDownloadState('error');

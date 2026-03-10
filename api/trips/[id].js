@@ -1,17 +1,19 @@
 import { verifyToken } from '@clerk/backend';
 import pg from 'pg';
+import { createTripEvent } from '../_lib/audit.js';
 
 const { Pool } = pg;
 
-// GET /api/trips/:id
-// Returns a single saved trip with its days. Only the owning user can access it.
+// GET    /api/trips/:id — return full trip with days
+// POST   /api/trips/:id — log a DOWNLOADED event
+// DELETE /api/trips/:id — delete trip + log DELETED event
 export default async function handler(req, res) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
   const { id } = req.query;
   if (!id) return res.status(400).json({ error: 'Missing trip id' });
+
+  if (!['GET', 'POST', 'DELETE'].includes(req.method)) {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   // ── Auth ─────────────────────────────────────────────────────
   const authHeader = req.headers.authorization;
@@ -42,30 +44,88 @@ export default async function handler(req, res) {
     if (!users.length) return res.status(404).json({ error: 'User not found' });
     const userId = users[0].id;
 
-    // Fetch trip — userId check enforces ownership
-    const { rows: trips } = await pool.query(
-      `SELECT id, title, destination, country, duration, overview,
-              highlights, hotels, experiences, "createdAt"
-       FROM "Trip"
-       WHERE id = $1 AND "userId" = $2`,
-      [id, userId]
-    );
-    if (!trips.length) return res.status(404).json({ error: 'Trip not found' });
-    const trip = trips[0];
+    // ── GET ───────────────────────────────────────────────────
+    if (req.method === 'GET') {
+      const { rows: trips } = await pool.query(
+        `SELECT id, title, destination, country, duration, overview,
+                highlights, hotels, experiences, "createdAt"
+         FROM "Trip"
+         WHERE id = $1 AND "userId" = $2`,
+        [id, userId]
+      );
+      if (!trips.length) return res.status(404).json({ error: 'Trip not found' });
 
-    // Fetch days in order
-    const { rows: days } = await pool.query(
-      `SELECT id, "dayNumber", title, description
-       FROM "TripDay"
-       WHERE "tripId" = $1
-       ORDER BY "dayNumber" ASC`,
-      [id]
-    );
+      const { rows: days } = await pool.query(
+        `SELECT id, "dayNumber", title, description
+         FROM "TripDay"
+         WHERE "tripId" = $1
+         ORDER BY "dayNumber" ASC`,
+        [id]
+      );
 
-    return res.status(200).json({ ...trip, days });
+      return res.status(200).json({ ...trips[0], days });
+    }
+
+    // ── POST — log DOWNLOADED event ───────────────────────────
+    if (req.method === 'POST') {
+      const { eventType, metadata = {} } = req.body || {};
+
+      if (eventType !== 'DOWNLOADED') {
+        return res.status(400).json({ error: 'Invalid eventType. Allowed via POST: DOWNLOADED' });
+      }
+
+      // Verify ownership — trip must exist and belong to this user
+      const { rows: trips } = await pool.query(
+        `SELECT id, destination FROM "Trip" WHERE id = $1 AND "userId" = $2`,
+        [id, userId]
+      );
+      if (!trips.length) return res.status(404).json({ error: 'Trip not found' });
+
+      await createTripEvent(pool, {
+        userId,
+        tripId: id,
+        eventType: 'DOWNLOADED',
+        metadata: {
+          destination: trips[0].destination,
+          source:      metadata.source || 'unknown',
+          ...metadata,
+        },
+      });
+
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── DELETE — delete trip + log DELETED event ──────────────
+    if (req.method === 'DELETE') {
+      // Fetch trip for snapshot + ownership check
+      const { rows: trips } = await pool.query(
+        `SELECT id, title, destination, duration FROM "Trip" WHERE id = $1 AND "userId" = $2`,
+        [id, userId]
+      );
+      if (!trips.length) return res.status(404).json({ error: 'Trip not found' });
+      const trip = trips[0];
+
+      // Write DELETED event BEFORE deletion so audit survives any subsequent error
+      await createTripEvent(pool, {
+        userId,
+        tripId: id,      // stored as plain string — survives deletion
+        eventType: 'DELETED',
+        metadata: {
+          title:       trip.title,
+          destination: trip.destination,
+          duration:    trip.duration,
+        },
+      });
+
+      // Delete trip — TripDay rows cascade via onDelete: Cascade
+      // TripEvent rows are unaffected (no FK on tripId)
+      await pool.query(`DELETE FROM "Trip" WHERE id = $1`, [id]);
+
+      return res.status(200).json({ ok: true });
+    }
   } catch (err) {
-    console.error('[api/trips/[id]] DB error:', err.message);
-    return res.status(500).json({ error: 'Database error' });
+    console.error('[api/trips/[id]] error:', err.message, '| code:', err.code);
+    return res.status(500).json({ error: 'Database error', detail: err.message });
   } finally {
     await pool.end();
   }
