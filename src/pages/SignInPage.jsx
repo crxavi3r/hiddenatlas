@@ -36,8 +36,10 @@ export default function SignInPage() {
         await setActive({ session: result.createdSessionId });
         navigate('/my-trips', { replace: true });
       } else if (result.status === 'needs_client_trust') {
-        // Device verification: send email code
-        await signIn.prepareFirstFactor({ strategy: 'email_code' });
+        // Device verification: find emailAddressId from supported factors and send email code
+        const emailFactor = result.supportedFirstFactors?.find(f => f.strategy === 'email_code')
+          || attempt.supportedFirstFactors?.find(f => f.strategy === 'email_code');
+        await signIn.prepareFirstFactor({ strategy: 'email_code', emailAddressId: emailFactor?.emailAddressId });
         setNeedsTrust(true);
       } else {
         setError(`Unexpected status: ${result.status}`);
