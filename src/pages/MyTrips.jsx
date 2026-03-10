@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Download, Calendar, BookOpen, MapPin, Clock, Trash2 } from 'lucide-react';
 import { useUser, SignInButton } from '@clerk/clerk-react';
@@ -13,6 +13,103 @@ function formatDate(iso) {
   });
 }
 
+// ── Delete confirmation modal ────────────────────────────────────────────────
+function DeleteConfirmModal({ destination, onConfirm, onCancel, deleting }) {
+  // Close on Escape
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onCancel(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
+  // Prevent page scroll while modal is open
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(28,26,22,0.55)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '24px',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'white', borderRadius: '12px',
+          width: '100%', maxWidth: '420px',
+          boxShadow: '0 24px 80px rgba(28,26,22,0.18)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header */}
+        <div style={{ padding: '28px 28px 0' }}>
+          <h2 style={{
+            fontFamily: "'Playfair Display', Georgia, serif",
+            fontSize: '20px', fontWeight: '600', color: '#1C1A16',
+            marginBottom: '10px',
+          }}>
+            Delete trip?
+          </h2>
+          <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.65' }}>
+            Are you sure you want to delete{' '}
+            <strong style={{ color: '#1C1A16', fontWeight: '600' }}>{destination}</strong>?
+            {' '}This action cannot be undone.
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div style={{
+          display: 'flex', gap: '10px',
+          padding: '24px 28px 28px',
+          justifyContent: 'flex-end',
+        }}>
+          <button
+            onClick={onCancel}
+            disabled={deleting}
+            style={{
+              padding: '10px 20px', borderRadius: '4px',
+              background: 'transparent', border: '1px solid #D4CCBF',
+              fontSize: '13px', fontWeight: '600', color: '#4A433A',
+              cursor: deleting ? 'default' : 'pointer',
+              transition: 'all 0.15s', letterSpacing: '0.3px',
+            }}
+            onMouseEnter={e => { if (!deleting) e.currentTarget.style.borderColor = '#9C9488'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#D4CCBF'; }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            style={{
+              padding: '10px 20px', borderRadius: '4px',
+              background: deleting ? '#E8A89F' : '#C0392B',
+              border: 'none',
+              fontSize: '13px', fontWeight: '600', color: 'white',
+              cursor: deleting ? 'default' : 'pointer',
+              transition: 'background 0.15s', letterSpacing: '0.3px',
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              minWidth: '110px', justifyContent: 'center',
+            }}
+            onMouseEnter={e => { if (!deleting) e.currentTarget.style.background = '#A93226'; }}
+            onMouseLeave={e => { if (!deleting) e.currentTarget.style.background = '#C0392B'; }}
+          >
+            {deleting ? 'Deleting…' : 'Delete trip'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Per-source gradient used when no catalog cover image is found (e.g. AI trips).
 const SOURCE_GRADIENTS = {
   FREE_JOURNEY:    'linear-gradient(135deg, #0E3D39 0%, #1B6B65 100%)',
@@ -24,6 +121,7 @@ const SOURCE_GRADIENTS = {
 function AiTripCard({ trip, onDelete }) {
   const [hovered, setHovered] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const tag = getTripSource(trip.source);
 
@@ -37,20 +135,35 @@ function AiTripCard({ trip, onDelete }) {
   const groupSize = matched?.groupSize ?? null;
   const fallbackGradient = SOURCE_GRADIENTS[trip.source] ?? SOURCE_GRADIENTS.AI_GENERATED;
 
-  async function handleDelete(e) {
+  function openConfirm(e) {
     e.preventDefault();
     e.stopPropagation();
-    if (!window.confirm(`Remove "${trip.destination}" from your library? This cannot be undone.`)) return;
+    setConfirmOpen(true);
+  }
+
+  const handleCancel = useCallback(() => setConfirmOpen(false), []);
+
+  async function handleConfirmDelete() {
     setDeleting(true);
     try {
       await onDelete(trip.id);
+      setConfirmOpen(false);
     } catch {
       setDeleting(false);
-      window.alert('Could not delete this trip. Please try again.');
+      setConfirmOpen(false);
     }
   }
 
   return (
+    <>
+    {confirmOpen && (
+      <DeleteConfirmModal
+        destination={trip.destination}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancel}
+        deleting={deleting}
+      />
+    )}
     <Link
       to={`/my-trips/${trip.id}`}
       onMouseEnter={() => setHovered(true)}
@@ -114,7 +227,7 @@ function AiTripCard({ trip, onDelete }) {
         </div>
         {/* Delete — top-right overlay */}
         <button
-          onClick={handleDelete}
+          onClick={openConfirm}
           disabled={deleting}
           title="Remove from library"
           style={{
@@ -178,6 +291,7 @@ function AiTripCard({ trip, onDelete }) {
         </div>
       </div>
     </Link>
+    </>
   );
 }
 
