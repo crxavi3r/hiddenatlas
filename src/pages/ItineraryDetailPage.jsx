@@ -420,7 +420,7 @@ export default function ItineraryDetailPage() {
         console.error('[ItineraryDetail] auto-save failed — aborting download');
         throw new Error('Could not save trip — please try again.');
       }
-      api.post(`/api/trips/${tripId}`, {
+      api.post(`/api/trip?id=${tripId}`, {
         eventType: 'DOWNLOADED',
         metadata:  { source: 'free_itinerary', destination: itinerary.title },
       }).catch(err => console.warn('[ItineraryDetail] audit failed:', err.message));
@@ -442,7 +442,7 @@ export default function ItineraryDetailPage() {
         console.error('[ItineraryDetail] premium auto-save failed — aborting download');
         throw new Error('Could not save trip — please try again.');
       }
-      api.post(`/api/trips/${tripId}`, {
+      api.post(`/api/trip?id=${tripId}`, {
         eventType: 'DOWNLOADED',
         metadata:  { source: 'premium_itinerary', destination: itinerary.title },
       }).catch(err => console.warn('[ItineraryDetail] premium audit failed:', err.message));

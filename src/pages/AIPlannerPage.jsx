@@ -164,7 +164,7 @@ export default function AIPlannerPage() {
       // Audit: fire-and-forget DOWNLOADED event (does not block the download)
       if (isLoaded && isSignedIn && auditTripId) {
         console.log('[download] firing DOWNLOADED audit for tripId:', auditTripId);
-        api.post(`/api/trips/${auditTripId}`, {
+        api.post(`/api/trip?id=${auditTripId}`, {
           eventType: 'DOWNLOADED',
           metadata: { source: 'ai_planner', destination: result.destination },
         }).catch(err => console.warn('[download] audit failed:', err.message));

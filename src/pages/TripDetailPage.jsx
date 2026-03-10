@@ -45,7 +45,7 @@ export default function TripDetailPage() {
     if (!isLoaded) return;
     if (!isSignedIn) { navigate('/sign-in'); return; }
 
-    api.get(`/api/trips/${id}`)
+    api.get(`/api/trip?id=${id}`)
       .then(res => {
         if (res.status === 404) { setStatus('notfound'); return; }
         if (!res.ok) throw new Error('Failed');
@@ -74,7 +74,7 @@ export default function TripDetailPage() {
       setDownloadState('done');
 
       // Audit: fire-and-forget DOWNLOADED event
-      api.post(`/api/trips/${id}`, {
+      api.post(`/api/trip?id=${id}`, {
         eventType: 'DOWNLOADED',
         metadata: { source: 'trip_detail', destination: trip.destination },
       }).catch(err => console.warn('[TripDetailPage] download audit failed:', err.message));
@@ -88,7 +88,7 @@ export default function TripDetailPage() {
     if (!window.confirm(`Delete "${trip?.destination}"? This cannot be undone.`)) return;
     setDeleting(true);
     try {
-      const res = await api.del(`/api/trips/${id}`);
+      const res = await api.del(`/api/trip?id=${id}`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Delete failed');

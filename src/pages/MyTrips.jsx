@@ -236,7 +236,7 @@ export default function MyTrips() {
   const [status, setStatus] = useState('loading');
 
   async function handleDeleteTrip(tripId) {
-    const res = await api.del(`/api/trips/${tripId}`);
+    const res = await api.del(`/api/trip?id=${tripId}`);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || 'Delete failed');
