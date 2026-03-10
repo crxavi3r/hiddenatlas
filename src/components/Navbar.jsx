@@ -140,31 +140,8 @@ export default function Navbar() {
               <SignedIn>
                 {/* Clerk's avatar + dropdown (account management + sign out) */}
                 <UserButton
-                  appearance={{
-                    elements: {
-                      avatarBox: {
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '50%',
-                      },
-                      avatarImage: {
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '50%',
-                      },
-                      userPreviewAvatarBox: {
-                        background: '#1F4D45',
-                        borderRadius: '50%',
-                      },
-                      avatarInitials: {
-                        color: 'white',
-                        fontSize: '14px',
-                        fontWeight: '600',
-                        fontFamily: "'Inter', system-ui, sans-serif",
-                        background: '#1F4D45',
-                      },
-                    },
-                  }}
+                  afterSignOutUrl="/"
+                  appearance={{ elements: { userButtonAvatarBox: 'ha-avatar-box' } }}
                 />
               </SignedIn>
             </div>
@@ -242,31 +219,8 @@ export default function Navbar() {
               <SignedIn>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <UserButton
-                    appearance={{
-                      elements: {
-                        avatarBox: {
-                          width: '36px',
-                          height: '36px',
-                          borderRadius: '50%',
-                        },
-                        avatarImage: {
-                          width: '36px',
-                          height: '36px',
-                          borderRadius: '50%',
-                        },
-                        userPreviewAvatarBox: {
-                          background: '#1F4D45',
-                          borderRadius: '50%',
-                        },
-                        avatarInitials: {
-                          color: 'white',
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          fontFamily: "'Inter', system-ui, sans-serif",
-                          background: '#1F4D45',
-                        },
-                      },
-                    }}
+                    afterSignOutUrl="/"
+                    appearance={{ elements: { userButtonAvatarBox: 'ha-avatar-box' } }}
                   />
                   <span style={{ fontSize: '14px', color: '#4A433A' }}>My Account</span>
                 </div>
@@ -288,6 +242,32 @@ export default function Navbar() {
         }
         /* Clerk UserButton alignment */
         .cl-userButtonBox { display: flex; align-items: center; }
+        /* Avatar container — size + shape */
+        .ha-avatar-box {
+          width: 36px !important;
+          height: 36px !important;
+          border-radius: 50% !important;
+          overflow: hidden !important;
+        }
+        /* Profile photo — fill the container */
+        .ha-avatar-box .cl-userButtonAvatarImage {
+          width: 36px !important;
+          height: 36px !important;
+          border-radius: 50% !important;
+          object-fit: cover !important;
+        }
+        /* Initials fallback — override Clerk's purple gradient */
+        .ha-avatar-box,
+        .ha-avatar-box * {
+          background-color: #1F4D45 !important;
+          background-image: none !important;
+          color: white !important;
+        }
+        /* Restore image rendering — don't tint profile photos */
+        .ha-avatar-box .cl-userButtonAvatarImage {
+          background-color: transparent !important;
+          color: unset !important;
+        }
       `}</style>
     </header>
   );
