@@ -20,10 +20,10 @@ const customTiers = [
       'Dedicated trip planner',
       'Fully custom day-by-day itinerary',
       'Accommodation shortlist and booking guidance',
-      'Restaurant reservations and experiences',
+      'Restaurant and experience recommendations',
+      'Logistics and transport planning',
       '2 rounds of revisions',
-      'Final PDF and digital delivery',
-      'Email support during your trip',
+      'Final digital itinerary package (PDF)',
     ],
   },
   {
@@ -34,11 +34,11 @@ const customTiers = [
     best: true,
     features: [
       'Everything in Couple / Duo',
-      'Group logistics planning (transfers, dinners)',
-      'Multiple room configurations researched',
+      'Group logistics and transport planning',
+      'Multiple accommodation configurations researched',
+      'Group dining and activity recommendations',
       '3 rounds of revisions',
-      'WhatsApp support during travel',
-      'Post-trip debrief and recommendations',
+      'Final digital itinerary package (PDF)',
     ],
   },
   {
@@ -49,12 +49,12 @@ const customTiers = [
     best: false,
     features: [
       'Everything in Small Group',
-      'Multi-room and villa sourcing',
-      'Complex logistics and transfers',
+      'Multi-room and villa research',
+      'Complex multi-destination logistics planning',
       'Activity and experience sourcing',
+      'Child and multi-gen travel considerations',
       'Unlimited revisions',
-      '24/7 WhatsApp during travel',
-      'Full concierge coordination',
+      'Final digital itinerary package (PDF)',
     ],
   },
 ];
@@ -158,7 +158,7 @@ export default function PricingPage() {
             </p>
           </div>
 
-          {/* mt-14px on wrapper so absolute badge has room without shifting card height */}
+          {/* Cards grid — mt-14px gives badge clearance */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', alignItems: 'stretch', marginTop: '14px' }}>
             {customTiers.map((tier, i) => (
               <div
@@ -234,6 +234,18 @@ export default function PricingPage() {
               </div>
             ))}
           </div>
+
+          <p style={{
+            marginTop: '32px',
+            textAlign: 'center',
+            fontSize: '13px',
+            color: '#8C8070',
+            maxWidth: '540px',
+            margin: '32px auto 0',
+            lineHeight: '1.7',
+          }}>
+            HiddenAtlas designs your itinerary but does not operate or book travel services. All bookings are made directly by you.
+          </p>
         </div>
       </section>
 
