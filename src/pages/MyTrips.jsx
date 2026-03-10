@@ -5,6 +5,7 @@ import { useUser, SignInButton } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
 import { getTripSource } from '../lib/tripSource';
 import { itineraries } from '../data/itineraries';
+import { getAiCoverImage } from '../lib/coverImage';
 
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -26,10 +27,10 @@ function AiTripCard({ trip, onDelete }) {
 
   const tag = getTripSource(trip.source);
 
-  // FREE_JOURNEY / PREMIUM_JOURNEY trips store itinerary.title as destination.
-  // Try to resolve a real catalog image. AI trips use the gradient fallback.
+  // FREE_JOURNEY / PREMIUM_JOURNEY: resolve catalog image by matching destination to title.
+  // AI_GENERATED: derive a cover image from the destination name via keyword map.
   const matched = itineraries.find(it => it.title === trip.destination);
-  const coverUrl = matched?.image ?? null;
+  const coverUrl = matched?.image ?? (trip.source === 'AI_GENERATED' ? getAiCoverImage(trip.destination) : null);
   const groupSize = matched?.groupSize ?? null;
   const fallbackGradient = SOURCE_GRADIENTS[trip.source] ?? SOURCE_GRADIENTS.AI_GENERATED;
 

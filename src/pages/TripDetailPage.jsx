@@ -4,6 +4,7 @@ import { ArrowLeft, Clock, Star, Check, MapPin, Calendar, Download, Trash2 } fro
 import { useAuth } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
 import { itineraries } from '../data/itineraries';
+import { getAiCoverImage } from '../lib/coverImage';
 
 const T = {
   label: {
@@ -172,12 +173,36 @@ export default function TripDetailPage() {
       </div>
 
       {/* Hero */}
-      <section style={{
-        background: 'linear-gradient(135deg, #0D3834 0%, #1B6B65 100%)',
-        padding: 'clamp(48px, 7vw, 88px) 24px',
-        textAlign: 'center', marginTop: '16px',
-      }}>
-        <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+      {(() => {
+        const heroCoverImage = trip.source === 'AI_GENERATED'
+          ? getAiCoverImage(trip.destination, 1200)
+          : null;
+        return (
+        <section style={{
+          position: 'relative',
+          background: heroCoverImage ? 'transparent' : 'linear-gradient(135deg, #0D3834 0%, #1B6B65 100%)',
+          padding: 'clamp(48px, 7vw, 88px) 24px',
+          textAlign: 'center', marginTop: '16px',
+          overflow: 'hidden',
+        }}>
+          {heroCoverImage && (
+            <>
+              <img
+                src={heroCoverImage}
+                alt={trip.destination}
+                style={{
+                  position: 'absolute', inset: 0,
+                  width: '100%', height: '100%',
+                  objectFit: 'cover', objectPosition: 'center',
+                }}
+              />
+              <div style={{
+                position: 'absolute', inset: 0,
+                background: 'linear-gradient(to bottom, rgba(10,30,28,0.55) 0%, rgba(10,30,28,0.72) 100%)',
+              }} />
+            </>
+          )}
+        <div style={{ maxWidth: '640px', margin: '0 auto', position: 'relative', zIndex: 1 }}>
           {trip.country && (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', marginBottom: '16px' }}>
               <MapPin size={12} color="rgba(255,255,255,0.55)" />
@@ -233,7 +258,9 @@ export default function TripDetailPage() {
             </p>
           )}
         </div>
-      </section>
+        </section>
+        );
+      })()}
 
       {/* Body */}
       <section style={{ padding: 'clamp(48px, 6vw, 88px) 24px' }}>
