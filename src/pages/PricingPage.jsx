@@ -1,259 +1,173 @@
 import { Link } from 'react-router-dom';
-import { Check, ArrowRight, Star } from 'lucide-react';
+import { Check, ArrowRight } from 'lucide-react';
+
+const itineraryIncludes = [
+  'Day-by-day route and schedule',
+  'Curated hotel suggestions',
+  'Restaurant recommendations',
+  'Logistics and transport notes',
+  'Downloadable PDF — yours forever',
+];
+
+const customIncludes = [
+  'Dedicated human trip planner',
+  'Fully custom day-by-day itinerary',
+  'Accommodation shortlist and booking guidance',
+  'Restaurant reservations and experiences',
+  'Revisions until you are satisfied',
+  'Final PDF and digital delivery',
+  'Support during your trip',
+];
 
 export default function PricingPage() {
-  const premiumItineraries = [
-    { name: 'Single Itinerary', price: '€29', desc: 'One-time purchase. Full access to your chosen route: day plans, stays, restaurants, logistics. Download it forever.' },
-    { name: 'Explorer Bundle (3)', price: '€79', desc: 'Choose any 3 premium itineraries. Ideal if you have multiple trips in mind or want to gift one.' },
-    { name: 'Annual Access', price: '€249 / year', desc: 'Unlimited downloads from the full premium library for 12 months, including all new releases. Best for frequent travelers.' },
-  ];
-
-  const customTiers = [
-    {
-      name: 'Couple / Duo',
-      price: '€349',
-      best: false,
-      group: '2 people',
-      duration: 'Up to 14 days',
-      features: [
-        'Dedicated trip planner',
-        'Fully custom day-by-day itinerary',
-        'Accommodation shortlist + booking guidance',
-        'Restaurant reservations & experiences',
-        '2 rounds of revisions',
-        'Final PDF + digital delivery',
-        'Email support during your trip',
-      ],
-    },
-    {
-      name: 'Small Group',
-      price: '€549',
-      best: true,
-      group: '3–6 people',
-      duration: 'Up to 14 days',
-      features: [
-        'Everything in Couple / Duo',
-        'Group logistics planning (transfers, dinners)',
-        'Multiple room configurations researched',
-        '3 rounds of revisions',
-        'WhatsApp support during travel',
-        'Post-trip debrief & recommendations',
-      ],
-    },
-    {
-      name: 'Large Group / Family',
-      price: 'From €849',
-      best: false,
-      group: '7+ people',
-      duration: 'Custom scope',
-      features: [
-        'Everything in Small Group',
-        'Multi-room & villa sourcing',
-        'Complex logistics & transfers',
-        'Activity & experience sourcing',
-        'Unlimited revisions',
-        '24/7 WhatsApp during travel',
-        'Full concierge coordination',
-      ],
-    },
-  ];
-
-  const faqs = [
-    {
-      q: 'Can I buy an itinerary as a gift?',
-      a: 'Yes. After purchase you\'ll receive a digital download you can forward or print for the recipient. We\'re also working on gift cards, coming soon.',
-    },
-    {
-      q: 'What currency are prices in?',
-      a: 'Custom planning fees are in EUR. We accept major credit cards and PayPal.',
-    },
-    {
-      q: 'Do you offer refunds?',
-      a: 'Digital itineraries are non-refundable once downloaded. If you\'re unsatisfied with a custom planning engagement, we offer additional revision rounds at no extra charge.',
-    },
-    {
-      q: 'Is the custom planning fee separate from travel costs?',
-      a: 'Yes. The planning fee covers our service. All actual travel costs (flights, hotels, meals, activities) are paid directly by you as you book.',
-    },
-  ];
-
   return (
     <div style={{ background: '#FAFAF8', paddingTop: '72px' }}>
 
       {/* Hero */}
       <section style={{ padding: 'clamp(48px, 8vw, 100px) 24px', textAlign: 'center', background: '#F4F1EC' }}>
-        <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+        <div style={{ maxWidth: '560px', margin: '0 auto' }}>
           <span style={{
             fontSize: '11px', fontWeight: '600', letterSpacing: '2px', textTransform: 'uppercase',
             color: '#1B6B65', display: 'block', marginBottom: '16px',
           }}>
-            Transparent Pricing
+            Simple Pricing
           </span>
           <h1 style={{
             fontFamily: "'Playfair Display', Georgia, serif",
-            fontSize: 'clamp(36px, 5vw, 56px)',
+            fontSize: 'clamp(36px, 5vw, 54px)',
             fontWeight: '600', color: '#1C1A16',
             lineHeight: '1.15', letterSpacing: '-0.5px', marginBottom: '20px',
           }}>
-            Plans for every kind of traveler.
+            Two ways to travel better.
           </h1>
           <p style={{ fontSize: '17px', color: '#6B6156', lineHeight: '1.7' }}>
-            From a one-off itinerary download to a fully custom luxury trip, we have an option that fits. No hidden fees, no subscriptions you'll forget about.
+            Download a curated itinerary for your next trip, or let us plan everything from scratch.
           </p>
         </div>
       </section>
 
-      {/* Premium Itineraries */}
+      {/* Two options */}
       <section style={{ padding: 'clamp(48px, 6vw, 80px) 24px' }}>
-        <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-            <span style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '2px', textTransform: 'uppercase', color: '#1B6B65', display: 'block', marginBottom: '12px' }}>
-              Digital Itineraries
+        <div style={{
+          maxWidth: '900px', margin: '0 auto',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: '24px',
+          alignItems: 'start',
+        }}>
+
+          {/* Option 1 — Itinerary Download */}
+          <div style={{
+            background: 'white',
+            border: '1px solid #E8E3DA',
+            borderRadius: '12px',
+            padding: '40px 36px',
+            display: 'flex',
+            flexDirection: 'column',
+          }}>
+            <span style={{
+              fontSize: '11px', fontWeight: '600', letterSpacing: '2px', textTransform: 'uppercase',
+              color: '#1B6B65', display: 'block', marginBottom: '16px',
+            }}>
+              Digital Itinerary
             </span>
-            <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 'clamp(28px, 3.5vw, 42px)', fontWeight: '600', color: '#1C1A16' }}>
-              Premium Itinerary Plans
+            <h2 style={{
+              fontFamily: "'Playfair Display', Georgia, serif",
+              fontSize: '26px', fontWeight: '600', color: '#1C1A16', marginBottom: '8px',
+            }}>
+              Premium Itinerary Download
             </h2>
-            <p style={{ fontSize: '16px', color: '#6B6156', marginTop: '12px', maxWidth: '480px', margin: '12px auto 0' }}>
-              Expertly crafted routes you can download and use forever. No subscription needed.
+            <div style={{
+              fontSize: '48px', fontWeight: '700',
+              fontFamily: "'Playfair Display', Georgia, serif",
+              color: '#1B6B65', lineHeight: '1', marginBottom: '8px',
+            }}>
+              €29
+            </div>
+            <p style={{ fontSize: '13px', color: '#8C8070', marginBottom: '28px' }}>
+              One-time purchase. No subscription.
             </p>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
-            {premiumItineraries.map((plan, i) => (
-              <div
-                key={i}
-                style={{
-                  background: 'white', border: '1px solid #E8E3DA',
-                  borderRadius: '10px', padding: '32px',
-                  display: 'flex', flexDirection: 'column',
-                }}
-              >
-                <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600', color: '#1C1A16', marginBottom: '8px' }}>
-                  {plan.name}
-                </h3>
-                <div style={{ fontSize: '32px', fontWeight: '700', color: '#1B6B65', fontFamily: "'Playfair Display', Georgia, serif", marginBottom: '16px' }}>
-                  {plan.price}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '36px', flex: 1 }}>
+              {itineraryIncludes.map((item, i) => (
+                <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                  <Check size={14} color="#1B6B65" strokeWidth={2.5} style={{ flexShrink: 0, marginTop: '3px' }} />
+                  <span style={{ fontSize: '15px', color: '#4A433A', lineHeight: '1.5' }}>{item}</span>
                 </div>
-                <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.7', marginBottom: '28px', flex: 1 }}>
-                  {plan.desc}
-                </p>
-                <Link
-                  to="/itineraries"
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                    padding: '13px 20px',
-                    background: '#EFF6F5', color: '#1B6B65',
-                    border: '1px solid #A8D5D1', borderRadius: '4px',
-                    fontSize: '13px', fontWeight: '600',
-                    letterSpacing: '0.5px', textTransform: 'uppercase',
-                    textDecoration: 'none',
-                  }}
-                >
-                  Browse Itineraries <ArrowRight size={13} />
-                </Link>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+              ))}
+            </div>
 
-      {/* Custom Planning */}
-      <section style={{ padding: 'clamp(48px, 6vw, 80px) 24px', background: '#F4F1EC' }}>
-        <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-            <span style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '2px', textTransform: 'uppercase', color: '#1B6B65', display: 'block', marginBottom: '12px' }}>
+            <Link
+              to="/itineraries"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                padding: '14px 24px', borderRadius: '4px',
+                background: '#1B6B65', color: 'white',
+                fontSize: '13px', fontWeight: '600',
+                letterSpacing: '0.6px', textTransform: 'uppercase',
+                textDecoration: 'none',
+              }}
+            >
+              Browse Itineraries <ArrowRight size={13} />
+            </Link>
+          </div>
+
+          {/* Option 2 — Custom Planning */}
+          <div style={{
+            background: '#1C1A16',
+            borderRadius: '12px',
+            padding: '40px 36px',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 24px 80px rgba(28,26,22,0.18)',
+          }}>
+            <span style={{
+              fontSize: '11px', fontWeight: '600', letterSpacing: '2px', textTransform: 'uppercase',
+              color: '#C9A96E', display: 'block', marginBottom: '16px',
+            }}>
               Bespoke Service
             </span>
-            <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 'clamp(28px, 3.5vw, 42px)', fontWeight: '600', color: '#1C1A16' }}>
+            <h2 style={{
+              fontFamily: "'Playfair Display', Georgia, serif",
+              fontSize: '26px', fontWeight: '600', color: 'white', marginBottom: '8px',
+            }}>
               Custom Trip Planning
             </h2>
-            <p style={{ fontSize: '16px', color: '#6B6156', marginTop: '12px', maxWidth: '480px', margin: '12px auto 0' }}>
-              One-time planning fee. Your trip designed end-to-end by a human expert who cares.
+            <div style={{
+              fontSize: '48px', fontWeight: '700',
+              fontFamily: "'Playfair Display', Georgia, serif",
+              color: '#C9A96E', lineHeight: '1', marginBottom: '8px',
+            }}>
+              From €349
+            </div>
+            <p style={{ fontSize: '13px', color: '#8C8070', marginBottom: '28px' }}>
+              One-time planning fee. Trip designed end-to-end.
             </p>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
-            {customTiers.map((tier, i) => (
-              <div
-                key={i}
-                style={{
-                  background: tier.best ? '#1C1A16' : 'white',
-                  border: tier.best ? 'none' : '1px solid #E8E3DA',
-                  borderRadius: '12px', padding: '36px',
-                  position: 'relative',
-                  transform: tier.best ? 'scale(1.03)' : 'none',
-                  boxShadow: tier.best ? '0 24px 80px rgba(28,26,22,0.25)' : 'none',
-                  display: 'flex', flexDirection: 'column',
-                }}
-              >
-                {tier.best && (
-                  <div style={{
-                    position: 'absolute', top: '-14px', left: '50%', transform: 'translateX(-50%)',
-                    background: '#C9A96E', color: 'white',
-                    padding: '5px 16px', borderRadius: '3px',
-                    fontSize: '11px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase',
-                    whiteSpace: 'nowrap',
-                  }}>
-                    Most Popular
-                  </div>
-                )}
-
-                <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '24px', fontWeight: '600', color: tier.best ? 'white' : '#1C1A16', marginBottom: '4px' }}>
-                  {tier.name}
-                </h3>
-                <p style={{ fontSize: '13px', color: tier.best ? '#8C8070' : '#8C8070', marginBottom: '20px' }}>
-                  {tier.group} · {tier.duration}
-                </p>
-                <div style={{ fontSize: '38px', fontWeight: '700', color: tier.best ? '#C9A96E' : '#1B6B65', fontFamily: "'Playfair Display', Georgia, serif", marginBottom: '28px' }}>
-                  {tier.price}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '36px', flex: 1 }}>
+              {customIncludes.map((item, i) => (
+                <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                  <Check size={14} color="#C9A96E" strokeWidth={2.5} style={{ flexShrink: 0, marginTop: '3px' }} />
+                  <span style={{ fontSize: '15px', color: '#D4CCBF', lineHeight: '1.5' }}>{item}</span>
                 </div>
+              ))}
+            </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px', flex: 1 }}>
-                  {tier.features.map((f, j) => (
-                    <div key={j} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                      <Check size={14} color={tier.best ? '#C9A96E' : '#1B6B65'} strokeWidth={2.5} style={{ flexShrink: 0, marginTop: '2px' }} />
-                      <span style={{ fontSize: '14px', color: tier.best ? '#D4CCBF' : '#4A433A', lineHeight: '1.5' }}>{f}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <Link
-                  to="/custom"
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                    padding: '14px 20px', borderRadius: '4px',
-                    fontSize: '13px', fontWeight: '600',
-                    letterSpacing: '0.5px', textTransform: 'uppercase',
-                    textDecoration: 'none',
-                    background: tier.best ? '#C9A96E' : '#1B6B65',
-                    color: 'white',
-                    border: 'none',
-                  }}
-                >
-                  Get Started <ArrowRight size={13} />
-                </Link>
-              </div>
-            ))}
+            <Link
+              to="/custom"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                padding: '14px 24px', borderRadius: '4px',
+                background: '#C9A96E', color: 'white',
+                fontSize: '13px', fontWeight: '600',
+                letterSpacing: '0.6px', textTransform: 'uppercase',
+                textDecoration: 'none',
+              }}
+            >
+              Request Custom Planning <ArrowRight size={13} />
+            </Link>
           </div>
-        </div>
-      </section>
 
-      {/* FAQ */}
-      <section style={{ padding: 'clamp(48px, 6vw, 80px) 24px' }}>
-        <div style={{ maxWidth: '720px', margin: '0 auto' }}>
-          <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '32px', fontWeight: '600', color: '#1C1A16', textAlign: 'center', marginBottom: '40px' }}>
-            Pricing FAQs
-          </h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            {faqs.map((faq, i) => (
-              <div key={i} style={{ background: 'white', border: '1px solid #E8E3DA', borderRadius: '6px', padding: '24px', marginBottom: '4px' }}>
-                <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '18px', fontWeight: '600', color: '#1C1A16', marginBottom: '10px' }}>
-                  {faq.q}
-                </h3>
-                <p style={{ fontSize: '15px', color: '#6B6156', lineHeight: '1.7' }}>{faq.a}</p>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
