@@ -4,6 +4,7 @@ import { ArrowRight, Download, Calendar, BookOpen, MapPin, Clock, Trash2 } from 
 import { useUser, SignInButton } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
 import { getTripSource } from '../lib/tripSource';
+import { itineraries } from '../data/itineraries';
 
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -11,12 +12,25 @@ function formatDate(iso) {
   });
 }
 
+// Per-source gradient used when no catalog cover image is found (e.g. AI trips).
+const SOURCE_GRADIENTS = {
+  FREE_JOURNEY:    'linear-gradient(135deg, #0E3D39 0%, #1B6B65 100%)',
+  AI_GENERATED:    'linear-gradient(135deg, #2C2925 0%, #1C1A16 100%)',
+  PREMIUM_JOURNEY: 'linear-gradient(135deg, #8A6332 0%, #C9A96E 100%)',
+};
+
 // ── AI Trip card ────────────────────────────────────────────────────────────
 function AiTripCard({ trip, onDelete }) {
   const [hovered, setHovered] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const tag = getTripSource(trip.source);
+
+  // FREE_JOURNEY / PREMIUM_JOURNEY trips store itinerary.title as destination.
+  // Try to resolve a real catalog image. AI trips use the gradient fallback.
+  const matched = itineraries.find(it => it.title === trip.destination);
+  const coverUrl = matched?.image ?? null;
+  const fallbackGradient = SOURCE_GRADIENTS[trip.source] ?? SOURCE_GRADIENTS.AI_GENERATED;
 
   async function handleDelete(e) {
     e.preventDefault();
@@ -39,6 +53,7 @@ function AiTripCard({ trip, onDelete }) {
       style={{
         background: 'white', borderRadius: '10px',
         border: '1px solid #E8E3DA', textDecoration: 'none',
+        overflow: 'hidden',
         boxShadow: hovered ? '0 20px 60px rgba(28,26,22,0.12)' : '0 2px 16px rgba(28,26,22,0.05)',
         transform: hovered ? 'translateY(-4px)' : 'translateY(0)',
         transition: 'box-shadow 0.3s ease, transform 0.3s ease',
@@ -46,75 +61,115 @@ function AiTripCard({ trip, onDelete }) {
         opacity: deleting ? 0.5 : 1,
       }}
     >
-      <div style={{ padding: '22px 22px 20px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-        {/* Source badge — matches ItineraryCard / PurchasedTripCard style */}
+      {/* Image / gradient banner */}
+      <div style={{ position: 'relative', height: '160px', overflow: 'hidden', flexShrink: 0 }}>
+        {coverUrl ? (
+          <img
+            src={coverUrl}
+            alt={trip.destination}
+            style={{
+              width: '100%', height: '100%', objectFit: 'cover',
+              transform: hovered ? 'scale(1.05)' : 'scale(1)',
+              transition: 'transform 0.5s ease',
+            }}
+            onError={e => { e.currentTarget.style.display = 'none'; }}
+          />
+        ) : (
+          <div style={{
+            width: '100%', height: '100%',
+            background: fallbackGradient,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <span style={{
+              fontFamily: "'Playfair Display', Georgia, serif",
+              fontSize: 'clamp(20px, 4vw, 28px)',
+              fontWeight: '600',
+              color: 'rgba(255,255,255,0.45)',
+              letterSpacing: '0.5px',
+              textAlign: 'center',
+              padding: '0 20px',
+            }}>
+              {trip.destination}
+            </span>
+          </div>
+        )}
+        {/* Scrim */}
         <div style={{
-          display: 'inline-block',
-          padding: '5px 11px', borderRadius: '3px', marginBottom: '14px',
-          fontSize: '10px', fontWeight: '700', letterSpacing: '0.8px',
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(to top, rgba(28,26,22,0.45) 0%, transparent 55%)',
+        }} />
+        {/* Source badge — top-left overlay */}
+        <div style={{
+          position: 'absolute', top: '12px', left: '14px',
+          padding: '4px 10px', borderRadius: '3px',
+          fontSize: '9.5px', fontWeight: '700', letterSpacing: '0.8px',
           textTransform: 'uppercase', background: tag.bg, color: tag.color,
-          alignSelf: 'flex-start',
         }}>
           {tag.label}
         </div>
+        {/* Delete — top-right overlay */}
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          title="Remove from library"
+          style={{
+            position: 'absolute', top: '10px', right: '10px',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: '30px', height: '30px',
+            background: 'rgba(28,26,22,0.4)',
+            border: 'none', borderRadius: '50%',
+            color: 'rgba(255,255,255,0.65)', cursor: deleting ? 'default' : 'pointer',
+            transition: 'all 0.15s',
+            backdropFilter: 'blur(4px)',
+          }}
+          onMouseEnter={e => { if (!deleting) { e.currentTarget.style.background = 'rgba(192,57,43,0.8)'; e.currentTarget.style.color = 'white'; }}}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(28,26,22,0.4)'; e.currentTarget.style.color = 'rgba(255,255,255,0.65)'; }}
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
 
+      {/* Content */}
+      <div style={{ padding: '18px 20px 16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
         <h3 style={{
           fontFamily: "'Playfair Display', Georgia, serif",
-          fontSize: '19px', fontWeight: '600', color: '#1C1A16',
-          lineHeight: '1.3', marginBottom: '10px',
+          fontSize: '18px', fontWeight: '600', color: '#1C1A16',
+          lineHeight: '1.3', marginBottom: '6px',
         }}>
           {trip.destination}
         </h3>
-        {trip.country && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12.5px', color: '#8C8070', marginBottom: '6px' }}>
-            <MapPin size={11} strokeWidth={2} />
-            {trip.country}
-          </div>
-        )}
-        {trip.duration && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12.5px', color: '#8C8070', marginBottom: '14px' }}>
-            <Clock size={11} strokeWidth={2} />
-            {trip.duration} · {trip.dayCount} {trip.dayCount === 1 ? 'day' : 'days'}
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: '14px', marginBottom: '10px', flexWrap: 'wrap' }}>
+          {trip.country && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#8C8070' }}>
+              <MapPin size={10} strokeWidth={2} />
+              {trip.country}
+            </span>
+          )}
+          {trip.duration && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#8C8070' }}>
+              <Clock size={10} strokeWidth={2} />
+              {trip.duration}{trip.dayCount ? ` · ${trip.dayCount} ${trip.dayCount === 1 ? 'day' : 'days'}` : ''}
+            </span>
+          )}
+        </div>
         {trip.overview && (
-          <p style={{ fontSize: '13.5px', color: '#6B6156', lineHeight: '1.6', marginBottom: '16px', flex: 1 }}>
-            {trip.overview.length > 120 ? trip.overview.slice(0, 120) + '…' : trip.overview}
+          <p style={{ fontSize: '13px', color: '#6B6156', lineHeight: '1.6', marginBottom: '12px', flex: 1 }}>
+            {trip.overview.length > 100 ? trip.overview.slice(0, 100) + '…' : trip.overview}
           </p>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#9C9488', marginBottom: '16px' }}>
-          <Calendar size={12} strokeWidth={2} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: '#B5AA99', marginBottom: '14px' }}>
+          <Calendar size={11} strokeWidth={2} />
           Saved {formatDate(trip.createdAt)}
         </div>
-
-        {/* Actions row */}
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
-          <div style={{
-            flex: 1,
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
-            padding: '11px 16px', background: '#1B6B65', color: 'white',
-            borderRadius: '4px', fontSize: '12.5px', fontWeight: '600',
-            letterSpacing: '0.4px', textTransform: 'uppercase',
-            justifyContent: 'center',
-          }}>
-            <BookOpen size={13} /> View Itinerary
-          </div>
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            title="Remove from library"
-            style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              padding: '11px 12px', background: 'transparent',
-              border: '1px solid #E8E3DA', borderRadius: '4px',
-              color: '#C4B9AF', cursor: deleting ? 'default' : 'pointer',
-              transition: 'all 0.15s', flexShrink: 0,
-            }}
-            onMouseEnter={e => { if (!deleting) { e.currentTarget.style.borderColor = '#C0392B'; e.currentTarget.style.color = '#C0392B'; e.currentTarget.style.background = '#FFF5F5'; }}}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8E3DA'; e.currentTarget.style.color = '#C4B9AF'; e.currentTarget.style.background = 'transparent'; }}
-          >
-            <Trash2 size={13} />
-          </button>
+        {/* CTA — full width, no separate delete button */}
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: '6px',
+          padding: '11px 16px', background: '#1B6B65', color: 'white',
+          borderRadius: '4px', fontSize: '12.5px', fontWeight: '600',
+          letterSpacing: '0.4px', textTransform: 'uppercase',
+          justifyContent: 'center',
+        }}>
+          <BookOpen size={13} /> View Itinerary
         </div>
       </div>
     </Link>
