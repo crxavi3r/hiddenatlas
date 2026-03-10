@@ -19,16 +19,25 @@ export default function SignInPage() {
     setError('');
 
     try {
-      const result = await signIn.create({ identifier: email, password });
+      // Step 1: identify the user
+      const attempt = await signIn.create({ identifier: email });
+
+      let result;
+      if (attempt.status === 'needs_first_factor') {
+        // Step 2: provide password as first factor
+        result = await signIn.attemptFirstFactor({ strategy: 'password', password });
+      } else {
+        result = attempt;
+      }
 
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
         navigate('/my-trips', { replace: true });
       } else {
-        setError('Verificação adicional necessária. Tenta novamente.');
+        setError(`Unexpected status: ${result.status}`);
       }
     } catch (err) {
-      const msg = err.errors?.[0]?.longMessage || err.errors?.[0]?.message || 'Erro ao fazer login.';
+      const msg = err.errors?.[0]?.longMessage || err.errors?.[0]?.message || 'Incorrect email or password.';
       setError(msg);
     } finally {
       setLoading(false);
