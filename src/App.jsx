@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, ScrollRestoration, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import './index.css';
 import { useUserSync } from './hooks/useUserSync';
@@ -43,7 +43,7 @@ function Layout({ children }) {
 export default function App() {
   useUserSync();
   return (
-    <BrowserRouter>
+    <>
       <ScrollToTop />
       <Layout>
         <ErrorBoundary>
@@ -68,6 +68,6 @@ export default function App() {
           </Routes>
         </ErrorBoundary>
       </Layout>
-    </BrowserRouter>
+    </>
   );
 }
