@@ -85,8 +85,8 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ id: tripId });
   } catch (err) {
-    console.error('[api/trips/save] DB error:', err.message);
-    return res.status(500).json({ error: 'Database error' });
+    console.error('[api/trips/save] DB error:', err.message, err.code);
+    return res.status(500).json({ error: 'Database error', detail: err.message });
   } finally {
     await pool.end();
   }
