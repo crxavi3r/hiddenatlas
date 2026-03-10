@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import {
   SignedIn, SignedOut,
   SignInButton, SignUpButton,
-  UserButton,
+  useUser, useClerk,
 } from '@clerk/clerk-react';
 
 const navLinks = [
@@ -15,6 +15,96 @@ const navLinks = [
   { label: 'Journal',         href: '/journal' },
   { label: 'My Trips',        href: '/my-trips' },
 ];
+
+function UserAvatar() {
+  const { user } = useUser();
+  const { signOut, openUserProfile } = useClerk();
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  if (!user) return null;
+
+  const initials = [user.firstName, user.lastName]
+    .filter(Boolean)
+    .map(n => n[0].toUpperCase())
+    .join('') || (user.emailAddresses[0]?.emailAddress[0]?.toUpperCase() ?? '?');
+
+  const avatarStyle = {
+    width: '36px', height: '36px', borderRadius: '50%',
+    background: '#1F4D45', color: 'white',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: '13px', fontWeight: '600', fontFamily: "'Inter', system-ui, sans-serif",
+    cursor: 'pointer', border: 'none', padding: 0, flexShrink: 0, overflow: 'hidden',
+  };
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button onClick={() => setOpen(o => !o)} style={avatarStyle} aria-label="Account menu">
+        {user.imageUrl
+          ? <img src={user.imageUrl} alt={user.fullName ?? ''} style={{ width: '36px', height: '36px', objectFit: 'cover', display: 'block', borderRadius: '50%' }} />
+          : initials
+        }
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 10px)', right: 0,
+          background: 'white', borderRadius: '8px', minWidth: '220px',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.10)', border: '1px solid #E8E3DA',
+          zIndex: 100, overflow: 'hidden',
+        }}>
+          {/* User info */}
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid #E8E3DA' }}>
+            <div style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16', marginBottom: '2px' }}>
+              {user.fullName || user.firstName || 'Account'}
+            </div>
+            <div style={{ fontSize: '12px', color: '#8C8070', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {user.emailAddresses[0]?.emailAddress}
+            </div>
+          </div>
+
+          {/* Manage account */}
+          <button
+            onClick={() => { openUserProfile(); setOpen(false); }}
+            style={{
+              display: 'block', width: '100%', padding: '11px 16px',
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: '13px', fontWeight: '500', color: '#1C1A16',
+              textAlign: 'left', borderBottom: '1px solid #E8E3DA',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = '#F4F1EC'}
+            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+          >
+            Manage account
+          </button>
+
+          {/* Sign out */}
+          <button
+            onClick={() => signOut({ redirectUrl: '/' })}
+            style={{
+              display: 'block', width: '100%', padding: '11px 16px',
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: '13px', fontWeight: '500', color: '#C0392B',
+              textAlign: 'left',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = '#FDF2F0'}
+            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+          >
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Navbar() {
   const [scrolled,  setScrolled]  = useState(false);
@@ -138,11 +228,7 @@ export default function Navbar() {
               </SignedOut>
 
               <SignedIn>
-                {/* Clerk's avatar + dropdown (account management + sign out) */}
-                <UserButton
-                  afterSignOutUrl="/"
-                  appearance={{ elements: { userButtonAvatarBox: 'ha-avatar-box' } }}
-                />
+                <UserAvatar />
               </SignedIn>
             </div>
 
@@ -218,10 +304,7 @@ export default function Navbar() {
               </SignedOut>
               <SignedIn>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <UserButton
-                    afterSignOutUrl="/"
-                    appearance={{ elements: { userButtonAvatarBox: 'ha-avatar-box' } }}
-                  />
+                  <UserAvatar />
                   <span style={{ fontSize: '14px', color: '#4A433A' }}>My Account</span>
                 </div>
               </SignedIn>
@@ -239,34 +322,6 @@ export default function Navbar() {
         }
         @media (min-width: 769px) {
           .show-mobile { display: none !important; }
-        }
-        /* Clerk UserButton alignment */
-        .cl-userButtonBox { display: flex; align-items: center; }
-        /* Avatar container — size + shape */
-        .ha-avatar-box {
-          width: 36px !important;
-          height: 36px !important;
-          border-radius: 50% !important;
-          overflow: hidden !important;
-        }
-        /* Profile photo — fill the container */
-        .ha-avatar-box .cl-userButtonAvatarImage {
-          width: 36px !important;
-          height: 36px !important;
-          border-radius: 50% !important;
-          object-fit: cover !important;
-        }
-        /* Initials fallback — override Clerk's purple gradient */
-        .ha-avatar-box,
-        .ha-avatar-box * {
-          background-color: #1F4D45 !important;
-          background-image: none !important;
-          color: white !important;
-        }
-        /* Restore image rendering — don't tint profile photos */
-        .ha-avatar-box .cl-userButtonAvatarImage {
-          background-color: transparent !important;
-          color: unset !important;
         }
       `}</style>
     </header>
