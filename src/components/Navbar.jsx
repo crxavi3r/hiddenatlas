@@ -104,6 +104,32 @@ function UserAvatar() {
   );
 }
 
+function MobileUserSection({ onClose }) {
+  const { user } = useUser();
+  const { signOut } = useClerk();
+
+  if (!user) return null;
+
+  const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.emailAddresses[0]?.emailAddress || 'Account';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <span style={{ fontSize: '14px', color: '#6B6156' }}>{name}</span>
+      <button
+        onClick={() => { signOut(); onClose(); }}
+        style={{
+          padding: '13px 24px', borderRadius: '4px',
+          border: '1px solid #D4CCBF', background: 'transparent',
+          fontSize: '14px', fontWeight: '600', color: '#1C1A16',
+          cursor: 'pointer', textAlign: 'center', width: '100%',
+        }}
+      >
+        Sign out
+      </button>
+    </div>
+  );
+}
+
 export default function Navbar() {
   const [scrolled,  setScrolled]  = useState(false);
   const [menuOpen,  setMenuOpen]  = useState(false);
@@ -242,9 +268,13 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Mobile Menu */}
+      {/* Mobile Menu — full-screen overlay */}
       {menuOpen && (
-        <div style={{ background: '#FAFAF8', borderTop: '1px solid #E8E3DA', padding: '24px' }}>
+        <div style={{
+          position: 'fixed', top: '64px', left: 0, right: 0, bottom: 0,
+          background: '#FAFAF8', borderTop: '1px solid #E8E3DA',
+          padding: '24px', overflowY: 'auto', zIndex: 998,
+        }}>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {navLinks.map(link => (
               <Link
@@ -295,10 +325,7 @@ export default function Navbar() {
                 </Link>
               </SignedOut>
               <SignedIn>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <UserAvatar />
-                  <span style={{ fontSize: '14px', color: '#4A433A' }}>My Account</span>
-                </div>
+                <MobileUserSection onClose={() => setMenuOpen(false)} />
               </SignedIn>
             </div>
           </nav>
