@@ -142,7 +142,27 @@ export default function Navbar() {
                 <UserButton
                   appearance={{
                     elements: {
-                      avatarBox: { width: '34px', height: '34px' },
+                      avatarBox: {
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '50%',
+                      },
+                      avatarImage: {
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '50%',
+                      },
+                      userPreviewAvatarBox: {
+                        background: '#1F4D45',
+                        borderRadius: '50%',
+                      },
+                      avatarInitials: {
+                        color: 'white',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        fontFamily: "'Inter', system-ui, sans-serif",
+                        background: '#1F4D45',
+                      },
                     },
                   }}
                 />
@@ -221,7 +241,33 @@ export default function Navbar() {
               </SignedOut>
               <SignedIn>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <UserButton appearance={{ elements: { avatarBox: { width: '36px', height: '36px' } } }} />
+                  <UserButton
+                    appearance={{
+                      elements: {
+                        avatarBox: {
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '50%',
+                        },
+                        avatarImage: {
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '50%',
+                        },
+                        userPreviewAvatarBox: {
+                          background: '#1F4D45',
+                          borderRadius: '50%',
+                        },
+                        avatarInitials: {
+                          color: 'white',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          fontFamily: "'Inter', system-ui, sans-serif",
+                          background: '#1F4D45',
+                        },
+                      },
+                    }}
+                  />
                   <span style={{ fontSize: '14px', color: '#4A433A' }}>My Account</span>
                 </div>
               </SignedIn>
