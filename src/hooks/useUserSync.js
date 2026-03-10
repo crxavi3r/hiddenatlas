@@ -1,23 +1,40 @@
 import { useEffect, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { useApi } from '../lib/api';
+import { API_BASE } from '../lib/api';
 
 // Calls POST /api/auth/sync once per session after the user signs in.
-// The backend verifies the Clerk JWT server-side, then upserts the User
-// row in PostgreSQL. No user data is sent from the frontend.
+// Uses getToken() directly to guarantee the Bearer token is attached.
 export function useUserSync() {
-  const { isSignedIn, isLoaded } = useAuth();
-  const api = useApi();
+  const { isSignedIn, isLoaded, getToken } = useAuth();
   const synced = useRef(false);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || synced.current) return;
 
-    synced.current = true;
-    api.post('/api/auth/sync', {})
-      .catch(err => {
-        console.error('[useUserSync] sync failed:', err.message);
-        synced.current = false; // allow retry on next render if it failed
-      });
+    async function run() {
+      synced.current = true;
+      try {
+        const token = await getToken();
+
+        const res = await fetch(`${API_BASE}/api/auth/sync`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({}),
+        });
+
+        if (!res.ok) {
+          console.error('[useUserSync] sync failed — HTTP', res.status);
+          synced.current = false;
+        }
+      } catch (err) {
+        console.error('[useUserSync] network error:', err.message);
+        synced.current = false;
+      }
+    }
+
+    run();
   }, [isSignedIn, isLoaded]);
 }
