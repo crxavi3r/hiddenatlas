@@ -72,10 +72,10 @@ function MobilePricingBlock() {
         fontSize: '20px', fontWeight: '600',
         color: 'white', marginBottom: '8px',
       }}>
-        The custom planning fee
+        Custom trip planning
       </h3>
       <p style={{ fontSize: '13.5px', color: 'rgba(255,255,255,0.55)', lineHeight: '1.6', marginBottom: '24px' }}>
-        A bespoke itinerary, thoughtfully designed around your style, pace and priorities.
+        A personalised itinerary designed around your travel style, pace and priorities.
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
@@ -628,10 +628,10 @@ export default function CustomPlanningPage() {
                   fontSize: '22px', fontWeight: '600',
                   color: 'white', marginBottom: '8px',
                 }}>
-                  The custom planning fee
+                  Custom trip planning
                 </h3>
                 <p style={{ fontSize: '13.5px', color: 'rgba(255,255,255,0.45)', lineHeight: '1.6', marginBottom: '28px' }}>
-                  A bespoke itinerary, thoughtfully designed around your style, pace and priorities.
+                  A personalised itinerary designed around your travel style, pace and priorities.
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0', marginBottom: '28px' }}>

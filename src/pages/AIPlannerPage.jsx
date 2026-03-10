@@ -222,7 +222,7 @@ export default function AIPlannerPage() {
             Plan your journey
           </h1>
           <p style={{ fontSize: '17px', color: 'rgba(255,255,255,0.68)', lineHeight: '1.75' }}>
-            Tell us where you want to go. We generate a complete, bespoke itinerary based on your travel style: day plans, hotel suggestions, and local experiences included.
+            Tell us where you want to go. We generate a complete, personalised itinerary based on your travel style: day plans, hotel suggestions, and local experiences included.
           </p>
         </div>
       </section>

@@ -903,7 +903,7 @@ export default function HomePage() {
                   <em style={{ fontStyle: 'italic', color: 'rgba(255,255,255,0.65)' }}>in seconds.</em>
                 </h2>
                 <p style={{ fontSize: '16px', color: 'rgba(255,255,255,0.6)', lineHeight: '1.8', marginBottom: '36px', maxWidth: '440px' }}>
-                  Tell us where you want to go. Our AI generates a complete, bespoke itinerary built around your travel style: day plans, hotel suggestions, and local experiences.
+                  Tell us where you want to go. Our AI generates a complete, personalised itinerary built around your travel style: day plans, hotel suggestions, and local experiences.
                 </p>
                 <Link
                   to="/ai-planner"

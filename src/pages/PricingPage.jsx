@@ -148,7 +148,7 @@ export default function PricingPage() {
         <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: '48px' }}>
             <span style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '2px', textTransform: 'uppercase', color: '#1B6B65', display: 'block', marginBottom: '12px' }}>
-              Bespoke Service
+              Custom Planning
             </span>
             <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 'clamp(26px, 3vw, 36px)', fontWeight: '600', color: '#1C1A16', marginBottom: '12px' }}>
               Custom Trip Planning
