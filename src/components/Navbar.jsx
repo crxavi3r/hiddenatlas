@@ -114,14 +114,21 @@ function MobileUserSection({ onClose }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      <span style={{ fontSize: '14px', color: '#6B6156' }}>{name}</span>
+      <span style={{ fontSize: '13px', color: '#8C8070', letterSpacing: '0.2px' }}>{name}</span>
       <button
-        onClick={() => { signOut(); onClose(); }}
+        onClick={() => { signOut({ redirectUrl: '/' }); onClose(); }}
         style={{
-          padding: '13px 24px', borderRadius: '4px',
-          border: '1px solid #D4CCBF', background: 'transparent',
-          fontSize: '14px', fontWeight: '600', color: '#1C1A16',
-          cursor: 'pointer', textAlign: 'center', width: '100%',
+          padding: '14px',
+          borderRadius: '4px',
+          border: '1px solid #D4CCBF',
+          background: 'transparent',
+          fontSize: '14px',
+          fontWeight: '600',
+          color: '#1C1A16',
+          cursor: 'pointer',
+          textAlign: 'center',
+          width: '100%',
+          boxSizing: 'border-box',
         }}
       >
         Sign out
@@ -144,11 +151,17 @@ export default function Navbar() {
 
   useEffect(() => { setMenuOpen(false); }, [location]);
 
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    document.body.style.overflow = menuOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [menuOpen]);
+
   const isTransparent = isHome && !scrolled && !menuOpen;
 
   return (
     <header style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 999,
       transition: 'background 0.4s ease, box-shadow 0.4s ease',
       background: isTransparent ? 'transparent' : 'rgba(250,250,248,0.97)',
       boxShadow: isTransparent ? 'none' : '0 1px 0 rgba(212,204,191,0.5)',
@@ -268,58 +281,100 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Mobile Menu — full-screen overlay */}
+      {/* Mobile drawer */}
       {menuOpen && (
         <div style={{
-          position: 'fixed', top: '64px', left: 0, right: 0, bottom: 0,
-          background: '#FAFAF8', borderTop: '1px solid #E8E3DA',
-          padding: '24px', overflowY: 'auto', zIndex: 998,
+          position: 'fixed', top: '72px', left: 0, right: 0, bottom: 0,
+          background: '#FAFAF8',
+          borderTop: '1px solid #E8E3DA',
+          overflowY: 'auto',
+          zIndex: 998,
+          display: 'flex',
+          flexDirection: 'column',
         }}>
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <nav style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '32px 28px',
+            gap: '0',
+          }}>
+            {/* Nav links */}
             {navLinks.map(link => (
               <Link
                 key={link.href}
                 to={link.href}
                 style={{
-                  fontSize: '18px',
+                  fontSize: '20px',
                   fontFamily: "'Playfair Display', Georgia, serif",
-                  color: '#1C1A16', textDecoration: 'none',
+                  color: '#1C1A16',
+                  textDecoration: 'none',
+                  padding: '14px 0',
+                  borderBottom: '1px solid #F0EBE3',
+                  display: 'block',
                 }}
               >
                 {link.label}
               </Link>
             ))}
 
-            <Link
-              to="/custom"
-              style={{
-                padding: '14px 24px', borderRadius: '4px',
-                background: '#1B6B65', color: 'white',
-                fontSize: '14px', fontWeight: '600', letterSpacing: '0.5px',
-                textTransform: 'uppercase', textDecoration: 'none', textAlign: 'center',
-              }}
-            >
-              Plan My Trip
-            </Link>
+            {/* CTA */}
+            <div style={{ marginTop: '32px' }}>
+              <Link
+                to="/custom"
+                style={{
+                  display: 'block',
+                  padding: '15px 24px',
+                  borderRadius: '4px',
+                  background: '#1B6B65',
+                  color: 'white',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  letterSpacing: '0.8px',
+                  textTransform: 'uppercase',
+                  textDecoration: 'none',
+                  textAlign: 'center',
+                }}
+              >
+                Plan My Trip
+              </Link>
+            </div>
 
-            {/* ── Auth — mobile ── */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '8px', borderTop: '1px solid #E8E3DA' }}>
+            {/* Auth */}
+            <div style={{
+              marginTop: '28px',
+              paddingTop: '24px',
+              borderTop: '1px solid #E8E3DA',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              paddingBottom: 'env(safe-area-inset-bottom, 24px)',
+            }}>
               <SignedOut>
                 <Link to="/sign-in" style={{
-                  padding: '13px 24px', borderRadius: '4px',
-                  border: '1px solid #D4CCBF', background: 'transparent',
-                  fontSize: '14px', fontWeight: '600', color: '#1C1A16',
-                  textAlign: 'center', width: '100%', textDecoration: 'none',
                   display: 'block',
+                  padding: '14px',
+                  borderRadius: '4px',
+                  border: '1px solid #D4CCBF',
+                  background: 'transparent',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  color: '#1C1A16',
+                  textAlign: 'center',
+                  textDecoration: 'none',
                 }}>
                   Sign in
                 </Link>
                 <Link to="/sign-up" style={{
-                  padding: '13px 24px', borderRadius: '4px',
-                  background: '#1C1A16', border: 'none',
-                  fontSize: '14px', fontWeight: '600', color: 'white',
-                  textAlign: 'center', width: '100%', textDecoration: 'none',
                   display: 'block',
+                  padding: '14px',
+                  borderRadius: '4px',
+                  background: '#1C1A16',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  color: 'white',
+                  textAlign: 'center',
+                  textDecoration: 'none',
                 }}>
                   Create account
                 </Link>
