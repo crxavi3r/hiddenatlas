@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { API_BASE } from '../lib/api';
 
-// Calls POST /api/auth/sync once per session after the user signs in.
-// Uses getToken() directly to guarantee the Bearer token is attached.
+// Calls the Vercel serverless function at /api/auth/sync once per session
+// after Clerk confirms the user is signed in. The function verifies the JWT
+// server-side and upserts the User row in Neon. No user data sent from client.
 export function useUserSync() {
   const { isSignedIn, isLoaded, getToken } = useAuth();
   const synced = useRef(false);
@@ -15,8 +15,7 @@ export function useUserSync() {
       synced.current = true;
       try {
         const token = await getToken();
-
-        const res = await fetch(`${API_BASE}/api/auth/sync`, {
+        const res = await fetch('/api/auth/sync', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -24,7 +23,6 @@ export function useUserSync() {
           },
           body: JSON.stringify({}),
         });
-
         if (!res.ok) {
           console.error('[useUserSync] sync failed — HTTP', res.status);
           synced.current = false;

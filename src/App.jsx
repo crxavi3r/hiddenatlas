@@ -30,7 +30,6 @@ function ScrollToTop() {
 }
 
 function Layout({ children }) {
-  useUserSync();
   return (
     <>
       <Navbar />
@@ -41,6 +40,7 @@ function Layout({ children }) {
 }
 
 export default function App() {
+  useUserSync();
   return (
     <BrowserRouter>
       <ScrollToTop />
