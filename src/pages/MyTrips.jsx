@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Download, Calendar, BookOpen, MapPin, Clock, Trash2 } from 'lucide-react';
 import { useUser, SignInButton } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
+import { getTripSource } from '../lib/tripSource';
 
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -10,18 +11,12 @@ function formatDate(iso) {
   });
 }
 
-const SOURCE_LABELS = {
-  AI_GENERATED:   { label: 'AI Generated',   bg: '#EFF6F5', color: '#1B6B65' },
-  FREE_JOURNEY:   { label: 'Free Journey',    bg: '#EFF6F5', color: '#1B6B65' },
-  PREMIUM_JOURNEY:{ label: 'Premium Journey', bg: '#FFF8EE', color: '#C9A96E' },
-};
-
 // ── AI Trip card ────────────────────────────────────────────────────────────
 function AiTripCard({ trip, onDelete }) {
   const [hovered, setHovered] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const tag = SOURCE_LABELS[trip.source] || SOURCE_LABELS.AI_GENERATED;
+  const tag = getTripSource(trip.source);
 
   async function handleDelete(e) {
     e.preventDefault();
@@ -52,12 +47,13 @@ function AiTripCard({ trip, onDelete }) {
       }}
     >
       <div style={{ padding: '22px 22px 20px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-        {/* Source tag */}
+        {/* Source badge — matches ItineraryCard / PurchasedTripCard style */}
         <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: '5px',
-          padding: '4px 10px', borderRadius: '3px', marginBottom: '14px',
-          fontSize: '9.5px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase',
-          background: tag.bg, color: tag.color, alignSelf: 'flex-start',
+          display: 'inline-block',
+          padding: '5px 11px', borderRadius: '3px', marginBottom: '14px',
+          fontSize: '10px', fontWeight: '700', letterSpacing: '0.8px',
+          textTransform: 'uppercase', background: tag.bg, color: tag.color,
+          alignSelf: 'flex-start',
         }}>
           {tag.label}
         </div>
