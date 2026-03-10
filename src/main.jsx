@@ -1,37 +1,53 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, useNavigate } from 'react-router-dom';
-import { ClerkProvider } from '@clerk/clerk-react';
+import { BrowserRouter, useNavigate, useLocation } from 'react-router-dom';
+import { ClerkProvider, useAuth } from '@clerk/clerk-react';
+import { useEffect } from 'react';
 import './index.css';
 import App from './App.jsx';
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
-/**
- * ClerkProvider must receive routerPush / routerReplace so that Clerk uses
- * React Router's navigate() for all internal navigation — including the
- * post-auth redirect to /my-trips.
- *
- * Without this, Clerk calls window.history.pushState() directly. That does NOT
- * fire a popstate event, so React Router never detects the URL change, never
- * re-renders <Routes>, and the <SignIn> component stays mounted. This is
- * the root cause of the "stays on /sign-in after auth" bug on mobile Safari.
- *
- * BrowserRouter must wrap this component so useNavigate() is available.
- */
+// [DEBUG] Watches auth state + pathname on every change.
+// Remove after diagnosis.
+function AuthWatcher() {
+  const { isLoaded, isSignedIn, userId } = useAuth();
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    console.log('[AuthWatcher]', { pathname, isLoaded, isSignedIn, userId: userId ?? null });
+  }, [pathname, isLoaded, isSignedIn, userId]);
+
+  return null;
+}
+
 function ClerkWithRouter({ children }) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+
+  // [DEBUG]
+  useEffect(() => {
+    console.log('[ClerkWithRouter] mounted — pathname:', pathname);
+  }, []);
+
   return (
     <ClerkProvider
       publishableKey={PUBLISHABLE_KEY}
-      routerPush={(to) => navigate(to)}
-      routerReplace={(to) => navigate(to, { replace: true })}
+      routerPush={(to) => {
+        console.log('[ClerkProvider] routerPush called — to:', to);
+        navigate(to);
+      }}
+      routerReplace={(to) => {
+        console.log('[ClerkProvider] routerReplace called — to:', to);
+        navigate(to, { replace: true });
+      }}
       signInUrl="/sign-in"
       signUpUrl="/sign-up"
       signInFallbackRedirectUrl="/my-trips"
       signUpFallbackRedirectUrl="/my-trips"
       afterSignOutUrl="/"
     >
+      <AuthWatcher />
       {children}
     </ClerkProvider>
   );

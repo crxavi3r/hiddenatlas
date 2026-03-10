@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Download, Calendar, BookOpen, MapPin, Clock, Trash2 } from 'lucide-react';
 import { useUser, SignInButton } from '@clerk/clerk-react';
@@ -400,6 +400,17 @@ function resolveFirstName(user) {
 export default function MyTrips() {
   const { isLoaded, isSignedIn, user } = useUser();
   const api = useApi();
+
+  // [DEBUG]
+  const mountCount = useRef(0);
+  useEffect(() => {
+    mountCount.current += 1;
+    console.log(`[MyTrips] mounted (mount #${mountCount.current}) — isLoaded:${isLoaded} isSignedIn:${isSignedIn}`);
+    return () => console.log('[MyTrips] unmounted');
+  }, []);
+  useEffect(() => {
+    console.log('[MyTrips] auth state —', { isLoaded, isSignedIn, userId: user?.id ?? null });
+  }, [isLoaded, isSignedIn, user]);
 
   const [aiTrips, setAiTrips] = useState([]);
   const [purchases, setPurchases] = useState([]);
