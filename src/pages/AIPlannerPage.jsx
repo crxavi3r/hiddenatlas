@@ -222,7 +222,7 @@ export default function AIPlannerPage() {
             Plan your journey
           </h1>
           <p style={{ fontSize: '17px', color: 'rgba(255,255,255,0.68)', lineHeight: '1.75' }}>
-            Tell us where you want to go. We generate a complete, bespoke itinerary based on your travel style — day plans, hotel suggestions, and local experiences included.
+            Tell us where you want to go. We generate a complete, bespoke itinerary based on your travel style: day plans, hotel suggestions, and local experiences included.
           </p>
         </div>
       </section>
@@ -385,7 +385,7 @@ export default function AIPlannerPage() {
                     </button>
                   )}
                   {saveState === 'error' && (
-                    <span style={{ fontSize: '12px', color: '#A0522D' }}>Save failed — try again</span>
+                    <span style={{ fontSize: '12px', color: '#A0522D' }}>Save failed. Try again.</span>
                   )}
 
                   {/* Divider */}
@@ -419,7 +419,7 @@ export default function AIPlannerPage() {
                 {downloadState === 'downloading' ? 'Preparing PDF…' : 'Download PDF'}
               </button>
               {downloadState === 'error' && (
-                <span style={{ fontSize: '12px', color: '#A0522D' }}>Download failed — try again</span>
+                <span style={{ fontSize: '12px', color: '#A0522D' }}>Download failed. Try again.</span>
               )}
             </div>
 
@@ -528,7 +528,7 @@ export default function AIPlannerPage() {
                 Turn this into a fully booked journey
               </h3>
               <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.65)', lineHeight: '1.75', marginBottom: '32px', maxWidth: '480px', margin: '0 auto 32px' }}>
-                Our planners take AI-generated itineraries and turn them into fully detailed, bookable trips — with confirmed hotels, private guides, and all logistics sorted.
+                Our planners take AI-generated itineraries and turn them into fully detailed, bookable trips, with confirmed hotels, private guides, and all logistics sorted.
               </p>
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
                 <Link

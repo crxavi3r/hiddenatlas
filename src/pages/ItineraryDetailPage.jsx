@@ -66,7 +66,7 @@ function LockedSidebar({ itinerary, onBuy, purchasing }) {
           onMouseEnter={e => { if (!purchasing) e.currentTarget.style.background = '#B8943A'; }}
           onMouseLeave={e => { if (!purchasing) e.currentTarget.style.background = '#C9A96E'; }}
         >
-          {purchasing ? 'Processing…' : `Buy itinerary — €${price}`}
+          {purchasing ? 'Processing…' : `Buy itinerary · €${price}`}
         </button>
 
         <p style={{ fontSize: '12px', color: '#9C9488', textAlign: 'center', marginBottom: '16px' }}>
@@ -618,7 +618,7 @@ export default function ItineraryDetailPage() {
                       Unlock the full {duration} itinerary
                     </h3>
                     <p style={{ fontSize: '15px', color: '#6B6156', maxWidth: '400px', margin: '0 auto 24px', lineHeight: '1.7' }}>
-                      Get every day, every recommendation, logistics, insider tips and the PDF — all for a one-time fee.
+                      Get every day, every recommendation, logistics, insider tips and the PDF, all for a one-time fee.
                     </p>
 
                     {accessState === 'unauthenticated' ? (

@@ -143,7 +143,7 @@ export default function ItinerariesPage() {
                 </span>
               </div>
               <p style={{ fontSize: '15px', color: '#6B6156', lineHeight: '1.6', maxWidth: '560px' }}>
-                Complete day-by-day itineraries — researched, written, and free to download. No account required.
+                Complete day-by-day itineraries, researched and written by our team. Free to download, no account required.
               </p>
             </div>
 
@@ -186,7 +186,7 @@ export default function ItinerariesPage() {
                 </span>
               </div>
               <p style={{ fontSize: '15px', color: '#6B6156', lineHeight: '1.6', maxWidth: '560px' }}>
-                Deep-dive itineraries for complex, multi-week journeys. Full logistics, hotel lists, booking notes, and insider access — one purchase, yours forever.
+                Deep-dive itineraries for complex, multi-week journeys. Full logistics, hotel lists, booking notes, and insider access. One purchase, yours forever.
               </p>
             </div>
 

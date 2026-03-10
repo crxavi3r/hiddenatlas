@@ -54,7 +54,7 @@ const nextSteps = [
   'We review your brief and confirm scope (within 24h)',
   'Your planner reaches out to discuss the details',
   'We design your itinerary (7–10 working days)',
-  'You review — revisions included',
+  'You review. Revisions included.',
   'Final delivery, ready to book',
 ];
 
@@ -285,7 +285,7 @@ export default function CustomPlanningPage() {
             A trip built entirely<br />around you.
           </h1>
           <p style={{ fontSize: '17px', color: 'rgba(255,255,255,0.72)', lineHeight: '1.75', maxWidth: '540px', margin: '0 auto 24px' }}>
-            For families, couples, and friend groups who want something genuinely tailored — not a template with your name on it. One dedicated planner. No shortcuts.
+            For families, couples, and friend groups who want something genuinely tailored, not a template with your name on it. One dedicated planner. No shortcuts.
           </p>
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
             {['Families', 'Couples', 'Friend Groups'].map(label => (
@@ -309,8 +309,8 @@ export default function CustomPlanningPage() {
           <div className="ha-value-props">
             {[
               { icon: <MapPin size={20} color="#1B6B65" />, title: 'Any Destination', desc: '70+ countries, researched on the ground. If you can dream it, we know how to get you there.' },
-              { icon: <Calendar size={20} color="#1B6B65" />, title: 'Built Around You', desc: 'Your dates, your pace, your group\'s needs — the plan shapes itself around your life.' },
-              { icon: <Users size={20} color="#1B6B65" />, title: 'Families, Couples, Groups', desc: 'Whether it\'s a honeymoon, a family adventure, or a friends reunion — we\'ve planned it before.' },
+              { icon: <Calendar size={20} color="#1B6B65" />, title: 'Built Around You', desc: 'Your dates, your pace, your group\'s needs. The plan shapes itself around your life.' },
+              { icon: <Users size={20} color="#1B6B65" />, title: 'Families, Couples, Groups', desc: 'Whether it\'s a honeymoon, a family adventure, or a friends reunion, we\'ve planned it before.' },
               { icon: <Heart size={20} color="#1B6B65" />, title: 'Boutique All the Way', desc: 'Private villas, handpicked ryokans, boutique riads. No chain hotels, no generic itineraries.' },
             ].map((item, i) => (
               <div key={i} style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
@@ -405,7 +405,7 @@ export default function CustomPlanningPage() {
 
               {/* ── Trip Details ── */}
               <fieldset style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
-                <SectionLegend label="Trip Details" helper="Be as specific or open-ended as you like — we work from wherever you are." />
+                <SectionLegend label="Trip Details" helper="Be as specific or open-ended as you like. We work from wherever you are." />
                 <div className="ha-form-2col">
 
                   <div id="field-destination" style={{ gridColumn: '1 / -1' }}>
@@ -435,7 +435,7 @@ export default function CustomPlanningPage() {
                       onFocus={e => e.target.style.borderColor = '#1B6B65'}
                       onBlur={e => { e.target.style.borderColor = errors.dates ? ERR_COLOR : '#D4CCBF'; }}
                     />
-                    <FieldHelper text="Flexible is fine — even a rough season helps." />
+                    <FieldHelper text="Flexible is fine. Even a rough season helps." />
                     <ErrorMsg msg={errors.dates} />
                   </div>
 
@@ -491,7 +491,7 @@ export default function CustomPlanningPage() {
               <fieldset id="field-style" style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
                 <SectionLegend
                   label="How do you like to travel?"
-                  helper="Select everything that resonates — your planner will use this to shape the tone of the itinerary."
+                  helper="Select everything that resonates. Your planner will use this to shape the tone of the itinerary."
                 />
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {travelStyles.map(style => {
@@ -528,7 +528,7 @@ export default function CustomPlanningPage() {
               <fieldset id="field-budget" style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
                 <SectionLegend
                   label="Daily Budget Range"
-                  helper="Per person, per day — excluding flights and planning fee."
+                  helper="Per person, per day, excluding flights and planning fee."
                 />
                 <div className="ha-budget-grid">
                   {budgets.map(b => {
@@ -568,7 +568,7 @@ export default function CustomPlanningPage() {
                   value={formData.notes}
                   onChange={handleChange}
                   rows={5}
-                  placeholder="Special occasions, dietary needs, mobility considerations, specific experiences you have in mind — or things you'd rather avoid..."
+                  placeholder="Special occasions, dietary needs, mobility considerations, specific experiences you have in mind, or things you'd rather avoid..."
                   style={{
                     width: '100%', padding: '14px',
                     border: '1px solid #D4CCBF', borderRadius: '6px',
@@ -580,7 +580,7 @@ export default function CustomPlanningPage() {
                   onFocus={e => e.target.style.borderColor = '#1B6B65'}
                   onBlur={e => e.target.style.borderColor = '#D4CCBF'}
                 />
-                <FieldHelper text="Optional but genuinely useful — the more context you give, the better the first draft." />
+                <FieldHelper text="Optional but genuinely useful. The more context you give, the better the first draft." />
               </fieldset>
 
               {/* ── Submit ── */}
@@ -608,7 +608,7 @@ export default function CustomPlanningPage() {
                   Send My Brief <ArrowRight size={16} />
                 </button>
                 <p style={{ fontSize: '13px', color: '#6B6156', textAlign: 'center', lineHeight: '1.6' }}>
-                  No payment required now — we'll review your brief and reply within 48 hours.
+                  No payment required now. We'll review your brief and reply within 48 hours.
                 </p>
               </div>
             </form>

@@ -213,7 +213,7 @@ export default function TripDetailPage() {
           </div>
           {downloadState === 'error' && (
             <p style={{ fontSize: '12px', color: 'rgba(255,180,100,0.9)', marginTop: '10px' }}>
-              Download failed — please try again.
+              Download failed. Please try again.
             </p>
           )}
         </div>

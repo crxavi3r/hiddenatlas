@@ -31,7 +31,7 @@ export default function TermsOfServicePage() {
             <ul>
               <li>Itineraries may not be resold, redistributed, or published without written permission.</li>
               <li>Access is granted to the purchasing account only.</li>
-              <li>Content is provided "as is" — travel conditions, prices, and availability may change.</li>
+              <li>Content is provided "as is". Travel conditions, prices, and availability may change.</li>
             </ul>
           </PolicySection>
 
@@ -44,7 +44,7 @@ export default function TermsOfServicePage() {
           </PolicySection>
 
           <PolicySection title="5. Intellectual property">
-            <p>All content on HiddenAtlas — including itinerary text, images, routes, and recommendations — is the intellectual property of HiddenAtlas and may not be reproduced without consent.</p>
+            <p>All content on HiddenAtlas, including itinerary text, images, routes, and recommendations, is the intellectual property of HiddenAtlas and may not be reproduced without consent.</p>
           </PolicySection>
 
           <PolicySection title="6. Limitation of liability">

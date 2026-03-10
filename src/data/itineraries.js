@@ -46,7 +46,7 @@ export const itineraries = [
     difficulty: "Moderate",
     image: journeyImg('bali-island-journey', 800),
     coverImage: journeyImg('bali-island-journey', 1600),
-    description: "Bali is not one island but several — a cliffside south that faces Australia, a cultural centre that has been producing art and ceremony for a thousand years, a volcanic north that most visitors never reach, and offshore islands of extraordinary beauty. Ten days is enough to move through them properly if you resist the tendency to stay in one place and call it the whole.",
+    description: "Bali is not one island but several: a cliffside south that faces Australia, a cultural centre that has been producing art and ceremony for a thousand years, a volcanic north that most visitors never reach, and offshore islands of extraordinary beauty. Ten days is enough to move through them properly if you resist the tendency to stay in one place and call it the whole.",
     highlights: [
       "Uluwatu Temple — the cliff-edge sea temple at the Bukit Peninsula's southern tip",
       "Tegallalang Rice Terraces — the terraced landscape that defines the Balinese aesthetic",
@@ -202,7 +202,7 @@ export const itineraries = [
     difficulty: "Moderate",
     image: journeyImg('albania-riviera-mountains', 800),
     coverImage: journeyImg('albania-riviera-mountains', 1600),
-    description: "Albania is the Balkans' best-kept secret and, increasingly, an open one. Ten days is enough to drive the full arc of the country: a day in the rapidly changing capital, four days on the Ionian Riviera — the most beautiful coastline in the Mediterranean that no one has ruined yet — two days in the UNESCO hill towns, and three days in the Albanian Alps where the hiking is world-class and the villages look unchanged since the nineteenth century. The roads have improved. The infrastructure is basic. The rewards are disproportionate.",
+    description: "Albania is the Balkans' best-kept secret and, increasingly, an open one. Ten days is enough to drive the full arc of the country: a day in the rapidly changing capital, four days on the Ionian Riviera (the most beautiful coastline in the Mediterranean that no one has ruined yet), two days in the UNESCO hill towns, and three days in the Albanian Alps where the hiking is world-class and the villages look unchanged since the nineteenth century. The roads have improved. The infrastructure is basic. The rewards are disproportionate.",
     highlights: [
       "Llogara Pass — the mountain road that delivers you to the Riviera in a single descent",
       "Ksamil Islands — four turquoise islets in water the colour of the Maldives",
@@ -373,7 +373,7 @@ export const itineraries = [
     difficulty: "Easy to Moderate",
     image: journeyImg('brazil-coastal-journey', 800),
     coverImage: journeyImg('brazil-coastal-journey', 1600),
-    description: "Rio de Janeiro is one of the world's great cities but it is not the whole story. Drive two hours east along the Costa do Sol and you reach Búzios — a rocky peninsula of 23 beaches and an atmosphere that Brigitte Bardot made famous in the 1960s and the Atlantic Ocean has preserved since. Drive two hours west and Angra dos Reis opens into the largest bay on Brazil's coast, its 365 islands accessible only by boat. This twelve-day route moves through all three worlds: city, coast and island, in an order that builds rather than repeats.",
+    description: "Rio de Janeiro is one of the world's great cities but it is not the whole story. Drive two hours east along the Costa do Sol and you reach Búzios: a rocky peninsula of 23 beaches and an atmosphere that Brigitte Bardot made famous in the 1960s and the Atlantic Ocean has preserved since. Drive two hours west and Angra dos Reis opens into the largest bay on Brazil's coast, its 365 islands accessible only by boat. This twelve-day route moves through all three worlds: city, coast and island, in an order that builds rather than repeats.",
     highlights: [
       "Arraial do Cabo — Brazil's most transparently blue water, on the road to Búzios",
       "Búzios — 23 beaches, a cobblestone pedestrian street, and sailing to hidden coves",
@@ -566,7 +566,7 @@ export const itineraries = [
     difficulty: "Relaxed",
     image: journeyImg('budapest-city-break', 800),
     coverImage: journeyImg('budapest-city-break', 1600),
-    description: "Budapest is the Central European city that has not yet been reduced to a stag-party circuit. The Danube divides Buda — hilly, quiet, residential — from Pest: flat, caffeinated, and architecturally deranged in the best possible way. Three days is enough to understand the logic of the place and fall for it completely.",
+    description: "Budapest is the Central European city that has not yet been reduced to a stag-party circuit. The Danube divides Buda (hilly, quiet, residential) from Pest: flat, caffeinated, and architecturally deranged in the best possible way. Three days is enough to understand the logic of the place and fall for it completely.",
     highlights: [
       "The Hungarian Parliament from the Danube at dusk — arguably Europe's finest riverside building",
       "Fisherman's Bastion at dawn, before the tour groups arrive",
@@ -638,7 +638,7 @@ export const itineraries = [
     difficulty: "Moderate",
     image: journeyImg('northern-england-roadtrip', 800),
     coverImage: journeyImg('northern-england-roadtrip', 1600),
-    description: "Northern England holds landscapes of a kind that resist easy photography — dry-stone walls threading across moorland, glacial lakes reflecting November cloud, and market towns that still operate on their own unhurried logic. This four-day route threads through the Yorkshire Dales, across the Lake District fells, and down through the North York Moors to the sea. It is not the England of tourist brochures. It is the real one.",
+    description: "Northern England holds landscapes of a kind that resist easy photography: dry-stone walls threading across moorland, glacial lakes reflecting November cloud, and market towns that still operate on their own unhurried logic. This four-day route threads through the Yorkshire Dales, across the Lake District fells, and down through the North York Moors to the sea. It is not the England of tourist brochures. It is the real one.",
     highlights: [
       "Castlerigg Stone Circle at first light — no crowds, no fences, no commentary",
       "Ullswater by boat before the walking season presses in",
@@ -724,7 +724,7 @@ export const itineraries = [
     difficulty: "Relaxed",
     image: journeyImg('puglia-road-journey', 800),
     coverImage: journeyImg('puglia-road-journey', 1600),
-    description: "Puglia is the heel of Italy's boot — a flat, sun-bleached landscape of olive groves, baroque towns and an Adriatic coast that the north of the country has largely forgotten about. It has been quietly absorbing visitors for a decade now, but it absorbs them well. The food is exceptional, the wine is underrated, and the architecture — particularly in Lecce and Ostuni — is something you need to see to calibrate correctly.",
+    description: "Puglia is the heel of Italy's boot: a flat, sun-bleached landscape of olive groves, baroque towns and an Adriatic coast that the north of the country has largely forgotten about. It has been quietly absorbing visitors for a decade now, but it absorbs them well. The food is exceptional, the wine is underrated, and the architecture (particularly in Lecce and Ostuni) is something you need to see to calibrate correctly.",
     highlights: [
       "Polignano a Mare: the town built on a cliff above the Adriatic",
       "Ostuni, the White City — a whitewashed labyrinth on a limestone hill",
@@ -809,7 +809,7 @@ export const itineraries = [
     difficulty: "Relaxed",
     image: journeyImg('normandy-brittany-loire', 800),
     coverImage: journeyImg('normandy-brittany-loire', 1600),
-    description: "Three of France's most distinct landscapes in four days: the chalk cliffs and harbour towns of Normandy, the granite coast and walled cities of Brittany, and the Renaissance châteaux of the Loire Valley. This is the France that exists between the guidebook highlights — the cheese shops, the cider farms, the empty abbey cloisters, the market squares that don't know they're beautiful.",
+    description: "Three of France's most distinct landscapes in four days: the chalk cliffs and harbour towns of Normandy, the granite coast and walled cities of Brittany, and the Renaissance châteaux of the Loire Valley. This is the France that exists between the guidebook highlights: the cheese shops, the cider farms, the empty abbey cloisters, the market squares that don't know they're beautiful.",
     highlights: [
       "Étretat cliffs at first light — the arches and needles of the Alabaster Coast",
       "Honfleur harbour: the most painted fishing port in France",
@@ -891,7 +891,7 @@ export const itineraries = [
     difficulty: "Relaxed",
     image: journeyImg('vienna-imperial-journey', 800),
     coverImage: journeyImg('vienna-imperial-journey', 1600),
-    description: "Vienna is the city that built itself for permanence. The Ringstrasse boulevard, the opera house, the museums, the Habsburgs' twin palaces — they were all designed to outlast their builders by centuries, and they have. Four days is the minimum needed to move through this city at the pace it was built for: slowly, with long lunches and evening concerts and mornings that start with coffee and end with cake.",
+    description: "Vienna is the city that built itself for permanence. The Ringstrasse boulevard, the opera house, the museums, the Habsburgs' twin palaces: they were all designed to outlast their builders by centuries, and they have. Four days is the minimum needed to move through this city at the pace it was built for: slowly, with long lunches and evening concerts and mornings that start with coffee and end with cake.",
     highlights: [
       "St Stephen's Cathedral — the Gothic spire that has defined the Viennese skyline since 1160",
       "Hofburg Palace and the Spanish Riding School",

@@ -45,10 +45,10 @@ export default function PrivacyPolicyPage() {
           <PolicySection title="3. Third-party services">
             <p>HiddenAtlas uses the following third-party services which have their own privacy policies:</p>
             <ul>
-              <li><strong>Clerk</strong> — authentication and account management.</li>
-              <li><strong>Stripe</strong> — payment processing.</li>
-              <li><strong>Resend</strong> — transactional email delivery.</li>
-              <li><strong>Vercel</strong> — website hosting and analytics.</li>
+              <li><strong>Clerk</strong>: authentication and account management.</li>
+              <li><strong>Stripe</strong>: payment processing.</li>
+              <li><strong>Resend</strong>: transactional email delivery.</li>
+              <li><strong>Vercel</strong>: website hosting and analytics.</li>
             </ul>
           </PolicySection>
 

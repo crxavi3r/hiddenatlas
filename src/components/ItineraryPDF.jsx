@@ -797,7 +797,7 @@ function CTAPage({ itinerary }) {
   const { title, country } = itinerary;
 
   const bullets = [
-    'Handpicked boutique hotels — personally vetted, never generic',
+    'Handpicked boutique hotels, personally vetted and never generic',
     'Restaurant reservations at the places locals actually eat',
     'Private guides & exclusive experiences off the tourist trail',
     'Seamless logistics and real-time support throughout your trip',

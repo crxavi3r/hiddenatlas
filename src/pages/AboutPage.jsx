@@ -58,7 +58,7 @@ export default function AboutPage() {
                 Each journey on HiddenAtlas is built from firsthand exploration, thoughtful planning, and a deep appreciation for places that reward curiosity.
               </p>
               <p style={{ fontSize: '17px', color: '#4A433A', lineHeight: '1.8' }}>
-                Today, HiddenAtlas helps travellers discover beautiful destinations through carefully designed routes — combining iconic highlights with lesser-known locations that most visitors never find.
+                Today, HiddenAtlas helps travellers discover beautiful destinations through carefully designed routes, combining iconic highlights with lesser-known locations that most visitors never find.
               </p>
 
               <div style={{ display: 'flex', gap: '16px', marginTop: '36px', flexWrap: 'wrap' }}>

@@ -58,7 +58,7 @@ const premiumJourneys = itineraries.filter(it => it.isPremium);
 /* ─── Journal articles ─── */
 const journalArticles = [
   {
-    title: 'El Nido — where to stay, what to skip',
+    title: 'El Nido: where to stay, what to skip',
     category: 'Destination Guide',
     image: journeyImg('philippines-island-journey', 700),
     excerpt: 'Corong Corong for sunsets, Nacpan for quiet. A neighbourhood-by-neighbourhood breakdown of Palawan\'s most visited town.',
@@ -72,7 +72,7 @@ const journalArticles = [
     href: '/journal/best-time-to-visit-kyoto',
   },
   {
-    title: 'Puglia by car — the Valle d\'Itria loop',
+    title: 'Puglia by car: the Valle d\'Itria loop',
     category: 'Road Journey',
     image: journeyImg('puglia-road-journey', 700),
     excerpt: 'Alberobello, Locorotondo, Cisternino and Martina Franca in two days. The trulli country is better by road and better in the early morning.',
@@ -83,9 +83,9 @@ const journalArticles = [
 /* ─── Philippines itinerary preview ─── */
 const philippinesTimeline = [
   { days: 'Day 1',     title: 'Arrival in Manila',                  detail: 'Transfer to boutique hotel in Intramuros. Dinner in the old walled city.' },
-  { days: 'Day 2–4',   title: 'El Nido — private island hopping',   detail: 'Small-boat charters to hidden lagoons. No groups larger than six.' },
-  { days: 'Day 5–7',   title: 'Coron — lagoons and hidden beaches',  detail: 'Kayangan Lake, Twin Lagoon, and the WWII Japanese shipwrecks.' },
-  { days: 'Day 8–12',  title: 'Boracay — luxury beach escape',       detail: 'A private beachfront villa on the quiet northern end of the island.' },
+  { days: 'Day 2–4',   title: 'El Nido: private island hopping',   detail: 'Small-boat charters to hidden lagoons. No groups larger than six.' },
+  { days: 'Day 5–7',   title: 'Coron: lagoons and hidden beaches',  detail: 'Kayangan Lake, Twin Lagoon, and the WWII Japanese shipwrecks.' },
+  { days: 'Day 8–12',  title: 'Boracay: luxury beach escape',       detail: 'A private beachfront villa on the quiet northern end of the island.' },
   { days: 'Day 13',    title: 'Return to Manila',                    detail: 'Final night dinner at a rooftop restaurant above Makati.' },
   { days: 'Day 14',    title: 'Departure',                           detail: 'Private transfer to Ninoy Aquino International Airport.' },
 ];
@@ -167,7 +167,7 @@ export default function HomePage() {
               lineHeight: '1.75', maxWidth: '540px', marginBottom: '36px',
             }}>
               HiddenAtlas journeys are curated travel routes built from real trips.
-              Each route is structured day by day — so you can simply follow the journey.
+              Each route is structured day by day, so you can simply follow the journey.
             </p>
 
             <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
@@ -312,7 +312,7 @@ export default function HomePage() {
             <span style={T.label}>How it works</span>
             <h2 style={{ ...T.h2, marginBottom: '16px' }}>Journeys designed to be followed day by day.</h2>
             <p style={{ ...T.body, maxWidth: '560px', margin: '0 auto 44px' }}>
-              HiddenAtlas journeys are curated travel routes built from real trips. Each journey is designed to be followed step by step — like a travel recipe. No planning required.
+              HiddenAtlas journeys are curated travel routes built from real trips. Each journey is designed to be followed step by step, like a travel recipe. No planning required.
             </p>
             <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', textAlign: 'left' }}>
               <div style={{ background: 'white', borderRadius: '8px', padding: '28px 30px', border: '1px solid #E8E3DA' }}>
@@ -488,7 +488,7 @@ export default function HomePage() {
                 num: '01',
                 icon: <Compass size={22} color="#C9A96E" />,
                 title: 'Explore curated itineraries',
-                body: 'Discover carefully designed travel routes created from real trips — not aggregated from review sites or travel blogs.',
+                body: 'Discover carefully designed travel routes created from real trips, not aggregated from review sites or travel blogs.',
               },
               {
                 num: '02',
@@ -548,7 +548,7 @@ export default function HomePage() {
               <span style={T.label}>See what's inside</span>
               <h2 style={T.h2}>A glimpse of a premium itinerary</h2>
               <p style={{ ...T.body, maxWidth: '480px', margin: '14px auto 0' }}>
-                This is what you get — not a highlights reel, but a real, usable plan with every detail thought through.
+                A real, usable plan with every detail thought through.
               </p>
             </div>
           </Reveal>
@@ -579,7 +579,7 @@ export default function HomePage() {
                     fontSize: 'clamp(22px, 2.5vw, 34px)', fontWeight: '600',
                     color: 'white', lineHeight: '1.2', marginBottom: '16px',
                   }}>
-                    Philippines —<br />14 Day Island Journey
+                    Philippines<br />14 Day Island Journey
                   </h3>
                   <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '24px' }}>
                     {['Couples', 'Family', '14 Days', 'Beach & Culture'].map(tag => (
@@ -594,7 +594,7 @@ export default function HomePage() {
                     ))}
                   </div>
                   <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.65)', lineHeight: '1.7' }}>
-                    From the karst limestone towers of El Nido to Coron's hidden lagoons and Boracay's northern quietude — the Philippines, planned without compromise.
+                    From the karst limestone towers of El Nido to Coron's hidden lagoons and Boracay's northern quietude. The Philippines, planned without compromise.
                   </p>
                 </div>
               </div>
@@ -664,7 +664,7 @@ export default function HomePage() {
                     onMouseLeave={e => e.currentTarget.style.background = '#C9A96E'}
                   >
                     <Lock size={12} />
-                    Unlock — €29
+                    Unlock for €29
                   </Link>
                 </div>
               </div>
@@ -689,7 +689,7 @@ export default function HomePage() {
           <div className="resp-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
             {[
               {
-                quote: 'The best trip we ever took as a family. Every hotel, every restaurant — it was all exactly right. We\'ve already started planning our next one with HiddenAtlas.',
+                quote: 'The best trip we ever took as a family. Every hotel, every restaurant was exactly right. We\'ve already started planning our next one with HiddenAtlas.',
                 name: 'Marta',
                 location: 'Lisbon',
                 trip: 'Bali Island Journey',
@@ -698,16 +698,16 @@ export default function HomePage() {
                 type: 'Family',
               },
               {
-                quote: 'Saved us weeks of research and planning. I kept waiting for something to go wrong — nothing did. The itinerary was better than anything we\'d have put together ourselves.',
+                quote: 'Saved us weeks of research and planning. I kept waiting for something to go wrong. Nothing did. The itinerary was better than anything we\'d have put together ourselves.',
                 name: 'Daniel',
                 location: 'London',
-                trip: 'Japan — 18 Day Cultural Grand Journey',
+                trip: 'Japan · 18 Day Cultural Grand Journey',
                 avatar: '/avatars/daniel.svg',
                 fallbackAvatar: 'https://i.pravatar.cc/100?img=12',
                 type: 'Couple',
               },
               {
-                quote: 'Every hotel and experience was exactly right — understated, elegant, local. Our group of six had completely different tastes and everyone came home happy.',
+                quote: 'Every hotel and experience was exactly right: understated, elegant, local. Our group of six had completely different tastes and everyone came home happy.',
                 name: 'Sofia',
                 location: 'Milan',
                 trip: 'Puglia Road Journey',
@@ -814,9 +814,9 @@ export default function HomePage() {
             <Reveal delay={0.15}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {[
-                  { icon: '⌂', label: 'Families', text: 'Multi-generational trips that work for everyone — children, grandparents, and the adults in between.' },
+                  { icon: '⌂', label: 'Families', text: 'Multi-generational trips that work for everyone: children, grandparents, and the adults in between.' },
                   { icon: '♥', label: 'Couples', text: 'Honeymoons, anniversaries, and milestone escapes built around privacy, romance, and the right pace.' },
-                  { icon: '◉', label: 'Friend Groups', text: 'Group logistics handled end-to-end — private villas, shared experiences, enough flexibility for everyone.' },
+                  { icon: '◉', label: 'Friend Groups', text: 'Group logistics handled end-to-end: private villas, shared experiences, and enough flexibility for everyone.' },
                   { icon: '✦', label: 'Solo Travelers', text: 'Expertly planned solo routes that feel safe, spontaneous, and entirely your own.' },
                 ].map((item, i) => (
                   <div key={i} style={{
@@ -903,7 +903,7 @@ export default function HomePage() {
                   <em style={{ fontStyle: 'italic', color: 'rgba(255,255,255,0.65)' }}>in seconds.</em>
                 </h2>
                 <p style={{ fontSize: '16px', color: 'rgba(255,255,255,0.6)', lineHeight: '1.8', marginBottom: '36px', maxWidth: '440px' }}>
-                  Tell us where you want to go. Our AI generates a complete, bespoke itinerary — day plans, hotel suggestions, and local experiences — built around your travel style.
+                  Tell us where you want to go. Our AI generates a complete, bespoke itinerary built around your travel style: day plans, hotel suggestions, and local experiences.
                 </p>
                 <Link
                   to="/ai-planner"
@@ -924,7 +924,7 @@ export default function HomePage() {
             <Reveal delay={0.12}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {[
-                  { step: '01', title: 'Enter your destination', desc: 'Any place in the world — city, region, or country.' },
+                  { step: '01', title: 'Enter your destination', desc: 'Any place in the world: city, region, or country.' },
                   { step: '02', title: 'Set your travel style', desc: 'Trip length, group type, budget, and travel preferences.' },
                   { step: '03', title: 'Get your itinerary', desc: 'A day-by-day plan with hotels, experiences, and insider notes.' },
                 ].map((item, i) => (
@@ -1218,7 +1218,7 @@ function ItinerarySmallCard({ it }) {
             </span>
           </div>
           <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '15px', fontWeight: '600', color: '#1C1A16', lineHeight: '1.3', marginBottom: '8px' }}>
-            {it.title} — {it.subtitle}
+            {it.title}: {it.subtitle}
           </p>
           <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '10px' }}>
             {it.bestFor.slice(0, 2).map(tag => (
@@ -1404,7 +1404,7 @@ function CuratedJourneyCard({ it }) {
             fontSize: 'clamp(17px, 2vw, 21px)', fontWeight: '600', color: '#1C1A16',
             lineHeight: '1.3', marginBottom: '10px',
           }}>
-            {it.title} — {it.subtitle}
+            {it.title}: {it.subtitle}
           </h3>
           <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.7', flex: 1, marginBottom: '18px' }}>
             {it.shortDescription}

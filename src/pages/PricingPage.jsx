@@ -3,7 +3,7 @@ import { Check, ArrowRight, Star } from 'lucide-react';
 
 export default function PricingPage() {
   const premiumItineraries = [
-    { name: 'Single Itinerary', price: '€29', desc: 'One-time purchase. Full access to your chosen route — day plans, stays, restaurants, logistics. Download it forever.' },
+    { name: 'Single Itinerary', price: '€29', desc: 'One-time purchase. Full access to your chosen route: day plans, stays, restaurants, logistics. Download it forever.' },
     { name: 'Explorer Bundle (3)', price: '€79', desc: 'Choose any 3 premium itineraries. Ideal if you have multiple trips in mind or want to gift one.' },
     { name: 'Annual Access', price: '€249 / year', desc: 'Unlimited downloads from the full premium library for 12 months, including all new releases. Best for frequent travelers.' },
   ];
@@ -61,7 +61,7 @@ export default function PricingPage() {
   const faqs = [
     {
       q: 'Can I buy an itinerary as a gift?',
-      a: 'Yes. After purchase you\'ll receive a digital download you can forward or print for the recipient. We\'re also working on gift cards — coming soon.',
+      a: 'Yes. After purchase you\'ll receive a digital download you can forward or print for the recipient. We\'re also working on gift cards, coming soon.',
     },
     {
       q: 'What currency are prices in?',
@@ -73,7 +73,7 @@ export default function PricingPage() {
     },
     {
       q: 'Is the custom planning fee separate from travel costs?',
-      a: 'Yes. The planning fee covers our service. All actual travel costs — flights, hotels, meals, activities — are paid directly by you as you book.',
+      a: 'Yes. The planning fee covers our service. All actual travel costs (flights, hotels, meals, activities) are paid directly by you as you book.',
     },
   ];
 
@@ -98,7 +98,7 @@ export default function PricingPage() {
             Plans for every kind of traveler.
           </h1>
           <p style={{ fontSize: '17px', color: '#6B6156', lineHeight: '1.7' }}>
-            From a one-off itinerary download to a fully custom luxury trip — we have an option that fits. No hidden fees, no subscriptions you'll forget about.
+            From a one-off itinerary download to a fully custom luxury trip, we have an option that fits. No hidden fees, no subscriptions you'll forget about.
           </p>
         </div>
       </section>

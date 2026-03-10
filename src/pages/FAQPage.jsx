@@ -8,7 +8,7 @@ const faqs = [
     items: [
       {
         q: 'Are the itineraries really researched in person?',
-        a: 'Yes — every route in our library has been traveled by a member of our team or a trusted local correspondent. We do not publish destinations we haven\'t personally vetted. We also update our itineraries when conditions change (new openings, closures, seasonal shifts).',
+        a: 'Yes. Every route in our library has been traveled by a member of our team or a trusted local correspondent. We do not publish destinations we haven\'t personally vetted. We also update our itineraries when conditions change (new openings, closures, seasonal shifts).',
       },
       {
         q: 'How detailed are the premium itineraries?',
@@ -20,7 +20,7 @@ const faqs = [
       },
       {
         q: 'How do I receive my itinerary after purchase?',
-        a: 'Immediately after payment, you\'ll receive a download link via email. The itinerary comes as a beautifully designed PDF, optimized for both desktop and mobile. You keep it forever — no expiry.',
+        a: 'Immediately after payment, you\'ll receive a download link via email. The itinerary comes as a beautifully designed PDF, optimized for both desktop and mobile. You keep it forever, with no expiry.',
       },
     ],
   },
@@ -29,7 +29,7 @@ const faqs = [
     items: [
       {
         q: 'What does the custom planning process look like?',
-        a: 'You start by filling out a brief on our website — destinations, dates, group size, interests, and budget range. Within 24–48 hours, your dedicated planner will reach out to discuss the details. We then build a full itinerary over 7–10 days, incorporating your feedback in revision rounds. Final delivery is a comprehensive PDF and optional booking support.',
+        a: 'You start by filling out a brief on our website with destinations, dates, group size, interests, and budget range. Within 24–48 hours, your dedicated planner will reach out to discuss the details. We then build a full itinerary over 7–10 days, incorporating your feedback in revision rounds. Final delivery is a comprehensive PDF and optional booking support.',
       },
       {
         q: 'Can you plan trips that aren\'t in your existing library?',
@@ -37,7 +37,7 @@ const faqs = [
       },
       {
         q: 'Do you book hotels and activities on our behalf?',
-        a: 'We provide detailed recommendations and booking instructions. For premium custom clients, we can make recommendations and guide the booking process directly. Full end-to-end booking (acting as your travel agent) is available as an add-on service — ask your planner for details.',
+        a: 'We provide detailed recommendations and booking instructions. For premium custom clients, we can make recommendations and guide the booking process directly. Full end-to-end booking (acting as your travel agent) is available as an add-on service. Ask your planner for details.',
       },
       {
         q: 'What if we change our minds after receiving the itinerary?',
@@ -50,11 +50,11 @@ const faqs = [
     items: [
       {
         q: 'Is the planning fee refundable?',
-        a: 'Digital itinerary downloads are non-refundable once accessed. For custom planning, the fee is non-refundable after the planning process has begun — but we offer revision rounds to ensure your satisfaction.',
+        a: 'Digital itinerary downloads are non-refundable once accessed. For custom planning, the fee is non-refundable after the planning process has begun, but we offer revision rounds to ensure your satisfaction.',
       },
       {
         q: 'Does the custom planning fee include my travel costs?',
-        a: 'No. The planning fee is our service charge for designing your trip. All actual costs — flights, accommodation, meals, experiences, transfers — are paid directly by you as you book.',
+        a: 'No. The planning fee is our service charge for designing your trip. All actual costs (flights, accommodation, meals, experiences, transfers) are paid directly by you as you book.',
       },
       {
         q: 'Do you offer group discounts?',
@@ -67,7 +67,7 @@ const faqs = [
     items: [
       {
         q: 'Who is HiddenAtlas designed for?',
-        a: 'We design for travelers who want quality over quantity — people who\'d rather spend three extraordinary days in one place than rush through five. Our audience tends to value comfort, authenticity, local culture, good food, and smart logistics. They\'re not necessarily looking for the most extreme luxury, but they do care about staying somewhere with character and eating somewhere memorable.',
+        a: 'We design for travelers who want quality over quantity: people who\'d rather spend three extraordinary days in one place than rush through five. Our audience tends to value comfort, authenticity, local culture, good food, and smart logistics. They\'re not necessarily looking for the most extreme luxury, but they do care about staying somewhere with character and eating somewhere memorable.',
       },
       {
         q: 'Are your itineraries suitable for families with children?',
@@ -75,7 +75,7 @@ const faqs = [
       },
       {
         q: 'Do you cover adventure or off-grid travel?',
-        a: 'We cover a range of styles — from relaxed cultural immersion to more active routes. We tend to avoid purely extreme or survival-style travel, but we definitely include hiking, trekking, sailing, and wilderness experiences within the context of well-planned journeys.',
+        a: 'We cover a range of styles, from relaxed cultural immersion to more active routes. We tend to avoid purely extreme or survival-style travel, but we definitely include hiking, trekking, sailing, and wilderness experiences within the context of well-planned journeys.',
       },
     ],
   },

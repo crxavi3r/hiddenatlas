@@ -265,7 +265,7 @@ export function JournalPostPage() {
         {/* Article body — placeholder content */}
         <div style={{ fontSize: '17px', color: '#4A433A', lineHeight: '1.85' }}>
           <p style={{ marginBottom: '24px' }}>
-            {post.excerpt} The places worth visiting are rarely the ones with the longest queues or the most Instagram tags — they're the ones you find when you look just slightly past the obvious.
+            {post.excerpt} The places worth visiting are rarely the ones with the longest queues or the most Instagram tags. They're the ones you find when you look just slightly past the obvious.
           </p>
           <p style={{ marginBottom: '24px' }}>
             After years of researching and traveling through some of the world's most compelling destinations, we've learned that the best experiences share a common thread: they require a little more intention, a little more curiosity, and usually a willingness to leave the main road.
@@ -274,7 +274,7 @@ export function JournalPostPage() {
             What we found
           </h2>
           <p style={{ marginBottom: '24px' }}>
-            The research for this guide began eighteen months ago, when one of our planners spent three weeks traveling through the region without a fixed itinerary — following recommendations from locals, doubling back to revisit places that deserved more time, and deliberately avoiding the sites most featured in guidebooks.
+            The research for this guide began eighteen months ago, when one of our planners spent three weeks traveling through the region without a fixed itinerary, following recommendations from locals, doubling back to revisit places that deserved more time, and deliberately avoiding the sites most featured in guidebooks.
           </p>
           <p style={{ marginBottom: '24px' }}>
             What emerged was a picture of a place far more interesting, more layered, and more accessible than its reputation suggests. Here is what we learned, and what we think you should know before you go.
@@ -286,9 +286,9 @@ export function JournalPostPage() {
             padding: '24px 28px', borderRadius: '4px', margin: '36px 0',
           }}>
             <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '19px', color: '#0E3D39', fontStyle: 'italic', lineHeight: '1.6' }}>
-              "The best trips aren't the ones you plan perfectly — they're the ones you plan just enough, then let breathe."
+              "The best trips aren't the ones you plan perfectly. They're the ones you plan just enough, then let breathe."
             </p>
-            <p style={{ fontSize: '13px', color: '#1B6B65', marginTop: '12px', fontWeight: '600' }}>— HiddenAtlas</p>
+            <p style={{ fontSize: '13px', color: '#1B6B65', marginTop: '12px', fontWeight: '600' }}>HiddenAtlas</p>
           </div>
 
           <p style={{ marginBottom: '24px' }}>
