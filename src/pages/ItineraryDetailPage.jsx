@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { Clock, Users, MapPin, Check, Star, ArrowRight, Lock, Download, ChevronRight, Route } from 'lucide-react';
-import { useAuth, useUser, useClerk } from '@clerk/clerk-react';
+import { useAuth, useUser } from '@clerk/clerk-react';
 import { itineraries } from '../data/itineraries';
 import { downloadItineraryPDF } from '../utils/downloadPDF';
 import { useApi } from '../lib/api';
@@ -283,8 +283,7 @@ export default function ItineraryDetailPage() {
   const itinerary = itineraries.find(it => it.id === id);
 
   const { isLoaded, isSignedIn } = useAuth();
-  const { openSignIn } = useClerk();
-  const api = useApi();
+const api = useApi();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -462,7 +461,7 @@ export default function ItineraryDetailPage() {
     if (!itinerary || purchasing) return;
     if (!isSignedIn) {
       sessionStorage.setItem(PENDING_KEY, itinerary.id);
-      openSignIn({ afterSignInUrl: window.location.href, afterSignUpUrl: window.location.href });
+      navigate('/sign-in');
       return;
     }
     handlePurchase();
@@ -622,11 +621,9 @@ export default function ItineraryDetailPage() {
                     </p>
 
                     {accessState === 'unauthenticated' ? (
-                      <SignInButton mode="modal">
-                        <button style={{ padding: '15px 40px', background: '#1B6B65', color: 'white', border: 'none', borderRadius: '4px', fontSize: '14px', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase', cursor: 'pointer' }}>
-                          Sign in to Unlock
-                        </button>
-                      </SignInButton>
+                      <Link to="/sign-in" style={{ padding: '15px 40px', background: '#1B6B65', color: 'white', borderRadius: '4px', fontSize: '14px', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none', display: 'inline-block' }}>
+                        Sign in to Unlock
+                      </Link>
                     ) : (
                       <button
                         onClick={handlePurchase}

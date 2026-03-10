@@ -3,7 +3,6 @@ import { Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import {
   SignedIn, SignedOut,
-  SignInButton, SignUpButton,
   useUser, useClerk,
 } from '@clerk/clerk-react';
 
@@ -190,40 +189,36 @@ export default function Navbar() {
             {/* ── Auth — desktop ── */}
             <div className="hidden-mobile" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <SignedOut>
-                <SignInButton mode="modal">
-                  <button style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    fontSize: '13px', fontWeight: '500', letterSpacing: '0.3px',
-                    color: isTransparent ? 'rgba(255,255,255,0.8)' : '#4A433A',
-                    padding: '8px 4px', transition: 'color 0.2s',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.color = isTransparent ? 'white' : '#1B6B65'}
-                  onMouseLeave={e => e.currentTarget.style.color = isTransparent ? 'rgba(255,255,255,0.8)' : '#4A433A'}
-                  >
-                    Sign in
-                  </button>
-                </SignInButton>
-                <SignUpButton mode="modal">
-                  <button style={{
-                    padding: '8px 16px', borderRadius: '4px',
-                    border: isTransparent ? '1px solid rgba(255,255,255,0.35)' : '1px solid #D4CCBF',
-                    background: 'transparent',
-                    fontSize: '13px', fontWeight: '600', letterSpacing: '0.3px',
-                    color: isTransparent ? 'rgba(255,255,255,0.85)' : '#1C1A16',
-                    cursor: 'pointer', transition: 'all 0.2s',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = isTransparent ? 'rgba(255,255,255,0.7)' : '#1B6B65';
-                    e.currentTarget.style.color = isTransparent ? 'white' : '#1B6B65';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = isTransparent ? 'rgba(255,255,255,0.35)' : '#D4CCBF';
-                    e.currentTarget.style.color = isTransparent ? 'rgba(255,255,255,0.85)' : '#1C1A16';
-                  }}
-                  >
-                    Sign up
-                  </button>
-                </SignUpButton>
+                <Link to="/sign-in" style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: '13px', fontWeight: '500', letterSpacing: '0.3px',
+                  color: isTransparent ? 'rgba(255,255,255,0.8)' : '#4A433A',
+                  padding: '8px 4px', transition: 'color 0.2s', textDecoration: 'none',
+                }}
+                onMouseEnter={e => e.currentTarget.style.color = isTransparent ? 'white' : '#1B6B65'}
+                onMouseLeave={e => e.currentTarget.style.color = isTransparent ? 'rgba(255,255,255,0.8)' : '#4A433A'}
+                >
+                  Sign in
+                </Link>
+                <Link to="/sign-up" style={{
+                  padding: '8px 16px', borderRadius: '4px',
+                  border: isTransparent ? '1px solid rgba(255,255,255,0.35)' : '1px solid #D4CCBF',
+                  background: 'transparent',
+                  fontSize: '13px', fontWeight: '600', letterSpacing: '0.3px',
+                  color: isTransparent ? 'rgba(255,255,255,0.85)' : '#1C1A16',
+                  cursor: 'pointer', transition: 'all 0.2s', textDecoration: 'none',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.borderColor = isTransparent ? 'rgba(255,255,255,0.7)' : '#1B6B65';
+                  e.currentTarget.style.color = isTransparent ? 'white' : '#1B6B65';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = isTransparent ? 'rgba(255,255,255,0.35)' : '#D4CCBF';
+                  e.currentTarget.style.color = isTransparent ? 'rgba(255,255,255,0.85)' : '#1C1A16';
+                }}
+                >
+                  Sign up
+                </Link>
               </SignedOut>
 
               <SignedIn>
@@ -280,26 +275,24 @@ export default function Navbar() {
             {/* ── Auth — mobile ── */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '8px', borderTop: '1px solid #E8E3DA' }}>
               <SignedOut>
-                <SignInButton mode="modal">
-                  <button style={{
-                    padding: '13px 24px', borderRadius: '4px',
-                    border: '1px solid #D4CCBF', background: 'transparent',
-                    fontSize: '14px', fontWeight: '600', color: '#1C1A16',
-                    cursor: 'pointer', textAlign: 'center', width: '100%',
-                  }}>
-                    Sign in
-                  </button>
-                </SignInButton>
-                <SignUpButton mode="modal">
-                  <button style={{
-                    padding: '13px 24px', borderRadius: '4px',
-                    background: '#1C1A16', border: 'none',
-                    fontSize: '14px', fontWeight: '600', color: 'white',
-                    cursor: 'pointer', textAlign: 'center', width: '100%',
-                  }}>
-                    Create account
-                  </button>
-                </SignUpButton>
+                <Link to="/sign-in" style={{
+                  padding: '13px 24px', borderRadius: '4px',
+                  border: '1px solid #D4CCBF', background: 'transparent',
+                  fontSize: '14px', fontWeight: '600', color: '#1C1A16',
+                  textAlign: 'center', width: '100%', textDecoration: 'none',
+                  display: 'block',
+                }}>
+                  Sign in
+                </Link>
+                <Link to="/sign-up" style={{
+                  padding: '13px 24px', borderRadius: '4px',
+                  background: '#1C1A16', border: 'none',
+                  fontSize: '14px', fontWeight: '600', color: 'white',
+                  textAlign: 'center', width: '100%', textDecoration: 'none',
+                  display: 'block',
+                }}>
+                  Create account
+                </Link>
               </SignedOut>
               <SignedIn>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>

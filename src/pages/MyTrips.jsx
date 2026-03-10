@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Download, Calendar, BookOpen, MapPin, Clock, Trash2 } from 'lucide-react';
-import { useUser, SignInButton } from '@clerk/clerk-react';
+import { useUser } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
 import { getTripSource } from '../lib/tripSource';
 import { itineraries } from '../data/itineraries';
@@ -488,15 +488,14 @@ export default function MyTrips() {
               <p style={{ fontSize: '15px', color: '#6B6156', marginBottom: '28px', lineHeight: '1.7' }}>
                 Your saved and purchased itineraries are stored in your account.
               </p>
-              <SignInButton mode="modal">
-                <button style={{
-                  padding: '13px 32px', background: '#1B6B65', color: 'white',
-                  border: 'none', borderRadius: '4px', fontSize: '14px', fontWeight: '600',
-                  letterSpacing: '0.5px', textTransform: 'uppercase', cursor: 'pointer',
-                }}>
-                  Sign in
-                </button>
-              </SignInButton>
+              <Link to="/sign-in" style={{
+                padding: '13px 32px', background: '#1B6B65', color: 'white',
+                borderRadius: '4px', fontSize: '14px', fontWeight: '600',
+                letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none',
+                display: 'inline-block',
+              }}>
+                Sign in
+              </Link>
             </div>
           )}
 
