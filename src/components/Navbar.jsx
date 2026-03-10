@@ -160,6 +160,7 @@ export default function Navbar() {
   const isTransparent = isHome && !scrolled && !menuOpen;
 
   return (
+    <>
     <header style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 999,
       transition: 'background 0.4s ease, box-shadow 0.4s ease',
@@ -281,7 +282,9 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Mobile drawer */}
+    </header>
+
+      {/* Mobile drawer — outside <header> so backdropFilter doesn't trap position:fixed children */}
       {menuOpen && (
         <div style={{
           position: 'fixed', top: '72px', left: 0, right: 0, bottom: 0,
@@ -398,6 +401,6 @@ export default function Navbar() {
           .show-mobile { display: none !important; }
         }
       `}</style>
-    </header>
+    </>
   );
 }
