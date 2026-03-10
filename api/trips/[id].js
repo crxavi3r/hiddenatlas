@@ -13,7 +13,6 @@ export default async function handler(req, res) {
   // not populate req.query with path params — fall back to parsing from req.url.
   const id = req.query.id
     || (/\/api\/trips\/([^/?]+)/.exec(req.url || '') || [])[1];
-  console.log('[trips/id] method:', req.method, '| id:', id, '| req.query:', JSON.stringify(req.query), '| url:', req.url);
   if (!id) return res.status(400).json({ error: 'Missing trip id' });
 
   if (!['GET', 'POST', 'DELETE'].includes(req.method)) {

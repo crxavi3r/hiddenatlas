@@ -28,7 +28,6 @@ export default async function handler(req, res) {
       `SELECT id FROM "User" WHERE "clerkId" = $1`,
       [clerkId]
     );
-    console.log('[trips/list] user lookup rows:', users.length);
     if (!users.length) return res.status(200).json([]);
     const userId = users[0].id;
 
@@ -51,8 +50,6 @@ export default async function handler(req, res) {
        ORDER BY t."createdAt" DESC`,
       [userId]
     );
-    console.log('[trips/list] found', rows.length, 'trips for userId:', userId);
-
     return res.status(200).json(rows);
   } catch (err) {
     console.error('[trips/list] DB error:', err.message, '| code:', err.code);

@@ -23,7 +23,6 @@ export default async function handler(req, res) {
   }
 
   const { trip, source = 'AI_GENERATED' } = req.body || {};
-  console.log('[save] trip.destination:', trip?.destination, '| source:', source);
   if (!trip?.destination) {
     return res.status(400).json({ error: 'Missing trip data — expected { trip: { destination, ... } }' });
   }
@@ -39,7 +38,6 @@ export default async function handler(req, res) {
       `SELECT id FROM "User" WHERE "clerkId" = $1`,
       [clerkId]
     );
-    console.log('[save] user lookup rows:', users.length);
     if (!users.length) {
       return res.status(404).json({ error: 'User not found. Please sign out and sign in again.' });
     }
@@ -60,7 +58,6 @@ export default async function handler(req, res) {
     );
     if (existing.length) {
       const existingId = existing[0].id;
-      console.log('[save] dedup: returning existing trip:', existingId);
       return res.status(200).json({ id: existingId, deduplicated: true });
     }
 
@@ -89,7 +86,6 @@ export default async function handler(req, res) {
       ]
     );
     const tripId = trips[0].id;
-    console.log('[save] Trip created:', tripId);
 
     // Insert TripDay rows
     const days = Array.isArray(trip.days) ? trip.days : [];
@@ -114,7 +110,6 @@ export default async function handler(req, res) {
         source:      'ai_planner',
       },
     });
-    console.log('[save] SAVED event written for tripId:', tripId);
 
     return res.status(200).json({ id: tripId });
   } catch (err) {

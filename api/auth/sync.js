@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
-  // ── 4. Fetch fresh profile from Clerk ───────────────────────
+  // ── 3. Fetch fresh profile from Clerk ───────────────────────
   let email, name;
   try {
     const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Failed to fetch Clerk user profile' });
   }
 
-  // ── 5. Upsert into Neon ─────────────────────────────────────
+  // ── 4. Upsert into Neon ─────────────────────────────────────
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
     const { rows } = await pool.query(

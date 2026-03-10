@@ -14,8 +14,6 @@ const { Pool } = pg;
 // that limitation entirely.
 export default async function handler(req, res) {
   const id = req.query.id;
-  console.log('[api/trip] method:', req.method, '| id:', id);
-
   if (!id) return res.status(400).json({ error: 'Missing trip id' });
 
   if (!['GET', 'POST', 'DELETE'].includes(req.method)) {
@@ -47,7 +45,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const { rows: trips } = await pool.query(
         `SELECT id, title, destination, country, duration, overview,
-                highlights, hotels, experiences, source, "createdAt"
+                highlights, hotels, experiences, source, "coverImage", "createdAt"
          FROM "Trip"
          WHERE id = $1 AND "userId" = $2`,
         [id, userId]
@@ -62,7 +60,6 @@ export default async function handler(req, res) {
         [id]
       );
 
-      console.log('[api/trip] GET ok — destination:', trips[0].destination, '| days:', days.length);
       return res.status(200).json({ ...trips[0], days });
     }
 
@@ -85,7 +82,6 @@ export default async function handler(req, res) {
         metadata: { destination: trips[0].destination, ...metadata },
       });
 
-      console.log('[api/trip] DOWNLOADED audit written for tripId:', id);
       return res.status(200).json({ ok: true });
     }
 
@@ -107,7 +103,6 @@ export default async function handler(req, res) {
       // TripDay rows cascade; TripEvent rows are unaffected (no FK on tripId)
       await pool.query(`DELETE FROM "Trip" WHERE id = $1`, [id]);
 
-      console.log('[api/trip] DELETED tripId:', id, '| destination:', trip.destination);
       return res.status(200).json({ ok: true });
     }
   } catch (err) {
