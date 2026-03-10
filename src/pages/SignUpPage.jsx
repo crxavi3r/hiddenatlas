@@ -1,6 +1,16 @@
-import { SignUp, ClerkLoading, ClerkLoaded } from '@clerk/clerk-react';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth, SignUp, ClerkLoading, ClerkLoaded } from '@clerk/clerk-react';
 
 export default function SignUpPage() {
+  const { isSignedIn, isLoaded } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      navigate('/my-trips', { replace: true });
+    }
+  }, [isLoaded, isSignedIn]);
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',

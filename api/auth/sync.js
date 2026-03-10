@@ -17,24 +17,17 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'DATABASE_URL not configured' });
   }
 
-  // ── 2. [DEBUG] Log Authorization header presence ────────────
+  // ── 2. Require Bearer token ─────────────────────────────────
   const authHeader = req.headers.authorization;
-  console.log('[api/auth/sync] Authorization header present:', !!authHeader);
-  console.log('[api/auth/sync] Starts with Bearer:', authHeader?.startsWith('Bearer ') ?? false);
-
-  // ── 3. Require Bearer token ─────────────────────────────────
   if (!authHeader?.startsWith('Bearer ')) {
-    console.warn('[api/auth/sync] REJECTED — missing Authorization header');
     return res.status(401).json({ error: 'Missing authorization header' });
   }
 
-  // ── 4. Verify Clerk JWT ─────────────────────────────────────
+  // ── 3. Verify Clerk JWT ─────────────────────────────────────
   let clerkId;
   try {
     clerkId = await verifyAuth(authHeader);
-    console.log('[api/auth/sync] verifyAuth SUCCESS — clerkId:', clerkId);
   } catch (err) {
-    console.warn('[api/auth/sync] verifyAuth FAILED —', err.message);
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
@@ -62,7 +55,6 @@ export default async function handler(req, res) {
        RETURNING id, "clerkId", email, name, "createdAt"`,
       [clerkId, email, name]
     );
-    console.log('[api/auth/sync] DB upsert SUCCESS — userId:', rows[0].id);
     return res.status(200).json(rows[0]);
   } catch (err) {
     console.error('[api/auth/sync] DB error:', err.message);

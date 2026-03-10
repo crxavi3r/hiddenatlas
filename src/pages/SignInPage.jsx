@@ -1,17 +1,18 @@
 import { useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@clerk/clerk-react';
 import { SignIn, ClerkLoading, ClerkLoaded } from '@clerk/clerk-react';
 
 export default function SignInPage() {
-  const { pathname } = useLocation();
+  const { isSignedIn, isLoaded } = useAuth();
+  const navigate = useNavigate();
 
-  // [DEBUG]
+  // Fallback redirect: if Clerk completes auth but routerPush fails, navigate imperatively.
   useEffect(() => {
-    console.log('[SignInPage] mounted — pathname:', pathname);
-    return () => {
-      console.log('[SignInPage] unmounted — was at pathname:', pathname);
-    };
-  }, []);
+    if (isLoaded && isSignedIn) {
+      navigate('/my-trips', { replace: true });
+    }
+  }, [isLoaded, isSignedIn]);
 
   return (
     <div style={{
@@ -20,14 +21,10 @@ export default function SignInPage() {
       background: '#FAFAF8',
     }}>
       <ClerkLoading>
-        {/* [DEBUG] */}
-        {console.log('[SignInPage] ClerkLoading rendering — pathname:', pathname) || null}
         <p style={{ fontSize: '14px', color: '#6B6156' }}>Loading…</p>
       </ClerkLoading>
 
       <ClerkLoaded>
-        {/* [DEBUG] */}
-        {console.log('[SignInPage] ClerkLoaded rendering — pathname:', pathname) || null}
         <SignIn
           routing="path"
           path="/sign-in"

@@ -1,53 +1,26 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, useNavigate, useLocation } from 'react-router-dom';
-import { ClerkProvider, useAuth } from '@clerk/clerk-react';
-import { useEffect } from 'react';
+import { BrowserRouter, useNavigate } from 'react-router-dom';
+import { ClerkProvider } from '@clerk/clerk-react';
 import './index.css';
 import App from './App.jsx';
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
-// [DEBUG] Watches auth state + pathname on every change.
-// Remove after diagnosis.
-function AuthWatcher() {
-  const { isLoaded, isSignedIn, userId } = useAuth();
-  const { pathname } = useLocation();
-
-  useEffect(() => {
-    console.log('[AuthWatcher]', { pathname, isLoaded, isSignedIn, userId: userId ?? null });
-  }, [pathname, isLoaded, isSignedIn, userId]);
-
-  return null;
-}
-
 function ClerkWithRouter({ children }) {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
-
-  // [DEBUG]
-  useEffect(() => {
-    console.log('[ClerkWithRouter] mounted — pathname:', pathname);
-  }, []);
 
   return (
     <ClerkProvider
       publishableKey={PUBLISHABLE_KEY}
-      routerPush={(to) => {
-        console.log('[ClerkProvider] routerPush called — to:', to);
-        navigate(to);
-      }}
-      routerReplace={(to) => {
-        console.log('[ClerkProvider] routerReplace called — to:', to);
-        navigate(to, { replace: true });
-      }}
+      routerPush={(to) => navigate(to)}
+      routerReplace={(to) => navigate(to, { replace: true })}
       signInUrl="/sign-in"
       signUpUrl="/sign-up"
       signInFallbackRedirectUrl="/my-trips"
       signUpFallbackRedirectUrl="/my-trips"
       afterSignOutUrl="/"
     >
-      <AuthWatcher />
       {children}
     </ClerkProvider>
   );
