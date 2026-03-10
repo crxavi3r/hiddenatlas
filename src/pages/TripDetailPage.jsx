@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Clock, Star, Check, MapPin, Calendar, Download, Trash2 } from 'lucide-react';
 import { useAuth } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
+import { itineraries } from '../data/itineraries';
 
 const T = {
   label: {
@@ -62,7 +63,27 @@ export default function TripDetailPage() {
   async function handleDownload() {
     if (!trip || downloadState === 'downloading') return;
     setDownloadState('downloading');
+
+    const audit = () => api.post(`/api/trip?id=${id}`, {
+      eventType: 'DOWNLOADED',
+      metadata: { source: 'trip_detail', destination: trip.destination },
+    }).catch(err => console.warn('[TripDetailPage] download audit failed:', err.message));
+
     try {
+      // FREE_JOURNEY / PREMIUM_JOURNEY: resolve the original catalog itinerary and
+      // use the full editorial ItineraryPDF — identical to the itinerary detail page.
+      if (trip.source === 'FREE_JOURNEY' || trip.source === 'PREMIUM_JOURNEY') {
+        const matched = itineraries.find(it => it.title === trip.destination);
+        if (matched) {
+          const { downloadItineraryPDF } = await import('../utils/downloadPDF');
+          await downloadItineraryPDF(matched);
+          setDownloadState('done');
+          audit();
+          return;
+        }
+      }
+
+      // AI_GENERATED (or unmatched catalog trip): use the TripPDF with DB data.
       const [{ pdf }, { TripPDF }] = await Promise.all([
         import('@react-pdf/renderer'),
         import('../components/TripPDF'),
@@ -72,12 +93,7 @@ export default function TripDetailPage() {
       const filename = `${trip.destination.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-itinerary.pdf`;
       triggerDownload(blob, filename);
       setDownloadState('done');
-
-      // Audit: fire-and-forget DOWNLOADED event
-      api.post(`/api/trip?id=${id}`, {
-        eventType: 'DOWNLOADED',
-        metadata: { source: 'trip_detail', destination: trip.destination },
-      }).catch(err => console.warn('[TripDetailPage] download audit failed:', err.message));
+      audit();
     } catch (err) {
       console.error('[TripDetailPage] download error:', err.message);
       setDownloadState('error');
