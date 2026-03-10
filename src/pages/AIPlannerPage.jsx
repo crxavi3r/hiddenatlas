@@ -63,7 +63,7 @@ function triggerDownload(blob, filename) {
 
 export default function AIPlannerPage() {
   const [searchParams] = useSearchParams();
-  const { isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   const api = useApi();
 
   const [form, setForm] = useState({
@@ -91,18 +91,27 @@ export default function AIPlannerPage() {
   // Ensures the trip is saved exactly once per session.
   // Returns the trip id (existing or newly created), or null on failure.
   async function ensureSaved() {
-    if (savedTripId) return savedTripId;
-    if (saveState === 'saving') return null;
+    if (savedTripId) {
+      console.log('[ensureSaved] already saved, returning:', savedTripId);
+      return savedTripId;
+    }
+    if (saveState === 'saving') {
+      console.warn('[ensureSaved] save already in progress, skipping duplicate call');
+      return null;
+    }
+    console.log('[ensureSaved] calling POST /api/trips/save for:', result?.destination);
     setSaveState('saving');
     try {
       const res = await api.post('/api/trips/save', { trip: result });
       const data = await res.json();
+      console.log('[ensureSaved] response status:', res.status, 'data:', data);
       if (!res.ok) throw new Error(data.error || 'Save failed');
       setSavedTripId(data.id);
       setSaveState('saved');
+      console.log('[ensureSaved] saved successfully, tripId:', data.id);
       return data.id;
     } catch (err) {
-      console.error('[AIPlannerPage] save error:', err.message);
+      console.error('[ensureSaved] save error:', err.message);
       setSaveState('error');
       return null;
     }
@@ -115,15 +124,31 @@ export default function AIPlannerPage() {
 
   async function handleDownload() {
     if (!result || downloadState === 'downloading') return;
+    console.log('[download] clicked — isLoaded:', isLoaded, 'isSignedIn:', isSignedIn, 'savedTripId:', savedTripId);
     setDownloadState('downloading');
+    let auditTripId = savedTripId;
     try {
-      // Auto-save first if signed in and not yet saved
-      if (isSignedIn && !savedTripId) {
-        await ensureSaved();
-        // Download continues even if save failed
+      // Auto-save first if signed in (use isLoaded to guard against undefined auth state)
+      if (isLoaded && isSignedIn && !savedTripId) {
+        console.log('[download] auto-save: calling ensureSaved()');
+        const newId = await ensureSaved();
+        console.log('[download] auto-save result:', newId);
+        if (!newId) {
+          console.error('[download] auto-save failed — trip will NOT appear in My Trips');
+          setDownloadState('error');
+          return;
+        }
+        auditTripId = newId;
+      } else if (!isLoaded) {
+        console.warn('[download] Clerk not yet loaded — skipping auto-save');
+      } else if (!isSignedIn) {
+        console.log('[download] user not signed in — skipping auto-save');
+      } else {
+        console.log('[download] trip already saved, reusing id:', savedTripId);
       }
 
       // Lazy-load the PDF library to keep initial bundle small
+      console.log('[download] generating PDF for:', result.destination);
       const [{ pdf }, { TripPDF }] = await Promise.all([
         import('@react-pdf/renderer'),
         import('../components/TripPDF'),
@@ -133,18 +158,19 @@ export default function AIPlannerPage() {
       const blob = await pdf(createElement(TripPDF, { trip: result })).toBlob();
       const filename = `${result.destination.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-itinerary.pdf`;
       triggerDownload(blob, filename);
+      console.log('[download] PDF downloaded successfully');
       setDownloadState('done');
 
       // Audit: fire-and-forget DOWNLOADED event (does not block the download)
-      const auditTripId = savedTripId;
-      if (isSignedIn && auditTripId) {
+      if (isLoaded && isSignedIn && auditTripId) {
+        console.log('[download] firing DOWNLOADED audit for tripId:', auditTripId);
         api.post(`/api/trips/${auditTripId}`, {
           eventType: 'DOWNLOADED',
           metadata: { source: 'ai_planner', destination: result.destination },
-        }).catch(err => console.warn('[AIPlannerPage] download audit failed:', err.message));
+        }).catch(err => console.warn('[download] audit failed:', err.message));
       }
     } catch (err) {
-      console.error('[AIPlannerPage] download error:', err.message);
+      console.error('[download] error:', err.message);
       setDownloadState('error');
     }
   }

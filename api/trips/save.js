@@ -49,6 +49,23 @@ export default async function handler(req, res) {
     }
     const userId = users[0].id;
 
+    // Deduplication: if this user already saved a trip to the same destination
+    // within the last hour, return that trip instead of creating a duplicate.
+    const { rows: existing } = await pool.query(
+      `SELECT id FROM "Trip"
+       WHERE "userId" = $1
+         AND destination = $2
+         AND "createdAt" > NOW() - INTERVAL '1 hour'
+       ORDER BY "createdAt" DESC
+       LIMIT 1`,
+      [userId, trip.destination]
+    );
+    if (existing.length) {
+      const existingId = existing[0].id;
+      console.log('[save] dedup: returning existing trip:', existingId);
+      return res.status(200).json({ id: existingId, deduplicated: true });
+    }
+
     // Insert Trip
     const { rows: trips } = await pool.query(
       `INSERT INTO "Trip" (id, "userId", title, destination, country, duration, overview, highlights, hotels, experiences, "createdAt")
