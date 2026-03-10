@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, ScrollRestoration, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import './index.css';
+import { useUserSync } from './hooks/useUserSync';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -29,6 +30,7 @@ function ScrollToTop() {
 }
 
 function Layout({ children }) {
+  useUserSync();
   return (
     <>
       <Navbar />
