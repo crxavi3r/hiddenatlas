@@ -172,6 +172,13 @@ function PurchasedTripCard({ trip }) {
   );
 }
 
+// Returns first name → first word of full name → null (triggers "Your trips" fallback)
+function resolveFirstName(user) {
+  if (user.firstName?.trim()) return user.firstName.trim();
+  if (user.fullName?.trim()) return user.fullName.trim().split(' ')[0];
+  return null;
+}
+
 // ── Page ────────────────────────────────────────────────────────────────────
 export default function MyTrips() {
   const { isLoaded, isSignedIn, user } = useUser();
@@ -215,14 +222,19 @@ export default function MyTrips() {
           <span style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '2px', textTransform: 'uppercase', color: '#1B6B65', display: 'block', marginBottom: '14px' }}>
             My Library
           </span>
-          <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 'clamp(30px, 4vw, 46px)', fontWeight: '600', color: '#1C1A16', lineHeight: '1.15', marginBottom: '12px' }}>
-            Your trips.
-          </h1>
-          {isSignedIn && (
-            <p style={{ fontSize: '15px', color: '#6B6156', lineHeight: '1.7' }}>
-              Signed in as <strong style={{ color: '#1C1A16' }}>{user.primaryEmailAddress?.emailAddress}</strong>
-            </p>
-          )}
+          {(() => {
+            const name = isSignedIn ? resolveFirstName(user) : null;
+            return (
+              <>
+                <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 'clamp(30px, 4vw, 46px)', fontWeight: '600', color: '#1C1A16', lineHeight: '1.15', marginBottom: '10px' }}>
+                  {name ? `${name}'s trips` : 'Your trips'}
+                </h1>
+                <p style={{ fontSize: '15px', color: '#8C8070', lineHeight: '1.7' }}>
+                  Your personal travel library
+                </p>
+              </>
+            );
+          })()}
         </div>
       </section>
 
