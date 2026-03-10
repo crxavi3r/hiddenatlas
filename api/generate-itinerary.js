@@ -1,5 +1,34 @@
 import Anthropic from '@anthropic-ai/sdk';
 
+/**
+ * Fetches a landmark-specific, editorial-quality cover image from Unsplash.
+ * Uses the Unsplash Source API (no key required) with heroLandmark + destination
+ * keywords to return the most relevant professional travel photograph.
+ * Returns the resolved image URL, or null on failure.
+ */
+async function fetchLandmarkCoverImage(heroLandmark, destination) {
+  try {
+    const keywords = [heroLandmark, destination, 'travel photography']
+      .filter(Boolean)
+      .map(k => k.trim().replace(/\s+/g, '+'))
+      .join(',');
+
+    const resp = await fetch(
+      `https://source.unsplash.com/featured/1600x900/?${keywords}`,
+      { redirect: 'follow', signal: AbortSignal.timeout(5000) },
+    );
+
+    // After following redirects, resp.url is the actual Unsplash image URL
+    if (resp.ok && resp.url.includes('unsplash.com')) {
+      const base = resp.url.split('?')[0];
+      return `${base}?w=1200&q=85&fit=crop`;
+    }
+  } catch (err) {
+    console.warn('[generate-itinerary] cover image fetch failed:', err.message);
+  }
+  return null;
+}
+
 const DAY_COUNTS = {
   '3–5 days': 4,
   '7–10 days': 7,
@@ -38,6 +67,7 @@ Return ONLY valid JSON with this exact structure — no markdown, no other text,
   "destination": "string (city or region name)",
   "country": "string",
   "duration": "string (e.g. '7 days')",
+  "heroLandmark": "string (ONE iconic visual landmark or landscape feature that defines this destination — be specific and photogenic, e.g. 'Uluwatu Temple' for Bali, 'Mount Fuji' for Tokyo, 'Mont Saint-Michel' for Normandy, 'Alberobello trulli' for Puglia, 'Riad courtyards' for Marrakech)",
   "overview": "string (2–3 sentences, sophisticated editorial tone, specific to the destination)",
   "highlights": [
     "string (4 specific, compelling highlights — not generic)"
@@ -77,6 +107,15 @@ Generate exactly ${numDays} days. Be specific: use real neighbourhood names, mar
     if (!jsonMatch) throw new Error('Invalid AI response format');
 
     const itinerary = JSON.parse(jsonMatch[0]);
+
+    // Fetch a landmark-specific cover image from Unsplash Source.
+    // This runs server-side so the URL is resolved before returning to the client.
+    const coverImage = await fetchLandmarkCoverImage(
+      itinerary.heroLandmark,
+      itinerary.destination,
+    );
+    if (coverImage) itinerary.coverImage = coverImage;
+
     return res.status(200).json(itinerary);
   } catch (err) {
     console.error('[generate-itinerary]', err);

@@ -28,9 +28,12 @@ function AiTripCard({ trip, onDelete }) {
   const tag = getTripSource(trip.source);
 
   // FREE_JOURNEY / PREMIUM_JOURNEY: resolve catalog image by matching destination to title.
-  // AI_GENERATED: derive a cover image from the destination name via keyword map.
+  // AI_GENERATED: prefer the persisted coverImage from DB, fall back to keyword map.
   const matched = itineraries.find(it => it.title === trip.destination);
-  const coverUrl = matched?.image ?? (trip.source === 'AI_GENERATED' ? getAiCoverImage(trip.destination) : null);
+  const coverUrl = matched?.image
+    ?? (trip.source === 'AI_GENERATED'
+      ? (trip.coverImage || getAiCoverImage(trip.destination))
+      : null);
   const groupSize = matched?.groupSize ?? null;
   const fallbackGradient = SOURCE_GRADIENTS[trip.source] ?? SOURCE_GRADIENTS.AI_GENERATED;
 

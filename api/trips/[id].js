@@ -53,7 +53,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const { rows: trips } = await pool.query(
         `SELECT id, title, destination, country, duration, overview,
-                highlights, hotels, experiences, source, "createdAt"
+                highlights, hotels, experiences, source, "coverImage", "createdAt"
          FROM "Trip"
          WHERE id = $1 AND "userId" = $2`,
         [id, userId]

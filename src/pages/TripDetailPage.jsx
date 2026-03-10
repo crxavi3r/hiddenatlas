@@ -174,8 +174,10 @@ export default function TripDetailPage() {
 
       {/* Hero */}
       {(() => {
+        // Prefer the persisted landmark-specific cover image from DB;
+        // fall back to the client-side keyword map for older trips.
         const heroCoverImage = trip.source === 'AI_GENERATED'
-          ? getAiCoverImage(trip.destination, 1200)
+          ? (trip.coverImage || getAiCoverImage(trip.destination, 1200))
           : null;
         return (
         <section style={{

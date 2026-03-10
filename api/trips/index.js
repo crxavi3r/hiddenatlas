@@ -52,6 +52,7 @@ export default async function handler(req, res) {
          t.duration,
          t.overview,
          t.source,
+         t."coverImage",
          t."createdAt",
          COUNT(d.id)::int AS "dayCount"
        FROM "Trip" t

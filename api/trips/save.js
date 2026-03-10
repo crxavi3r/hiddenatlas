@@ -36,6 +36,9 @@ export default async function handler(req, res) {
   if (!trip?.destination) {
     return res.status(400).json({ error: 'Missing trip data — expected { trip: { destination, ... } }' });
   }
+  const coverImage = (typeof trip.coverImage === 'string' && trip.coverImage.startsWith('http'))
+    ? trip.coverImage
+    : null;
   const validSources = ['AI_GENERATED', 'FREE_JOURNEY', 'PREMIUM_JOURNEY'];
   const tripSource = validSources.includes(source) ? source : 'AI_GENERATED';
 
@@ -70,10 +73,15 @@ export default async function handler(req, res) {
       return res.status(200).json({ id: existingId, deduplicated: true });
     }
 
+    // Ensure coverImage column exists (idempotent — no-op after first run)
+    await pool.query(
+      `ALTER TABLE "Trip" ADD COLUMN IF NOT EXISTS "coverImage" TEXT DEFAULT NULL`
+    ).catch(err => console.warn('[save] coverImage column migration warning:', err.message));
+
     // Insert Trip
     const { rows: trips } = await pool.query(
-      `INSERT INTO "Trip" (id, "userId", title, destination, country, duration, overview, highlights, hotels, experiences, source, "createdAt")
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, NOW())
+      `INSERT INTO "Trip" (id, "userId", title, destination, country, duration, overview, highlights, hotels, experiences, source, "coverImage", "createdAt")
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11, NOW())
        RETURNING id`,
       [
         userId,
@@ -86,6 +94,7 @@ export default async function handler(req, res) {
         JSON.stringify(trip.hotels       || []),
         JSON.stringify(trip.experiences  || []),
         tripSource,
+        coverImage,
       ]
     );
     const tripId = trips[0].id;
