@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Download, Calendar, BookOpen } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowRight, Download, Calendar, BookOpen, MapPin, Clock } from 'lucide-react';
 import { useUser, SignInButton } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
 
@@ -10,7 +10,76 @@ function formatDate(iso) {
   });
 }
 
-function TripCard({ trip }) {
+// ── AI Trip card ────────────────────────────────────────────────────────────
+function AiTripCard({ trip }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Link
+      to={`/my-trips/${trip.id}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: 'white', borderRadius: '10px',
+        border: '1px solid #E8E3DA', textDecoration: 'none',
+        boxShadow: hovered ? '0 20px 60px rgba(28,26,22,0.12)' : '0 2px 16px rgba(28,26,22,0.05)',
+        transform: hovered ? 'translateY(-4px)' : 'translateY(0)',
+        transition: 'box-shadow 0.3s ease, transform 0.3s ease',
+        display: 'flex', flexDirection: 'column',
+      }}
+    >
+      <div style={{ padding: '22px 22px 20px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: '5px',
+          padding: '4px 10px', borderRadius: '3px', marginBottom: '14px',
+          fontSize: '9.5px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase',
+          background: '#EFF6F5', color: '#1B6B65', alignSelf: 'flex-start',
+        }}>
+          AI Generated
+        </div>
+        <h3 style={{
+          fontFamily: "'Playfair Display', Georgia, serif",
+          fontSize: '19px', fontWeight: '600', color: '#1C1A16',
+          lineHeight: '1.3', marginBottom: '10px',
+        }}>
+          {trip.destination}
+        </h3>
+        {trip.country && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12.5px', color: '#8C8070', marginBottom: '6px' }}>
+            <MapPin size={11} strokeWidth={2} />
+            {trip.country}
+          </div>
+        )}
+        {trip.duration && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12.5px', color: '#8C8070', marginBottom: '14px' }}>
+            <Clock size={11} strokeWidth={2} />
+            {trip.duration} · {trip.dayCount} {trip.dayCount === 1 ? 'day' : 'days'}
+          </div>
+        )}
+        {trip.overview && (
+          <p style={{ fontSize: '13.5px', color: '#6B6156', lineHeight: '1.6', marginBottom: '16px', flex: 1 }}>
+            {trip.overview.length > 120 ? trip.overview.slice(0, 120) + '…' : trip.overview}
+          </p>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#9C9488', marginBottom: '20px' }}>
+          <Calendar size={12} strokeWidth={2} />
+          Saved {formatDate(trip.createdAt)}
+        </div>
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: '6px',
+          padding: '11px 16px', background: '#1B6B65', color: 'white',
+          borderRadius: '4px', fontSize: '12.5px', fontWeight: '600',
+          letterSpacing: '0.4px', textTransform: 'uppercase', alignSelf: 'stretch',
+          justifyContent: 'center',
+        }}>
+          <BookOpen size={13} /> View Itinerary
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+// ── Purchased Itinerary card ────────────────────────────────────────────────
+function PurchasedTripCard({ trip }) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -45,7 +114,6 @@ function TripCard({ trip }) {
           Purchased
         </div>
       </div>
-
       <div style={{ padding: '22px 22px 20px', display: 'flex', flexDirection: 'column', flex: 1 }}>
         <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '19px', fontWeight: '600', color: '#1C1A16', lineHeight: '1.3', marginBottom: '8px' }}>
           {trip.title}
@@ -59,7 +127,6 @@ function TripCard({ trip }) {
           <Calendar size={12} strokeWidth={2} />
           Purchased {formatDate(trip.purchasedAt)}
         </div>
-
         <div style={{ display: 'flex', gap: '10px', marginTop: 'auto', flexWrap: 'wrap' }}>
           <Link
             to={`/itineraries/${trip.slug}`}
@@ -69,14 +136,10 @@ function TripCard({ trip }) {
               padding: '11px 16px', background: '#1B6B65', color: 'white',
               borderRadius: '4px', fontSize: '12.5px', fontWeight: '600',
               letterSpacing: '0.4px', textTransform: 'uppercase', textDecoration: 'none',
-              transition: 'background 0.2s',
             }}
-            onMouseEnter={e => e.currentTarget.style.background = '#145550'}
-            onMouseLeave={e => e.currentTarget.style.background = '#1B6B65'}
           >
             <BookOpen size={13} /> View Itinerary
           </Link>
-
           {trip.pdfUrl ? (
             <a
               href={trip.pdfUrl} target="_blank" rel="noopener noreferrer"
@@ -87,10 +150,7 @@ function TripCard({ trip }) {
                 border: '1px solid #D4CCBF', borderRadius: '4px',
                 fontSize: '12.5px', fontWeight: '600',
                 letterSpacing: '0.4px', textTransform: 'uppercase', textDecoration: 'none',
-                transition: 'border-color 0.2s, color 0.2s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#1B6B65'; e.currentTarget.style.color = '#1B6B65'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#D4CCBF'; e.currentTarget.style.color = '#1C1A16'; }}
             >
               <Download size={13} /> Download PDF
             </a>
@@ -112,30 +172,32 @@ function TripCard({ trip }) {
   );
 }
 
+// ── Page ────────────────────────────────────────────────────────────────────
 export default function MyTrips() {
   const { isLoaded, isSignedIn, user } = useUser();
   const api = useApi();
-  const [trips, setTrips] = useState([]);
-  const [status, setStatus] = useState('loading'); // loading | ok | empty | error
+
+  const [aiTrips, setAiTrips] = useState([]);
+  const [purchases, setPurchases] = useState([]);
+  const [status, setStatus] = useState('loading');
 
   useEffect(() => {
     if (!isLoaded) return;
-
-    // Not signed in — show sign-in prompt, don't fetch
     if (!isSignedIn) { setStatus('unauthenticated'); return; }
 
     setStatus('loading');
-    api.get('/api/my-trips')
-      .then(res => {
-        if (!res.ok) throw new Error('Request failed');
-        return res.json();
-      })
-      .then(data => {
-        setTrips(data);
-        setStatus(data.length === 0 ? 'empty' : 'ok');
-      })
-      .catch(() => setStatus('error'));
+
+    Promise.all([
+      api.get('/api/trips').then(r => r.ok ? r.json() : []).catch(() => []),
+      api.get('/api/my-trips').then(r => r.ok ? r.json() : []).catch(() => []),
+    ]).then(([trips, bought]) => {
+      setAiTrips(trips);
+      setPurchases(bought);
+      setStatus('ok');
+    });
   }, [isLoaded, isSignedIn]);
+
+  const totalCount = aiTrips.length + purchases.length;
 
   return (
     <div style={{ background: '#FAFAF8', paddingTop: '72px', minHeight: '100vh' }}>
@@ -147,7 +209,7 @@ export default function MyTrips() {
             My Library
           </span>
           <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 'clamp(30px, 4vw, 46px)', fontWeight: '600', color: '#1C1A16', lineHeight: '1.15', marginBottom: '12px' }}>
-            Your purchased itineraries.
+            Your trips.
           </h1>
           {isSignedIn && (
             <p style={{ fontSize: '15px', color: '#6B6156', lineHeight: '1.7' }}>
@@ -168,7 +230,7 @@ export default function MyTrips() {
                 Sign in to view your trips
               </p>
               <p style={{ fontSize: '15px', color: '#6B6156', marginBottom: '28px', lineHeight: '1.7' }}>
-                Your purchased itineraries are saved to your account.
+                Your saved and purchased itineraries are stored in your account.
               </p>
               <SignInButton mode="modal">
                 <button style={{
@@ -189,38 +251,58 @@ export default function MyTrips() {
             </div>
           )}
 
-          {/* Error */}
-          {status === 'error' && (
-            <div style={{ textAlign: 'center', padding: '80px 24px', background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' }}>
-              <p style={{ fontSize: '15px', color: '#6B6156', marginBottom: '8px' }}>Couldn't load your trips right now.</p>
-              <p style={{ fontSize: '13px', color: '#9C9488' }}>Please try again in a moment.</p>
-            </div>
-          )}
-
-          {/* Empty */}
-          {status === 'empty' && (
-            <div style={{ textAlign: 'center', padding: '80px 24px', background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' }}>
-              <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600', color: '#1C1A16', marginBottom: '12px' }}>
-                No trips yet.
-              </p>
-              <p style={{ fontSize: '15px', color: '#6B6156', marginBottom: '28px', lineHeight: '1.7' }}>
-                Browse our itinerary library and unlock your first journey.
-              </p>
-              <Link to="/itineraries" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '13px 26px', background: '#1B6B65', color: 'white', borderRadius: '4px', fontSize: '13.5px', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none' }}>
-                Browse Itineraries <ArrowRight size={14} />
-              </Link>
-            </div>
-          )}
-
-          {/* Trip grid */}
+          {/* Loaded */}
           {status === 'ok' && (
             <>
-              <p style={{ fontSize: '13px', color: '#9C9488', marginBottom: '28px' }}>
-                {trips.length} {trips.length === 1 ? 'itinerary' : 'itineraries'} in your library
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '28px' }}>
-                {trips.map(trip => <TripCard key={trip.purchaseId} trip={trip} />)}
-              </div>
+              {/* Empty state */}
+              {totalCount === 0 && (
+                <div style={{ textAlign: 'center', padding: '80px 24px', background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' }}>
+                  <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600', color: '#1C1A16', marginBottom: '12px' }}>
+                    No trips yet.
+                  </p>
+                  <p style={{ fontSize: '15px', color: '#6B6156', marginBottom: '28px', lineHeight: '1.7' }}>
+                    Generate an AI itinerary or browse our curated collection.
+                  </p>
+                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <Link to="/ai-planner" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '13px 26px', background: '#1B6B65', color: 'white', borderRadius: '4px', fontSize: '13.5px', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none' }}>
+                      AI Planner <ArrowRight size={14} />
+                    </Link>
+                    <Link to="/itineraries" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '13px 26px', background: 'transparent', color: '#1C1A16', border: '1px solid #D4CCBF', borderRadius: '4px', fontSize: '13.5px', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none' }}>
+                      Browse Itineraries
+                    </Link>
+                  </div>
+                </div>
+              )}
+
+              {/* AI Trips section */}
+              {aiTrips.length > 0 && (
+                <div style={{ marginBottom: '60px' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '24px' }}>
+                    <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600', color: '#1C1A16' }}>
+                      Saved AI Trips
+                    </h2>
+                    <span style={{ fontSize: '13px', color: '#9C9488' }}>{aiTrips.length}</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '28px' }}>
+                    {aiTrips.map(trip => <AiTripCard key={trip.id} trip={trip} />)}
+                  </div>
+                </div>
+              )}
+
+              {/* Purchased Itineraries section */}
+              {purchases.length > 0 && (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '24px' }}>
+                    <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600', color: '#1C1A16' }}>
+                      Purchased Itineraries
+                    </h2>
+                    <span style={{ fontSize: '13px', color: '#9C9488' }}>{purchases.length}</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '28px' }}>
+                    {purchases.map(trip => <PurchasedTripCard key={trip.purchaseId} trip={trip} />)}
+                  </div>
+                </div>
+              )}
             </>
           )}
 

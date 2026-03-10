@@ -22,6 +22,7 @@ model User {
   updatedAt DateTime   @updatedAt
 
   purchases Purchase[]
+  trips     Trip[]
 }
 
 // ─────────────────────────────────────────────
@@ -57,6 +58,43 @@ model Purchase {
 
   user      User      @relation(fields: [userId],      references: [id])
   itinerary Itinerary @relation(fields: [itineraryId], references: [id])
+}
+
+// ─────────────────────────────────────────────
+// Trip  (AI-generated, saved by user)
+// ─────────────────────────────────────────────
+model Trip {
+  id          String    @id @default(uuid())
+  userId      String
+  title       String
+  destination String
+  country     String    @default("")
+  duration    String    @default("")
+  overview    String    @default("")
+  highlights  Json      @default("[]")  // String[]
+  hotels      Json      @default("[]")  // { name, type, note }[]
+  experiences Json      @default("[]")  // String[]
+  createdAt   DateTime  @default(now())
+
+  user User     @relation(fields: [userId], references: [id])
+  days TripDay[]
+
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────
+// TripDay  (one row per day of a saved trip)
+// ─────────────────────────────────────────────
+model TripDay {
+  id          String @id @default(uuid())
+  tripId      String
+  dayNumber   Int
+  title       String @default("")
+  description String @default("")
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
 }
 
 // ─────────────────────────────────────────────

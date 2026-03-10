@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { ArrowRight, MapPin, Clock, Star, Check } from 'lucide-react';
+import { ArrowRight, MapPin, Clock, Star, Check, BookmarkPlus, BookmarkCheck } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useAuth } from '@clerk/clerk-react';
+import { useApi } from '../lib/api';
 
 const T = {
   label: {
@@ -57,6 +59,9 @@ function FormLabel({ children }) {
 
 export default function AIPlannerPage() {
   const [searchParams] = useSearchParams();
+  const { isSignedIn } = useAuth();
+  const api = useApi();
+
   const [form, setForm] = useState({
     destination: searchParams.get('destination') || '',
     tripLength: '7–10 days',
@@ -68,8 +73,27 @@ export default function AIPlannerPage() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
+  // Save-trip state: 'idle' | 'saving' | 'saved' | 'error'
+  const [saveState, setSaveState] = useState('idle');
+  const [savedTripId, setSavedTripId] = useState(null);
+
   function set(key, val) {
     setForm(f => ({ ...f, [key]: val }));
+  }
+
+  async function handleSave() {
+    if (!result || saveState === 'saving' || saveState === 'saved') return;
+    setSaveState('saving');
+    try {
+      const res = await api.post('/api/trips/save', { trip: result });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      setSavedTripId(data.id);
+      setSaveState('saved');
+    } catch (err) {
+      console.error('[AIPlannerPage] save error:', err.message);
+      setSaveState('error');
+    }
   }
 
   async function handleGenerate() {
@@ -77,6 +101,8 @@ export default function AIPlannerPage() {
     setLoading(true);
     setResult(null);
     setError(null);
+    setSaveState('idle');
+    setSavedTripId(null);
     try {
       const res = await fetch('/api/generate-itinerary', {
         method: 'POST',
@@ -249,6 +275,64 @@ export default function AIPlannerPage() {
                 <Clock size={13} />
                 {result.duration}
               </div>
+            </div>
+
+            {/* Save Trip bar */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              gap: '14px', marginBottom: '56px',
+              padding: '18px 24px', background: 'white',
+              borderRadius: '8px', border: '1px solid #E8E3DA',
+              flexWrap: 'wrap',
+            }}>
+              {!isSignedIn ? (
+                <p style={{ fontSize: '14px', color: '#6B6156', margin: 0 }}>
+                  <Link to="/sign-in" style={{ color: '#1B6B65', fontWeight: '600', textDecoration: 'none' }}>Sign in</Link>
+                  {' '}to save this trip to your account.
+                </p>
+              ) : saveState === 'saved' ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1B6B65', fontSize: '14px', fontWeight: '600' }}>
+                    <BookmarkCheck size={17} />
+                    Trip saved to your account
+                  </div>
+                  <Link
+                    to={`/my-trips/${savedTripId}`}
+                    style={{
+                      padding: '9px 20px', background: '#EFF6F5', color: '#1B6B65',
+                      borderRadius: '4px', fontSize: '12.5px', fontWeight: '700',
+                      letterSpacing: '0.4px', textTransform: 'uppercase', textDecoration: 'none',
+                    }}
+                  >
+                    View in My Trips →
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: '14px', color: '#6B6156', margin: 0 }}>
+                    Happy with this itinerary?
+                  </p>
+                  <button
+                    onClick={handleSave}
+                    disabled={saveState === 'saving'}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '8px',
+                      padding: '11px 24px',
+                      background: saveState === 'saving' ? '#B5AA99' : '#1B6B65',
+                      color: 'white', border: 'none', borderRadius: '4px',
+                      fontSize: '13px', fontWeight: '700', letterSpacing: '0.5px',
+                      textTransform: 'uppercase', cursor: saveState === 'saving' ? 'default' : 'pointer',
+                      transition: 'background 0.2s',
+                    }}
+                  >
+                    <BookmarkPlus size={15} />
+                    {saveState === 'saving' ? 'Saving…' : 'Save this trip'}
+                  </button>
+                  {saveState === 'error' && (
+                    <span style={{ fontSize: '13px', color: '#A0522D' }}>Save failed — please try again.</span>
+                  )}
+                </>
+              )}
             </div>
 
             {/* Highlights */}
