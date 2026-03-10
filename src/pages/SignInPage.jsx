@@ -146,7 +146,7 @@ export default function SignInPage() {
                 padding: '10px 14px', borderRadius: '8px',
                 border: '1.5px solid #E5E0D8', fontSize: '15px',
                 outline: 'none', color: '#1C1A16',
-                background: 'white',
+                background: 'white', width: '100%', boxSizing: 'border-box',
               }}
             />
           </div>
@@ -163,7 +163,7 @@ export default function SignInPage() {
                 padding: '10px 14px', borderRadius: '8px',
                 border: '1.5px solid #E5E0D8', fontSize: '15px',
                 outline: 'none', color: '#1C1A16',
-                background: 'white',
+                background: 'white', width: '100%', boxSizing: 'border-box',
               }}
             />
           </div>
