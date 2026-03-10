@@ -350,7 +350,7 @@ export default function MyTrips() {
                 <div style={{ marginBottom: '60px' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '24px' }}>
                     <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600', color: '#1C1A16' }}>
-                      Saved AI Trips
+                      Saved Trips
                     </h2>
                     <span style={{ fontSize: '13px', color: '#9C9488' }}>{aiTrips.length}</span>
                   </div>
