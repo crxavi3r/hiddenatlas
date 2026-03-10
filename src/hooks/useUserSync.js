@@ -5,11 +5,11 @@ import { useAuth } from '@clerk/clerk-react';
 // after Clerk confirms the user is signed in. The function verifies the JWT
 // server-side and upserts the User row in Neon. No user data sent from client.
 export function useUserSync() {
-  const { isSignedIn, isLoaded, getToken } = useAuth();
+  const { userId, getToken } = useAuth();
   const synced = useRef(false);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || synced.current) return;
+    if (!userId || synced.current) return;
 
     async function run() {
       synced.current = true;
@@ -34,5 +34,5 @@ export function useUserSync() {
     }
 
     run();
-  }, [isSignedIn, isLoaded]);
+  }, [userId]);
 }
