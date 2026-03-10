@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, Star, Check, MapPin, Calendar } from 'lucide-react';
+import { ArrowLeft, Clock, Star, Check, MapPin, Calendar, Download } from 'lucide-react';
 import { useAuth } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
 
@@ -10,18 +10,23 @@ const T = {
     fontSize: '10.5px', fontWeight: '700', letterSpacing: '2.5px',
     textTransform: 'uppercase', color: '#1B6B65', marginBottom: '14px',
   },
-  h2: {
-    fontFamily: "'Playfair Display', Georgia, serif",
-    fontSize: 'clamp(28px, 3.8vw, 48px)',
-    fontWeight: '600', color: '#1C1A16',
-    lineHeight: '1.18', letterSpacing: '-0.5px',
-  },
 };
 
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-GB', {
     day: 'numeric', month: 'long', year: 'numeric',
   });
+}
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 export default function TripDetailPage() {
@@ -32,6 +37,8 @@ export default function TripDetailPage() {
 
   const [trip, setTrip] = useState(null);
   const [status, setStatus] = useState('loading');
+  // 'idle' | 'downloading' | 'done' | 'error'
+  const [downloadState, setDownloadState] = useState('idle');
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -50,6 +57,25 @@ export default function TripDetailPage() {
       })
       .catch(() => setStatus('error'));
   }, [isLoaded, isSignedIn, id]);
+
+  async function handleDownload() {
+    if (!trip || downloadState === 'downloading') return;
+    setDownloadState('downloading');
+    try {
+      const [{ pdf }, { TripPDF }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('../components/TripPDF'),
+      ]);
+      const { createElement } = await import('react');
+      const blob = await pdf(createElement(TripPDF, { trip })).toBlob();
+      const filename = `${trip.destination.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-itinerary.pdf`;
+      triggerDownload(blob, filename);
+      setDownloadState('done');
+    } catch (err) {
+      console.error('[TripDetailPage] download error:', err.message);
+      setDownloadState('error');
+    }
+  }
 
   if (status === 'loading') {
     return (
@@ -72,8 +98,8 @@ export default function TripDetailPage() {
     );
   }
 
-  const highlights = Array.isArray(trip.highlights) ? trip.highlights : [];
-  const hotels = Array.isArray(trip.hotels) ? trip.hotels : [];
+  const highlights  = Array.isArray(trip.highlights)  ? trip.highlights  : [];
+  const hotels      = Array.isArray(trip.hotels)      ? trip.hotels      : [];
   const experiences = Array.isArray(trip.experiences) ? trip.experiences : [];
 
   return (
@@ -93,8 +119,7 @@ export default function TripDetailPage() {
       <section style={{
         background: 'linear-gradient(135deg, #0D3834 0%, #1B6B65 100%)',
         padding: 'clamp(48px, 7vw, 88px) 24px',
-        textAlign: 'center',
-        marginTop: '16px',
+        textAlign: 'center', marginTop: '16px',
       }}>
         <div style={{ maxWidth: '640px', margin: '0 auto' }}>
           {trip.country && (
@@ -105,8 +130,7 @@ export default function TripDetailPage() {
           )}
           <h1 style={{
             fontFamily: "'Playfair Display', Georgia, serif",
-            fontSize: 'clamp(32px, 5vw, 58px)',
-            fontWeight: '600', color: 'white',
+            fontSize: 'clamp(32px, 5vw, 58px)', fontWeight: '600', color: 'white',
             lineHeight: '1.12', letterSpacing: '-0.5px', marginBottom: '20px',
           }}>
             {trip.destination}
@@ -116,7 +140,7 @@ export default function TripDetailPage() {
               {trip.overview}
             </p>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
             {trip.duration && (
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '7px 16px', background: 'rgba(255,255,255,0.12)', borderRadius: '20px', fontSize: '12.5px', color: 'rgba(255,255,255,0.8)', fontWeight: '600' }}>
                 <Clock size={12} />
@@ -127,7 +151,31 @@ export default function TripDetailPage() {
               <Calendar size={12} />
               Saved {formatDate(trip.createdAt)}
             </div>
+            {/* Download button */}
+            <button
+              onClick={handleDownload}
+              disabled={downloadState === 'downloading'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '7px',
+                padding: '7px 18px',
+                background: downloadState === 'downloading' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.15)',
+                color: 'white', border: '1px solid rgba(255,255,255,0.3)',
+                borderRadius: '20px', fontSize: '12.5px', fontWeight: '600',
+                cursor: downloadState === 'downloading' ? 'default' : 'pointer',
+                transition: 'background 0.2s',
+              }}
+              onMouseEnter={e => { if (downloadState !== 'downloading') e.currentTarget.style.background = 'rgba(255,255,255,0.22)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = downloadState === 'downloading' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.15)'; }}
+            >
+              <Download size={12} />
+              {downloadState === 'downloading' ? 'Preparing…' : 'Download PDF'}
+            </button>
           </div>
+          {downloadState === 'error' && (
+            <p style={{ fontSize: '12px', color: 'rgba(255,180,100,0.9)', marginTop: '10px' }}>
+              Download failed — please try again.
+            </p>
+          )}
         </div>
       </section>
 

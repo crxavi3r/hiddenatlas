@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowRight, MapPin, Clock, Star, Check, BookmarkPlus, BookmarkCheck } from 'lucide-react';
+import { ArrowRight, MapPin, Clock, Star, Check, BookmarkPlus, BookmarkCheck, Download } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
@@ -28,17 +28,12 @@ function OptionChip({ label, active, onClick }) {
     <button
       onClick={onClick}
       style={{
-        padding: '9px 18px',
-        borderRadius: '4px',
-        fontSize: '13px',
-        fontWeight: '500',
-        border: '1px solid',
+        padding: '9px 18px', borderRadius: '4px',
+        fontSize: '13px', fontWeight: '500', border: '1px solid',
         borderColor: active ? '#1B6B65' : '#E8E3DA',
         background: active ? '#EFF6F5' : 'white',
         color: active ? '#1B6B65' : '#6B6156',
-        cursor: 'pointer',
-        transition: 'all 0.15s',
-        whiteSpace: 'nowrap',
+        cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap',
       }}
     >
       {label}
@@ -48,13 +43,22 @@ function OptionChip({ label, active, onClick }) {
 
 function FormLabel({ children }) {
   return (
-    <p style={{
-      fontSize: '13px', fontWeight: '600', letterSpacing: '0.3px',
-      color: '#1C1A16', marginBottom: '12px',
-    }}>
+    <p style={{ fontSize: '13px', fontWeight: '600', letterSpacing: '0.3px', color: '#1C1A16', marginBottom: '12px' }}>
       {children}
     </p>
   );
+}
+
+// Trigger a browser file download from a Blob
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 export default function AIPlannerPage() {
@@ -73,16 +77,22 @@ export default function AIPlannerPage() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
-  // Save-trip state: 'idle' | 'saving' | 'saved' | 'error'
+  // 'idle' | 'saving' | 'saved' | 'error'
   const [saveState, setSaveState] = useState('idle');
   const [savedTripId, setSavedTripId] = useState(null);
+
+  // 'idle' | 'downloading' | 'done' | 'error'
+  const [downloadState, setDownloadState] = useState('idle');
 
   function set(key, val) {
     setForm(f => ({ ...f, [key]: val }));
   }
 
-  async function handleSave() {
-    if (!result || saveState === 'saving' || saveState === 'saved') return;
+  // Ensures the trip is saved exactly once per session.
+  // Returns the trip id (existing or newly created), or null on failure.
+  async function ensureSaved() {
+    if (savedTripId) return savedTripId;
+    if (saveState === 'saving') return null;
     setSaveState('saving');
     try {
       const res = await api.post('/api/trips/save', { trip: result });
@@ -90,9 +100,43 @@ export default function AIPlannerPage() {
       if (!res.ok) throw new Error(data.error || 'Save failed');
       setSavedTripId(data.id);
       setSaveState('saved');
+      return data.id;
     } catch (err) {
       console.error('[AIPlannerPage] save error:', err.message);
       setSaveState('error');
+      return null;
+    }
+  }
+
+  async function handleSave() {
+    if (saveState === 'saved' || saveState === 'saving') return;
+    await ensureSaved();
+  }
+
+  async function handleDownload() {
+    if (!result || downloadState === 'downloading') return;
+    setDownloadState('downloading');
+    try {
+      // Auto-save first if signed in and not yet saved
+      if (isSignedIn && !savedTripId) {
+        await ensureSaved();
+        // Download continues even if save failed
+      }
+
+      // Lazy-load the PDF library to keep initial bundle small
+      const [{ pdf }, { TripPDF }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('../components/TripPDF'),
+      ]);
+
+      const { createElement } = await import('react');
+      const blob = await pdf(createElement(TripPDF, { trip: result })).toBlob();
+      const filename = `${result.destination.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-itinerary.pdf`;
+      triggerDownload(blob, filename);
+      setDownloadState('done');
+    } catch (err) {
+      console.error('[AIPlannerPage] download error:', err.message);
+      setDownloadState('error');
     }
   }
 
@@ -103,6 +147,7 @@ export default function AIPlannerPage() {
     setError(null);
     setSaveState('idle');
     setSavedTripId(null);
+    setDownloadState('idle');
     try {
       const res = await fetch('/api/generate-itinerary', {
         method: 'POST',
@@ -128,8 +173,7 @@ export default function AIPlannerPage() {
       {/* Hero */}
       <section style={{
         background: 'linear-gradient(135deg, #0D3834 0%, #1B6B65 100%)',
-        padding: 'clamp(56px, 8vw, 100px) 24px',
-        textAlign: 'center',
+        padding: 'clamp(56px, 8vw, 100px) 24px', textAlign: 'center',
       }}>
         <div style={{ maxWidth: '640px', margin: '0 auto' }}>
           <span style={{ ...T.label, color: '#C9A96E', display: 'block', textAlign: 'center' }}>
@@ -137,8 +181,7 @@ export default function AIPlannerPage() {
           </span>
           <h1 style={{
             fontFamily: "'Playfair Display', Georgia, serif",
-            fontSize: 'clamp(36px, 5vw, 62px)',
-            fontWeight: '600', color: 'white',
+            fontSize: 'clamp(36px, 5vw, 62px)', fontWeight: '600', color: 'white',
             lineHeight: '1.12', letterSpacing: '-0.5px', marginBottom: '20px',
           }}>
             Plan your journey
@@ -157,11 +200,7 @@ export default function AIPlannerPage() {
           <div style={{ marginBottom: '36px' }}>
             <FormLabel>Where do you want to go?</FormLabel>
             <div style={{ position: 'relative' }}>
-              <MapPin
-                size={16}
-                color="#8C8070"
-                style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
-              />
+              <MapPin size={16} color="#8C8070" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
               <input
                 type="text"
                 value={form.destination}
@@ -172,8 +211,7 @@ export default function AIPlannerPage() {
                   width: '100%', padding: '14px 16px 14px 42px',
                   border: '1px solid #D4CCBF', borderRadius: '4px',
                   fontSize: '15px', color: '#1C1A16', background: '#FAFAF8',
-                  outline: 'none', boxSizing: 'border-box',
-                  transition: 'border-color 0.2s',
+                  outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s',
                 }}
                 onFocus={e => e.target.style.borderColor = '#1B6B65'}
                 onBlur={e => e.target.style.borderColor = '#D4CCBF'}
@@ -185,9 +223,7 @@ export default function AIPlannerPage() {
           <div style={{ marginBottom: '28px' }}>
             <FormLabel>Trip length</FormLabel>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {TRIP_LENGTHS.map(l => (
-                <OptionChip key={l} label={l} active={form.tripLength === l} onClick={() => set('tripLength', l)} />
-              ))}
+              {TRIP_LENGTHS.map(l => <OptionChip key={l} label={l} active={form.tripLength === l} onClick={() => set('tripLength', l)} />)}
             </div>
           </div>
 
@@ -195,9 +231,7 @@ export default function AIPlannerPage() {
           <div style={{ marginBottom: '28px' }}>
             <FormLabel>Travel style</FormLabel>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {STYLES.map(s => (
-                <OptionChip key={s} label={s} active={form.style === s} onClick={() => set('style', s)} />
-              ))}
+              {STYLES.map(s => <OptionChip key={s} label={s} active={form.style === s} onClick={() => set('style', s)} />)}
             </div>
           </div>
 
@@ -205,9 +239,7 @@ export default function AIPlannerPage() {
           <div style={{ marginBottom: '28px' }}>
             <FormLabel>Budget</FormLabel>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {BUDGETS.map(b => (
-                <OptionChip key={b} label={b} active={form.budget === b} onClick={() => set('budget', b)} />
-              ))}
+              {BUDGETS.map(b => <OptionChip key={b} label={b} active={form.budget === b} onClick={() => set('budget', b)} />)}
             </div>
           </div>
 
@@ -215,9 +247,7 @@ export default function AIPlannerPage() {
           <div style={{ marginBottom: '44px' }}>
             <FormLabel>Travelling as</FormLabel>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {GROUPS.map(g => (
-                <OptionChip key={g} label={g} active={form.groupType === g} onClick={() => set('groupType', g)} />
-              ))}
+              {GROUPS.map(g => <OptionChip key={g} label={g} active={form.groupType === g} onClick={() => set('groupType', g)} />)}
             </div>
           </div>
 
@@ -241,9 +271,7 @@ export default function AIPlannerPage() {
                 Generating your itinerary…
               </>
             ) : (
-              <>
-                Generate itinerary <ArrowRight size={15} />
-              </>
+              <>Generate itinerary <ArrowRight size={15} /></>
             )}
           </button>
 
@@ -264,8 +292,8 @@ export default function AIPlannerPage() {
         <section id="ai-result" style={{ padding: 'clamp(56px, 7vw, 100px) 24px', background: '#FAFAF8' }}>
           <div style={{ maxWidth: '900px', margin: '0 auto' }}>
 
-            {/* Header */}
-            <div style={{ textAlign: 'center', marginBottom: '64px' }}>
+            {/* Destination header */}
+            <div style={{ textAlign: 'center', marginBottom: '48px' }}>
               <span style={T.label}>{result.country}</span>
               <h2 style={T.h2}>{result.destination}</h2>
               <p style={{ fontSize: '17px', color: '#4A433A', lineHeight: '1.8', maxWidth: '600px', margin: '18px auto 24px' }}>
@@ -277,61 +305,86 @@ export default function AIPlannerPage() {
               </div>
             </div>
 
-            {/* Save Trip bar */}
+            {/* ── Actions bar ─────────────────────────────────────────── */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              gap: '14px', marginBottom: '56px',
-              padding: '18px 24px', background: 'white',
-              borderRadius: '8px', border: '1px solid #E8E3DA',
+              gap: '12px', marginBottom: '56px', padding: '18px 24px',
+              background: 'white', borderRadius: '8px', border: '1px solid #E8E3DA',
               flexWrap: 'wrap',
             }}>
-              {!isSignedIn ? (
-                <p style={{ fontSize: '14px', color: '#6B6156', margin: 0 }}>
+              {isSignedIn ? (
+                <>
+                  {/* Save state */}
+                  {saveState === 'saved' ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1B6B65', fontSize: '14px', fontWeight: '600' }}>
+                      <BookmarkCheck size={16} />
+                      Saved
+                      <Link
+                        to={`/my-trips/${savedTripId}`}
+                        style={{
+                          marginLeft: '4px', padding: '6px 14px',
+                          background: '#EFF6F5', color: '#1B6B65', borderRadius: '4px',
+                          fontSize: '12px', fontWeight: '700', letterSpacing: '0.4px',
+                          textTransform: 'uppercase', textDecoration: 'none',
+                        }}
+                      >
+                        View in My Trips →
+                      </Link>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleSave}
+                      disabled={saveState === 'saving'}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '7px',
+                        padding: '11px 20px',
+                        background: saveState === 'saving' ? '#B5AA99' : '#1B6B65',
+                        color: 'white', border: 'none', borderRadius: '4px',
+                        fontSize: '13px', fontWeight: '700', letterSpacing: '0.5px',
+                        textTransform: 'uppercase', cursor: saveState === 'saving' ? 'default' : 'pointer',
+                        transition: 'background 0.2s',
+                      }}
+                    >
+                      <BookmarkPlus size={14} />
+                      {saveState === 'saving' ? 'Saving…' : 'Save this trip'}
+                    </button>
+                  )}
+                  {saveState === 'error' && (
+                    <span style={{ fontSize: '12px', color: '#A0522D' }}>Save failed — try again</span>
+                  )}
+
+                  {/* Divider */}
+                  <div style={{ width: '1px', height: '22px', background: '#E8E3DA', flexShrink: 0 }} />
+                </>
+              ) : (
+                <p style={{ fontSize: '13.5px', color: '#6B6156', margin: 0 }}>
                   <Link to="/sign-in" style={{ color: '#1B6B65', fontWeight: '600', textDecoration: 'none' }}>Sign in</Link>
                   {' '}to save this trip to your account.
                 </p>
-              ) : saveState === 'saved' ? (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#1B6B65', fontSize: '14px', fontWeight: '600' }}>
-                    <BookmarkCheck size={17} />
-                    Trip saved to your account
-                  </div>
-                  <Link
-                    to={`/my-trips/${savedTripId}`}
-                    style={{
-                      padding: '9px 20px', background: '#EFF6F5', color: '#1B6B65',
-                      borderRadius: '4px', fontSize: '12.5px', fontWeight: '700',
-                      letterSpacing: '0.4px', textTransform: 'uppercase', textDecoration: 'none',
-                    }}
-                  >
-                    View in My Trips →
-                  </Link>
-                </>
-              ) : (
-                <>
-                  <p style={{ fontSize: '14px', color: '#6B6156', margin: 0 }}>
-                    Happy with this itinerary?
-                  </p>
-                  <button
-                    onClick={handleSave}
-                    disabled={saveState === 'saving'}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: '8px',
-                      padding: '11px 24px',
-                      background: saveState === 'saving' ? '#B5AA99' : '#1B6B65',
-                      color: 'white', border: 'none', borderRadius: '4px',
-                      fontSize: '13px', fontWeight: '700', letterSpacing: '0.5px',
-                      textTransform: 'uppercase', cursor: saveState === 'saving' ? 'default' : 'pointer',
-                      transition: 'background 0.2s',
-                    }}
-                  >
-                    <BookmarkPlus size={15} />
-                    {saveState === 'saving' ? 'Saving…' : 'Save this trip'}
-                  </button>
-                  {saveState === 'error' && (
-                    <span style={{ fontSize: '13px', color: '#A0522D' }}>Save failed — please try again.</span>
-                  )}
-                </>
+              )}
+
+              {/* Download button — available to all */}
+              <button
+                onClick={handleDownload}
+                disabled={downloadState === 'downloading'}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '7px',
+                  padding: '11px 20px',
+                  background: downloadState === 'downloading' ? '#B5AA99' : 'white',
+                  color: downloadState === 'downloading' ? 'white' : '#1C1A16',
+                  border: '1px solid',
+                  borderColor: downloadState === 'downloading' ? '#B5AA99' : '#D4CCBF',
+                  borderRadius: '4px', fontSize: '13px', fontWeight: '700',
+                  letterSpacing: '0.5px', textTransform: 'uppercase',
+                  cursor: downloadState === 'downloading' ? 'default' : 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <Download size={14} />
+                {downloadState === 'downloading' ? 'Preparing PDF…' : 'Download PDF'}
+              </button>
+              {downloadState === 'error' && (
+                <span style={{ fontSize: '12px', color: '#A0522D' }}>Download failed — try again</span>
               )}
             </div>
 
@@ -393,9 +446,8 @@ export default function AIPlannerPage() {
               </section>
             )}
 
-            {/* Hotels + Experiences side by side */}
+            {/* Hotels + Experiences */}
             <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '28px', marginBottom: '60px' }}>
-
               {result.hotels?.length > 0 && (
                 <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA', padding: '28px' }}>
                   <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '19px', fontWeight: '600', color: '#1C1A16', marginBottom: '20px' }}>
@@ -412,7 +464,6 @@ export default function AIPlannerPage() {
                   </div>
                 </div>
               )}
-
               {result.experiences?.length > 0 && (
                 <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA', padding: '28px' }}>
                   <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '19px', fontWeight: '600', color: '#1C1A16', marginBottom: '20px' }}>
@@ -433,8 +484,7 @@ export default function AIPlannerPage() {
             {/* CTA */}
             <div style={{
               background: 'linear-gradient(135deg, #0D3834, #1B6B65)',
-              borderRadius: '12px', padding: '44px 48px',
-              textAlign: 'center',
+              borderRadius: '12px', padding: '44px 48px', textAlign: 'center',
             }}>
               <span style={{ ...T.label, color: '#C9A96E', textAlign: 'center', display: 'block' }}>
                 Take it further
