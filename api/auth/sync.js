@@ -17,7 +17,13 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'DATABASE_URL not configured' });
   }
 
-  // ── 2. Verify Clerk JWT — clerkId comes from the token, never from body ──
+  // ── 2. Require Bearer token — reject immediately if header is missing ──────
+  if (!req.headers.authorization?.startsWith('Bearer ')) {
+    console.warn('[api/auth/sync] request rejected — missing Authorization header');
+    return res.status(401).json({ error: 'Missing authorization header' });
+  }
+
+  // ── 3. Verify Clerk JWT — clerkId comes from the token, never from body ──
   let clerkId;
   try {
     clerkId = await verifyAuth(req.headers.authorization);
@@ -25,7 +31,7 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
-  // ── 3. Fetch fresh profile from Clerk ───────────────────────
+  // ── 4. Fetch fresh profile from Clerk ───────────────────────
   let email, name;
   try {
     const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
@@ -37,7 +43,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Failed to fetch Clerk user profile' });
   }
 
-  // ── 4. Upsert into Neon ─────────────────────────────────────
+  // ── 5. Upsert into Neon ─────────────────────────────────────
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
     const { rows } = await pool.query(

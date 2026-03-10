@@ -1,38 +1,60 @@
 import { useEffect, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 
-// Calls the Vercel serverless function at /api/auth/sync once per session
-// after Clerk confirms the user is signed in. The function verifies the JWT
-// server-side and upserts the User row in Neon. No user data sent from client.
+/**
+ * Syncs the authenticated Clerk user to the Neon database once per session.
+ *
+ * Mobile-safe design:
+ * - Waits for isLoaded AND isSignedIn before attempting sync.
+ * - Calls getToken() only after Clerk is fully initialised.
+ * - Never sends a request without a valid Bearer token.
+ * - Marks synced only after a confirmed 200 response.
+ * - Resets on sign-out so a subsequent sign-in re-syncs correctly.
+ */
 export function useUserSync() {
-  const { userId, getToken } = useAuth();
+  const { isLoaded, isSignedIn, userId, getToken } = useAuth();
   const synced = useRef(false);
 
+  // Reset on sign-out so the next sign-in triggers a fresh sync.
   useEffect(() => {
-    if (!userId || synced.current) return;
+    if (isLoaded && !isSignedIn) {
+      synced.current = false;
+    }
+  }, [isLoaded, isSignedIn]);
+
+  useEffect(() => {
+    // All three conditions must be true before attempting sync.
+    if (!isLoaded || !isSignedIn || !userId || synced.current) return;
 
     async function run() {
-      synced.current = true;
       try {
         const token = await getToken();
+
+        // getToken() can return null if Clerk has not yet exchanged the OAuth
+        // code for a session token (common on mobile after redirect). Bail out
+        // without marking synced — the effect will retry when dependencies update.
+        if (!token) {
+          console.warn('[useUserSync] getToken() returned null — will retry');
+          return;
+        }
+
         const res = await fetch('/api/auth/sync', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({}),
         });
-        if (!res.ok) {
+
+        if (res.ok) {
+          synced.current = true;
+        } else {
           console.error('[useUserSync] sync failed — HTTP', res.status);
-          synced.current = false;
         }
       } catch (err) {
         console.error('[useUserSync] network error:', err.message);
-        synced.current = false;
       }
     }
 
     run();
-  }, [userId]);
+  }, [isLoaded, isSignedIn, userId]);
 }
