@@ -8,7 +8,12 @@ const { Pool } = pg;
 // POST   /api/trips/:id — log a DOWNLOADED event
 // DELETE /api/trips/:id — delete trip + log DELETED event
 export default async function handler(req, res) {
-  const { id } = req.query;
+  // req.query.id is set by Vercel's dynamic route matching.
+  // When the route is reached via the /api/(.*) passthrough rewrite, Vercel may
+  // not populate req.query with path params — fall back to parsing from req.url.
+  const id = req.query.id
+    || (/\/api\/trips\/([^/?]+)/.exec(req.url || '') || [])[1];
+  console.log('[trips/id] method:', req.method, '| id:', id, '| req.query:', JSON.stringify(req.query), '| url:', req.url);
   if (!id) return res.status(400).json({ error: 'Missing trip id' });
 
   if (!['GET', 'POST', 'DELETE'].includes(req.method)) {
@@ -48,7 +53,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const { rows: trips } = await pool.query(
         `SELECT id, title, destination, country, duration, overview,
-                highlights, hotels, experiences, "createdAt"
+                highlights, hotels, experiences, source, "createdAt"
          FROM "Trip"
          WHERE id = $1 AND "userId" = $2`,
         [id, userId]

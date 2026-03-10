@@ -31,11 +31,13 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
-  const { trip } = req.body || {};
-  console.log('[save] trip.destination:', trip?.destination);
+  const { trip, source = 'AI_GENERATED' } = req.body || {};
+  console.log('[save] trip.destination:', trip?.destination, '| source:', source);
   if (!trip?.destination) {
     return res.status(400).json({ error: 'Missing trip data — expected { trip: { destination, ... } }' });
   }
+  const validSources = ['AI_GENERATED', 'FREE_JOURNEY', 'PREMIUM_JOURNEY'];
+  const tripSource = validSources.includes(source) ? source : 'AI_GENERATED';
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
@@ -49,16 +51,18 @@ export default async function handler(req, res) {
     }
     const userId = users[0].id;
 
-    // Deduplication: if this user already saved a trip to the same destination
-    // within the last hour, return that trip instead of creating a duplicate.
+    // Deduplication: same user + same destination + same source within 1 hour.
+    // Source is included so AI_GENERATED and FREE_JOURNEY are treated as distinct
+    // even when the destination string happens to be the same.
     const { rows: existing } = await pool.query(
       `SELECT id FROM "Trip"
        WHERE "userId" = $1
          AND destination = $2
+         AND source = $3
          AND "createdAt" > NOW() - INTERVAL '1 hour'
        ORDER BY "createdAt" DESC
        LIMIT 1`,
-      [userId, trip.destination]
+      [userId, trip.destination, tripSource]
     );
     if (existing.length) {
       const existingId = existing[0].id;
@@ -68,8 +72,8 @@ export default async function handler(req, res) {
 
     // Insert Trip
     const { rows: trips } = await pool.query(
-      `INSERT INTO "Trip" (id, "userId", title, destination, country, duration, overview, highlights, hotels, experiences, "createdAt")
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, NOW())
+      `INSERT INTO "Trip" (id, "userId", title, destination, country, duration, overview, highlights, hotels, experiences, source, "createdAt")
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, NOW())
        RETURNING id`,
       [
         userId,
@@ -81,6 +85,7 @@ export default async function handler(req, res) {
         JSON.stringify(trip.highlights   || []),
         JSON.stringify(trip.hotels       || []),
         JSON.stringify(trip.experiences  || []),
+        tripSource,
       ]
     );
     const tripId = trips[0].id;

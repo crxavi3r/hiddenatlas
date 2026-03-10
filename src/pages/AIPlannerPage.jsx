@@ -102,7 +102,7 @@ export default function AIPlannerPage() {
     console.log('[ensureSaved] calling POST /api/trips/save for:', result?.destination);
     setSaveState('saving');
     try {
-      const res = await api.post('/api/trips/save', { trip: result });
+      const res = await api.post('/api/trips/save', { trip: result, source: 'AI_GENERATED' });
       const data = await res.json();
       console.log('[ensureSaved] response status:', res.status, 'data:', data);
       if (!res.ok) throw new Error(data.error || 'Save failed');

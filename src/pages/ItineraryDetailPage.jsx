@@ -96,24 +96,21 @@ function LockedSidebar({ itinerary, onBuy, purchasing }) {
 // ─────────────────────────────────────────────────────────────
 // Sidebar — unlocked state
 // ─────────────────────────────────────────────────────────────
-function UnlockedSidebar({ itinerary, pdfUrl }) {
+function UnlockedSidebar({ itinerary, onDownload }) {
   const { price, included = [], title } = itinerary;
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState(null);
 
   async function handleDownload() {
-    if (pdfUrl) {
-      window.open(pdfUrl, '_blank', 'noopener,noreferrer');
-      return;
-    }
-    // Fallback: generate PDF client-side
     if (downloading) return;
     setDownloading(true);
     setDownloadError(null);
     try {
-      await downloadItineraryPDF(itinerary);
+      // onDownload handles save + audit + actual file delivery
+      await onDownload();
     } catch (err) {
-      setDownloadError('PDF generation failed. Please try again.');
+      console.error('[UnlockedSidebar] download error:', err.message);
+      setDownloadError(err.message || 'PDF generation failed. Please try again.');
     } finally {
       setDownloading(false);
     }
@@ -368,75 +365,96 @@ export default function ItineraryDetailPage() {
     }
   }
 
-  // Persist a free curated itinerary to the Trip table (same model as AI trips).
+  // Persist a curated itinerary to the Trip table (same model as AI trips).
+  // source: 'FREE_JOURNEY' | 'PREMIUM_JOURNEY'
   // Returns the trip id on success, null on failure. Deduplicates within session.
-  async function ensureItinerarySaved() {
+  async function ensureItinerarySaved(source) {
     if (savedItineraryId) {
-      console.log('[FreeSidebar] already saved this session, reusing tripId:', savedItineraryId);
+      console.log('[ItineraryDetail] already saved this session, reusing tripId:', savedItineraryId);
       return savedItineraryId;
     }
     if (itinerarySaveState === 'saving') {
-      console.warn('[FreeSidebar] save already in progress');
+      console.warn('[ItineraryDetail] save already in progress');
       return null;
     }
 
     const tripPayload = {
       destination: itinerary.title,
-      country:     itinerary.country    || '',
-      duration:    itinerary.duration   || '',
+      country:     itinerary.country     || '',
+      duration:    itinerary.duration    || '',
       overview:    itinerary.description || '',
-      highlights:  itinerary.highlights || [],
-      hotels:      itinerary.hotels     || [],
-      experiences: itinerary.bestFor    || [],
+      highlights:  itinerary.highlights  || [],
+      hotels:      itinerary.hotels      || [],
+      experiences: itinerary.bestFor     || [],
       days: (itinerary.days || []).map(d => ({
         day:         d.day,
-        title:       d.title       || '',
+        title:       d.title || '',
         description: d.desc || d.description || '',
       })),
     };
 
-    console.log('[FreeSidebar] calling POST /api/trips/save for:', itinerary.title);
+    console.log('[ItineraryDetail] calling POST /api/trips/save — source:', source, '| title:', itinerary.title);
     setItinerarySaveState('saving');
     try {
-      const res = await api.post('/api/trips/save', { trip: tripPayload });
+      const res = await api.post('/api/trips/save', { trip: tripPayload, source });
       const data = await res.json();
-      console.log('[FreeSidebar] save response status:', res.status, 'data:', data);
+      console.log('[ItineraryDetail] save response status:', res.status, 'data:', data);
       if (!res.ok) throw new Error(data.error || 'Save failed');
       setSavedItineraryId(data.id);
       setItinerarySaveState('saved');
-      console.log('[FreeSidebar] trip saved successfully, tripId:', data.id, data.deduplicated ? '(deduplicated)' : '(new)');
+      console.log('[ItineraryDetail] trip saved, tripId:', data.id, data.deduplicated ? '(deduplicated)' : '(new)');
       return data.id;
     } catch (err) {
-      console.error('[FreeSidebar] save failed:', err.message);
+      console.error('[ItineraryDetail] save failed:', err.message);
       setItinerarySaveState('error');
       return null;
     }
   }
 
-  // Handler passed to FreeSidebar. For signed-in users: save first, then download.
+  // Passed to FreeSidebar: save as FREE_JOURNEY then download PDF.
   async function handleFreeDownload() {
-    console.log('[FreeSidebar] Download Free clicked — isLoaded:', isLoaded, 'isSignedIn:', isSignedIn, 'savedItineraryId:', savedItineraryId);
-
+    console.log('[ItineraryDetail] Download Free clicked — isLoaded:', isLoaded, 'isSignedIn:', isSignedIn);
     if (isLoaded && isSignedIn) {
-      const tripId = await ensureItinerarySaved();
+      const tripId = await ensureItinerarySaved('FREE_JOURNEY');
       if (!tripId) {
-        console.error('[FreeSidebar] auto-save failed — aborting download so trip is not lost silently');
+        console.error('[ItineraryDetail] auto-save failed — aborting download');
         throw new Error('Could not save trip — please try again.');
       }
-      // Fire-and-forget audit event
       api.post(`/api/trips/${tripId}`, {
         eventType: 'DOWNLOADED',
         metadata:  { source: 'free_itinerary', destination: itinerary.title },
-      }).catch(err => console.warn('[FreeSidebar] download audit failed:', err.message));
+      }).catch(err => console.warn('[ItineraryDetail] audit failed:', err.message));
     } else if (!isLoaded) {
-      console.warn('[FreeSidebar] Clerk not yet loaded — proceeding without save');
+      console.warn('[ItineraryDetail] Clerk not loaded — proceeding without save');
     } else {
-      console.log('[FreeSidebar] user not signed in — proceeding without save');
+      console.log('[ItineraryDetail] not signed in — proceeding without save');
     }
-
-    console.log('[FreeSidebar] proceeding with PDF generation');
+    console.log('[ItineraryDetail] proceeding with PDF generation (free)');
     await downloadItineraryPDF(itinerary);
-    console.log('[FreeSidebar] PDF download triggered successfully');
+  }
+
+  // Passed to UnlockedSidebar: save as PREMIUM_JOURNEY then download.
+  async function handlePremiumDownload() {
+    console.log('[ItineraryDetail] Download PDF (premium) clicked — isLoaded:', isLoaded, 'isSignedIn:', isSignedIn);
+    if (isLoaded && isSignedIn) {
+      const tripId = await ensureItinerarySaved('PREMIUM_JOURNEY');
+      if (!tripId) {
+        console.error('[ItineraryDetail] premium auto-save failed — aborting download');
+        throw new Error('Could not save trip — please try again.');
+      }
+      api.post(`/api/trips/${tripId}`, {
+        eventType: 'DOWNLOADED',
+        metadata:  { source: 'premium_itinerary', destination: itinerary.title },
+      }).catch(err => console.warn('[ItineraryDetail] premium audit failed:', err.message));
+    }
+    // Actual file delivery: open hosted PDF or generate client-side
+    if (pdfUrl) {
+      console.log('[ItineraryDetail] opening pdfUrl:', pdfUrl);
+      window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+    } else {
+      console.log('[ItineraryDetail] generating PDF client-side (premium)');
+      await downloadItineraryPDF(itinerary);
+    }
   }
 
   // Unified buy handler: sign in first if needed, then go to Stripe
@@ -675,7 +693,7 @@ export default function ItineraryDetailPage() {
             )}
             {accessState === 'unlocked' && (
               isPremium
-                ? <UnlockedSidebar itinerary={itinerary} pdfUrl={pdfUrl} />
+                ? <UnlockedSidebar itinerary={itinerary} onDownload={handlePremiumDownload} />
                 : (
                   // Free itinerary — download sidebar with auth-aware save
                   <FreeSidebar itinerary={itinerary} onDownload={handleFreeDownload} />

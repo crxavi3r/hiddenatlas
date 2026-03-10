@@ -75,6 +75,7 @@ model Trip {
   highlights  Json      @default("[]")  // String[]
   hotels      Json      @default("[]")  // { name, type, note }[]
   experiences Json      @default("[]")  // String[]
+  source      String    @default("AI_GENERATED")  // AI_GENERATED | FREE_JOURNEY | PREMIUM_JOURNEY
   createdAt   DateTime  @default(now())
 
   user User     @relation(fields: [userId], references: [id])

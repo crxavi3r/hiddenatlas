@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Download, Calendar, BookOpen, MapPin, Clock } from 'lucide-react';
+import { ArrowRight, Download, Calendar, BookOpen, MapPin, Clock, Trash2 } from 'lucide-react';
 import { useUser, SignInButton } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
 
@@ -10,9 +10,32 @@ function formatDate(iso) {
   });
 }
 
+const SOURCE_LABELS = {
+  AI_GENERATED:   { label: 'AI Generated',   bg: '#EFF6F5', color: '#1B6B65' },
+  FREE_JOURNEY:   { label: 'Free Journey',    bg: '#EFF6F5', color: '#1B6B65' },
+  PREMIUM_JOURNEY:{ label: 'Premium Journey', bg: '#FFF8EE', color: '#C9A96E' },
+};
+
 // ── AI Trip card ────────────────────────────────────────────────────────────
-function AiTripCard({ trip }) {
+function AiTripCard({ trip, onDelete }) {
   const [hovered, setHovered] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const tag = SOURCE_LABELS[trip.source] || SOURCE_LABELS.AI_GENERATED;
+
+  async function handleDelete(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm(`Remove "${trip.destination}" from your library? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await onDelete(trip.id);
+    } catch {
+      setDeleting(false);
+      window.alert('Could not delete this trip. Please try again.');
+    }
+  }
+
   return (
     <Link
       to={`/my-trips/${trip.id}`}
@@ -25,17 +48,20 @@ function AiTripCard({ trip }) {
         transform: hovered ? 'translateY(-4px)' : 'translateY(0)',
         transition: 'box-shadow 0.3s ease, transform 0.3s ease',
         display: 'flex', flexDirection: 'column',
+        opacity: deleting ? 0.5 : 1,
       }}
     >
       <div style={{ padding: '22px 22px 20px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+        {/* Source tag */}
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: '5px',
           padding: '4px 10px', borderRadius: '3px', marginBottom: '14px',
           fontSize: '9.5px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase',
-          background: '#EFF6F5', color: '#1B6B65', alignSelf: 'flex-start',
+          background: tag.bg, color: tag.color, alignSelf: 'flex-start',
         }}>
-          AI Generated
+          {tag.label}
         </div>
+
         <h3 style={{
           fontFamily: "'Playfair Display', Georgia, serif",
           fontSize: '19px', fontWeight: '600', color: '#1C1A16',
@@ -60,18 +86,39 @@ function AiTripCard({ trip }) {
             {trip.overview.length > 120 ? trip.overview.slice(0, 120) + '…' : trip.overview}
           </p>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#9C9488', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#9C9488', marginBottom: '16px' }}>
           <Calendar size={12} strokeWidth={2} />
           Saved {formatDate(trip.createdAt)}
         </div>
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: '6px',
-          padding: '11px 16px', background: '#1B6B65', color: 'white',
-          borderRadius: '4px', fontSize: '12.5px', fontWeight: '600',
-          letterSpacing: '0.4px', textTransform: 'uppercase', alignSelf: 'stretch',
-          justifyContent: 'center',
-        }}>
-          <BookOpen size={13} /> View Itinerary
+
+        {/* Actions row */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
+          <div style={{
+            flex: 1,
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            padding: '11px 16px', background: '#1B6B65', color: 'white',
+            borderRadius: '4px', fontSize: '12.5px', fontWeight: '600',
+            letterSpacing: '0.4px', textTransform: 'uppercase',
+            justifyContent: 'center',
+          }}>
+            <BookOpen size={13} /> View Itinerary
+          </div>
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            title="Remove from library"
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              padding: '11px 12px', background: 'transparent',
+              border: '1px solid #E8E3DA', borderRadius: '4px',
+              color: '#C4B9AF', cursor: deleting ? 'default' : 'pointer',
+              transition: 'all 0.15s', flexShrink: 0,
+            }}
+            onMouseEnter={e => { if (!deleting) { e.currentTarget.style.borderColor = '#C0392B'; e.currentTarget.style.color = '#C0392B'; e.currentTarget.style.background = '#FFF5F5'; }}}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8E3DA'; e.currentTarget.style.color = '#C4B9AF'; e.currentTarget.style.background = 'transparent'; }}
+          >
+            <Trash2 size={13} />
+          </button>
         </div>
       </div>
     </Link>
@@ -188,6 +235,15 @@ export default function MyTrips() {
   const [purchases, setPurchases] = useState([]);
   const [status, setStatus] = useState('loading');
 
+  async function handleDeleteTrip(tripId) {
+    const res = await api.del(`/api/trips/${tripId}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Delete failed');
+    }
+    setAiTrips(prev => prev.filter(t => t.id !== tripId));
+  }
+
   useEffect(() => {
     if (!isLoaded) return;
     if (!isSignedIn) { setStatus('unauthenticated'); return; }
@@ -303,7 +359,7 @@ export default function MyTrips() {
                     <span style={{ fontSize: '13px', color: '#9C9488' }}>{aiTrips.length}</span>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '28px' }}>
-                    {aiTrips.map(trip => <AiTripCard key={trip.id} trip={trip} />)}
+                    {aiTrips.map(trip => <AiTripCard key={trip.id} trip={trip} onDelete={handleDeleteTrip} />)}
                   </div>
                 </div>
               )}
