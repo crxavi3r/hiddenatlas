@@ -12,7 +12,6 @@ const navLinks = [
   { label: 'AI Planner',      href: '/ai-planner' },
   { label: 'Custom Planning', href: '/custom' },
   { label: 'Pricing',         href: '/pricing' },
-  { label: 'Journal',         href: '/journal' },
   { label: 'My Trips',        href: '/my-trips' },
 ];
 

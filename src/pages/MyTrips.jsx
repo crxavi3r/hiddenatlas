@@ -30,6 +30,7 @@ function AiTripCard({ trip, onDelete }) {
   // Try to resolve a real catalog image. AI trips use the gradient fallback.
   const matched = itineraries.find(it => it.title === trip.destination);
   const coverUrl = matched?.image ?? null;
+  const groupSize = matched?.groupSize ?? null;
   const fallbackGradient = SOURCE_GRADIENTS[trip.source] ?? SOURCE_GRADIENTS.AI_GENERATED;
 
   async function handleDelete(e) {
@@ -148,7 +149,7 @@ function AiTripCard({ trip, onDelete }) {
           {trip.duration && (
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#8C8070' }}>
               <Clock size={10} strokeWidth={2} />
-              {trip.duration}{trip.dayCount ? ` · ${trip.dayCount} ${trip.dayCount === 1 ? 'day' : 'days'}` : ''}
+              {trip.duration}{groupSize ? ` · ${groupSize}` : ''}
             </span>
           )}
         </div>
