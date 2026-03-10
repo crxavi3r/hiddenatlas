@@ -13,11 +13,13 @@ export default async function handler(req, res) {
   // ── Auth ─────────────────────────────────────────────────────
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
+    console.log('[trips/list] missing auth header');
     return res.status(401).json({ error: 'Unauthorized' });
   }
   const token = authHeader.slice(7);
 
   if (!process.env.CLERK_SECRET_KEY || !process.env.DATABASE_URL) {
+    console.error('[trips/list] missing env vars');
     return res.status(500).json({ error: 'Server misconfigured' });
   }
 
@@ -25,7 +27,9 @@ export default async function handler(req, res) {
   try {
     const payload = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY });
     clerkId = payload.sub;
-  } catch {
+    console.log('[trips/list] clerkId:', clerkId);
+  } catch (err) {
+    console.error('[trips/list] token verify failed:', err.message);
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
@@ -35,7 +39,7 @@ export default async function handler(req, res) {
       `SELECT id FROM "User" WHERE "clerkId" = $1`,
       [clerkId]
     );
-    // No user row yet (first sign-in still processing) → return empty list
+    console.log('[trips/list] user lookup rows:', users.length);
     if (!users.length) return res.status(200).json([]);
     const userId = users[0].id;
 
@@ -56,11 +60,12 @@ export default async function handler(req, res) {
        ORDER BY t."createdAt" DESC`,
       [userId]
     );
+    console.log('[trips/list] found', rows.length, 'trips for userId:', userId);
 
     return res.status(200).json(rows);
   } catch (err) {
-    console.error('[api/trips/index] DB error:', err.message);
-    return res.status(500).json({ error: 'Database error' });
+    console.error('[trips/list] DB error:', err.message, '| code:', err.code);
+    return res.status(500).json({ error: 'Database error', detail: err.message });
   } finally {
     await pool.end();
   }

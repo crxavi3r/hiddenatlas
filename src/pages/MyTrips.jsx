@@ -188,8 +188,15 @@ export default function MyTrips() {
     setStatus('loading');
 
     Promise.all([
-      api.get('/api/trips').then(r => r.ok ? r.json() : []).catch(() => []),
-      api.get('/api/my-trips').then(r => r.ok ? r.json() : []).catch(() => []),
+      api.get('/api/trips')
+        .then(r => {
+          if (!r.ok) return r.json().then(d => { throw new Error(d.detail || d.error || r.status); });
+          return r.json();
+        })
+        .catch(err => { console.error('[MyTrips] /api/trips error:', err.message); return []; }),
+      api.get('/api/my-trips')
+        .then(r => r.ok ? r.json() : [])
+        .catch(() => []),
     ]).then(([trips, bought]) => {
       setAiTrips(trips);
       setPurchases(bought);
