@@ -6,13 +6,13 @@
 //   AI_GENERATED | FREE_JOURNEY | PREMIUM_JOURNEY
 //
 // Color logic:
-//   FREE_JOURNEY    — neutral stone (#F4F1EC bg / #8C8070 text): open, no cost
-//   AI_GENERATED    — brand teal   (#1B6B65 bg / white text):    primary product action
+//   FREE_JOURNEY    — brand teal   (#1B6B65 bg / white text):    matches itinerary card free badge
+//   AI_GENERATED    — charcoal     (#1C1A16 bg / white text):    technical / product feel
 //   PREMIUM_JOURNEY — warm gold    (#C9A96E bg / white text):    paid, high-value
 
 export const TRIP_SOURCE = {
-  FREE_JOURNEY:    { label: 'Free',       bg: '#F4F1EC', color: '#6B6156' },
-  AI_GENERATED:    { label: 'AI Planner', bg: '#1B6B65', color: 'white'   },
+  FREE_JOURNEY:    { label: 'Free',       bg: '#1B6B65', color: 'white'   },
+  AI_GENERATED:    { label: 'AI Planner', bg: '#1C1A16', color: 'white'   },
   PREMIUM_JOURNEY: { label: 'Premium',    bg: '#C9A96E', color: 'white'   },
 };
 

@@ -26,7 +26,26 @@
       "WebFetch(domain:voyeglobal.com)",
       "WebFetch(domain:www.moonhoneytravel.com)",
       "WebFetch(domain:wanderwithlaura.com)",
-      "Bash(sips:*)"
+      "Bash(sips:*)",
+      "Bash(npm init:*)",
+      "Bash(npx prisma:*)",
+      "Bash(pkill:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(gh run:*)",
+      "Bash(gh api:*)",
+      "Bash(vercel ls:*)",
+      "Bash(npx vercel:*)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:hiddenatlas-6ga1tuwij-cristiano-xaviers-projects.vercel.app)",
+      "WebFetch(domain:hiddenatlas.vercel.app)",
+      "WebFetch(domain:api.vercel.com)",
+      "Bash(dig CNAME:*)",
+      "WebFetch(domain:clerk.com)",
+      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas/node_modules/@clerk/clerk-js/dist -name \"*.js\" 2>/dev/null | head -3)",
+      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas/node_modules/@clerk -name \"*.js\" -path \"*/dist/*\" 2>/dev/null | head -5)",
+      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas/node_modules/@clerk/types/dist -name \"*.d.ts\" 2>/dev/null | head -5)",
+      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas/node_modules/@clerk -name \"*.d.ts\" 2>/dev/null | xargs grep -l \"userButtonAvatarBox\\\\|avatarBox\" 2>/dev/null | head -5)",
+      "Bash(grep -A2 -B2 \"userButtonAvatarBox\\\\|userButtonTrigger\\\\|avatarBox\\\\|avatarImage\\\\|avatarInitials\" /Users/cristianoxavier/Documents/Projects/HiddenAtlas/node_modules/@clerk/shared/dist/types/index.d.ts | grep -v \"^--$\" | head -60)"
     ]
   }
 }
