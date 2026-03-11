@@ -616,7 +616,7 @@ export const itineraries = [
         tip: "Széchenyi opens at 6am — this is the correct time to arrive. The outdoor pool chess players are regulars, not a tourist display. The baths are partially segregated; the main outdoor pools are mixed. Heroes' Square is busiest between 10am and 4pm; early morning or evening visits are dramatically quieter.",
       },
     ],
-    whySpecial: "Budapest rewards those who stay long enough to get beyond the obvious. The thermal baths are not a tourist gimmick — they are how the city has woken up every morning for 150 years. The ruin bars are genuinely strange in a way that cannot be manufactured. And the architecture — the sheer quantity of first-rate nineteenth-century buildings that survived the twentieth century — is unlike anything in Western Europe.",
+    whySpecial: "Budapest rewards those who stay long enough to get beyond the obvious. The thermal baths are not a tourist gimmick — they are how the city has begun its mornings for more than 150 years. The ruin bars are genuinely strange in a way that cannot be manufactured. And the architecture — the remarkable number of nineteenth century buildings that survived the twentieth century — is unlike anything else in Western Europe.",
     routeOverview: "Pest: Danube Promenade → Hungarian Parliament → St Stephen's Basilica → Central Market Hall → Jewish Quarter → Dohány Synagogue → Buda: Chain Bridge → Fisherman's Bastion → Matthias Church → Castle District → City Park: Széchenyi Baths → Heroes' Square → Vajdahunyad Castle",
   },
 
