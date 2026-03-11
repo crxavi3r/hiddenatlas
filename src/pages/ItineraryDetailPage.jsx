@@ -5,6 +5,7 @@ import { useAuth, useUser } from '@clerk/clerk-react';
 import { itineraries } from '../data/itineraries';
 import { downloadItineraryPDF } from '../utils/downloadPDF';
 import { useApi } from '../lib/api';
+import { getGalleryImages, getResearchImages } from '../lib/itineraryImages';
 
 // ─────────────────────────────────────────────────────────────
 // Sidebar — locked state
@@ -486,6 +487,9 @@ const api = useApi();
 
   const hasAccess = accessState === 'unlocked';
 
+  const galleryImages  = getGalleryImages(itinerary.id);
+  const researchImages = getResearchImages(itinerary.id);
+
   return (
     <div style={{ background: '#FAFAF8', paddingTop: '72px' }}>
 
@@ -582,6 +586,35 @@ const api = useApi();
               </div>
             </section>
 
+            {/* Destination Gallery */}
+            {galleryImages.length > 0 && (
+              <section style={{ marginBottom: '60px' }}>
+                <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '24px' }}>
+                  The Destination
+                </h2>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: '8px',
+                }}>
+                  {galleryImages.map((img, i) => (
+                    <div key={i} style={{
+                      aspectRatio: i === 0 ? '16/10' : '1/1',
+                      gridColumn: i === 0 ? '1 / -1' : 'auto',
+                      overflow: 'hidden',
+                      borderRadius: '6px',
+                    }}>
+                      <img
+                        src={img.src}
+                        alt={`${title} — ${img.filename.replace(/[-_]/g, ' ').replace(/\.\w+$/, '')}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* Day by Day */}
             <section style={{ marginBottom: '60px' }}>
               <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '32px' }}>
@@ -666,6 +699,43 @@ const api = useApi();
                   <p style={{ fontSize: '15px', color: '#2C5F5A', lineHeight: '1.7', fontWeight: '500' }}>
                     {routeOverview}
                   </p>
+                </div>
+              </section>
+            )}
+
+            {/* Researched on Location */}
+            {researchImages.length > 0 && (
+              <section style={{ marginBottom: '60px' }}>
+                <div style={{
+                  background: '#F4F1EC',
+                  borderRadius: '10px',
+                  padding: '36px',
+                }}>
+                  <span style={{
+                    fontSize: '10px', fontWeight: '700', letterSpacing: '2px',
+                    textTransform: 'uppercase', color: '#1B6B65',
+                    display: 'block', marginBottom: '12px',
+                  }}>
+                    Researched on location
+                  </span>
+                  <p style={{ fontSize: '15px', color: '#4A433A', lineHeight: '1.7', maxWidth: '520px', marginBottom: '28px' }}>
+                    This itinerary was developed during our own visit to {title}, with on-location research across key neighbourhoods, landmarks and experiences.
+                  </p>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${Math.min(researchImages.length, 3)}, 1fr)`,
+                    gap: '8px',
+                  }}>
+                    {researchImages.map((img, i) => (
+                      <div key={i} style={{ aspectRatio: '4/3', overflow: 'hidden', borderRadius: '6px' }}>
+                        <img
+                          src={img.src}
+                          alt={`On location — ${title}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </section>
             )}
