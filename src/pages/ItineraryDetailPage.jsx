@@ -719,7 +719,7 @@ const api = useApi();
                     Researched on location
                   </span>
                   <p style={{ fontSize: '15px', color: '#4A433A', lineHeight: '1.7', maxWidth: '520px', marginBottom: '28px' }}>
-                    This itinerary was developed during our own visit to {title}, with on-location research across key neighbourhoods, landmarks and experiences.
+                    This itinerary was developed during our own visit to {title}, based on first-hand exploration of its neighbourhoods, landmarks and local experiences.
                   </p>
                   <div style={{
                     display: 'grid',
