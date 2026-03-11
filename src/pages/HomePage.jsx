@@ -773,12 +773,12 @@ export default function HomePage() {
 
             <Reveal>
               <div>
-                <span style={{ ...T.label, color: '#C9A96E' }}>Bespoke service</span>
+                <span style={{ ...T.label, color: '#C9A96E' }}>Custom trip planning</span>
                 <h2 style={{ ...T.h2, color: 'white', marginBottom: '20px' }}>
                   Prefer a fully<br />custom journey?
                 </h2>
                 <p style={{ fontSize: '17px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.8', marginBottom: '36px' }}>
-                  We design bespoke travel experiences built around boutique hotels, private guides, and hidden places most travelers never find. One dedicated planner, built around how you travel.
+                  We design personalised travel itineraries built around boutique hotels, private guides, and hidden places most travellers never find. One dedicated planner, shaped entirely around how you travel.
                 </p>
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                   <Link
@@ -816,7 +816,7 @@ export default function HomePage() {
                 {[
                   { icon: '⌂', label: 'Families', text: 'Multi-generational trips that work for everyone: children, grandparents, and the adults in between.' },
                   { icon: '♥', label: 'Couples', text: 'Honeymoons, anniversaries, and milestone escapes built around privacy, romance, and the right pace.' },
-                  { icon: '◉', label: 'Friend Groups', text: 'Group logistics handled end-to-end: private villas, shared experiences, and enough flexibility for everyone.' },
+                  { icon: '◉', label: 'Friend Groups', text: 'Group logistics planned from start to finish: private villas, shared experiences, and enough flexibility for everyone.' },
                   { icon: '✦', label: 'Solo Travelers', text: 'Expertly planned solo routes that feel safe, spontaneous, and entirely your own.' },
                 ].map((item, i) => (
                   <div key={i} style={{

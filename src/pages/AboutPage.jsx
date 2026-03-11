@@ -137,7 +137,7 @@ export default function AboutPage() {
             Ready to plan something remarkable?
           </h2>
           <p style={{ fontSize: '16px', color: '#6B6156', lineHeight: '1.7', marginBottom: '32px' }}>
-            Browse the itinerary library or get in touch to build something entirely bespoke.
+            Browse the itinerary library or get in touch to build something entirely personalised.
           </p>
           <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
             <Link

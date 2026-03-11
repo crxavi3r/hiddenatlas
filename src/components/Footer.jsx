@@ -165,6 +165,11 @@ export default function Footer() {
           </div>
         </div>
 
+        {/* Positioning disclaimer */}
+        <p style={{ fontSize: '12px', color: '#4A433A', lineHeight: '1.6', marginBottom: '32px', maxWidth: '600px' }}>
+          HiddenAtlas designs travel itineraries but does not operate travel services or handle bookings. All reservations are made directly by the traveller.
+        </p>
+
         {/* Bottom */}
         <div style={{
           borderTop: '1px solid #2E2922',

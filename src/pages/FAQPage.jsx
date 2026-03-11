@@ -37,7 +37,7 @@ const faqs = [
       },
       {
         q: 'Do you book hotels and activities on our behalf?',
-        a: 'We provide detailed recommendations and booking instructions. For premium custom clients, we can make recommendations and guide the booking process directly. Full end-to-end booking (acting as your travel agent) is available as an add-on service. Ask your planner for details.',
+        a: 'No. HiddenAtlas designs travel itineraries and provides detailed booking guidance — hotel shortlists, experience recommendations, and logistics notes. All reservations are made directly by you. We are a planning platform, not a travel agency.',
       },
       {
         q: 'What if we change our minds after receiving the itinerary?',

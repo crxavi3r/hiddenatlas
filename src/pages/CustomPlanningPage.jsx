@@ -274,7 +274,7 @@ export default function CustomPlanningPage() {
             fontSize: '11px', fontWeight: '600', letterSpacing: '2px', textTransform: 'uppercase',
             color: '#C9A96E', display: 'block', marginBottom: '16px',
           }}>
-            Bespoke Travel Planning
+            Custom Trip Planning
           </span>
           <h1 style={{
             fontFamily: "'Playfair Display', Georgia, serif",

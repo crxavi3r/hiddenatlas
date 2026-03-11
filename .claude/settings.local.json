@@ -45,7 +45,8 @@
       "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas/node_modules/@clerk -name \"*.js\" -path \"*/dist/*\" 2>/dev/null | head -5)",
       "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas/node_modules/@clerk/types/dist -name \"*.d.ts\" 2>/dev/null | head -5)",
       "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas/node_modules/@clerk -name \"*.d.ts\" 2>/dev/null | xargs grep -l \"userButtonAvatarBox\\\\|avatarBox\" 2>/dev/null | head -5)",
-      "Bash(grep -A2 -B2 \"userButtonAvatarBox\\\\|userButtonTrigger\\\\|avatarBox\\\\|avatarImage\\\\|avatarInitials\" /Users/cristianoxavier/Documents/Projects/HiddenAtlas/node_modules/@clerk/shared/dist/types/index.d.ts | grep -v \"^--$\" | head -60)"
+      "Bash(grep -A2 -B2 \"userButtonAvatarBox\\\\|userButtonTrigger\\\\|avatarBox\\\\|avatarImage\\\\|avatarInitials\" /Users/cristianoxavier/Documents/Projects/HiddenAtlas/node_modules/@clerk/shared/dist/types/index.d.ts | grep -v \"^--$\" | head -60)",
+      "Bash(ls /Users/cristianoxavier/Documents/Projects/HiddenAtlas/.env* 2>/dev/null)"
     ]
   }
 }

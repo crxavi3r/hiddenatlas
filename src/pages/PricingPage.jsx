@@ -154,7 +154,7 @@ export default function PricingPage() {
               Custom Trip Planning
             </h2>
             <p style={{ fontSize: '16px', color: '#6B6156', maxWidth: '480px', margin: '0 auto', lineHeight: '1.7' }}>
-              One-time planning fee. Your trip designed end-to-end by a human expert who cares.
+              One-time planning fee. Your itinerary designed by a dedicated trip planner who cares.
             </p>
           </div>
 
