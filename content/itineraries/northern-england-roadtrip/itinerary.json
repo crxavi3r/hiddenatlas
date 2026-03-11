@@ -1,0 +1,19 @@
+{
+  "slug": "northern-england-roadtrip",
+  "title": "Northern England",
+  "subtitle": "4 Day Hidden Landscapes Roadtrip",
+  "tagline": "Lake District, Yorkshire Dales and the North Sea coast",
+  "price": 0,
+  "currency": "EUR",
+  "isPremium": false,
+  "durationDays": 4,
+  "country": "England",
+  "region": "Yorkshire & Lake District",
+  "groupSize": "2–5 people",
+  "category": "Road Journey",
+  "heroImage": "cover.jpg",
+  "gallery": [],
+  "pdf": null,
+  "seo": { "ogImage": "seo/og-cover.jpg" },
+  "isResearchedInPerson": false
+}

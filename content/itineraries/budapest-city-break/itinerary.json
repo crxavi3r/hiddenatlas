@@ -1,0 +1,19 @@
+{
+  "slug": "budapest-city-break",
+  "title": "Budapest",
+  "subtitle": "3 Day Cultural City Break",
+  "tagline": "Central Europe's most architecturally dramatic city",
+  "price": 0,
+  "currency": "EUR",
+  "isPremium": false,
+  "durationDays": 3,
+  "country": "Hungary",
+  "region": "Central Budapest",
+  "groupSize": "2–4 people",
+  "category": "City Break",
+  "heroImage": "cover.jpg",
+  "gallery": [],
+  "pdf": null,
+  "seo": { "ogImage": "seo/og-cover.jpg" },
+  "isResearchedInPerson": false
+}

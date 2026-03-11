@@ -1,0 +1,19 @@
+{
+  "slug": "bali-island-journey",
+  "title": "Bali",
+  "subtitle": "10 Day Island Journey",
+  "tagline": "Temples, rice terraces and volcanic island life",
+  "price": 0,
+  "currency": "EUR",
+  "isPremium": false,
+  "durationDays": 10,
+  "country": "Indonesia",
+  "region": "Bali",
+  "groupSize": "2–6 people",
+  "category": "Island Journey",
+  "heroImage": "cover.jpg",
+  "gallery": [],
+  "pdf": null,
+  "seo": { "ogImage": "seo/og-cover.jpg" },
+  "isResearchedInPerson": false
+}

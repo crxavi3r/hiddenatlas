@@ -1,0 +1,19 @@
+{
+  "slug": "philippines-island-journey",
+  "title": "Philippines",
+  "subtitle": "14 Day Island Journey",
+  "tagline": "Palawan limestone islands and hidden lagoons",
+  "price": 29,
+  "currency": "EUR",
+  "isPremium": true,
+  "durationDays": 14,
+  "country": "Philippines",
+  "region": "Palawan",
+  "groupSize": "2–6 people",
+  "category": "Island Journey",
+  "heroImage": "cover.jpg",
+  "gallery": [],
+  "pdf": "pdf/itinerary.pdf",
+  "seo": { "ogImage": "seo/og-cover.jpg" },
+  "isResearchedInPerson": false
+}

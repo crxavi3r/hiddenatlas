@@ -1,0 +1,19 @@
+{
+  "slug": "brazil-coastal-journey",
+  "title": "Brazil",
+  "subtitle": "12 Day Coastal Journey",
+  "tagline": "Rio, Búzios and Angra — where the mountains meet the sea",
+  "price": 0,
+  "currency": "EUR",
+  "isPremium": false,
+  "durationDays": 12,
+  "country": "Brazil",
+  "region": "Rio de Janeiro State",
+  "groupSize": "2–6 people",
+  "category": "Coastal Journey",
+  "heroImage": "cover.jpg",
+  "gallery": [],
+  "pdf": null,
+  "seo": { "ogImage": "seo/og-cover.jpg" },
+  "isResearchedInPerson": false
+}

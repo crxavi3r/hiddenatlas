@@ -1,0 +1,19 @@
+{
+  "slug": "albania-riviera-mountains",
+  "title": "Albania",
+  "subtitle": "10 Day Riviera & Accursed Mountains Road Trip",
+  "tagline": "Ionian coast, Ottoman hill towns and the Albanian Alps",
+  "price": 0,
+  "currency": "EUR",
+  "isPremium": false,
+  "durationDays": 10,
+  "country": "Albania",
+  "region": "Riviera & Albanian Alps",
+  "groupSize": "2–5 people",
+  "category": "Road Journey",
+  "heroImage": "cover.jpg",
+  "gallery": [],
+  "pdf": null,
+  "seo": { "ogImage": "seo/og-cover.jpg" },
+  "isResearchedInPerson": false
+}

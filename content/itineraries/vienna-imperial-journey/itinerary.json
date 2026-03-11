@@ -1,0 +1,19 @@
+{
+  "slug": "vienna-imperial-journey",
+  "title": "Vienna",
+  "subtitle": "4 Day Imperial City Journey",
+  "tagline": "Imperial palaces, Ringstrasse grandeur and café culture",
+  "price": 0,
+  "currency": "EUR",
+  "isPremium": false,
+  "durationDays": 4,
+  "country": "Austria",
+  "region": "Vienna",
+  "groupSize": "2–4 people",
+  "category": "City Break",
+  "heroImage": "cover.jpg",
+  "gallery": [],
+  "pdf": null,
+  "seo": { "ogImage": "seo/og-cover.jpg" },
+  "isResearchedInPerson": false
+}

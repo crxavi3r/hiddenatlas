@@ -1,0 +1,19 @@
+{
+  "slug": "normandy-brittany-loire",
+  "title": "Normandy, Brittany & Loire",
+  "subtitle": "4 Day Road Journey",
+  "tagline": "Étrekat cliffs, Mont Saint-Michel and Loire Valley châteaux",
+  "price": 0,
+  "currency": "EUR",
+  "isPremium": false,
+  "durationDays": 4,
+  "country": "France",
+  "region": "Northwestern France",
+  "groupSize": "2–5 people",
+  "category": "Road Journey",
+  "heroImage": "cover.jpg",
+  "gallery": [],
+  "pdf": null,
+  "seo": { "ogImage": "seo/og-cover.jpg" },
+  "isResearchedInPerson": false
+}

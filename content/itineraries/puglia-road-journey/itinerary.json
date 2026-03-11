@@ -1,0 +1,19 @@
+{
+  "slug": "puglia-road-journey",
+  "title": "Puglia",
+  "subtitle": "4 Day Southern Italy Road Journey",
+  "tagline": "Trulli, baroque towns and the Adriatic coast",
+  "price": 0,
+  "currency": "EUR",
+  "isPremium": false,
+  "durationDays": 4,
+  "country": "Italy",
+  "region": "Puglia",
+  "groupSize": "2–6 people",
+  "category": "Road Journey",
+  "heroImage": "cover.jpg",
+  "gallery": [],
+  "pdf": null,
+  "seo": { "ogImage": "seo/og-cover.jpg" },
+  "isResearchedInPerson": false
+}

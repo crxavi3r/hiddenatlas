@@ -1,0 +1,19 @@
+{
+  "slug": "japan-grand-cultural-journey",
+  "title": "Japan",
+  "subtitle": "18 Day Cultural Grand Journey",
+  "tagline": "18 days of culture, craft and living tradition",
+  "price": 29,
+  "currency": "EUR",
+  "isPremium": true,
+  "durationDays": 18,
+  "country": "Japan",
+  "region": "Honshu & Kansai",
+  "groupSize": "2–4 people",
+  "category": "Cultural Journey",
+  "heroImage": "cover.jpg",
+  "gallery": [],
+  "pdf": "pdf/itinerary.pdf",
+  "seo": { "ogImage": "seo/og-cover.jpg" },
+  "isResearchedInPerson": false
+}
