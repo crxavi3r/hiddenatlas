@@ -986,14 +986,11 @@ export const itineraries = [
       "Hakone — Mount Fuji framed by the volcanic Owakudani landscape",
     ],
     included: [
-      "Complete 18-day itinerary with daily timings and logistics",
-      "18 handpicked accommodation options — ryokan, machiya and boutique hotels",
-      "Transport guide: shinkansen, local trains, buses and walking routes",
-      "30+ restaurant recommendations with booking notes",
-      "What to book months in advance (ryokan rooms, tea ceremonies, capsule experiences)",
-      "Cultural context: what to do, what to avoid, how to behave",
-      "Seasonal notes for spring, summer, autumn and winter visits",
-      "Digital PDF + mobile-optimised offline format",
+      "Complete 18-day Japan itinerary",
+      "Day-by-day route across Tokyo, Kanazawa, Kyoto and beyond",
+      "Cultural highlights and key places to visit",
+      "Carefully structured travel framework",
+      "Downloadable PDF travel guide",
     ],
     days: [
       {
