@@ -1,7 +1,8 @@
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import './index.css';
 import { useUserSync } from './hooks/useUserSync';
+import { useUser } from '@clerk/clerk-react';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -21,6 +22,19 @@ import SignUpPage from './pages/SignUpPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import TermsOfServicePage from './pages/TermsOfServicePage';
 import RefundPolicyPage from './pages/RefundPolicyPage';
+import AdminPage from './pages/AdminPage';
+
+const ADMIN_EMAILS = [
+  'cristiano.xavier@outlook.com',
+  'cristiano.xavier@hiddenatlas.travel',
+];
+
+function AdminRoute() {
+  const { isLoaded, isSignedIn, user } = useUser();
+  if (!isLoaded) return null;
+  const isAdmin = isSignedIn && ADMIN_EMAILS.includes(user.primaryEmailAddress?.emailAddress);
+  return isAdmin ? <AdminPage /> : <Navigate to="/" replace />;
+}
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -65,6 +79,7 @@ export default function App() {
             <Route path="/privacy" element={<PrivacyPolicyPage />} />
             <Route path="/terms" element={<TermsOfServicePage />} />
             <Route path="/refunds" element={<RefundPolicyPage />} />
+            <Route path="/admin" element={<AdminRoute />} />
           </Routes>
         </ErrorBoundary>
       </Layout>

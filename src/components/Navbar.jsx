@@ -6,6 +6,11 @@ import {
   useUser, useClerk,
 } from '@clerk/clerk-react';
 
+const ADMIN_EMAILS = [
+  'cristiano.xavier@outlook.com',
+  'cristiano.xavier@hiddenatlas.travel',
+];
+
 const navLinks = [
   { label: 'Itineraries',     href: '/itineraries' },
   { label: 'AI Planner',      href: '/ai-planner' },
@@ -142,6 +147,8 @@ export default function Navbar() {
   const [menuOpen,  setMenuOpen]  = useState(false);
   const location = useLocation();
   const isHome = location.pathname === '/';
+  const { user } = useUser();
+  const isAdmin = ADMIN_EMAILS.includes(user?.primaryEmailAddress?.emailAddress);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 60);
@@ -201,6 +208,20 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
+            {isAdmin && (
+              <Link
+                to="/admin"
+                style={{
+                  fontSize: '13.5px', fontWeight: '500', letterSpacing: '0.3px',
+                  color: isTransparent ? 'rgba(255,255,255,0.85)' : '#4A433A',
+                  textDecoration: 'none', transition: 'color 0.2s', whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={e => e.target.style.color = isTransparent ? 'white' : '#1B6B65'}
+                onMouseLeave={e => e.target.style.color = isTransparent ? 'rgba(255,255,255,0.85)' : '#4A433A'}
+              >
+                Backoffice
+              </Link>
+            )}
           </nav>
 
           {/* Right: CTA + auth */}
@@ -320,6 +341,22 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
+            {isAdmin && (
+              <Link
+                to="/admin"
+                style={{
+                  fontSize: '20px',
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                  color: '#1C1A16',
+                  textDecoration: 'none',
+                  padding: '14px 0',
+                  borderBottom: '1px solid #F0EBE3',
+                  display: 'block',
+                }}
+              >
+                Backoffice
+              </Link>
+            )}
 
             {/* CTA */}
             <div style={{ marginTop: '32px' }}>
