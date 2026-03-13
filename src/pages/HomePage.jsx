@@ -481,8 +481,17 @@ export default function HomePage() {
               },
             ].map((step, i) => (
               <Reveal key={i} delay={i * 0.12} style={{ height: '100%' }}>
-                <div style={{ background: '#1C1A16', padding: '48px 40px', height: '100%', boxSizing: 'border-box' }}>
-                  <div style={{ marginBottom: '28px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <div style={{ background: '#1C1A16', padding: '48px 40px', height: '100%', boxSizing: 'border-box', position: 'relative', overflow: 'hidden' }}>
+                  {/* Decorative step number — watermark anchored to its card */}
+                  <span style={{
+                    position: 'absolute', top: '16px', right: '24px',
+                    fontFamily: "'Playfair Display', Georgia, serif",
+                    fontSize: '72px', fontWeight: '700', color: '#2E2922',
+                    lineHeight: 1, userSelect: 'none', pointerEvents: 'none',
+                  }}>
+                    {step.num}
+                  </span>
+                  <div style={{ marginBottom: '28px' }}>
                     <div style={{
                       width: '48px', height: '48px', borderRadius: '10px',
                       background: 'rgba(201,169,110,0.1)',
@@ -491,13 +500,6 @@ export default function HomePage() {
                     }}>
                       {step.icon}
                     </div>
-                    <span style={{
-                      fontFamily: "'Playfair Display', Georgia, serif",
-                      fontSize: '42px', fontWeight: '600', color: '#2E2922',
-                      lineHeight: 1, userSelect: 'none',
-                    }}>
-                      {step.num}
-                    </span>
                   </div>
                   <h3 style={{
                     fontFamily: "'Playfair Display', Georgia, serif",
