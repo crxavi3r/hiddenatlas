@@ -385,23 +385,29 @@ async function getSales(pool, interval, offset) {
 }
 
 // ── Custom Requests ───────────────────────────────────────────────────────────
-async function getCustomRequests(pool, statusFilter, offset) {
-  const VALID_STATUSES = ['open', 'in_progress', 'closed'];
-  const useFilter = VALID_STATUSES.includes(statusFilter);
+async function getCustomRequests(pool, statusParam, offset) {
+  const VALID = ['open', 'in_progress', 'closed'];
+
+  // statusParam may be a comma-separated list: 'open,in_progress'
+  const statuses = statusParam
+    ? statusParam.split(',').map(s => s.trim()).filter(s => VALID.includes(s))
+    : [];
+  const useFilter = statuses.length > 0;
 
   const { rows: requests } = await pool.query(
     `SELECT id, "fullName", email, phone, destination, dates, duration,
             "groupSize", "groupType", budget, style, notes, status, "createdAt"
      FROM "CustomRequest"
-     ${useFilter ? `WHERE status = $1` : ''}
+     ${useFilter ? `WHERE status = ANY($1::text[])` : ''}
      ORDER BY "createdAt" DESC
      LIMIT 50 OFFSET ${useFilter ? '$2' : '$1'}`,
-    useFilter ? [statusFilter, offset] : [offset]
+    useFilter ? [statuses, offset] : [offset]
   );
 
   const countRes = await pool.query(
-    `SELECT COUNT(*) AS total FROM "CustomRequest" ${useFilter ? `WHERE status = $1` : ''}`,
-    useFilter ? [statusFilter] : []
+    `SELECT COUNT(*) AS total FROM "CustomRequest"
+     ${useFilter ? `WHERE status = ANY($1::text[])` : ''}`,
+    useFilter ? [statuses] : []
   );
 
   const countsRes = await pool.query(
