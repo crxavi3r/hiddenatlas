@@ -82,8 +82,13 @@ function LockedSidebar({ itinerary, onBuy, purchasing, purchaseError }) {
             {purchaseError}
           </p>
         )}
-        <p style={{ fontSize: '12px', color: '#9C9488', textAlign: 'center', marginBottom: '16px' }}>
+        <p style={{ fontSize: '12px', color: '#9C9488', textAlign: 'center', marginBottom: '4px' }}>
           Instant access after purchase
+        </p>
+        <p style={{ fontSize: '11px', color: '#B5AA99', textAlign: 'center', lineHeight: '1.6', marginBottom: '16px' }}>
+          By completing this purchase you agree to the{' '}
+          <Link to="/terms" style={{ color: '#9C9488', textDecoration: 'underline' }}>Terms of Service</Link>
+          {' '}and acknowledge that digital content is delivered immediately and is non-refundable once accessed.
         </p>
 
         <Link
@@ -697,6 +702,11 @@ const api = useApi();
                       {purchasing ? 'Processing…' : `Unlock for €${price}`}
                     </button>
                     {purchaseError && <p style={{ fontSize: '13px', color: '#B04040', marginTop: '12px' }}>{purchaseError}</p>}
+                    <p style={{ fontSize: '11px', color: '#B5AA99', marginTop: '14px', lineHeight: '1.6', maxWidth: '380px', margin: '14px auto 0' }}>
+                      By completing this purchase you agree to the{' '}
+                      <Link to="/terms" style={{ color: '#9C9488', textDecoration: 'underline' }}>Terms of Service</Link>
+                      {' '}and acknowledge that digital content is delivered immediately and is non-refundable once accessed.
+                    </p>
                   </div>
                 </div>
               )}

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 
-const LAST_UPDATED = 'March 2025';
+const LAST_UPDATED = 'March 2026';
 
 export default function RefundPolicyPage() {
   return (
@@ -33,31 +33,34 @@ export default function RefundPolicyPage() {
               Our commitment
             </p>
             <p style={{ fontSize: '14px', color: '#4A433A', lineHeight: '1.7' }}>
-              We stand behind the quality of every itinerary. If you're not satisfied, contact us within 7 days of purchase and we will make it right.
+              We stand behind the quality of every itinerary. If you believe you have a valid reason for a refund, contact us within 7 days of purchase and we will evaluate your request fairly and promptly.
             </p>
           </div>
 
-          <PolicySection title="1. Digital goods">
-            <p>HiddenAtlas sells digital travel itineraries. Because digital content is delivered immediately upon purchase, we generally do not offer refunds once an itinerary has been accessed.</p>
-            <p>However, we handle every request individually and fairly.</p>
+          <PolicySection title="1. Digital goods and right of withdrawal">
+            <p>HiddenAtlas sells digital travel itineraries delivered immediately upon purchase. In accordance with Article 16(m) of EU Directive 2011/83/EU, by completing your purchase and accessing or downloading your itinerary, you expressly consent to the immediate supply of digital content and acknowledge that you thereby waive your statutory right of withdrawal.</p>
+            <p>As a result, refunds are generally not available once an itinerary has been downloaded or substantially accessed. We evaluate all refund requests individually, and refunds outside the eligible cases listed below are issued at our sole discretion.</p>
           </PolicySection>
 
           <PolicySection title="2. Eligible refund situations">
             <p>We will issue a full refund in the following cases:</p>
             <ul>
-              <li>You were charged but never received access to your itinerary.</li>
+              <li>You were charged but never received access to your itinerary due to a technical failure on our side.</li>
               <li>You were charged more than once for the same purchase (duplicate charge).</li>
-              <li>The itinerary content is materially different from what was described.</li>
-              <li>You contact us within 7 days of purchase and have not yet downloaded the PDF or read beyond the preview.</li>
+              <li>The itinerary content is materially different from what was described on the product page.</li>
             </ul>
+            <p>In all cases, we may request supporting information (such as confirmation of non-access or evidence of a duplicate charge) before processing a refund.</p>
           </PolicySection>
 
           <PolicySection title="3. Non-refundable situations">
+            <p>Refunds will not be issued in the following circumstances:</p>
             <ul>
-              <li>The itinerary has been fully accessed and downloaded.</li>
+              <li>The itinerary has been downloaded or substantially accessed.</li>
               <li>More than 7 days have passed since the purchase date.</li>
-              <li>Dissatisfaction based on personal travel preferences that were not misrepresented.</li>
+              <li>Dissatisfaction based on personal travel preferences that were not misrepresented in the product description.</li>
+              <li>The request appears to involve purchasing an itinerary, accessing the content, and then seeking a refund without a qualifying technical or content issue.</li>
             </ul>
+            <p>HiddenAtlas reserves the right to decline refund requests that show evidence of content access followed by a refund claim without a legitimate basis. Repeated patterns of this behaviour may result in account suspension.</p>
           </PolicySection>
 
           <PolicySection title="4. Custom planning requests">

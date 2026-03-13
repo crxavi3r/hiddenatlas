@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 
-const LAST_UPDATED = 'March 2025';
+const LAST_UPDATED = 'March 2026';
 
 export default function TermsOfServicePage() {
   return (
@@ -22,8 +22,8 @@ export default function TermsOfServicePage() {
       {/* Content */}
       <section style={{ padding: 'clamp(48px, 6vw, 80px) 24px' }}>
         <div style={{ maxWidth: '760px', margin: '0 auto' }}>
-          <PolicySection title="1. Acceptance of terms">
-            <p>By accessing or using HiddenAtlas ("the Service"), you agree to be bound by these Terms of Service. If you do not agree, please do not use the Service.</p>
+          <PolicySection title="1. About HiddenAtlas">
+            <p>HiddenAtlas is operated by HiddenAtlas Travel, a travel planning platform based in Portugal. By accessing or using HiddenAtlas ("the Service"), you agree to be bound by these Terms of Service. If you do not agree, please do not use the Service.</p>
           </PolicySection>
 
           <PolicySection title="2. Products and digital goods">
@@ -33,6 +33,7 @@ export default function TermsOfServicePage() {
               <li>Access is granted to the purchasing account only.</li>
               <li>Content is provided "as is". Travel conditions, prices, and availability may change.</li>
             </ul>
+            <p><strong>Right of withdrawal — digital content.</strong> In accordance with Article 16(m) of EU Directive 2011/83/EU, by completing your purchase and accessing or downloading your itinerary, you expressly consent to the immediate supply of digital content and acknowledge that you thereby waive your right of withdrawal. Itinerary downloads are therefore non-refundable once accessed.</p>
           </PolicySection>
 
           <PolicySection title="3. User accounts">
@@ -43,19 +44,38 @@ export default function TermsOfServicePage() {
             <p>All purchases are processed securely by Stripe. Prices are displayed in EUR and are inclusive of applicable taxes. HiddenAtlas reserves the right to update pricing at any time; changes do not affect already-completed purchases.</p>
           </PolicySection>
 
-          <PolicySection title="5. Intellectual property">
-            <p>All content on HiddenAtlas, including itinerary text, images, routes, and recommendations, is the intellectual property of HiddenAtlas and may not be reproduced without consent.</p>
+          <PolicySection title="5. Intellectual property and prohibited use">
+            <p>All content on HiddenAtlas, including itinerary text, images, routes, and recommendations, is the intellectual property of HiddenAtlas Travel and may not be reproduced without prior written consent.</p>
+            <p>You may not copy, scrape, extract, or systematically download any content from this website, whether manually or by automated means. You may not use any itinerary content for commercial purposes, resale, redistribution, publication, or incorporation into other products or services without explicit written authorisation from HiddenAtlas.</p>
           </PolicySection>
 
-          <PolicySection title="6. Limitation of liability">
-            <p>HiddenAtlas provides travel itineraries for planning purposes only. We are not a travel agency and do not arrange bookings. We are not liable for any travel disruption, loss, injury, or dissatisfaction arising from use of our itineraries.</p>
+          <PolicySection title="6. Travel disclaimer">
+            <p>HiddenAtlas itineraries are informational travel planning guides only. They are designed to help you structure your trip, not to replace your own research and judgement.</p>
+            <p>You are solely responsible for verifying the accuracy of all information before travel, including but not limited to: hotel and restaurant bookings, opening hours, transport schedules, visa and entry requirements, health and vaccination requirements, and local safety conditions.</p>
+            <p>HiddenAtlas is a travel planning platform. We are not a travel agency and do not arrange, book, or operate any travel services on your behalf.</p>
           </PolicySection>
 
-          <PolicySection title="7. Governing law">
+          <PolicySection title="7. Limitation of liability">
+            <p>To the fullest extent permitted by applicable law, HiddenAtlas and HiddenAtlas Travel shall not be liable for any direct, indirect, incidental, or consequential losses arising from your use of our itineraries or the Service, including but not limited to:</p>
+            <ul>
+              <li>Travel disruptions, cancellations, delays, or missed connections.</li>
+              <li>Errors in bookings made directly by you with third-party providers.</li>
+              <li>Changes in prices, availability, or operating conditions at any destination.</li>
+              <li>Personal injury, illness, or loss of property during travel.</li>
+              <li>Financial losses resulting from travel decisions based on our content.</li>
+            </ul>
+            <p>Our total liability to you for any claim arising in connection with these Terms shall not exceed the amount you paid for the relevant itinerary.</p>
+          </PolicySection>
+
+          <PolicySection title="8. Service modifications">
+            <p>HiddenAtlas reserves the right to modify, suspend, or discontinue any part of the Service at any time, with or without notice. This includes changes to itinerary content, pricing, available features, and the custom planning service. We are not liable to you or any third party for any such modification, suspension, or discontinuation.</p>
+          </PolicySection>
+
+          <PolicySection title="9. Governing law">
             <p>These terms are governed by the laws of Portugal. Any disputes shall be subject to the exclusive jurisdiction of the courts of Portugal.</p>
           </PolicySection>
 
-          <PolicySection title="8. Contact">
+          <PolicySection title="10. Contact">
             <p>Questions about these terms? Email us at <a href="mailto:contact@hiddenatlas.travel" style={{ color: '#1B6B65', fontWeight: '600' }}>contact@hiddenatlas.travel</a>.</p>
           </PolicySection>
 
