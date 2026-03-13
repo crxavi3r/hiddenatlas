@@ -1,11 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-/**
- * Fetches a landmark-specific, editorial-quality cover image from Unsplash.
- * Uses the Unsplash Source API (no key required) with heroLandmark + destination
- * keywords to return the most relevant professional travel photograph.
- * Returns the resolved image URL, or null on failure.
- */
 async function fetchLandmarkCoverImage(heroLandmark, destination) {
   try {
     const keywords = [heroLandmark, destination, 'travel photography']
@@ -18,13 +12,12 @@ async function fetchLandmarkCoverImage(heroLandmark, destination) {
       { redirect: 'follow', signal: AbortSignal.timeout(5000) },
     );
 
-    // After following redirects, resp.url is the actual Unsplash image URL
     if (resp.ok && resp.url.includes('unsplash.com')) {
       const base = resp.url.split('?')[0];
       return `${base}?w=1200&q=85&fit=crop`;
     }
   } catch (err) {
-    console.warn('[generate-itinerary] cover image fetch failed:', err.message);
+    console.warn('[ai-planner] cover image fetch failed:', err.message);
   }
   return null;
 }
@@ -36,6 +29,7 @@ const DAY_COUNTS = {
   '15+ days': 12,
 };
 
+// POST /api/ai-planner
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -108,8 +102,6 @@ Generate exactly ${numDays} days. Be specific: use real neighbourhood names, mar
 
     const itinerary = JSON.parse(jsonMatch[0]);
 
-    // Fetch a landmark-specific cover image from Unsplash Source.
-    // This runs server-side so the URL is resolved before returning to the client.
     const coverImage = await fetchLandmarkCoverImage(
       itinerary.heroLandmark,
       itinerary.destination,
@@ -118,7 +110,7 @@ Generate exactly ${numDays} days. Be specific: use real neighbourhood names, mar
 
     return res.status(200).json(itinerary);
   } catch (err) {
-    console.error('[generate-itinerary]', err);
+    console.error('[ai-planner]', err);
     const isJsonError = err instanceof SyntaxError;
     return res.status(500).json({
       error: isJsonError

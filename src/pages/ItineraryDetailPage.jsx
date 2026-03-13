@@ -311,7 +311,7 @@ const api = useApi();
 
     if (!isSignedIn) { setAccessState('locked'); return; }
 
-    api.get(`/api/itinerary-access?slug=${itinerary.id}`)
+    api.get(`/api/itineraries?action=access&slug=${itinerary.id}`)
       .then(res => res.ok ? res.json() : { hasAccess: false, pdfUrl: null })
       .then(({ hasAccess, pdfUrl }) => {
         setAccessState(hasAccess ? 'unlocked' : 'locked');
@@ -336,7 +336,7 @@ const api = useApi();
     if (!sessionId || !isLoaded || !isSignedIn || !itinerary) return;
 
     setAccessState('verifying');
-    api.post('/api/checkout/verify', { sessionId })
+    api.post('/api/checkout?action=verify', { sessionId })
       .then(res => res.ok ? res.json() : Promise.reject())
       .then(({ hasAccess, pdfUrl }) => {
         if (hasAccess) {
@@ -356,7 +356,7 @@ const api = useApi();
     setPurchasing(true);
     setPurchaseError(null);
     try {
-      const res = await api.post('/api/checkout/session', {
+      const res = await api.post('/api/checkout?action=session', {
         slug:       itinerary.id,
         amount:     itinerary.price,
         title:      itinerary.title,
@@ -403,7 +403,7 @@ const api = useApi();
     console.log('[ItineraryDetail] calling POST /api/trips/save — source:', source, '| title:', itinerary.title);
     setItinerarySaveState('saving');
     try {
-      const res = await api.post('/api/trips/save', { trip: tripPayload, source });
+      const res = await api.post('/api/trips', { trip: tripPayload, source });
       const data = await res.json();
       console.log('[ItineraryDetail] save response status:', res.status, 'data:', data);
       if (!res.ok) throw new Error(data.error || 'Save failed');
@@ -427,7 +427,7 @@ const api = useApi();
         console.error('[ItineraryDetail] auto-save failed — aborting download');
         throw new Error('Could not save trip — please try again.');
       }
-      api.post(`/api/trip?id=${tripId}`, {
+      api.post(`/api/trips?id=${tripId}`, {
         eventType: 'DOWNLOADED',
         metadata:  { source: 'free_itinerary', destination: itinerary.title },
       }).catch(err => console.warn('[ItineraryDetail] audit failed:', err.message));
@@ -449,7 +449,7 @@ const api = useApi();
         console.error('[ItineraryDetail] premium auto-save failed — aborting download');
         throw new Error('Could not save trip — please try again.');
       }
-      api.post(`/api/trip?id=${tripId}`, {
+      api.post(`/api/trips?id=${tripId}`, {
         eventType: 'DOWNLOADED',
         metadata:  { source: 'premium_itinerary', destination: itinerary.title },
       }).catch(err => console.warn('[ItineraryDetail] premium audit failed:', err.message));

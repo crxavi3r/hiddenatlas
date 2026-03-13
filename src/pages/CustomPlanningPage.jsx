@@ -188,7 +188,7 @@ export default function CustomPlanningPage() {
       return;
     }
     try {
-      await fetch('/api/send-brief', {
+      await fetch('/api/custom-planning', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),

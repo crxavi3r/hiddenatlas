@@ -102,7 +102,7 @@ export default function AIPlannerPage() {
     console.log('[ensureSaved] calling POST /api/trips/save for:', result?.destination);
     setSaveState('saving');
     try {
-      const res = await api.post('/api/trips/save', { trip: result, source: 'AI_GENERATED' });
+      const res = await api.post('/api/trips', { trip: result, source: 'AI_GENERATED' });
       const data = await res.json();
       console.log('[ensureSaved] response status:', res.status, 'data:', data);
       if (!res.ok) throw new Error(data.error || 'Save failed');
@@ -164,7 +164,7 @@ export default function AIPlannerPage() {
       // Audit: fire-and-forget DOWNLOADED event (does not block the download)
       if (isLoaded && isSignedIn && auditTripId) {
         console.log('[download] firing DOWNLOADED audit for tripId:', auditTripId);
-        api.post(`/api/trip?id=${auditTripId}`, {
+        api.post(`/api/trips?id=${auditTripId}`, {
           eventType: 'DOWNLOADED',
           metadata: { source: 'ai_planner', destination: result.destination },
         }).catch(err => console.warn('[download] audit failed:', err.message));
@@ -184,7 +184,7 @@ export default function AIPlannerPage() {
     setSavedTripId(null);
     setDownloadState('idle');
     try {
-      const res = await fetch('/api/generate-itinerary', {
+      const res = await fetch('/api/ai-planner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),

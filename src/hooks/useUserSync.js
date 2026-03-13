@@ -20,7 +20,7 @@ export function useUserSync() {
         const token = await getToken();
         if (!token) return;
 
-        const res = await fetch('/api/auth/sync', {
+        const res = await fetch('/api/auth', {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
         });

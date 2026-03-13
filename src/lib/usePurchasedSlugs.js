@@ -20,7 +20,7 @@ export function usePurchasedSlugs() {
       setPurchasedSlugs(new Set());
       return;
     }
-    api.get('/api/purchases')
+    api.get('/api/itineraries?action=purchases')
       .then(res => res.ok ? res.json() : { slugs: [] })
       .then(({ slugs }) => setPurchasedSlugs(new Set(slugs)))
       .catch(() => setPurchasedSlugs(new Set()));

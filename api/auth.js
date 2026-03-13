@@ -1,15 +1,16 @@
 import { createClerkClient } from '@clerk/backend';
 import pg from 'pg';
-import { verifyAuth } from '../_lib/verifyAuth.js';
+import { verifyAuth } from './_lib/verifyAuth.js';
 
 const { Pool } = pg;
 
+// POST /api/auth
+// Syncs the authenticated Clerk user into the PostgreSQL User table.
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // ── 1. Guard env vars ───────────────────────────────────────
   if (!process.env.CLERK_SECRET_KEY) {
     return res.status(500).json({ error: 'CLERK_SECRET_KEY not configured' });
   }
@@ -17,21 +18,18 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'DATABASE_URL not configured' });
   }
 
-  // ── 2. Require Bearer token ─────────────────────────────────
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Missing authorization header' });
   }
 
-  // ── 3. Verify Clerk JWT ─────────────────────────────────────
   let clerkId;
   try {
     clerkId = await verifyAuth(authHeader);
-  } catch (err) {
+  } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
-  // ── 5. Fetch fresh profile from Clerk ───────────────────────
   let email, name;
   try {
     const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
@@ -40,11 +38,10 @@ export default async function handler(req, res) {
     name = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ').trim()
       || 'HiddenAtlas User';
   } catch (err) {
-    console.error('[api/auth/sync] Clerk profile fetch FAILED —', err.message);
+    console.error('[api/auth] Clerk profile fetch failed:', err.message);
     return res.status(500).json({ error: 'Failed to fetch Clerk user profile' });
   }
 
-  // ── 6. Upsert into Neon ─────────────────────────────────────
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
     const { rows } = await pool.query(
@@ -57,7 +54,7 @@ export default async function handler(req, res) {
     );
     return res.status(200).json(rows[0]);
   } catch (err) {
-    console.error('[api/auth/sync] DB error:', err.message);
+    console.error('[api/auth] DB error:', err.message);
     return res.status(500).json({ error: 'Database error' });
   } finally {
     await pool.end();
