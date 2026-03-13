@@ -1353,8 +1353,9 @@ function CuratedJourneyCard({ it, isPurchased = false }) {
         borderRadius: '10px', overflow: 'hidden', background: 'white',
         height: '100%', display: 'flex', flexDirection: 'column',
         boxShadow: hovered ? '0 20px 60px rgba(28,26,22,0.13)' : '0 4px 24px rgba(28,26,22,0.06)',
-        transition: 'box-shadow 0.35s, transform 0.35s',
+        transition: 'box-shadow 0.35s, transform 0.35s, border-color 0.35s',
         transform: hovered ? 'translateY(-5px)' : 'none',
+        border: it.isPremium && isPurchased ? '1px solid rgba(212,165,93,0.4)' : '1px solid transparent',
       }}>
         <div style={{ position: 'relative', paddingTop: '56%', overflow: 'hidden', flexShrink: 0 }}>
           <img
@@ -1415,10 +1416,20 @@ function CuratedJourneyCard({ it, isPurchased = false }) {
           <h3 style={{
             fontFamily: "'Playfair Display', Georgia, serif",
             fontSize: 'clamp(17px, 2vw, 21px)', fontWeight: '600', color: '#1C1A16',
-            lineHeight: '1.3', marginBottom: '10px',
+            lineHeight: '1.3', marginBottom: '6px',
           }}>
             {it.title}: {it.subtitle}
           </h3>
+          {it.isPremium && isPurchased && (
+            <p style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              fontSize: '11.5px', fontWeight: '500', color: '#B8924A',
+              marginBottom: '10px', letterSpacing: '0.1px',
+            }}>
+              <Check size={11} strokeWidth={2.5} />
+              In your library
+            </p>
+          )}
           <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.7', flex: 1, marginBottom: '18px' }}>
             {it.shortDescription}
           </p>
@@ -1427,7 +1438,7 @@ function CuratedJourneyCard({ it, isPurchased = false }) {
             fontSize: '12px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase',
             color: hovered ? '#1B6B65' : '#B5AA99', transition: 'color 0.2s',
           }}>
-            View itinerary <ArrowRight size={12} />
+            {it.isPremium && isPurchased ? 'Open Itinerary' : 'View Itinerary'} <ArrowRight size={12} />
           </span>
         </div>
       </div>

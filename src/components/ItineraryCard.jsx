@@ -22,11 +22,12 @@ export default function ItineraryCard({ itinerary, variant = 'default', isPurcha
           overflow: 'hidden',
           background: 'white',
           boxShadow: hovered ? '0 20px 60px rgba(28, 26, 22, 0.13)' : '0 2px 20px rgba(28, 26, 22, 0.06)',
-          transition: 'box-shadow 0.35s ease, transform 0.35s ease',
+          transition: 'box-shadow 0.35s ease, transform 0.35s ease, border-color 0.35s ease',
           transform: hovered ? 'translateY(-5px)' : 'translateY(0)',
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
+          border: isPremium && isPurchased ? '1px solid rgba(212,165,93,0.4)' : '1px solid transparent',
         }}>
           {/* Image */}
           <div style={{ position: 'relative', height: '220px', overflow: 'hidden', flexShrink: 0 }}>
@@ -106,6 +107,16 @@ export default function ItineraryCard({ itinerary, variant = 'default', isPurcha
             }}>
               {title}
             </h3>
+            {isPremium && isPurchased && (
+              <p style={{
+                display: 'flex', alignItems: 'center', gap: '5px',
+                fontSize: '11.5px', fontWeight: '500', color: '#B8924A',
+                marginBottom: '8px', letterSpacing: '0.1px',
+              }}>
+                <Check size={11} strokeWidth={2.5} />
+                In your library
+              </p>
+            )}
             <p style={{ fontSize: '13.5px', color: '#8C8070', marginBottom: '14px', lineHeight: '1.4' }}>
               {subtitle}
             </p>
@@ -145,19 +156,25 @@ export default function ItineraryCard({ itinerary, variant = 'default', isPurcha
             </div>
 
             {/* Footer */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid #F4F1EC' }}>
-              <div>
-                {isPremium ? (
-                  <span style={{ fontSize: '17px', fontWeight: '700', color: '#1C1A16', fontFamily: "'Playfair Display', Georgia, serif" }}>
-                    €{price}
-                    <span style={{ fontSize: '12px', fontWeight: '400', color: '#B5AA99', fontFamily: 'Inter, sans-serif' }}> / plan</span>
-                  </span>
-                ) : (
-                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#1B6B65', letterSpacing: '0.3px' }}>
-                    Free to Download
-                  </span>
-                )}
-              </div>
+            <div style={{
+              display: 'flex', alignItems: 'center',
+              justifyContent: isPremium && isPurchased ? 'flex-end' : 'space-between',
+              marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid #F4F1EC',
+            }}>
+              {!(isPremium && isPurchased) && (
+                <div>
+                  {isPremium ? (
+                    <span style={{ fontSize: '17px', fontWeight: '700', color: '#1C1A16', fontFamily: "'Playfair Display', Georgia, serif" }}>
+                      €{price}
+                      <span style={{ fontSize: '12px', fontWeight: '400', color: '#B5AA99', fontFamily: 'Inter, sans-serif' }}> / plan</span>
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '13px', fontWeight: '600', color: '#1B6B65', letterSpacing: '0.3px' }}>
+                      Free to Download
+                    </span>
+                  )}
+                </div>
+              )}
               <span style={{
                 display: 'flex', alignItems: 'center', gap: '4px',
                 fontSize: '12px', fontWeight: '600',
@@ -166,7 +183,7 @@ export default function ItineraryCard({ itinerary, variant = 'default', isPurcha
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px',
               }}>
-                View Plan <ArrowRight size={13} />
+                {isPremium && isPurchased ? 'Open Itinerary' : 'View Plan'} <ArrowRight size={13} />
               </span>
             </div>
           </div>
