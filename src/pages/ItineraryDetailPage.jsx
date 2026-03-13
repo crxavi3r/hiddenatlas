@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { Clock, Users, MapPin, Check, Star, ArrowRight, Lock, Download, ChevronRight, Route } from 'lucide-react';
 import { useAuth } from '@clerk/clerk-react';
@@ -303,6 +303,27 @@ const api = useApi();
   const [itinerarySaveState, setItinerarySaveState]   = useState('idle'); // 'idle'|'saving'|'saved'|'error'
 
   const isPremium = itinerary?.isPremium;
+
+  // Mobile sticky buy bar — watch both the sidebar and the inline lock gate.
+  // Bar is visible when neither purchase element is in the viewport.
+  const sidebarRef  = useRef(null);
+  const lockGateRef = useRef(null);
+  const [purchaseInView, setPurchaseInView] = useState(false);
+
+  useEffect(() => {
+    if (accessState !== 'locked' || !isPremium) { setPurchaseInView(false); return; }
+    const targets = [sidebarRef.current, lockGateRef.current].filter(Boolean);
+    if (!targets.length) return;
+    const visibilityMap = new Map(targets.map(t => [t, false]));
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => visibilityMap.set(e.target, e.isIntersecting));
+      setPurchaseInView([...visibilityMap.values()].some(Boolean));
+    }, { threshold: 0.1 });
+    targets.forEach(t => observer.observe(t));
+    return () => observer.disconnect();
+  }, [accessState, isPremium]);
+
+  const showStickyBar = isPremium && accessState === 'locked' && !purchaseInView;
   const PENDING_KEY = 'ha_pending_purchase';
 
   useEffect(() => {
@@ -649,7 +670,7 @@ const api = useApi();
 
               {/* Lock gate — shown below the preview days */}
               {isPremium && !hasAccess && (
-                <div style={{ background: 'linear-gradient(to bottom, rgba(250,250,248,0) 0%, #FAFAF8 30%)', marginTop: '-60px', paddingTop: '60px', position: 'relative' }}>
+                <div ref={lockGateRef} style={{ background: 'linear-gradient(to bottom, rgba(250,250,248,0) 0%, #FAFAF8 30%)', marginTop: '-60px', paddingTop: '60px', position: 'relative' }}>
                   <div style={{ background: 'white', borderRadius: '10px', padding: '36px', textAlign: 'center', border: '1px solid #E8E3DA', boxShadow: '0 4px 24px rgba(28,26,22,0.06)' }}>
                     <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F4F1EC', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                       <Lock size={20} color="#8C8070" />
@@ -745,7 +766,7 @@ const api = useApi();
           </div>
 
           {/* ── Right: Sidebar ── */}
-          <div className="resp-sidebar" style={{ position: 'sticky', top: '100px' }}>
+          <div ref={sidebarRef} className="resp-sidebar" style={{ position: 'sticky', top: '100px' }}>
             {(accessState === 'checking' || accessState === 'verifying') && (
               <div style={{ height: '200px', background: 'white', borderRadius: '12px', border: '1px solid #E8E3DA', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <p style={{ fontSize: '13px', color: '#9C9488' }}>
@@ -774,6 +795,77 @@ const api = useApi();
         </div>
       </div>
 
+      {/* Mobile sticky buy bar — hidden on desktop via media query */}
+      <MobileStickyBuyBar
+        price={price}
+        onBuy={handleBuyClick}
+        purchasing={purchasing}
+        visible={showStickyBar}
+      />
+
+      <style>{`
+        @media (min-width: 768px) { .ha-mobile-buy-bar { display: none !important; } }
+      `}</style>
+
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Mobile sticky buy bar
+// ─────────────────────────────────────────────────────────────
+function MobileStickyBuyBar({ price, onBuy, purchasing, visible }) {
+  return (
+    <div
+      className="ha-mobile-buy-bar"
+      style={{
+        position: 'fixed',
+        bottom: 0, left: 0, right: 0,
+        background: 'white',
+        borderTop: '1px solid #E8E3DA',
+        padding: '14px 20px',
+        paddingBottom: 'calc(14px + env(safe-area-inset-bottom, 0px))',
+        zIndex: 200,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        boxShadow: '0 -4px 24px rgba(28,26,22,0.08)',
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translateY(0)' : 'translateY(100%)',
+        transition: 'opacity 0.3s ease, transform 0.3s ease',
+        pointerEvents: visible ? 'auto' : 'none',
+      }}
+    >
+      <div>
+        <div style={{
+          fontFamily: "'Playfair Display', Georgia, serif",
+          fontSize: '20px', fontWeight: '700',
+          color: '#1C1A16', lineHeight: '1.2',
+        }}>
+          €{price}
+        </div>
+        <p style={{ fontSize: '11px', color: '#9C9488', letterSpacing: '0.2px', marginTop: '2px' }}>
+          Instant access · PDF included
+        </p>
+      </div>
+      <button
+        onClick={onBuy}
+        disabled={purchasing}
+        style={{
+          padding: '13px 24px',
+          background: purchasing ? '#8C8070' : '#C9A96E',
+          color: 'white', border: 'none', borderRadius: '4px',
+          fontSize: '13px', fontWeight: '700', letterSpacing: '0.3px',
+          cursor: purchasing ? 'wait' : 'pointer',
+          whiteSpace: 'nowrap', flexShrink: 0,
+          transition: 'background 0.2s',
+        }}
+        onMouseEnter={e => { if (!purchasing) e.currentTarget.style.background = '#B8943A'; }}
+        onMouseLeave={e => { if (!purchasing) e.currentTarget.style.background = '#C9A96E'; }}
+      >
+        {purchasing ? 'Processing…' : 'Buy itinerary'}
+      </button>
     </div>
   );
 }
