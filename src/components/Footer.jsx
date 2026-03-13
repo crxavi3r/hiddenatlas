@@ -97,8 +97,6 @@ export default function Footer() {
             <nav style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {[
                 ['Itineraries', '/itineraries'],
-                ['Free Itineraries', '/itineraries?filter=free'],
-                ['Premium Itineraries', '/itineraries?filter=premium'],
                 ['Pricing', '/pricing'],
               ].map(([label, href]) => (
                 <Link
@@ -122,9 +120,6 @@ export default function Footer() {
             <nav style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {[
                 ['Custom Trip Planning', '/custom'],
-                ['Group Travel', '/custom#groups'],
-                ['Honeymoon Planning', '/custom#honeymoon'],
-                ['Family Adventures', '/custom#family'],
               ].map(([label, href]) => (
                 <Link
                   key={href}
@@ -147,9 +142,7 @@ export default function Footer() {
             <nav style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {[
                 ['About HiddenAtlas', '/about'],
-                ['Journal', '/journal'],
                 ['FAQ', '/faq'],
-                ['Contact', '/contact'],
               ].map(([label, href]) => (
                 <Link
                   key={href}
