@@ -75,7 +75,7 @@ export default function SignUpPage() {
       const result = await signUp.attemptEmailAddressVerification({ code });
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        navigate('/my-trips', { replace: true });
+        navigate('/', { replace: true });
       } else {
         setError('Verification incomplete. Please try again.');
       }
