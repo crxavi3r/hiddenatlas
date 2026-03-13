@@ -1,0 +1,154 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@clerk/clerk-react';
+import { Link } from 'react-router-dom';
+import { DollarSign, ShoppingBag, TrendingUp } from 'lucide-react';
+
+const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
+
+const PERIODS = [
+  { label: 'Today',   value: 'today' },
+  { label: '7 days',  value: '7d' },
+  { label: '30 days', value: '30d' },
+];
+
+function fmtEur(n)  { return `€${parseFloat(n || 0).toFixed(2)}`; }
+function fmtDate(ts) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+export default function SalesPage() {
+  const [period, setPeriod] = useState('30d');
+  const [page, setPage]     = useState(1);
+  const [data, setData]     = useState(null);
+  const [loading, setLoading] = useState(true);
+  const { getToken } = useAuth();
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/admin?action=sales&period=${period}&page=${page}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setData(await res.json());
+    } catch (err) {
+      console.error('[admin/sales]', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [period, page, getToken]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const totalPages = data ? Math.ceil((data.total || 0) / 50) : 1;
+
+  return (
+    <div style={{ padding: '28px 32px' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '24px', fontWeight: '600', color: '#1C1A16' }}>
+            Sales
+          </h1>
+          <p style={{ fontSize: '12.5px', color: '#8C8070', marginTop: '3px' }}>
+            All-time revenue: <strong style={{ color: '#1C1A16' }}>{fmtEur(data?.allTimeRevenue)}</strong>
+          </p>
+        </div>
+        {/* Period selector */}
+        <div style={{ display: 'flex', gap: '3px', background: 'white', border: '1px solid #E8E3DA', borderRadius: '6px', padding: '3px' }}>
+          {PERIODS.map(p => (
+            <button key={p.value} onClick={() => { setPeriod(p.value); setPage(1); }} style={{
+              padding: '5px 14px', fontSize: '12px', fontWeight: '500',
+              background: period === p.value ? '#1C1A16' : 'transparent',
+              color: period === p.value ? 'white' : '#6B6156',
+              border: 'none', borderRadius: '4px', cursor: 'pointer',
+            }}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* KPI cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '20px' }}>
+        {[
+          { icon: DollarSign,  label: 'Revenue',       value: fmtEur(data?.revenue) },
+          { icon: ShoppingBag, label: 'Sales',          value: data?.total ?? '—' },
+          { icon: TrendingUp,  label: 'Avg order value',value: fmtEur(data?.avgOrderValue) },
+        ].map(k => (
+          <div key={k.label} style={{ ...card, padding: '18px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <p style={{ fontSize: '11px', fontWeight: '600', color: '#8C8070', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{k.label}</p>
+              <k.icon size={14} color="#B5AA99" />
+            </div>
+            <p style={{ fontSize: '24px', fontWeight: '700', color: '#1C1A16', fontFamily: "'Playfair Display', Georgia, serif" }}>{k.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div style={{ ...card, overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+            <thead>
+              <tr style={{ background: '#FAFAF8' }}>
+                {['Date', 'Customer', 'Itinerary', 'Amount', 'Status'].map(h => (
+                  <th key={h} style={{ padding: '10px 14px', textAlign: 'left', color: '#8C8070', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.4px', whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading
+                ? [...Array(8)].map((_, i) => (
+                    <tr key={i} style={{ borderTop: '1px solid #F4F1EC' }}>
+                      {[...Array(5)].map((_, j) => (
+                        <td key={j} style={{ padding: '12px 14px' }}>
+                          <div style={{ height: '12px', background: '#F4F1EC', borderRadius: '4px', width: j === 2 ? '140px' : '80px' }} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                : (data?.sales ?? []).map((s, i) => (
+                    <tr key={i} style={{ borderTop: '1px solid #F4F1EC', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
+                      <td style={{ padding: '10px 14px', color: '#8C8070', fontSize: '12px', whiteSpace: 'nowrap' }}>{fmtDate(s.purchasedAt)}</td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <p style={{ fontWeight: '500', color: '#1C1A16' }}>{s.name || '—'}</p>
+                        <p style={{ color: '#8C8070', fontSize: '11.5px' }}>{s.email}</p>
+                      </td>
+                      <td style={{ padding: '10px 14px', color: '#4A433A', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.itinerary}</td>
+                      <td style={{ padding: '10px 14px', fontWeight: '700', color: '#1B6B65', whiteSpace: 'nowrap' }}>{fmtEur(s.amount)}</td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: '600', color: s.status === 'paid' ? '#1B6B65' : '#8C8070', background: s.status === 'paid' ? '#EFF6F5' : '#F4F1EC', padding: '2px 8px', borderRadius: '10px' }}>
+                          {s.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+              }
+              {!loading && !data?.sales?.length && (
+                <tr><td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: '#B5AA99' }}>No sales in this period</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {totalPages > 1 && (
+          <div style={{ padding: '12px 16px', borderTop: '1px solid #F4F1EC', display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'flex-end' }}>
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={btnStyle(page === 1)}>← Prev</button>
+            <span style={{ fontSize: '12px', color: '#8C8070' }}>Page {page} of {totalPages}</span>
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={btnStyle(page === totalPages)}>Next →</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function btnStyle(disabled) {
+  return {
+    padding: '5px 12px', fontSize: '12px', borderRadius: '4px',
+    border: '1px solid #E8E3DA', background: disabled ? '#F4F1EC' : 'white',
+    color: disabled ? '#B5AA99' : '#4A433A', cursor: disabled ? 'default' : 'pointer',
+  };
+}

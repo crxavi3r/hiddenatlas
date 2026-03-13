@@ -6,6 +6,7 @@ import { itineraries } from '../data/itineraries';
 import { downloadItineraryPDF } from '../utils/downloadPDF';
 import { useApi } from '../lib/api';
 import { getGalleryImages, getResearchImages } from '../lib/itineraryImages';
+import { useTrack } from '../hooks/useTrack';
 
 // ─────────────────────────────────────────────────────────────
 // Sidebar — locked state
@@ -301,6 +302,7 @@ export default function ItineraryDetailPage() {
   const itinerary = itineraries.find(it => it.id === id);
 
   const { isLoaded, isSignedIn } = useAuth();
+  const { track } = useTrack();
 const api = useApi();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -315,6 +317,13 @@ const api = useApi();
   const [itinerarySaveState, setItinerarySaveState]   = useState('idle'); // 'idle'|'saving'|'saved'|'error'
 
   const isPremium = itinerary?.isPremium;
+
+  // Fire ITINERARY_VIEW once when a valid itinerary page loads
+  useEffect(() => {
+    if (itinerary?.slug) {
+      track('ITINERARY_VIEW', { itinerarySlug: itinerary.slug, pagePath: `/itineraries/${id}` });
+    }
+  }, [itinerary?.slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Mobile sticky buy bar — watch both the sidebar and the inline lock gate.
   // Bar is visible when neither purchase element is in the viewport.

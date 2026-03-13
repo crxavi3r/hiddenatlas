@@ -127,6 +127,31 @@ model TripEvent {
 }
 
 // ─────────────────────────────────────────────
+// Event  (analytics — page views, itinerary views, etc.)
+// userId is nullable: anonymous events are allowed.
+// country is populated from Vercel's x-vercel-ip-country header.
+// ─────────────────────────────────────────────
+model Event {
+  id            String   @id @default(uuid())
+  userId        String?
+  sessionId     String?
+  eventType     String
+  itinerarySlug String?
+  pagePath      String?
+  source        String?
+  country       String?
+  deviceType    String?
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([eventType])
+  @@index([itinerarySlug])
+  @@index([createdAt])
+  @@index([sessionId])
+}
+
+// ─────────────────────────────────────────────
 // CustomRequest
 // ─────────────────────────────────────────────
 model CustomRequest {
