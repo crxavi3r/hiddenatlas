@@ -191,7 +191,7 @@ export default function FAQPage() {
               We're a small team and we actually reply. Send us a message and we'll get back to you within one business day.
             </p>
             <a
-              href="mailto:hello@hiddenatlas.com"
+              href="mailto:contact@hiddenatlas.travel"
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '8px',
                 padding: '13px 28px', background: '#C9A96E', color: 'white',
