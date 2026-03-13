@@ -89,6 +89,19 @@ async function handleSession(req, res, body) {
   const origin = req.headers.origin || 'http://localhost:3000';
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+  // ── Diagnostics: inspect the Price object before creating the session ──────
+  // This does NOT change checkout behavior — read-only fetch for logging only.
+  try {
+    const priceId = process.env.STRIPE_PRICE_ID;
+    console.log('[checkout/session] STRIPE_PRICE_ID present:', !!priceId, '| value:', priceId);
+    if (priceId) {
+      const price = await stripe.prices.retrieve(priceId);
+      console.log('[checkout/session] price currency:', price.currency, '| unit_amount:', price.unit_amount, '| active:', price.active);
+    }
+  } catch (diagErr) {
+    console.warn('[checkout/session] price diagnostics failed (non-fatal):', diagErr.message);
+  }
+
   try {
     const sessionParams = {
       payment_method_types: ['card'],
@@ -104,15 +117,15 @@ async function handleSession(req, res, body) {
       },
     };
 
-    console.log('[checkout/session] creating session — slug:', slug, '| price:', process.env.STRIPE_PRICE_ID, '| payment_method_types:', sessionParams.payment_method_types);
+    console.log('[checkout/session] creating session — slug:', slug, '| payment_method_types:', JSON.stringify(sessionParams.payment_method_types));
 
     const session = await stripe.checkout.sessions.create(sessionParams);
 
-    console.log('[checkout/session] session created — id:', session.id, '| payment_method_types:', session.payment_method_types);
+    console.log('[checkout/session] session created — id:', session.id, '| payment_method_types returned by Stripe:', JSON.stringify(session.payment_method_types));
 
     return res.status(200).json({ url: session.url });
   } catch (err) {
-    console.error('[checkout/session] Stripe error — type:', err.type, '| code:', err.code, '| message:', err.message);
+    console.error('[checkout/session] Stripe error — type:', err.type, '| code:', err.code, '| requestId:', err.requestId ?? 'n/a', '| message:', err.message);
     return res.status(500).json({ error: 'Failed to create checkout session' });
   }
 }
