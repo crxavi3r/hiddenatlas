@@ -1,8 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, ChevronDown, Star, Check, MapPin, Lock, BookOpen, Compass } from 'lucide-react';
+import { useUser } from '@clerk/clerk-react';
 import { itineraries, journeyImg } from '../data/itineraries';
 import { usePurchasedSlugs } from '../lib/usePurchasedSlugs';
+
+const ADMIN_EMAILS = [
+  'cristiano.xavier@outlook.com',
+  'cristiano.xavier@hiddenatlas.travel',
+];
 
 /* ─── Scroll animation hook ─── */
 function useInView(threshold = 0.1) {
@@ -72,6 +78,9 @@ const philippinesTimeline = [
 export default function HomePage() {
   const [heroLoaded, setHeroLoaded] = useState(false);
   const purchasedSlugs = usePurchasedSlugs();
+  const { user } = useUser();
+  const isAdmin = ADMIN_EMAILS.includes(user?.primaryEmailAddress?.emailAddress);
+  const isPhilippinesPurchased = isAdmin || purchasedSlugs.has('philippines-island-journey');
 
   useEffect(() => {
     const t = setTimeout(() => setHeroLoaded(true), 120);
@@ -615,36 +624,65 @@ export default function HomePage() {
                   ))}
                 </div>
 
-                {/* Lock CTA */}
+                {/* CTA — locked or unlocked depending on purchase / admin state */}
                 <div style={{
                   marginTop: '8px',
                   padding: '20px 22px',
-                  background: '#F4F1EC',
+                  background: isPhilippinesPurchased ? '#EFF6F5' : '#F4F1EC',
                   borderRadius: '8px',
-                  border: '1px solid #E8E3DA',
+                  border: isPhilippinesPurchased ? '1px solid rgba(27,107,101,0.2)' : '1px solid #E8E3DA',
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px',
                 }}>
                   <div>
+                    {isPhilippinesPurchased && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px' }}>
+                        <Check size={11} color="#1B6B65" strokeWidth={3} />
+                        <span style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', color: '#1B6B65' }}>
+                          Unlocked
+                        </span>
+                      </div>
+                    )}
                     <p style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16', marginBottom: '2px' }}>
                       Full 14-day itinerary
                     </p>
-                    <p style={{ fontSize: '12px', color: '#8C8070' }}>Hotels · logistics · restaurant picks · booking notes</p>
+                    <p style={{ fontSize: '12px', color: '#8C8070' }}>
+                      {isPhilippinesPurchased
+                        ? 'All days · PDF included'
+                        : 'Hotels · logistics · restaurant picks · booking notes'}
+                    </p>
                   </div>
-                  <Link
-                    to="/itineraries/philippines-island-journey"
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '6px',
-                      padding: '11px 18px', background: '#C9A96E', color: 'white',
-                      borderRadius: '4px', fontSize: '12px', fontWeight: '700',
-                      letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none',
-                      whiteSpace: 'nowrap', transition: 'background 0.2s',
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#B08D4E'}
-                    onMouseLeave={e => e.currentTarget.style.background = '#C9A96E'}
-                  >
-                    <Lock size={12} />
-                    Unlock for €29
-                  </Link>
+                  {isPhilippinesPurchased ? (
+                    <Link
+                      to="/itineraries/philippines-island-journey"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '6px',
+                        padding: '11px 18px', background: '#1B6B65', color: 'white',
+                        borderRadius: '4px', fontSize: '12px', fontWeight: '700',
+                        letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none',
+                        whiteSpace: 'nowrap', transition: 'background 0.2s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#155F5A'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#1B6B65'}
+                    >
+                      View Itinerary <ArrowRight size={12} />
+                    </Link>
+                  ) : (
+                    <Link
+                      to="/itineraries/philippines-island-journey"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '6px',
+                        padding: '11px 18px', background: '#C9A96E', color: 'white',
+                        borderRadius: '4px', fontSize: '12px', fontWeight: '700',
+                        letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none',
+                        whiteSpace: 'nowrap', transition: 'background 0.2s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#B08D4E'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#C9A96E'}
+                    >
+                      <Lock size={12} />
+                      Unlock for €29
+                    </Link>
+                  )}
                 </div>
               </div>
             </Reveal>
