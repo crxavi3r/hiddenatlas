@@ -11,8 +11,15 @@ import { getGalleryImages, getResearchImages } from '../lib/itineraryImages';
 // Sidebar — locked state
 // ─────────────────────────────────────────────────────────────
 function LockedSidebar({ itinerary, onBuy, purchasing, purchaseError }) {
-  const { price, included = [] } = itinerary;
-  const allFeatures = ['Save 20+ hours of travel planning', ...included];
+  const { price } = itinerary;
+  const allFeatures = [
+    'Save 20+ hours of travel planning',
+    'Complete day-by-day travel itinerary',
+    'Carefully structured route across the destination',
+    'Cultural highlights and key places to visit',
+    'Practical travel framework for your trip',
+    'Digital guide + downloadable PDF',
+  ];
   return (
     <div style={{
       background: 'white', border: '1px solid #E8E3DA',
