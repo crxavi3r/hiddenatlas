@@ -2,11 +2,11 @@ import { Link } from 'react-router-dom';
 import { Check, ArrowRight } from 'lucide-react';
 
 const itineraryIncludes = [
-  'Day-by-day route and schedule',
-  'Curated hotel suggestions',
-  'Restaurant recommendations',
-  'Logistics and transport notes',
-  'Downloadable PDF — yours forever',
+  'Day-by-day travel route and schedule',
+  'Key places and experiences to visit',
+  'Route planning and trip structure',
+  'Transport and logistics notes',
+  'Downloadable travel guide (PDF)',
 ];
 
 const customTiers = [
@@ -94,10 +94,10 @@ export default function PricingPage() {
               Digital Itineraries
             </span>
             <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 'clamp(26px, 3vw, 36px)', fontWeight: '600', color: '#1C1A16', marginBottom: '12px' }}>
-              Premium Itinerary Download
+              Curated travel itineraries
             </h2>
             <p style={{ fontSize: '16px', color: '#6B6156', maxWidth: '440px', margin: '0 auto', lineHeight: '1.7' }}>
-              Expertly crafted routes you can download and use forever. No subscription needed.
+              Travel routes designed from real journeys — ready for your own trip.
             </p>
           </div>
 
