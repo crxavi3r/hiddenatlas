@@ -56,31 +56,6 @@ const T = {
 const freeJourneys = itineraries.filter(it => !it.isPremium);
 const premiumJourneys = itineraries.filter(it => it.isPremium);
 
-/* ─── Journal articles ─── */
-const journalArticles = [
-  {
-    title: 'El Nido: where to stay, what to skip',
-    category: 'Destination Guide',
-    image: journeyImg('philippines-island-journey', 700),
-    excerpt: 'Corong Corong for sunsets, Nacpan for quiet. A neighbourhood-by-neighbourhood breakdown of Palawan\'s most visited town.',
-    href: '/journal/el-nido-where-to-stay',
-  },
-  {
-    title: 'The best time to visit Kyoto',
-    category: 'Travel Planning',
-    image: journeyImg('japan-grand-cultural-journey', 700),
-    excerpt: 'Cherry blossom, autumn colour, or winter quiet? A month-by-month guide to Kyoto\'s seasons from someone who\'s been in all of them.',
-    href: '/journal/best-time-to-visit-kyoto',
-  },
-  {
-    title: 'Puglia by car: the Valle d\'Itria loop',
-    category: 'Road Journey',
-    image: journeyImg('puglia-road-journey', 700),
-    excerpt: 'Alberobello, Locorotondo, Cisternino and Martina Franca in two days. The trulli country is better by road and better in the early morning.',
-    href: '/journal/puglia-valley-itria-road-trip',
-  },
-];
-
 /* ─── Philippines itinerary preview ─── */
 const philippinesTimeline = [
   { days: 'Day 1',     title: 'Arrival in Manila',                  detail: 'Transfer to boutique hotel in Intramuros. Dinner in the old walled city.' },
@@ -490,19 +465,19 @@ export default function HomePage() {
                 num: '01',
                 icon: <Compass size={22} color="#C9A96E" />,
                 title: 'Explore curated itineraries',
-                body: 'Discover carefully designed travel routes created from real trips, not aggregated from review sites or travel blogs.',
+                body: 'Discover thoughtfully designed travel routes based on real journeys. Each itinerary provides a clear structure to help you explore a destination with confidence.',
               },
               {
                 num: '02',
                 icon: <BookOpen size={22} color="#C9A96E" />,
-                title: 'Get detailed travel plans',
-                body: 'Access day-by-day itineraries with boutique hotel recommendations, private experiences, restaurant picks, and logistics.',
+                title: 'Follow a proven route',
+                body: 'Access day-by-day travel routes that show how a trip can flow from start to finish. Designed to help you plan your own journey more easily.',
               },
               {
                 num: '03',
                 icon: <MapPin size={22} color="#C9A96E" />,
-                title: 'Or request a custom journey',
-                body: 'Let us design a personalised trip tailored to your travel style, group, dates, and places you\'ve always wanted to see.',
+                title: 'Use it to plan your trip',
+                body: 'Use the itinerary as a guide to organise your own travel plans, adapt the route, and build your trip around it.',
               },
             ].map((step, i) => (
               <Reveal key={i} delay={i * 0.12}>
@@ -840,42 +815,6 @@ export default function HomePage() {
                 ))}
               </div>
             </Reveal>
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════
-          §7  JOURNAL
-      ══════════════════════════════ */}
-      <section style={{ padding: 'clamp(64px, 8vw, 120px) 24px' }}>
-        <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
-
-          <Reveal>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '48px', flexWrap: 'wrap', gap: '20px' }}>
-              <div>
-                <span style={T.label}>Travel writing</span>
-                <h2 style={T.h2}>From the HiddenAtlas Journal</h2>
-                <p style={{ ...T.body, marginTop: '12px', maxWidth: '440px' }}>
-                  Honest destination guides, local recommendations, and travel advice from people who've actually been there.
-                </p>
-              </div>
-              <Link to="/journal" style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                fontSize: '12px', fontWeight: '700', letterSpacing: '1px',
-                textTransform: 'uppercase', color: '#1B6B65', textDecoration: 'none',
-                borderBottom: '1px solid #1B6B65', paddingBottom: '2px', whiteSpace: 'nowrap',
-              }}>
-                Read the journal <ArrowRight size={13} />
-              </Link>
-            </div>
-          </Reveal>
-
-          <div className="resp-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
-            {journalArticles.map((article, i) => (
-              <Reveal key={i} delay={i * 0.09}>
-                <JournalCard article={article} />
-              </Reveal>
-            ))}
           </div>
         </div>
       </section>
@@ -1285,58 +1224,6 @@ function TestimonialCard({ t }) {
         </div>
       </div>
     </div>
-  );
-}
-
-function JournalCard({ article }) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <Link
-      to={article.href}
-      style={{ textDecoration: 'none', display: 'block' }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div style={{
-        borderRadius: '8px', overflow: 'hidden', background: 'white',
-        boxShadow: hovered ? '0 16px 50px rgba(28,26,22,0.10)' : '0 2px 14px rgba(28,26,22,0.05)',
-        transition: 'box-shadow 0.3s, transform 0.3s',
-        transform: hovered ? 'translateY(-5px)' : 'none',
-      }}>
-        <div style={{ position: 'relative', paddingTop: '60%', overflow: 'hidden' }}>
-          <img
-            src={article.image} alt={article.title}
-            style={{
-              position: 'absolute', inset: 0, width: '100%', height: '100%',
-              objectFit: 'cover',
-              transform: hovered ? 'scale(1.05)' : 'scale(1)',
-              transition: 'transform 0.55s',
-            }}
-          />
-        </div>
-        <div style={{ padding: '22px' }}>
-          <p style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#1B6B65', marginBottom: '10px' }}>
-            {article.category}
-          </p>
-          <h3 style={{
-            fontFamily: "'Playfair Display', Georgia, serif",
-            fontSize: '18px', fontWeight: '600', color: '#1C1A16',
-            lineHeight: '1.35', marginBottom: '8px',
-          }}>
-            {article.title}
-          </h3>
-          <p style={{ fontSize: '13.5px', color: '#8C8070', lineHeight: '1.65' }}>{article.excerpt}</p>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '5px',
-            marginTop: '18px', fontSize: '11px', fontWeight: '700',
-            letterSpacing: '0.8px', textTransform: 'uppercase',
-            color: hovered ? '#1B6B65' : '#B5AA99', transition: 'color 0.2s',
-          }}>
-            Read article <ArrowRight size={12} />
-          </div>
-        </div>
-      </div>
-    </Link>
   );
 }
 

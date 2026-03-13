@@ -1,7 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { Clock, Users, MapPin, Check, Star, ArrowRight, Lock, Download, ChevronRight, Route } from 'lucide-react';
-import { useAuth } from '@clerk/clerk-react';
+import { useAuth, useUser } from '@clerk/clerk-react';
+
+const ADMIN_EMAILS = [
+  'cristiano.xavier@outlook.com',
+  'cristiano.xavier@hiddenatlas.travel',
+];
 import { itineraries } from '../data/itineraries';
 import { downloadItineraryPDF } from '../utils/downloadPDF';
 import { useApi } from '../lib/api';
@@ -302,6 +307,8 @@ export default function ItineraryDetailPage() {
   const itinerary = itineraries.find(it => it.id === id);
 
   const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
+  const isAdmin = ADMIN_EMAILS.includes(user?.primaryEmailAddress?.emailAddress);
   const { track } = useTrack();
 const api = useApi();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -351,6 +358,9 @@ const api = useApi();
     if (!itinerary || !isLoaded) return;
     if (!isPremium) { setAccessState('unlocked'); return; }
 
+    // Admins always have full access — no purchase required
+    if (isAdmin) { setAccessState('unlocked'); return; }
+
     if (!isSignedIn) { setAccessState('locked'); return; }
 
     api.get(`/api/itineraries?action=access&slug=${itinerary.id}`)
@@ -360,7 +370,7 @@ const api = useApi();
         setPdfUrl(pdfUrl);
       })
       .catch(() => setAccessState('locked'));
-  }, [itinerary?.id, isLoaded, isSignedIn]);
+  }, [itinerary?.id, isLoaded, isSignedIn, isAdmin]);
 
   // After sign-in: auto-resume checkout if visitor clicked Buy before authenticating
   useEffect(() => {
