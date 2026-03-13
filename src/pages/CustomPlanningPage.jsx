@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useUser } from '@clerk/clerk-react';
 import { Check, ArrowRight, MapPin, Calendar, Users, Heart } from 'lucide-react';
 
 const ERR_COLOR = '#C97070';
@@ -140,6 +141,8 @@ function SectionLegend({ label, helper }) {
 }
 
 export default function CustomPlanningPage() {
+  const { user, isLoaded } = useUser();
+
   const [formData, setFormData] = useState({
     name: '', email: '', phone: '',
     destination: '', dates: '', duration: '',
@@ -148,6 +151,19 @@ export default function CustomPlanningPage() {
   });
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
+
+  // Prefill name and email from Clerk once the user object is available.
+  // Only sets fields that are still empty so manual edits are never overwritten.
+  useEffect(() => {
+    if (!isLoaded || !user) return;
+    const name  = user.fullName || [user.firstName, user.lastName].filter(Boolean).join(' ');
+    const email = user.primaryEmailAddress?.emailAddress ?? '';
+    setFormData(prev => ({
+      ...prev,
+      name:  prev.name  || name,
+      email: prev.email || email,
+    }));
+  }, [isLoaded, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const clearError = key =>
     setErrors(prev => { const next = { ...prev }; delete next[key]; return next; });
