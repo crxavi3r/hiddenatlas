@@ -69,23 +69,25 @@ model Purchase {
 // Trip  (AI-generated, saved by user)
 // ─────────────────────────────────────────────
 model Trip {
-  id          String    @id @default(uuid())
-  userId      String
-  title       String
-  destination String
-  country     String    @default("")
-  duration    String    @default("")
-  overview    String    @default("")
-  highlights  Json      @default("[]")  // String[]
-  hotels      Json      @default("[]")  // { name, type, note }[]
-  experiences Json      @default("[]")  // String[]
-  source      String    @default("AI_GENERATED")  // AI_GENERATED | FREE_JOURNEY | PREMIUM_JOURNEY
-  createdAt   DateTime  @default(now())
+  id             String    @id @default(uuid())
+  userId         String
+  itinerarySlug  String?   // stable slug for curated itineraries; null for AI_GENERATED
+  title          String
+  destination    String
+  country        String    @default("")
+  duration       String    @default("")
+  overview       String    @default("")
+  highlights     Json      @default("[]")  // String[]
+  hotels         Json      @default("[]")  // { name, type, note }[]
+  experiences    Json      @default("[]")  // String[]
+  source         String    @default("AI_GENERATED")  // AI_GENERATED | FREE_JOURNEY | PREMIUM_JOURNEY
+  createdAt      DateTime  @default(now())
 
   user User     @relation(fields: [userId], references: [id])
   days TripDay[]
 
   @@index([userId])
+  // Partial unique enforced at DB level via a raw migration index (WHERE itinerarySlug IS NOT NULL)
 }
 
 // ─────────────────────────────────────────────

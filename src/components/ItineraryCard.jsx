@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Clock, Users, ArrowRight, Lock } from 'lucide-react';
+import { Clock, Users, ArrowRight, Lock, Check } from 'lucide-react';
 
 // Audience icon map
 const audienceIcon = { 'Couples': '♥', 'Families': '⌂', 'Friend Groups': '◉', 'Small Groups': '◉' };
 
-export default function ItineraryCard({ itinerary, variant = 'default' }) {
+export default function ItineraryCard({ itinerary, variant = 'default', isPurchased = false }) {
   const [hovered, setHovered] = useState(false);
   const { id, title, subtitle, country, duration, groupSize, price, isPremium, tag, image, bestFor } = itinerary;
 
@@ -69,16 +69,21 @@ export default function ItineraryCard({ itinerary, variant = 'default' }) {
                 padding: '5px 10px',
                 borderRadius: '3px',
                 fontSize: '10px',
-                fontWeight: '600',
+                fontWeight: '700',
                 letterSpacing: '0.5px',
                 textTransform: 'uppercase',
-                background: 'rgba(28,26,22,0.65)',
-                color: 'rgba(255,255,255,0.9)',
                 display: 'flex', alignItems: 'center', gap: '4px',
-                backdropFilter: 'blur(6px)',
+                ...(isPurchased ? {
+                  background: 'rgba(201,169,110,0.2)',
+                  border: '1px solid rgba(201,169,110,0.5)',
+                  color: '#C9A96E',
+                } : {
+                  background: 'rgba(28,26,22,0.65)',
+                  color: 'rgba(255,255,255,0.9)',
+                  backdropFilter: 'blur(6px)',
+                }),
               }}>
-                <Lock size={9} />
-                Premium
+                {isPurchased ? <><Check size={9} strokeWidth={3} /> Purchased</> : <><Lock size={9} /> Premium</>}
               </div>
             )}
             {/* Country on image */}

@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { Search } from 'lucide-react';
 import { itineraries } from '../data/itineraries';
 import ItineraryCard from '../components/ItineraryCard';
+import { usePurchasedSlugs } from '../lib/usePurchasedSlugs';
 
 export default function ItinerariesPage() {
   const [searchQuery, setSearchQuery] = useState('');
+  const purchasedSlugs = usePurchasedSlugs();
 
   const matchesSearch = (it) => {
     if (!searchQuery) return true;
@@ -149,7 +151,7 @@ export default function ItinerariesPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '28px' }}>
               {freeJourneys.map(it => (
-                <ItineraryCard key={it.id} itinerary={it} variant="featured" />
+                <ItineraryCard key={it.id} itinerary={it} variant="featured" isPurchased={false} />
               ))}
             </div>
           </section>
@@ -192,7 +194,7 @@ export default function ItinerariesPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '28px' }}>
               {premiumJourneys.map(it => (
-                <ItineraryCard key={it.id} itinerary={it} variant="featured" />
+                <ItineraryCard key={it.id} itinerary={it} variant="featured" isPurchased={purchasedSlugs.has(it.id)} />
               ))}
             </div>
           </section>

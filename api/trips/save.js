@@ -5,7 +5,14 @@ import { verifyAuth } from '../_lib/verifyAuth.js';
 const { Pool } = pg;
 
 // POST /api/trips/save
-// Saves an AI-generated trip and writes a SAVED audit event.
+// Saves a trip and writes a SAVED audit event.
+//
+// Deduplication strategy:
+//   - Curated itineraries (FREE_JOURNEY / PREMIUM_JOURNEY) that include an
+//     itinerarySlug: permanent dedup on (userId, itinerarySlug). No time limit.
+//     If the user opens the same itinerary again we return the existing row.
+//   - AI_GENERATED trips (no slug): dedup within 1 hour by (userId, destination, source).
+//     Users may legitimately generate multiple AI trips to the same destination.
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -26,11 +33,15 @@ export default async function handler(req, res) {
   if (!trip?.destination) {
     return res.status(400).json({ error: 'Missing trip data — expected { trip: { destination, ... } }' });
   }
+
   const coverImage = (typeof trip.coverImage === 'string' && trip.coverImage.startsWith('http'))
     ? trip.coverImage
     : null;
   const validSources = ['AI_GENERATED', 'FREE_JOURNEY', 'PREMIUM_JOURNEY'];
-  const tripSource = validSources.includes(source) ? source : 'AI_GENERATED';
+  const tripSource   = validSources.includes(source) ? source : 'AI_GENERATED';
+  const itinerarySlug = (typeof trip.itinerarySlug === 'string' && trip.itinerarySlug)
+    ? trip.itinerarySlug
+    : null;
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
@@ -43,36 +54,47 @@ export default async function handler(req, res) {
     }
     const userId = users[0].id;
 
-    // Deduplication: same user + same destination + same source within 1 hour.
-    // Source is included so AI_GENERATED and FREE_JOURNEY are treated as distinct
-    // even when the destination string happens to be the same.
-    const { rows: existing } = await pool.query(
-      `SELECT id FROM "Trip"
-       WHERE "userId" = $1
-         AND destination = $2
-         AND source = $3
-         AND "createdAt" > NOW() - INTERVAL '1 hour'
-       ORDER BY "createdAt" DESC
-       LIMIT 1`,
-      [userId, trip.destination, tripSource]
-    );
-    if (existing.length) {
-      const existingId = existing[0].id;
-      return res.status(200).json({ id: existingId, deduplicated: true });
+    // ── Deduplication ────────────────────────────────────────────────────────
+
+    if (itinerarySlug) {
+      // Curated itinerary: one row per user per slug, permanently.
+      const { rows: existing } = await pool.query(
+        `SELECT id FROM "Trip" WHERE "userId" = $1 AND "itinerarySlug" = $2 LIMIT 1`,
+        [userId, itinerarySlug]
+      );
+      if (existing.length) {
+        return res.status(200).json({ id: existing[0].id, deduplicated: true });
+      }
+    } else {
+      // AI trip: allow multiple trips to the same destination, but deduplicate
+      // within a 1-hour window to absorb rapid re-saves from the same session.
+      const { rows: existing } = await pool.query(
+        `SELECT id FROM "Trip"
+         WHERE "userId" = $1
+           AND destination = $2
+           AND source = $3
+           AND "createdAt" > NOW() - INTERVAL '1 hour'
+         ORDER BY "createdAt" DESC
+         LIMIT 1`,
+        [userId, trip.destination, tripSource]
+      );
+      if (existing.length) {
+        return res.status(200).json({ id: existing[0].id, deduplicated: true });
+      }
     }
 
-    // Ensure coverImage column exists (idempotent — no-op after first run)
-    await pool.query(
-      `ALTER TABLE "Trip" ADD COLUMN IF NOT EXISTS "coverImage" TEXT DEFAULT NULL`
-    ).catch(err => console.warn('[save] coverImage column migration warning:', err.message));
-
-    // Insert Trip
+    // ── Insert ───────────────────────────────────────────────────────────────
+    // ON CONFLICT DO NOTHING guards against the race condition where two
+    // concurrent requests both pass the dedup check above and then both insert.
     const { rows: trips } = await pool.query(
-      `INSERT INTO "Trip" (id, "userId", title, destination, country, duration, overview, highlights, hotels, experiences, source, "coverImage", "createdAt")
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11, NOW())
+      `INSERT INTO "Trip" (id, "userId", "itinerarySlug", title, destination, country, duration, overview, highlights, hotels, experiences, source, "coverImage", "createdAt")
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12, NOW())
+       ON CONFLICT ("userId", "itinerarySlug") WHERE "itinerarySlug" IS NOT NULL
+       DO NOTHING
        RETURNING id`,
       [
         userId,
+        itinerarySlug,
         trip.destination,
         trip.destination,
         trip.country     || '',
@@ -85,9 +107,23 @@ export default async function handler(req, res) {
         coverImage,
       ]
     );
+
+    // If DO NOTHING fired (race condition), fetch the row that won the race.
+    if (!trips.length) {
+      if (itinerarySlug) {
+        const { rows: existing } = await pool.query(
+          `SELECT id FROM "Trip" WHERE "userId" = $1 AND "itinerarySlug" = $2 LIMIT 1`,
+          [userId, itinerarySlug]
+        );
+        return res.status(200).json({ id: existing[0]?.id, deduplicated: true });
+      }
+      // AI trip with no slug — very unlikely to hit this path, but handle safely.
+      return res.status(200).json({ id: null, deduplicated: true });
+    }
+
     const tripId = trips[0].id;
 
-    // Insert TripDay rows
+    // ── TripDay rows ─────────────────────────────────────────────────────────
     const days = Array.isArray(trip.days) ? trip.days : [];
     for (const day of days) {
       await pool.query(
@@ -97,7 +133,7 @@ export default async function handler(req, res) {
       );
     }
 
-    // Audit: SAVED
+    // ── Audit: SAVED ─────────────────────────────────────────────────────────
     await createTripEvent(pool, {
       userId,
       tripId,
@@ -107,7 +143,7 @@ export default async function handler(req, res) {
         title:       trip.destination,
         duration:    trip.duration || '',
         dayCount:    days.length,
-        source:      'ai_planner',
+        source:      tripSource,
       },
     });
 

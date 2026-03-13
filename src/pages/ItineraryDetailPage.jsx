@@ -385,13 +385,14 @@ const api = useApi();
     }
 
     const tripPayload = {
-      destination: itinerary.title,
-      country:     itinerary.country     || '',
-      duration:    itinerary.duration    || '',
-      overview:    itinerary.description || '',
-      highlights:  itinerary.highlights  || [],
-      hotels:      itinerary.hotels      || [],
-      experiences: itinerary.bestFor     || [],
+      itinerarySlug: itinerary.id,
+      destination:   itinerary.title,
+      country:       itinerary.country     || '',
+      duration:      itinerary.duration    || '',
+      overview:      itinerary.description || '',
+      highlights:    itinerary.highlights  || [],
+      hotels:        itinerary.hotels      || [],
+      experiences:   itinerary.bestFor     || [],
       days: (itinerary.days || []).map(d => ({
         day:         d.day,
         title:       d.title || '',

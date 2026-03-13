@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, ChevronDown, Star, Check, MapPin, Lock, BookOpen, Compass } from 'lucide-react';
 import { itineraries, journeyImg } from '../data/itineraries';
+import { usePurchasedSlugs } from '../lib/usePurchasedSlugs';
 
 /* ─── Scroll animation hook ─── */
 function useInView(threshold = 0.1) {
@@ -95,6 +96,7 @@ const philippinesTimeline = [
 ════════════════════════════════════════ */
 export default function HomePage() {
   const [heroLoaded, setHeroLoaded] = useState(false);
+  const purchasedSlugs = usePurchasedSlugs();
 
   useEffect(() => {
     const t = setTimeout(() => setHeroLoaded(true), 120);
@@ -415,7 +417,7 @@ export default function HomePage() {
           <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '24px', marginBottom: '48px' }}>
             {premiumJourneys.map((it, i) => (
               <Reveal key={it.id} delay={i * 0.08}>
-                <CuratedJourneyCard it={it} />
+                <CuratedJourneyCard it={it} isPurchased={purchasedSlugs.has(it.id)} />
               </Reveal>
             ))}
           </div>
@@ -1338,9 +1340,8 @@ function JournalCard({ article }) {
   );
 }
 
-function CuratedJourneyCard({ it }) {
+function CuratedJourneyCard({ it, isPurchased = false }) {
   const [hovered, setHovered] = useState(false);
-  const badgeLabel = it.isPremium ? `Premium · €${it.price}` : 'Free Journey';
   return (
     <Link
       to={`/itineraries/${it.id}`}
@@ -1373,11 +1374,23 @@ function CuratedJourneyCard({ it }) {
           }} />
           <span style={{
             position: 'absolute', top: '14px', left: '14px',
-            padding: '4px 10px', background: it.isPremium ? '#C9A96E' : '#1B6B65', color: 'white',
-            borderRadius: '3px', fontSize: '10px', fontWeight: '700', letterSpacing: '0.8px',
+            padding: '4px 10px', borderRadius: '3px',
+            fontSize: '10px', fontWeight: '700', letterSpacing: '0.8px',
             textTransform: 'uppercase',
+            display: 'inline-flex', alignItems: 'center', gap: '4px',
+            ...(isPurchased ? {
+              background: 'rgba(201,169,110,0.2)',
+              border: '1px solid rgba(201,169,110,0.5)',
+              color: '#C9A96E',
+            } : {
+              background: it.isPremium ? '#C9A96E' : '#1B6B65',
+              color: 'white',
+            }),
           }}>
-            {badgeLabel}
+            {isPurchased
+              ? <><Check size={9} strokeWidth={3} /> Purchased</>
+              : (it.isPremium ? `Premium · €${it.price}` : 'Free Journey')
+            }
           </span>
         </div>
         <div style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column' }}>

@@ -30,14 +30,15 @@ export default async function handler(req, res) {
   if (!slug) return res.status(400).json({ error: 'slug is required' });
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  let userId;
+  let userId, userEmail;
   try {
     const { rows } = await pool.query(
-      `SELECT id FROM "User" WHERE "clerkId" = $1`,
+      `SELECT id, email FROM "User" WHERE "clerkId" = $1`,
       [clerkId]
     );
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
     userId = rows[0].id;
+    userEmail = rows[0].email;
   } catch (err) {
     console.error('[checkout/session] DB error:', err.message);
     return res.status(500).json({ error: 'Database error' });
@@ -54,6 +55,7 @@ export default async function handler(req, res) {
       payment_method_types: ['card'],
       line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
       mode: 'payment',
+      customer_email: userEmail,
       success_url: `${origin}/itineraries/${slug}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${origin}/itineraries/${slug}`,
       metadata: {
