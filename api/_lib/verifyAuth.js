@@ -6,6 +6,8 @@ import { verifyToken } from '@clerk/backend';
 const AUTHORIZED_PARTIES = [
   'https://hiddenatlas.travel',
   'https://www.hiddenatlas.travel',
+  'http://localhost:3000',
+  'http://localhost:5173',
 ];
 
 /**

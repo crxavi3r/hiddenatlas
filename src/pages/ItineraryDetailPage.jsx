@@ -10,7 +10,7 @@ import { getGalleryImages, getResearchImages } from '../lib/itineraryImages';
 // ─────────────────────────────────────────────────────────────
 // Sidebar — locked state
 // ─────────────────────────────────────────────────────────────
-function LockedSidebar({ itinerary, onBuy, purchasing }) {
+function LockedSidebar({ itinerary, onBuy, purchasing, purchaseError }) {
   const { price, included = [] } = itinerary;
   const allFeatures = ['Save 20+ hours of travel planning', ...included];
   return (
@@ -70,6 +70,11 @@ function LockedSidebar({ itinerary, onBuy, purchasing }) {
           {purchasing ? 'Processing…' : `Buy itinerary · €${price}`}
         </button>
 
+        {purchaseError && (
+          <p style={{ fontSize: '12px', color: '#B04040', textAlign: 'center', marginBottom: '8px' }}>
+            {purchaseError}
+          </p>
+        )}
         <p style={{ fontSize: '12px', color: '#9C9488', textAlign: 'center', marginBottom: '16px' }}>
           Instant access after purchase
         </p>
@@ -306,7 +311,7 @@ const api = useApi();
 
     if (!isSignedIn) { setAccessState('locked'); return; }
 
-    api.get(`/api/itineraries/${itinerary.id}/access`)
+    api.get(`/api/itinerary-access?slug=${itinerary.id}`)
       .then(res => res.ok ? res.json() : { hasAccess: false, pdfUrl: null })
       .then(({ hasAccess, pdfUrl }) => {
         setAccessState(hasAccess ? 'unlocked' : 'locked');
@@ -347,6 +352,7 @@ const api = useApi();
 
   async function handlePurchase() {
     if (!itinerary || purchasing) return;
+    console.log('[Buy] calling POST /api/checkout/session for slug:', itinerary.id);
     setPurchasing(true);
     setPurchaseError(null);
     try {
@@ -459,6 +465,7 @@ const api = useApi();
 
   // Unified buy handler: sign in first if needed, then go to Stripe
   function handleBuyClick() {
+    console.log('[Buy] clicked — itinerary:', itinerary?.id, '| isSignedIn:', isSignedIn, '| purchasing:', purchasing);
     if (!itinerary || purchasing) return;
     if (!isSignedIn) {
       sessionStorage.setItem(PENDING_KEY, itinerary.id);
@@ -653,19 +660,13 @@ const api = useApi();
                       Get every day, every recommendation, logistics, insider tips and the PDF, all for a one-time fee.
                     </p>
 
-                    {accessState === 'unauthenticated' ? (
-                      <Link to="/sign-in" style={{ padding: '15px 40px', background: '#1B6B65', color: 'white', borderRadius: '4px', fontSize: '14px', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none', display: 'inline-block' }}>
-                        Sign in to Unlock
-                      </Link>
-                    ) : (
-                      <button
-                        onClick={handlePurchase}
-                        disabled={purchasing}
-                        style={{ padding: '15px 40px', background: purchasing ? '#8C8070' : '#C9A96E', color: 'white', border: 'none', borderRadius: '4px', fontSize: '14px', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase', cursor: purchasing ? 'wait' : 'pointer', transition: 'background 0.2s' }}
-                      >
-                        {purchasing ? 'Processing…' : `Unlock for €${price}`}
-                      </button>
-                    )}
+                    <button
+                      onClick={handleBuyClick}
+                      disabled={purchasing}
+                      style={{ padding: '15px 40px', background: purchasing ? '#8C8070' : '#C9A96E', color: 'white', border: 'none', borderRadius: '4px', fontSize: '14px', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase', cursor: purchasing ? 'wait' : 'pointer', transition: 'background 0.2s' }}
+                    >
+                      {purchasing ? 'Processing…' : `Unlock for €${price}`}
+                    </button>
                     {purchaseError && <p style={{ fontSize: '13px', color: '#B04040', marginTop: '12px' }}>{purchaseError}</p>}
                   </div>
                 </div>
@@ -756,6 +757,7 @@ const api = useApi();
                 itinerary={itinerary}
                 onBuy={handleBuyClick}
                 purchasing={purchasing}
+                purchaseError={purchaseError}
               />
             )}
             {accessState === 'unlocked' && (

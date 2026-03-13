@@ -49,16 +49,20 @@ model Itinerary {
 // Purchase
 // ─────────────────────────────────────────────
 model Purchase {
-  id          String   @id @default(uuid())
-  userId      String
-  itineraryId String
-  amount      Float
-  status      String   @default("paid")
-  purchasedAt DateTime @default(now())
-  createdAt   DateTime @default(now())
+  id                    String   @id @default(uuid())
+  userId                String
+  itineraryId           String
+  stripeSessionId       String?  @unique
+  stripePaymentIntentId String?
+  amount                Float
+  status                String   @default("paid")
+  purchasedAt           DateTime @default(now())
+  createdAt             DateTime @default(now())
 
   user      User      @relation(fields: [userId],      references: [id])
   itinerary Itinerary @relation(fields: [itineraryId], references: [id])
+
+  @@unique([userId, itineraryId])
 }
 
 // ─────────────────────────────────────────────
