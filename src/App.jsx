@@ -30,6 +30,7 @@ import UsersPage from './pages/admin/UsersPage';
 import UserDetailPage from './pages/admin/UserDetailPage';
 import SalesPage from './pages/admin/SalesPage';
 import DownloadsPage from './pages/admin/DownloadsPage';
+import CustomRequestsPage from './pages/admin/CustomRequestsPage';
 
 // ── Scroll to top on route change ────────────────────────────────────────────
 function ScrollToTop() {
@@ -81,6 +82,7 @@ export default function App() {
           <Route path="users/:id" element={<UserDetailPage />} />
           <Route path="sales" element={<SalesPage />} />
           <Route path="downloads" element={<DownloadsPage />} />
+          <Route path="custom-requests" element={<CustomRequestsPage />} />
         </Route>
 
         {/* ── Public pages — shared Navbar + Footer ── */}

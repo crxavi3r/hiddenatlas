@@ -158,9 +158,18 @@ model CustomRequest {
   id          String   @id @default(uuid())
   fullName    String
   email       String
+  phone       String?
   destination String
   dates       String
+  duration    String?
   groupSize   Int
+  groupType   String?
+  budget      String?
+  style       Json     @default("[]")
   notes       String?
+  status      String   @default("open")  // open | in_progress | closed
   createdAt   DateTime @default(now())
+
+  @@index([status])
+  @@index([createdAt])
 }

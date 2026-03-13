@@ -1,6 +1,6 @@
 import { Outlet, NavLink, Navigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
-import { LayoutDashboard, Users, CreditCard, Download, ExternalLink } from 'lucide-react';
+import { LayoutDashboard, Users, CreditCard, Download, ExternalLink, Inbox } from 'lucide-react';
 
 const ADMIN_EMAILS = [
   'cristiano.xavier@outlook.com',
@@ -8,10 +8,11 @@ const ADMIN_EMAILS = [
 ];
 
 const NAV = [
-  { label: 'Dashboard', path: '/admin',           icon: LayoutDashboard, end: true },
-  { label: 'Users',     path: '/admin/users',      icon: Users },
-  { label: 'Sales',     path: '/admin/sales',      icon: CreditCard },
-  { label: 'Downloads', path: '/admin/downloads',  icon: Download },
+  { label: 'Dashboard',       path: '/admin',                   icon: LayoutDashboard, end: true },
+  { label: 'Users',           path: '/admin/users',              icon: Users },
+  { label: 'Sales',           path: '/admin/sales',              icon: CreditCard },
+  { label: 'Downloads',       path: '/admin/downloads',          icon: Download },
+  { label: 'Custom Requests', path: '/admin/custom-requests',    icon: Inbox },
 ];
 
 export default function AdminPage() {

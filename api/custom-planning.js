@@ -1,7 +1,10 @@
 import { Resend } from 'resend';
+import pg from 'pg';
+
+const { Pool } = pg;
 
 // POST /api/custom-planning
-// Sends the custom trip brief via email using Resend.
+// Persists the custom trip brief to the database and sends a notification email.
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -36,8 +39,41 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Name and email are required.' });
   }
 
-  const resend = new Resend(process.env.RESEND_API_KEY);
   const travelStyle = Array.isArray(style) && style.length ? style.join(', ') : 'None selected';
+
+  // ── Persist to database ──────────────────────────────────────────────────
+  if (process.env.DATABASE_URL) {
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      await pool.query(
+        `INSERT INTO "CustomRequest"
+           (id, "fullName", email, phone, destination, dates, duration, "groupSize", "groupType", budget, style, notes, status, "createdAt")
+         VALUES
+           (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'open', NOW())`,
+        [
+          name.trim(),
+          email.trim().toLowerCase(),
+          phone?.trim() || null,
+          destination?.trim() || null,
+          dates?.trim() || null,
+          duration?.trim() || null,
+          groupSize ? parseInt(groupSize, 10) : null,
+          groupType?.trim() || null,
+          budget?.trim() || null,
+          JSON.stringify(Array.isArray(style) ? style : []),
+          notes?.trim() || null,
+        ]
+      );
+    } catch (err) {
+      // Log but don't block — email will still go out
+      console.error('[custom-planning] DB insert error:', err.message);
+    } finally {
+      await pool.end();
+    }
+  }
+
+  // ── Send notification email ──────────────────────────────────────────────
+  const resend = new Resend(process.env.RESEND_API_KEY);
 
   try {
     await resend.emails.send({

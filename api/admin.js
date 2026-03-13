@@ -32,7 +32,9 @@ async function verifyAdmin(authHeader, pool) {
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== 'GET' && req.method !== 'PATCH') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
   if (!process.env.DATABASE_URL || !process.env.CLERK_SECRET_KEY) {
     return res.status(500).json({ error: 'Server misconfigured' });
   }
@@ -46,11 +48,31 @@ export default async function handler(req, res) {
     return res.status(err.status ?? 401).json({ error: err.message });
   }
 
-  const { action, period = '7d', page = '1', q = '', id } = req.query;
+  const { action, period = '7d', page = '1', q = '', id, status } = req.query;
   const interval = periodToInterval(period);
   const offset   = (Math.max(1, parseInt(page, 10)) - 1) * 50;
 
   try {
+    // ── PATCH: status updates ─────────────────────────────────────────────
+    if (req.method === 'PATCH') {
+      if (action === 'custom-request-status') {
+        const { id: bodyId, status: bodyStatus } = req.body ?? {};
+        const requestId  = bodyId     || id;
+        const newStatus  = bodyStatus || status;
+        const VALID = ['open', 'in_progress', 'closed'];
+        if (!requestId) return res.status(400).json({ error: 'id is required' });
+        if (!VALID.includes(newStatus)) return res.status(400).json({ error: 'Invalid status' });
+        const { rowCount } = await pool.query(
+          `UPDATE "CustomRequest" SET status = $1 WHERE id = $2`,
+          [newStatus, requestId]
+        );
+        if (rowCount === 0) return res.status(404).json({ error: 'Request not found' });
+        return res.status(200).json({ ok: true });
+      }
+      return res.status(400).json({ error: 'Unknown action' });
+    }
+
+    // ── GET actions ───────────────────────────────────────────────────────
     if (action === 'dashboard') {
       const [kpis, chart, funnel, topItineraries, sources, activity] = await Promise.all([
         getDashboardKPIs(pool, interval),
@@ -70,8 +92,9 @@ export default async function handler(req, res) {
       if (!data) return res.status(404).json({ error: 'User not found' });
       return res.status(200).json(data);
     }
-    if (action === 'sales')    return res.status(200).json(await getSales(pool, interval, offset));
+    if (action === 'sales')     return res.status(200).json(await getSales(pool, interval, offset));
     if (action === 'downloads') return res.status(200).json(await getDownloads(pool, interval, offset));
+    if (action === 'custom-requests') return res.status(200).json(await getCustomRequests(pool, status, offset));
 
     return res.status(400).json({ error: 'Unknown action' });
   } catch (err) {
@@ -358,6 +381,42 @@ async function getSales(pool, interval, offset) {
     revenue:        parseFloat(revenue),
     allTimeRevenue: parseFloat(allTime.revenue),
     avgOrderValue:  total > 0 ? +(parseFloat(revenue) / parseInt(total,10)).toFixed(2) : 0,
+  };
+}
+
+// ── Custom Requests ───────────────────────────────────────────────────────────
+async function getCustomRequests(pool, statusFilter, offset) {
+  const VALID_STATUSES = ['open', 'in_progress', 'closed'];
+  const useFilter = VALID_STATUSES.includes(statusFilter);
+
+  const { rows: requests } = await pool.query(
+    `SELECT id, "fullName", email, phone, destination, dates, duration,
+            "groupSize", "groupType", budget, style, notes, status, "createdAt"
+     FROM "CustomRequest"
+     ${useFilter ? `WHERE status = $1` : ''}
+     ORDER BY "createdAt" DESC
+     LIMIT 50 OFFSET ${useFilter ? '$2' : '$1'}`,
+    useFilter ? [statusFilter, offset] : [offset]
+  );
+
+  const countRes = await pool.query(
+    `SELECT COUNT(*) AS total FROM "CustomRequest" ${useFilter ? `WHERE status = $1` : ''}`,
+    useFilter ? [statusFilter] : []
+  );
+
+  const countsRes = await pool.query(
+    `SELECT status, COUNT(*) AS n FROM "CustomRequest" GROUP BY status`
+  );
+  const counts = { open: 0, in_progress: 0, closed: 0, all: 0 };
+  for (const row of countsRes.rows) {
+    counts[row.status] = parseInt(row.n, 10);
+    counts.all += parseInt(row.n, 10);
+  }
+
+  return {
+    requests,
+    total:  parseInt(countRes.rows[0].total, 10),
+    counts,
   };
 }
 
