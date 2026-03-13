@@ -480,8 +480,8 @@ export default function HomePage() {
                 body: 'Use the itinerary as a guide to organise your own travel plans, adapt the route, and build your trip around it.',
               },
             ].map((step, i) => (
-              <Reveal key={i} delay={i * 0.12}>
-                <div style={{ background: '#1C1A16', padding: '48px 40px' }}>
+              <Reveal key={i} delay={i * 0.12} style={{ height: '100%' }}>
+                <div style={{ background: '#1C1A16', padding: '48px 40px', height: '100%', boxSizing: 'border-box' }}>
                   <div style={{ marginBottom: '28px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                     <div style={{
                       width: '48px', height: '48px', borderRadius: '10px',
