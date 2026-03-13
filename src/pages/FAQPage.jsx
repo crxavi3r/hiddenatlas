@@ -7,20 +7,24 @@ const faqs = [
     category: 'About Our Itineraries',
     items: [
       {
-        q: 'Are the itineraries really researched in person?',
-        a: 'Yes. Every route in our library has been traveled by a member of our team or a trusted local correspondent. We do not publish destinations we haven\'t personally vetted. We also update our itineraries when conditions change (new openings, closures, seasonal shifts).',
+        q: 'Are the itineraries based on real travel experience?',
+        a: 'Yes. Many routes in our library are based on firsthand travel by our team or trusted local contributors. We prioritise destinations we know well and continuously update itineraries when conditions change or new experiences emerge.',
       },
       {
         q: 'How detailed are the premium itineraries?',
-        a: 'Premium itineraries are built to be genuinely usable. You\'ll get a day-by-day plan with suggested timings, 12–15 specific accommodation recommendations across budget tiers, 20+ restaurant picks with booking notes, transport logistics (how to get between places, how long it takes), estimated daily budgets, and insider advice about what to book months in advance versus what you can leave flexible.',
+        a: 'Our premium itineraries provide a clear, day-by-day travel framework designed to help you experience a destination in the right order and pace.\n\nEach guide highlights key places to visit, cultural context, and practical travel tips so you can confidently plan your trip without spending dozens of hours researching.',
       },
       {
         q: 'Are your itineraries suitable for first-time visitors?',
-        a: 'Absolutely. We design for travelers who haven\'t been to a destination before, while also including options that experienced travelers will appreciate. Each itinerary includes orientation context, cultural notes, and practical advice for navigating the region.',
+        a: 'Absolutely. Our guides are designed to help travellers understand a destination quickly — where to start, how to structure each day, and what experiences are truly worth prioritising.',
       },
       {
         q: 'How do I receive my itinerary after purchase?',
-        a: 'Immediately after payment, you\'ll receive a download link via email. The itinerary comes as a beautifully designed PDF, optimized for both desktop and mobile. You keep it forever, with no expiry.',
+        a: 'Immediately after payment you\'ll receive a download link by email. Your itinerary is delivered as a beautifully designed PDF that you can view on your phone or print for travel.',
+      },
+      {
+        q: 'Why buy an itinerary instead of planning the trip myself?',
+        a: 'Our itineraries compress dozens of hours of travel research into a clear, structured travel plan. Instead of spending weeks comparing routes, you start with a thoughtful framework designed by experienced travellers.',
       },
     ],
   },
@@ -29,19 +33,19 @@ const faqs = [
     items: [
       {
         q: 'What does the custom planning process look like?',
-        a: 'You start by filling out a brief on our website with destinations, dates, group size, interests, and budget range. Within 24–48 hours, your dedicated planner will reach out to discuss the details. We then build a full itinerary over 7–10 days, incorporating your feedback in revision rounds. Final delivery is a comprehensive PDF and optional booking support.',
+        a: 'You start by filling out a short travel brief on our website outlining your destination, travel dates, group size, interests, and budget range.\n\nWithin 24–48 hours your dedicated planner will reach out to refine the details. Over the following days we design a fully personalised itinerary, incorporating your feedback during revision rounds.\n\nFinal delivery is a comprehensive travel plan in PDF format.',
       },
       {
-        q: 'Can you plan trips that aren\'t in your existing library?',
-        a: 'Yes. Our library represents routes we\'ve codified, but our planners have expertise across 70+ countries. If you\'ve dreamed of a particular destination, our custom service is the best way to get there.',
+        q: 'Can you plan trips that aren\'t in your existing itinerary library?',
+        a: 'Yes. Our itinerary library represents curated routes we\'ve formalised, but our planners research and design trips across a wide range of destinations worldwide.\n\nIf you have a specific place in mind, the custom planning service is the best way to design it properly.',
       },
       {
-        q: 'Do you book hotels and activities on our behalf?',
-        a: 'No. HiddenAtlas designs travel itineraries and provides detailed booking guidance — hotel shortlists, experience recommendations, and logistics notes. All reservations are made directly by you. We are a planning platform, not a travel agency.',
+        q: 'Do you book hotels, flights or activities for us?',
+        a: 'No. HiddenAtlas designs travel itineraries and provides detailed booking guidance, but we do not make reservations on behalf of travellers.\n\nAll hotels, transport, restaurants and experiences are booked directly by you. HiddenAtlas is a travel planning platform, not a travel agency.',
       },
       {
-        q: 'What if we change our minds after receiving the itinerary?',
-        a: 'Revision rounds are included in every custom plan. We don\'t stop until it\'s right. If circumstances change significantly after delivery (e.g., you need to change your travel dates entirely), we can discuss a revised scope.',
+        q: 'What if we want to change the itinerary?',
+        a: 'Revision rounds are included in every custom planning package. We refine the itinerary with you until it fits your travel style, pace and priorities.',
       },
     ],
   },
@@ -49,16 +53,16 @@ const faqs = [
     category: 'Pricing & Payments',
     items: [
       {
-        q: 'Is the planning fee refundable?',
-        a: 'Digital itinerary downloads are non-refundable once accessed. For custom planning, the fee is non-refundable after the planning process has begun, but we offer revision rounds to ensure your satisfaction.',
+        q: 'Is the itinerary purchase refundable?',
+        a: 'Digital itinerary downloads are non-refundable once accessed.',
       },
       {
-        q: 'Does the custom planning fee include my travel costs?',
-        a: 'No. The planning fee is our service charge for designing your trip. All actual costs (flights, accommodation, meals, experiences, transfers) are paid directly by you as you book.',
+        q: 'Does the custom planning fee include travel costs?',
+        a: 'No. The planning fee covers the design and research of your itinerary. Flights, accommodation, meals, experiences and transport are paid separately by you when you make your bookings.',
       },
       {
-        q: 'Do you offer group discounts?',
-        a: 'Our pricing is already tiered by group size. For large corporate retreats or group trips above 15 people, contact us directly for a custom quote.',
+        q: 'Do you offer pricing for larger groups or special trips?',
+        a: 'Yes. For large group travel, corporate retreats, or complex multi-destination trips we can provide a custom quote.',
       },
     ],
   },
@@ -67,15 +71,15 @@ const faqs = [
     items: [
       {
         q: 'Who is HiddenAtlas designed for?',
-        a: 'We design for travelers who want quality over quantity: people who\'d rather spend three extraordinary days in one place than rush through five. Our audience tends to value comfort, authenticity, local culture, good food, and smart logistics. They\'re not necessarily looking for the most extreme luxury, but they do care about staying somewhere with character and eating somewhere memorable.',
+        a: 'HiddenAtlas is designed for travellers who prefer well-planned journeys over rushed sightseeing. Our approach prioritises meaningful places, memorable food, and smart travel pacing.',
       },
       {
-        q: 'Are your itineraries suitable for families with children?',
-        a: 'Many are, and we flag this in each itinerary\'s \'Best For\' section. Several routes are specifically designed to work for families. If you need something tailored to your children\'s ages and interests, the custom planning service is ideal.',
+        q: 'Are your itineraries suitable for families?',
+        a: 'Many of our itineraries work well for families. For trips that require careful planning around children\'s ages, interests or logistics, our custom planning service is usually the best option.',
       },
       {
-        q: 'Do you cover adventure or off-grid travel?',
-        a: 'We cover a range of styles, from relaxed cultural immersion to more active routes. We tend to avoid purely extreme or survival-style travel, but we definitely include hiking, trekking, sailing, and wilderness experiences within the context of well-planned journeys.',
+        q: 'Do you include adventure or outdoor experiences?',
+        a: 'Yes. While our focus is thoughtful travel rather than extreme expeditions, many itineraries include hiking, sailing, nature exploration and cultural immersion.',
       },
     ],
   },
