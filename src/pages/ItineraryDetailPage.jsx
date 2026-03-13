@@ -581,7 +581,7 @@ const api = useApi();
       </section>
 
       {/* Body */}
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '60px 24px' }}>
+      <div className="ha-detail-body" style={{ maxWidth: '1280px', margin: '0 auto', padding: '60px 24px' }}>
         <div className="resp-detail-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: '64px', alignItems: 'start' }}>
 
           {/* ── Left: Content ── */}
@@ -811,7 +811,12 @@ const api = useApi();
       />
 
       <style>{`
-        @media (min-width: 768px) { .ha-mobile-buy-bar { display: none !important; } }
+        @media (min-width: 768px) {
+          .ha-mobile-buy-bar { display: none !important; }
+        }
+        @media (max-width: 767px) {
+          .ha-detail-body { padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)) !important; }
+        }
       `}</style>
 
     </div>
@@ -829,10 +834,12 @@ function MobileStickyBuyBar({ price, onBuy, purchasing, visible }) {
         position: 'fixed',
         bottom: 0, left: 0, right: 0,
         background: 'white',
-        borderTop: '1px solid #E8E3DA',
-        padding: '14px 20px',
+        borderTop: '1px solid rgba(0,0,0,0.08)',
+        paddingTop: '14px',
+        paddingLeft: '20px',
+        paddingRight: '20px',
         paddingBottom: 'calc(14px + env(safe-area-inset-bottom, 0px))',
-        zIndex: 200,
+        zIndex: 1000,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -842,6 +849,7 @@ function MobileStickyBuyBar({ price, onBuy, purchasing, visible }) {
         transform: visible ? 'translateY(0)' : 'translateY(100%)',
         transition: 'opacity 0.3s ease, transform 0.3s ease',
         pointerEvents: visible ? 'auto' : 'none',
+        willChange: 'transform',
       }}
     >
       <div>

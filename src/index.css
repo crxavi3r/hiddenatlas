@@ -47,6 +47,7 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden; /* prevents body { overflow-x: hidden } from breaking position:fixed on Chrome mobile */
 }
 
 body {
