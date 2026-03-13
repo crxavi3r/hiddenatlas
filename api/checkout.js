@@ -91,9 +91,10 @@ async function handleSession(req, res, body) {
 
   try {
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      payment_method_types: ['card', 'mb_way', 'paypal'],
       line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
       mode: 'payment',
+      currency: 'eur',
       customer_email: userEmail,
       success_url: `${origin}/itineraries/${slug}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${origin}/itineraries/${slug}`,
