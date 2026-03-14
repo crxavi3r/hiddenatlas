@@ -47,32 +47,58 @@ export default async function handler(req, res) {
 
   let insertedId = null;
 
+  // ── Primary INSERT — includes status = 'open' explicitly ─────────────────
+  // Works once migration 20260313400000 has been applied.
+  // Falls back to original-column INSERT if the column doesn't exist yet.
+  const coreParams = [
+    name.trim(),
+    email.trim().toLowerCase(),
+    destination?.trim() || null,
+    dates?.trim()       || null,
+    groupSize ? parseInt(groupSize, 10) : null,
+    notes?.trim()       || null,
+  ];
+
   try {
     const { rows } = await pool.query(
-      `INSERT INTO "CustomRequest" (id, "fullName", email, destination, dates, "groupSize", notes, "createdAt")
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW())
+      `INSERT INTO "CustomRequest"
+         (id, "fullName", email, destination, dates, "groupSize", notes, status, "createdAt")
+       VALUES
+         (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'open', NOW())
        RETURNING id`,
-      [
-        name.trim(),
-        email.trim().toLowerCase(),
-        destination?.trim() || null,
-        dates?.trim()       || null,
-        groupSize ? parseInt(groupSize, 10) : null,
-        notes?.trim()       || null,
-      ]
+      coreParams
     );
     insertedId = rows[0]?.id ?? null;
-    console.log(`[custom-planning] DB insert OK — id=${insertedId}`);
+    console.log(`[custom-planning] DB insert OK (with status='open') — id=${insertedId}`);
   } catch (err) {
-    console.error('[custom-planning] DB insert FAILED:', err.message);
-    await pool.end().catch(() => {});
-    return res.status(500).json({ error: 'Failed to save your request. Please try again.' });
+    if (!err.message.toLowerCase().includes('column')) {
+      // Not a missing-column error — real failure
+      console.error('[custom-planning] DB insert FAILED:', err.message);
+      await pool.end().catch(() => {});
+      return res.status(500).json({ error: 'Failed to save your request. Please try again.' });
+    }
+
+    // status column not yet present (migration pending) — fall back to original schema
+    console.warn('[custom-planning] status column missing — falling back to original INSERT:', err.message);
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO "CustomRequest" (id, "fullName", email, destination, dates, "groupSize", notes, "createdAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW())
+         RETURNING id`,
+        coreParams
+      );
+      insertedId = rows[0]?.id ?? null;
+      console.log(`[custom-planning] DB insert OK (fallback, no status column yet) — id=${insertedId}`);
+    } catch (fallbackErr) {
+      console.error('[custom-planning] DB insert FAILED (fallback):', fallbackErr.message);
+      await pool.end().catch(() => {});
+      return res.status(500).json({ error: 'Failed to save your request. Please try again.' });
+    }
   }
 
-  // ── Best-effort UPDATE for extended fields (added by migration 20260313400000) ──
-  // If the migration has not been applied yet these columns don't exist — the
-  // UPDATE will throw, we log it and continue.  Once the migration is applied
-  // this UPDATE starts working automatically without any further code change.
+  // ── Best-effort UPDATE for remaining extended fields ──────────────────────
+  // Sets phone, duration, groupType, budget, style once those columns exist.
+  // status is already set in the INSERT above; included here only as a safety net.
   if (insertedId) {
     try {
       await pool.query(
@@ -90,7 +116,6 @@ export default async function handler(req, res) {
       );
       console.log(`[custom-planning] Extended fields UPDATE OK — id=${insertedId}`);
     } catch (err) {
-      // Columns not yet migrated — safe to ignore until migration is applied
       console.warn('[custom-planning] Extended fields UPDATE skipped (migration pending?):', err.message);
     }
   }
