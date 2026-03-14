@@ -185,12 +185,13 @@ async function handleVerify(req, res, body) {
     );
     const itinerary = itineraries[0];
 
-    await pool.query(
+    const { rowCount } = await pool.query(
       `INSERT INTO "Purchase" (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId", amount, status, "purchasedAt", "createdAt")
        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'paid', NOW(), NOW())
-       ON CONFLICT ("userId", "itineraryId") DO NOTHING`,
+       ON CONFLICT ("stripeSessionId") DO NOTHING`,
       [userId, itinerary.id, sessionId, session.payment_intent, session.amount_total / 100]
     );
+    console.log('[checkout/verify] purchase', rowCount > 0 ? 'created' : 'already existed', '— userId:', userId, '| slug:', slug, '| sessionId:', sessionId);
 
     return res.status(200).json({ hasAccess: true, pdfUrl: itinerary.pdfUrl ?? null });
   } catch (err) {
@@ -218,23 +219,39 @@ async function handleWebhook(req, res, rawBody) {
     return res.status(400).send(`Webhook error: ${err.message}`);
   }
 
+  console.log('[checkout/webhook] event received — type:', event.type, '| id:', event.id);
+
   if (event.type !== 'checkout.session.completed') {
     return res.status(200).json({ received: true });
   }
 
   const session = event.data.object;
-  if (session.payment_status !== 'paid') return res.status(200).json({ received: true });
+  console.log('[checkout/webhook] session.id:', session.id, '| payment_status:', session.payment_status, '| customer_email:', session.customer_email);
+
+  if (session.payment_status !== 'paid') {
+    console.log('[checkout/webhook] payment not paid — skipping');
+    return res.status(200).json({ received: true });
+  }
 
   const { itinerary_slug: slug, user_id: userId } = session.metadata || {};
-  if (!slug || !userId) return res.status(200).json({ received: true });
+  console.log('[checkout/webhook] metadata — slug:', slug, '| userId:', userId);
+
+  if (!slug || !userId) {
+    console.warn('[checkout/webhook] missing metadata — skipping');
+    return res.status(200).json({ received: true });
+  }
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
+    // Idempotency: skip if this Stripe session was already processed
     const { rows: existing } = await pool.query(
       `SELECT id FROM "Purchase" WHERE "stripeSessionId" = $1`,
       [session.id]
     );
-    if (existing.length) return res.status(200).json({ received: true });
+    if (existing.length) {
+      console.log('[checkout/webhook] purchase already exists for session:', session.id, '— skipping');
+      return res.status(200).json({ received: true });
+    }
 
     await pool.query(
       `INSERT INTO "Itinerary" (id, slug, title, description, price, "coverImage", "isPublished", "createdAt")
@@ -254,6 +271,19 @@ async function handleWebhook(req, res, rawBody) {
        ON CONFLICT ("stripeSessionId") DO NOTHING`,
       [userId, itineraries[0].id, session.id, session.payment_intent, session.amount_total / 100]
     );
+
+    console.log('[checkout/webhook] purchase created — userId:', userId, '| slug:', slug, '| sessionId:', session.id);
+
+    // ── Email hook point ─────────────────────────────────────────────────────
+    // Stripe receipt is already sent automatically via the Dashboard.
+    // When a HiddenAtlas confirmation email is needed, call it here:
+    // await sendPurchaseConfirmationEmail({
+    //   email:  session.customer_email,
+    //   slug,
+    //   amount: session.amount_total / 100,
+    // });
+    // ─────────────────────────────────────────────────────────────────────────
+
   } catch (err) {
     console.error('[checkout/webhook] DB error:', err.message);
     // Return 200 so Stripe does not retry — /verify is the client-facing fallback
