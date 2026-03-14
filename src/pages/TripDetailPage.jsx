@@ -386,7 +386,7 @@ export default function TripDetailPage() {
                 letterSpacing: '0.8px', textTransform: 'uppercase', textDecoration: 'none',
               }}
             >
-              Work with a planner <ArrowLeft size={14} style={{ transform: 'rotate(180deg)' }} />
+              Plan this journey with us →
             </Link>
           </div>
 
