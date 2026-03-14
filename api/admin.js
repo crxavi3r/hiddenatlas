@@ -94,7 +94,7 @@ export default async function handler(req, res) {
     }
     if (action === 'sales')     return res.status(200).json(await getSales(pool, interval, offset));
     if (action === 'downloads') return res.status(200).json(await getDownloads(pool, interval, offset));
-    if (action === 'custom-requests') return res.status(200).json(await getCustomRequests(pool, status, offset));
+    if (action === 'custom-requests') return res.status(200).json(await getCustomRequests(pool, status, offset, req.query.all === 'true'));
 
     return res.status(400).json({ error: 'Unknown action' });
   } catch (err) {
@@ -385,11 +385,12 @@ async function getSales(pool, interval, offset) {
 }
 
 // ── Custom Requests ───────────────────────────────────────────────────────────
-async function getCustomRequests(pool, statusParam, offset) {
+// noLimit=true: fetch all rows (used by admin table with client-side filtering).
+// When noLimit, status filter is skipped — the client handles it.
+async function getCustomRequests(pool, statusParam, offset, noLimit = false) {
   const VALID = ['open', 'in_progress', 'closed'];
 
-  // statusParam may be a comma-separated list: 'open,in_progress'
-  const statuses = statusParam
+  const statuses = (!noLimit && statusParam)
     ? statusParam.split(',').map(s => s.trim()).filter(s => VALID.includes(s))
     : [];
   const useFilter = statuses.length > 0;
@@ -397,15 +398,17 @@ async function getCustomRequests(pool, statusParam, offset) {
   let requests, total, counts;
 
   try {
-    // Full query — works once migration 20260313400000 has been applied
+    const limitClause = noLimit ? '' : `LIMIT 50 OFFSET ${useFilter ? '$2' : '$1'}`;
+    const params      = noLimit ? [] : (useFilter ? [statuses, offset] : [offset]);
+
     const { rows } = await pool.query(
       `SELECT id, "fullName", email, phone, destination, dates, duration,
               "groupSize", "groupType", budget, style, notes, status, "createdAt"
        FROM "CustomRequest"
        ${useFilter ? `WHERE status = ANY($1::text[])` : ''}
        ORDER BY "createdAt" DESC
-       LIMIT 50 OFFSET ${useFilter ? '$2' : '$1'}`,
-      useFilter ? [statuses, offset] : [offset]
+       ${limitClause}`,
+      params
     );
     requests = rows;
 
@@ -425,15 +428,9 @@ async function getCustomRequests(pool, statusParam, offset) {
       counts.all += parseInt(row.n, 10);
     }
   } catch (err) {
-    // If the error is a missing-column error the migration hasn't been applied yet.
-    // Fall back to original schema columns so the page still shows data.
     if (!err.message.toLowerCase().includes('column')) throw err;
-
     console.warn('[admin/custom-requests] Extended columns missing — using fallback query:', err.message);
 
-    // Fallback: select only original-schema columns; synthesise NULL/default values
-    // for the new fields so the frontend receives a consistent shape.
-    // Status filter is skipped here (column doesn't exist yet); all rows shown.
     const { rows } = await pool.query(
       `SELECT id, "fullName", email, destination, dates, "groupSize", notes, "createdAt",
               'open'::text  AS status,
@@ -444,11 +441,10 @@ async function getCustomRequests(pool, statusParam, offset) {
               '[]'::jsonb   AS style
        FROM "CustomRequest"
        ORDER BY "createdAt" DESC
-       LIMIT 50 OFFSET $1`,
-      [offset]
+       ${noLimit ? '' : 'LIMIT 50 OFFSET $1'}`,
+      noLimit ? [] : [offset]
     );
     requests = rows;
-
     const countRes = await pool.query(`SELECT COUNT(*) AS total FROM "CustomRequest"`);
     total  = parseInt(countRes.rows[0].total, 10);
     counts = { open: total, in_progress: 0, closed: 0, all: total };
