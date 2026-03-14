@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { ChevronDown, ChevronUp, ChevronsUpDown, Check, X, Filter } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Check, X, Filter, ChevronRight } from 'lucide-react';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STATUS_META = {
@@ -17,31 +17,40 @@ const NEXT_STATUS = {
   closed:      { value: 'open',        label: 'Reopen'        },
 };
 
-const COLUMNS = [
-  { id: 'createdAt',   label: 'Date',         field: 'createdAt',  type: 'date',   minW: 148 },
-  { id: 'fullName',    label: 'Name',          field: 'fullName',   type: 'text',   minW: 128 },
-  { id: 'email',       label: 'Email',         field: 'email',      type: 'text',   minW: 168 },
-  { id: 'phone',       label: 'Phone',         field: 'phone',      type: 'text',   minW: 108 },
-  { id: 'destination', label: 'Destination',   field: 'destination',type: 'text',   minW: 118 },
-  { id: 'dates',       label: 'Trip Date',     field: 'dates',      type: 'text',   minW: 108 },
-  { id: 'duration',    label: 'Duration',      field: 'duration',   type: 'text',   minW: 88  },
-  { id: 'group',       label: 'Group',         field: 'groupType',  type: 'text',   minW: 100 },
-  { id: 'groupType',   label: 'Group Type',    field: 'groupType',  type: 'text',   minW: 100 },
-  { id: 'groupSize',   label: 'Group Size',    field: 'groupSize',  type: 'number', minW: 84  },
-  { id: 'budget',      label: 'Budget',        field: 'budget',     type: 'text',   minW: 108 },
-  { id: 'style',       label: 'Style',         field: 'style',      type: 'style',  minW: 148 },
-  { id: 'notes',       label: 'Notes',         field: 'notes',      type: 'text',   minW: 180 },
-  { id: 'status',      label: 'Status',        field: 'status',     type: 'status', minW: 232 },
+// ── Column definitions ────────────────────────────────────────────────────────
+// PRIMARY: visible in the main table with sort + filter icons
+const PRIMARY_COLS = [
+  { id: 'createdAt',   label: 'Date',        field: 'createdAt',   type: 'date',   minW: 100 },
+  { id: 'fullName',    label: 'Name',         field: 'fullName',    type: 'text',   minW: 110 },
+  { id: 'email',       label: 'Email',        field: 'email',       type: 'text',   minW: 152 },
+  { id: 'destination', label: 'Destination',  field: 'destination', type: 'text',   minW: 100 },
+  { id: 'dates',       label: 'Trip Date',    field: 'dates',       type: 'text',   minW: 88  },
+  { id: 'duration',    label: 'Duration',     field: 'duration',    type: 'text',   minW: 64  },
+  { id: 'groupSize',   label: 'Pax',          field: 'groupSize',   type: 'number', minW: 46  },
+  { id: 'budget',      label: 'Budget',       field: 'budget',      type: 'text',   minW: 88  },
+  { id: 'status',      label: 'Status',       field: 'status',      type: 'status', minW: 190 },
 ];
 
+// SECONDARY: shown only in the expandable detail row
+const SECONDARY_COLS = [
+  { id: 'phone',     label: 'Phone',       field: 'phone',     type: 'text'  },
+  { id: 'groupType', label: 'Group Type',  field: 'groupType', type: 'text'  },
+  { id: 'style',     label: 'Style',       field: 'style',     type: 'style' },
+  { id: 'notes',     label: 'Notes',       field: 'notes',     type: 'text'  },
+];
+
+// All columns combined — used for filter state and matching
+const COLUMNS = [...PRIMARY_COLS, ...SECONDARY_COLS];
+
 const PAGE_SIZE = 25;
+// +1 for the expand-toggle column on the left
+const COL_SPAN  = PRIMARY_COLS.length + 1;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtDate(ts) {
   if (!ts) return '—';
-  return new Date(ts).toLocaleString('en-GB', {
+  return new Date(ts).toLocaleDateString('en-GB', {
     day: 'numeric', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
   });
 }
 
@@ -101,6 +110,15 @@ function initFilters() {
   return f;
 }
 
+// "No active filters" state — status = all selected, all text empty
+function emptyFilters() {
+  const f = {};
+  for (const col of COLUMNS) {
+    f[col.id] = col.type === 'status' ? [...ALL_STATUSES] : '';
+  }
+  return f;
+}
+
 function isFilterActive(col, filterVal) {
   if (col.type === 'status') return filterVal.length > 0 && filterVal.length < ALL_STATUSES.length;
   return !!filterVal;
@@ -111,6 +129,19 @@ function renderSortIcon(colId, sort) {
   return sort.dir === 'asc'
     ? <ChevronUp   size={10} color="#1B6B65" />
     : <ChevronDown size={10} color="#1B6B65" />;
+}
+
+// ── Detail field (used in expanded row) ───────────────────────────────────────
+function DetailField({ label, value }) {
+  if (!value) return null;
+  return (
+    <div>
+      <p style={{ fontSize: '10px', fontWeight: '600', color: '#B5AA99', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '3px' }}>
+        {label}
+      </p>
+      <p style={{ fontSize: '12.5px', color: '#4A433A', lineHeight: '1.4' }}>{value}</p>
+    </div>
+  );
 }
 
 // ── Status filter inside popover ──────────────────────────────────────────────
@@ -153,17 +184,15 @@ function StatusPopoverFilter({ value, onChange }) {
   );
 }
 
-// ── FilterPopover — rendered at position:fixed, outside the table DOM ─────────
+// ── FilterPopover — position:fixed, outside table DOM ─────────────────────────
 function FilterPopover({ col, value, onChange, onClose, anchorRect }) {
   const ref      = useRef(null);
   const inputRef = useRef(null);
 
-  // Auto-focus text input
   useEffect(() => {
     if (col.type !== 'status') inputRef.current?.focus();
   }, [col.type]);
 
-  // Close on outside click
   useEffect(() => {
     function onDown(e) {
       if (ref.current && !ref.current.contains(e.target)) onClose();
@@ -172,40 +201,30 @@ function FilterPopover({ col, value, onChange, onClose, anchorRect }) {
     return () => document.removeEventListener('mousedown', onDown);
   }, [onClose]);
 
-  // Close on Escape
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape') onClose(); }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Close on any scroll so position doesn't go stale
   useEffect(() => {
     function onScroll() { onClose(); }
     window.addEventListener('scroll', onScroll, true);
     return () => window.removeEventListener('scroll', onScroll, true);
   }, [onClose]);
 
-  // Position below the anchor, constrain to viewport
   const left = Math.min(anchorRect.left, window.innerWidth - 252);
   const top  = anchorRect.bottom + 6;
 
   return (
-    <div
-      ref={ref}
-      style={{
-        position: 'fixed', top, left, zIndex: 9999,
-        background: 'white',
-        border: '1px solid #E8E3DA', borderRadius: '8px',
-        boxShadow: '0 8px 28px rgba(28,26,22,0.14)',
-        minWidth: '236px', padding: '14px',
-      }}
-    >
-      {/* Column label */}
-      <p style={{
-        fontSize: '10.5px', fontWeight: '600', color: '#8C8070',
-        textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px',
-      }}>
+    <div ref={ref} style={{
+      position: 'fixed', top, left, zIndex: 9999,
+      background: 'white',
+      border: '1px solid #E8E3DA', borderRadius: '8px',
+      boxShadow: '0 8px 28px rgba(28,26,22,0.14)',
+      minWidth: '236px', padding: '14px',
+    }}>
+      <p style={{ fontSize: '10.5px', fontWeight: '600', color: '#8C8070', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
         {col.label}
       </p>
 
@@ -252,7 +271,7 @@ function FilterPopover({ col, value, onChange, onClose, anchorRect }) {
   );
 }
 
-// ── ColHeader — individual sortable + filterable column header ─────────────────
+// ── ColHeader ─────────────────────────────────────────────────────────────────
 function ColHeader({ col, sort, onSort, filterActive, onOpenFilter }) {
   const [hovered, setHovered] = useState(false);
 
@@ -272,7 +291,6 @@ function ColHeader({ col, sort, onSort, filterActive, onOpenFilter }) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-        {/* Sort trigger */}
         <button
           onClick={() => onSort(col.id)}
           style={{
@@ -286,8 +304,6 @@ function ColHeader({ col, sort, onSort, filterActive, onOpenFilter }) {
           {col.label}
           {renderSortIcon(col.id, sort)}
         </button>
-
-        {/* Filter icon — visible on hover or when a filter is active */}
         <button
           onClick={handleFilterClick}
           title={`Filter ${col.label}`}
@@ -308,7 +324,7 @@ function ColHeader({ col, sort, onSort, filterActive, onOpenFilter }) {
   );
 }
 
-// ── StatusAction (unchanged) ──────────────────────────────────────────────────
+// ── StatusAction ──────────────────────────────────────────────────────────────
 function StatusAction({ requestId, current, onUpdated, token }) {
   const [loading, setLoading] = useState(false);
 
@@ -363,6 +379,7 @@ export default function CustomRequestsPage() {
   const [filters, setFilters]              = useState(initFilters);
   const [page, setPage]                    = useState(1);
   const [popover, setPopover]              = useState(null); // { colId, anchorRect }
+  const [expandedRows, setExpandedRows]    = useState(new Set());
 
   useEffect(() => {
     getToken().then(setAuthToken).catch(() => {});
@@ -407,8 +424,9 @@ export default function CustomRequestsPage() {
     setPage(1);
   }
 
+  // Reset to "no filters active" — status = all selected, text = empty
   function clearAllFilters() {
-    setFilters(initFilters());
+    setFilters(emptyFilters());
     setPage(1);
   }
 
@@ -425,6 +443,14 @@ export default function CustomRequestsPage() {
   }
 
   function closePopover() { setPopover(null); }
+
+  function toggleExpand(id) {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   // ── Derived data ─────────────────────────────────────────────────────────────
   const { filteredRows, filteredTotal } = useMemo(() => {
@@ -490,7 +516,9 @@ export default function CustomRequestsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr>
-                {COLUMNS.map(col => (
+                {/* Expand toggle column */}
+                <th style={{ width: '32px', padding: '9px 4px 9px 12px', background: '#FAFAF8', borderBottom: '1px solid #E8E3DA' }} />
+                {PRIMARY_COLS.map(col => (
                   <ColHeader
                     key={col.id}
                     col={col}
@@ -506,7 +534,8 @@ export default function CustomRequestsPage() {
 
               {loading && [...Array(8)].map((_, i) => (
                 <tr key={i} style={{ borderTop: '1px solid #F4F1EC' }}>
-                  {COLUMNS.map((col, j) => (
+                  <td style={{ ...TD, width: '32px' }} />
+                  {PRIMARY_COLS.map((col, j) => (
                     <td key={col.id} style={TD}>
                       <div style={{ height: '11px', background: '#F4F1EC', borderRadius: '3px', width: j < 3 ? '80%' : '55%' }} />
                     </td>
@@ -516,51 +545,119 @@ export default function CustomRequestsPage() {
 
               {!loading && pageRows.length === 0 && (
                 <tr>
-                  <td colSpan={COLUMNS.length} style={{ padding: '48px', textAlign: 'center', color: '#B5AA99', fontSize: '13px' }}>
+                  <td colSpan={COL_SPAN} style={{ padding: '48px', textAlign: 'center', color: '#B5AA99', fontSize: '13px' }}>
                     No custom requests match the current filters.
                   </td>
                 </tr>
               )}
 
-              {!loading && pageRows.map((r, i) => (
-                <tr key={r.id} style={{ borderTop: '1px solid #F4F1EC', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
-                  <td style={{ ...TD, color: '#8C8070', fontSize: '11.5px', whiteSpace: 'nowrap' }}>{fmtDate(r.createdAt)}</td>
-                  <td style={{ ...TD, fontWeight: '500', color: '#1C1A16', whiteSpace: 'nowrap' }}>{r.fullName || '—'}</td>
-                  <td style={{ ...TD, maxWidth: '168px' }}>
-                    <a href={`mailto:${r.email}`} style={{ color: '#1B6B65', textDecoration: 'none', fontSize: '11.5px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {r.email || '—'}
-                    </a>
-                  </td>
-                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.phone || '—'}</td>
-                  <td style={{ ...TD, fontWeight: '500', color: '#1C1A16', whiteSpace: 'nowrap' }}>{r.destination || '—'}</td>
-                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.dates || '—'}</td>
-                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.duration ? `${r.duration}d` : '—'}</td>
-                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.groupType || '—'}</td>
-                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.groupType || '—'}</td>
-                  <td style={{ ...TD, color: '#4A433A', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.groupSize != null ? r.groupSize : '—'}</td>
-                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.budget || '—'}</td>
-                  <td style={{ ...TD, maxWidth: '148px' }}>
-                    <span title={styleText(r.style)} style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#4A433A', fontSize: '11.5px' }}>
-                      {styleText(r.style) || '—'}
-                    </span>
-                  </td>
-                  <td style={{ ...TD, maxWidth: '180px' }}>
-                    <span title={r.notes ?? ''} style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#6B6156', fontSize: '11.5px' }}>
-                      {r.notes || '—'}
-                    </span>
-                  </td>
-                  <td style={TD}>
-                    {authToken
-                      ? <StatusAction requestId={r.id} current={r.status || 'open'} onUpdated={handleStatusUpdated} token={authToken} />
-                      : (
-                        <span style={{ fontSize: '11px', fontWeight: '600', color: STATUS_META[r.status]?.color ?? '#1B6B65', background: STATUS_META[r.status]?.bg ?? '#EFF6F5', padding: '3px 9px', borderRadius: '10px' }}>
-                          {STATUS_META[r.status]?.label ?? 'Open'}
-                        </span>
-                      )
-                    }
-                  </td>
-                </tr>
-              ))}
+              {!loading && pageRows.map((r, i) => {
+                const isExpanded = expandedRows.has(r.id);
+                const rowBg = i % 2 === 0 ? 'white' : '#FAFAF8';
+                const hasSecondary = r.phone || r.groupType || styleText(r.style) || r.notes;
+
+                return [
+                  /* ── Main row ── */
+                  <tr key={r.id} style={{ borderTop: '1px solid #F4F1EC', background: rowBg }}>
+                    {/* Expand toggle */}
+                    <td style={{ ...TD, width: '32px', padding: '9px 4px 9px 12px' }}>
+                      {hasSecondary ? (
+                        <button
+                          onClick={() => toggleExpand(r.id)}
+                          title={isExpanded ? 'Collapse details' : 'Show more details'}
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            width: '20px', height: '20px', padding: 0,
+                            background: isExpanded ? '#EFF6F5' : 'transparent',
+                            border: `1px solid ${isExpanded ? '#A8D5D0' : '#E8E3DA'}`,
+                            borderRadius: '4px', cursor: 'pointer',
+                            transition: 'background 0.1s',
+                          }}
+                        >
+                          <ChevronRight
+                            size={11}
+                            color={isExpanded ? '#1B6B65' : '#B5AA99'}
+                            style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}
+                          />
+                        </button>
+                      ) : (
+                        <div style={{ width: '20px' }} />
+                      )}
+                    </td>
+
+                    <td style={{ ...TD, color: '#8C8070', fontSize: '11.5px', whiteSpace: 'nowrap' }}>
+                      {fmtDate(r.createdAt)}
+                    </td>
+                    <td style={{ ...TD, fontWeight: '500', color: '#1C1A16', whiteSpace: 'nowrap' }}>
+                      {r.fullName || '—'}
+                    </td>
+                    <td style={{ ...TD, maxWidth: '152px' }}>
+                      <a
+                        href={`mailto:${r.email}`}
+                        title={r.email}
+                        style={{ color: '#1B6B65', textDecoration: 'none', fontSize: '11.5px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      >
+                        {r.email || '—'}
+                      </a>
+                    </td>
+                    <td style={{ ...TD, fontWeight: '500', color: '#1C1A16', whiteSpace: 'nowrap' }}>
+                      {r.destination || '—'}
+                    </td>
+                    <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>
+                      {r.dates || '—'}
+                    </td>
+                    <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>
+                      {r.duration || '—'}
+                    </td>
+                    <td style={{ ...TD, color: '#4A433A', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {r.groupSize != null ? r.groupSize : '—'}
+                    </td>
+                    <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>
+                      {r.budget || '—'}
+                    </td>
+                    <td style={TD}>
+                      {authToken
+                        ? <StatusAction requestId={r.id} current={r.status || 'open'} onUpdated={handleStatusUpdated} token={authToken} />
+                        : (
+                          <span style={{ fontSize: '11px', fontWeight: '600', color: STATUS_META[r.status]?.color ?? '#1B6B65', background: STATUS_META[r.status]?.bg ?? '#EFF6F5', padding: '3px 9px', borderRadius: '10px' }}>
+                            {STATUS_META[r.status]?.label ?? 'Open'}
+                          </span>
+                        )
+                      }
+                    </td>
+                  </tr>,
+
+                  /* ── Expanded detail row ── */
+                  isExpanded && (
+                    <tr key={`${r.id}-detail`} style={{ background: rowBg }}>
+                      <td colSpan={COL_SPAN} style={{ padding: 0, borderTop: 'none' }}>
+                        <div style={{
+                          background: '#F8F6F2',
+                          borderTop: '1px solid #EDE8DF',
+                          borderBottom: '1px solid #EDE8DF',
+                          padding: '14px 16px 14px 44px',
+                        }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px 28px' }}>
+                            {r.phone     && <DetailField label="Phone"      value={r.phone} />}
+                            {r.groupType && <DetailField label="Group Type" value={r.groupType} />}
+                            {styleText(r.style) && <DetailField label="Style" value={styleText(r.style)} />}
+                          </div>
+                          {r.notes && (
+                            <div style={{ marginTop: r.phone || r.groupType || styleText(r.style) ? '12px' : 0 }}>
+                              <p style={{ fontSize: '10px', fontWeight: '600', color: '#B5AA99', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '3px' }}>
+                                Notes
+                              </p>
+                              <p style={{ fontSize: '12.5px', color: '#4A433A', lineHeight: '1.5', maxWidth: '680px' }}>
+                                {r.notes}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ),
+                ];
+              })}
 
             </tbody>
           </table>
@@ -581,9 +678,9 @@ export default function CustomRequestsPage() {
         </div>
       </div>
 
-      {/* ── Filter popover — rendered outside table, position:fixed ── */}
+      {/* Filter popover — rendered outside table, position:fixed */}
       {popover && (() => {
-        const col = COLUMNS.find(c => c.id === popover.colId);
+        const col = PRIMARY_COLS.find(c => c.id === popover.colId);
         return col ? (
           <FilterPopover
             col={col}
