@@ -291,15 +291,22 @@ async function getUsersList(pool, q, offset) {
   const { rows: users } = await pool.query(`
     SELECT
       u.id, u.email, u.name, u."createdAt",
-      COUNT(DISTINCT te.id) FILTER (WHERE te."eventType"='DOWNLOADED') AS downloads,
-      COUNT(DISTINCT p.id)                                              AS purchases,
-      COALESCE(SUM(p.amount), 0)                                        AS revenue,
-      GREATEST(u."createdAt", MAX(te."createdAt"), MAX(p."purchasedAt")) AS last_activity
+      COALESCE(dl.downloads, 0)    AS downloads,
+      COALESCE(pu.purchases, 0)    AS purchases,
+      COALESCE(pu.revenue, 0)      AS revenue,
+      GREATEST(u."createdAt", dl.last_download, pu.last_purchase) AS last_activity
     FROM "User" u
-    LEFT JOIN "TripEvent" te ON te."userId" = u.id
-    LEFT JOIN "Purchase"  p  ON p."userId"  = u.id
+    LEFT JOIN (
+      SELECT "userId", COUNT(*) AS downloads, MAX("createdAt") AS last_download
+      FROM "TripEvent" WHERE "eventType"='DOWNLOADED'
+      GROUP BY "userId"
+    ) dl ON dl."userId" = u.id
+    LEFT JOIN (
+      SELECT "userId", COUNT(*) AS purchases, SUM(amount) AS revenue, MAX("purchasedAt") AS last_purchase
+      FROM "Purchase"
+      GROUP BY "userId"
+    ) pu ON pu."userId" = u.id
     WHERE u.email ILIKE $1 OR u.name ILIKE $1
-    GROUP BY u.id, u.email, u.name, u."createdAt"
     ORDER BY u."createdAt" DESC
     LIMIT 50 OFFSET $2
   `, [like, offset]);
@@ -315,14 +322,19 @@ async function getUserDetail(pool, id) {
   const [userRes, purchasesRes, eventsRes, tripEventsRes] = await Promise.all([
     pool.query(`
       SELECT u.id, u.email, u.name, u."createdAt", u."clerkId",
-        COUNT(DISTINCT p.id)  AS purchases,
-        COUNT(DISTINCT te.id) FILTER (WHERE te."eventType"='DOWNLOADED') AS downloads,
-        COALESCE(SUM(p.amount), 0) AS revenue
+        COALESCE(pu.purchases, 0) AS purchases,
+        COALESCE(dl.downloads, 0) AS downloads,
+        COALESCE(pu.revenue, 0)   AS revenue
       FROM "User" u
-      LEFT JOIN "Purchase"  p  ON p."userId"  = u.id
-      LEFT JOIN "TripEvent" te ON te."userId" = u.id
+      LEFT JOIN (
+        SELECT "userId", COUNT(*) AS purchases, SUM(amount) AS revenue
+        FROM "Purchase" GROUP BY "userId"
+      ) pu ON pu."userId" = u.id
+      LEFT JOIN (
+        SELECT "userId", COUNT(*) AS downloads
+        FROM "TripEvent" WHERE "eventType"='DOWNLOADED' GROUP BY "userId"
+      ) dl ON dl."userId" = u.id
       WHERE u.id = $1
-      GROUP BY u.id, u.email, u.name, u."createdAt", u."clerkId"
     `, [id]),
     pool.query(`
       SELECT p."purchasedAt", p.amount, p.status, i.title, i.slug
