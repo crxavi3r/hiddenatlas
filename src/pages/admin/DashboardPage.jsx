@@ -87,17 +87,6 @@ function TrendChart({ data = [] }) {
   const step = Math.ceil(n / 7);
   const xLabelIdxs = data.reduce((a, _, i) => { if (i % step === 0 || i === n - 1) a.push(i); return a; }, []);
 
-  const handleMouseMove = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const mouseX = ((e.clientX - rect.left) / rect.width) * W;
-    let closest = 0, minDist = Infinity;
-    for (let i = 0; i < n; i++) {
-      const d = Math.abs(xPos(i) - mouseX);
-      if (d < minDist) { minDist = d; closest = i; }
-    }
-    setHovered(closest);
-  };
-
   const hd = hovered != null ? data[hovered] : null;
 
   // Tooltip: show to right of point unless near right edge
@@ -119,7 +108,6 @@ function TrendChart({ data = [] }) {
         <svg
           viewBox={`0 0 ${W} ${H}`}
           style={{ width: '100%', height: '210px', display: 'block', overflow: 'visible' }}
-          onMouseMove={handleMouseMove}
           onMouseLeave={() => setHovered(null)}
         >
           {/* Y-axis labels */}
@@ -190,14 +178,23 @@ function TrendChart({ data = [] }) {
             </text>
           ))}
 
-          {/* Invisible overlay — ensures mouse events fire across the full chart area,
-              including empty space between data points */}
-          <rect
-            x={padL} y={padT}
-            width={cW} height={cH}
-            fill="transparent"
-            style={{ cursor: 'crosshair' }}
-          />
+          {/* Per-column hit areas — each column spans from the midpoint to the previous
+              data point to the midpoint to the next, covering the full chart height.
+              This gives reliable hover detection anywhere on the chart, not just on dots. */}
+          {data.map((_, i) => {
+            const x0 = i === 0     ? padL         : (xPos(i - 1) + xPos(i)) / 2;
+            const x1 = i === n - 1 ? padL + cW    : (xPos(i) + xPos(i + 1)) / 2;
+            return (
+              <rect
+                key={`hit-${i}`}
+                x={x0} y={padT}
+                width={x1 - x0} height={cH}
+                fill="rgba(0,0,0,0)"
+                style={{ cursor: 'crosshair' }}
+                onMouseEnter={() => setHovered(i)}
+              />
+            );
+          })}
         </svg>
 
         {/* Tooltip */}
