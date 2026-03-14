@@ -139,13 +139,19 @@ function StatusFilter({ selected, onChange, counts }) {
   );
 }
 
-// ── Inline status selector per row ────────────────────────────────────────────
-function StatusSelect({ requestId, current, onUpdated, token }) {
+const NEXT_STATUS = {
+  open:        { value: 'in_progress', label: '→ In Progress' },
+  in_progress: { value: 'closed',      label: '→ Close'       },
+  closed:      { value: 'open',        label: 'Reopen'        },
+};
+
+// ── Inline status action per row ──────────────────────────────────────────────
+function StatusAction({ requestId, current, onUpdated, token }) {
   const [loading, setLoading] = useState(false);
 
-  async function handleChange(e) {
-    const newStatus = e.target.value;
-    if (newStatus === current) return;
+  async function advance() {
+    const next = NEXT_STATUS[current]?.value;
+    if (!next) return;
     setLoading(true);
     try {
       await fetch(`/api/admin?action=custom-request-status`, {
@@ -154,9 +160,9 @@ function StatusSelect({ requestId, current, onUpdated, token }) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ id: requestId, status: newStatus }),
+        body: JSON.stringify({ id: requestId, status: next }),
       });
-      onUpdated(requestId, newStatus);
+      onUpdated(requestId, next);
     } catch (err) {
       console.error('[admin/custom-requests] status update failed:', err);
     } finally {
@@ -164,31 +170,36 @@ function StatusSelect({ requestId, current, onUpdated, token }) {
     }
   }
 
-  const m = STATUS_META[current] ?? STATUS_META.open;
+  const m    = STATUS_META[current] ?? STATUS_META.open;
+  const next = NEXT_STATUS[current];
+
   return (
-    <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-      <select
-        value={current}
-        onChange={handleChange}
-        disabled={loading}
-        style={{
-          appearance: 'none',
-          padding: '4px 26px 4px 9px',
-          fontSize: '11px', fontWeight: '600',
-          color: m.color, background: m.bg,
-          border: 'none', borderRadius: '10px',
-          cursor: loading ? 'wait' : 'pointer',
-          outline: 'none',
-        }}
-      >
-        {Object.entries(STATUS_META).map(([val, meta]) => (
-          <option key={val} value={val}>{meta.label}</option>
-        ))}
-      </select>
-      <ChevronDown
-        size={10}
-        style={{ position: 'absolute', right: '7px', pointerEvents: 'none', color: m.color }}
-      />
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap' }}>
+      {/* Current status badge */}
+      <span style={{
+        fontSize: '11px', fontWeight: '600',
+        color: m.color, background: m.bg,
+        padding: '3px 9px', borderRadius: '10px', whiteSpace: 'nowrap',
+      }}>
+        {m.label}
+      </span>
+
+      {/* Next-action button */}
+      {next && (
+        <button
+          onClick={advance}
+          disabled={loading}
+          style={{
+            fontSize: '11px', fontWeight: '500',
+            color: '#4A433A', background: 'white',
+            border: '1px solid #E8E3DA', borderRadius: '6px',
+            padding: '3px 9px', cursor: loading ? 'wait' : 'pointer',
+            whiteSpace: 'nowrap', opacity: loading ? 0.6 : 1,
+          }}
+        >
+          {loading ? '…' : next.label}
+        </button>
+      )}
     </div>
   );
 }
@@ -364,10 +375,10 @@ export default function CustomRequestsPage() {
                         </span>
                       </td>
 
-                      {/* Status — inline editable select */}
+                      {/* Status — badge + next-action button */}
                       <td style={{ padding: '10px 14px' }}>
                         {authToken
-                          ? <StatusSelect
+                          ? <StatusAction
                               requestId={r.id}
                               current={r.status || 'open'}
                               onUpdated={handleStatusUpdated}

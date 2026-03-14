@@ -122,64 +122,133 @@ export default async function handler(req, res) {
 
   await pool.end().catch(() => {});
 
-  // ── Email notification ─────────────────────────────────────────────────────
-  // Non-fatal: request is already saved — email failure must not cancel the 200 response.
+  // ── Email notifications ────────────────────────────────────────────────────
+  // Non-fatal: request is already saved — email failures must not cancel the 200 response.
   // emailError is returned in the response so failures are visible without needing logs.
-  let emailSent  = false;
-  let emailError = null;
+  let adminEmailSent   = false;
+  let clientEmailSent  = false;
+  let emailError       = null;
 
   if (!process.env.RESEND_API_KEY) {
     emailError = 'RESEND_API_KEY environment variable is not set in production';
     console.warn('[custom-planning]', emailError);
   } else {
+    const { Resend } = await import('resend');
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const travelStyle = Array.isArray(style) && style.length ? style.join(', ') : 'None selected';
+    const FROM = 'HiddenAtlas <brief@hiddenatlas.travel>';
+
+    // ── 1) Admin notification ──────────────────────────────────────────────
+    const ADMIN_TO = 'contact@hiddenatlas.travel';
     try {
-      const { Resend } = await import('resend');
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      const travelStyle = Array.isArray(style) && style.length ? style.join(', ') : 'None selected';
-
-      const TO   = 'contact@hiddenatlas.travel';
-      const FROM = 'HiddenAtlas <brief@hiddenatlas.travel>';
-
-      console.log(`[custom-planning] Sending email from=${FROM} to=${TO}`);
-
-      const result = await resend.emails.send({
+      console.log(`[custom-planning] Sending admin email from=${FROM} to=${ADMIN_TO}`);
+      const adminResult = await resend.emails.send({
         from: FROM,
-        to:   [TO],
-        subject: `HiddenAtlas Trip Request – ${destination || 'New Inquiry'}`,
+        to:   [ADMIN_TO],
+        subject: `New Custom Journey Request – ${destination || 'New Inquiry'}`,
         html: `
-          <h2>New HiddenAtlas Travel Brief</h2>
-          <p><strong>Full name:</strong> ${name}</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Phone:</strong> ${phone || 'Not provided'}</p>
-          <hr />
-          <p><strong>Destination:</strong> ${destination || 'Not specified'}</p>
-          <p><strong>Approximate dates:</strong> ${dates || 'Not specified'}</p>
-          <p><strong>Trip duration:</strong> ${duration || 'Not specified'}</p>
-          <p><strong>Group size:</strong> ${groupSize || 'Not specified'}</p>
-          <p><strong>Trip type:</strong> ${groupType || 'Not specified'}</p>
-          <p><strong>Travel styles:</strong> ${travelStyle}</p>
-          <p><strong>Budget range:</strong> ${budget || 'Not specified'}</p>
-          <p><strong>Additional notes:</strong></p>
-          <p>${notes || 'No additional notes'}</p>
-          <hr />
-          <p style="color:#888;font-size:12px;">DB record id: ${insertedId}</p>
-          <p style="color:#888;font-size:12px;">Submitted via HiddenAtlas custom planning form.</p>
+          <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;">
+            <h2 style="color:#1B6B65;margin-bottom:4px;">New Custom Journey Request</h2>
+            <p style="color:#8C8070;font-size:13px;margin-top:0;">Submitted via HiddenAtlas custom planning form</p>
+            <hr style="border:none;border-top:1px solid #E8E3DA;margin:16px 0;" />
+
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+              <tr><td style="padding:6px 0;color:#8C8070;width:140px;">Name</td><td style="padding:6px 0;font-weight:600;">${name}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Email</td><td style="padding:6px 0;"><a href="mailto:${email}" style="color:#1B6B65;">${email}</a></td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Phone</td><td style="padding:6px 0;">${phone || '—'}</td></tr>
+            </table>
+
+            <hr style="border:none;border-top:1px solid #E8E3DA;margin:16px 0;" />
+
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+              <tr><td style="padding:6px 0;color:#8C8070;width:140px;">Destination</td><td style="padding:6px 0;font-weight:600;">${destination || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Dates</td><td style="padding:6px 0;">${dates || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Duration</td><td style="padding:6px 0;">${duration || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Group Size</td><td style="padding:6px 0;">${groupSize || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Trip Type</td><td style="padding:6px 0;">${groupType || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Travel Styles</td><td style="padding:6px 0;">${travelStyle}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Budget</td><td style="padding:6px 0;">${budget || '—'}</td></tr>
+            </table>
+
+            ${notes ? `
+            <hr style="border:none;border-top:1px solid #E8E3DA;margin:16px 0;" />
+            <p style="color:#8C8070;font-size:13px;margin-bottom:6px;">Notes</p>
+            <p style="font-size:14px;margin:0;">${notes}</p>
+            ` : ''}
+
+            <hr style="border:none;border-top:1px solid #E8E3DA;margin:16px 0;" />
+            <p>
+              <a href="https://hiddenatlas.travel/admin/custom-requests"
+                 style="display:inline-block;background:#1B6B65;color:white;text-decoration:none;
+                        padding:10px 20px;border-radius:6px;font-size:13px;font-weight:600;">
+                View in Backoffice →
+              </a>
+            </p>
+            <p style="color:#B5AA99;font-size:11px;margin-top:16px;">Record id: ${insertedId}</p>
+          </div>
         `,
       });
 
-      // Resend SDK v2+ returns { data, error } instead of throwing on API errors.
-      if (result.error) {
-        emailError = `Resend API error: ${JSON.stringify(result.error)}`;
+      if (adminResult.error) {
+        emailError = `Admin email — Resend API error: ${JSON.stringify(adminResult.error)}`;
         console.error(`[custom-planning] ${emailError}`);
       } else {
-        emailSent = true;
-        console.log(`[custom-planning] Email OK — Resend id=${result.data?.id} to=${TO} request=${insertedId}`);
+        adminEmailSent = true;
+        console.log(`[custom-planning] Admin email OK — Resend id=${adminResult.data?.id} request=${insertedId}`);
       }
     } catch (err) {
-      emailError = err.message || 'Unknown error';
-      console.error('[custom-planning] Email exception:', emailError);
+      emailError = `Admin email exception: ${err.message || 'Unknown error'}`;
+      console.error('[custom-planning]', emailError);
+    }
+
+    // ── 2) Client confirmation ─────────────────────────────────────────────
+    try {
+      const clientEmail = email.trim().toLowerCase();
+      console.log(`[custom-planning] Sending confirmation email from=${FROM} to=${clientEmail}`);
+      const clientResult = await resend.emails.send({
+        from: FROM,
+        to:   [clientEmail],
+        subject: `Your HiddenAtlas journey request ✨`,
+        html: `
+          <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;">
+            <h2 style="color:#1B6B65;">Hi ${name.split(' ')[0]},</h2>
+            <p style="font-size:15px;line-height:1.6;">
+              We've received your travel brief and one of our planners will review it shortly.
+            </p>
+            <p style="font-size:15px;line-height:1.6;">
+              We'll reach out within 48 hours to start designing your itinerary.
+            </p>
+            <p style="font-size:15px;line-height:1.6;">
+              In the meantime you can explore our curated journeys here:<br/>
+              <a href="https://hiddenatlas.travel/itineraries"
+                 style="color:#1B6B65;font-weight:600;">
+                hiddenatlas.travel/itineraries
+              </a>
+            </p>
+            <p style="font-size:15px;margin-top:24px;">— HiddenAtlas</p>
+            <hr style="border:none;border-top:1px solid #E8E3DA;margin:24px 0;" />
+            <p style="color:#B5AA99;font-size:11px;">
+              You're receiving this because you submitted a travel brief on hiddenatlas.travel.
+            </p>
+          </div>
+        `,
+      });
+
+      if (clientResult.error) {
+        const clientErr = `Client email — Resend API error: ${JSON.stringify(clientResult.error)}`;
+        console.error(`[custom-planning] ${clientErr}`);
+        emailError = emailError ? `${emailError} | ${clientErr}` : clientErr;
+      } else {
+        clientEmailSent = true;
+        console.log(`[custom-planning] Client confirmation email OK — Resend id=${clientResult.data?.id} to=${clientEmail}`);
+      }
+    } catch (err) {
+      const clientErr = `Client email exception: ${err.message || 'Unknown error'}`;
+      console.error('[custom-planning]', clientErr);
+      emailError = emailError ? `${emailError} | ${clientErr}` : clientErr;
     }
   }
 
-  return res.status(200).json({ success: true, emailSent, emailError });
+  const emailSent = adminEmailSent && clientEmailSent;
+  return res.status(200).json({ success: true, emailSent, adminEmailSent, clientEmailSent, emailError });
 }
