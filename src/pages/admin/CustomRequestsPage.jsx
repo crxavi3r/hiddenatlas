@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { ChevronDown, ChevronUp, ChevronsUpDown, Check, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Check, X, Filter } from 'lucide-react';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STATUS_META = {
@@ -8,7 +8,7 @@ const STATUS_META = {
   in_progress: { label: 'In Progress', color: '#A07830', bg: '#FBF6EE' },
   closed:      { label: 'Closed',      color: '#8C8070', bg: '#F4F1EC' },
 };
-const ALL_STATUSES  = Object.keys(STATUS_META);
+const ALL_STATUSES          = Object.keys(STATUS_META);
 const DEFAULT_STATUS_FILTER = ['open', 'in_progress'];
 
 const NEXT_STATUS = {
@@ -17,11 +17,6 @@ const NEXT_STATUS = {
   closed:      { value: 'open',        label: 'Reopen'        },
 };
 
-// ── Column definitions ────────────────────────────────────────────────────────
-// id:    unique — used as sort/filter key
-// field: data field on the row object
-// type:  'text' | 'date' | 'number' | 'style' | 'status'
-// minW:  minimum column width in px
 const COLUMNS = [
   { id: 'createdAt',   label: 'Date',         field: 'createdAt',  type: 'date',   minW: 148 },
   { id: 'fullName',    label: 'Name',          field: 'fullName',   type: 'text',   minW: 128 },
@@ -73,13 +68,12 @@ function sortRows(rows, key, dir) {
   return [...rows].sort((a, b) => {
     const av = getSortValue(a, col);
     const bv = getSortValue(b, col);
-    // nulls / empty last
     const aEmpty = av === '' || av === -Infinity;
     const bEmpty = bv === '' || bv === -Infinity;
     if (aEmpty && bEmpty) return 0;
     if (aEmpty) return 1;
     if (bEmpty) return -1;
-    let cmp = col.type === 'number' || col.type === 'date'
+    const cmp = col.type === 'number' || col.type === 'date'
       ? av - bv
       : String(av).localeCompare(String(bv));
     return dir === 'asc' ? cmp : -cmp;
@@ -107,6 +101,11 @@ function initFilters() {
   return f;
 }
 
+function isFilterActive(col, filterVal) {
+  if (col.type === 'status') return filterVal.length > 0 && filterVal.length < ALL_STATUSES.length;
+  return !!filterVal;
+}
+
 function renderSortIcon(colId, sort) {
   if (sort.key !== colId) return <ChevronsUpDown size={10} color="#C4BDB4" />;
   return sort.dir === 'asc'
@@ -114,84 +113,202 @@ function renderSortIcon(colId, sort) {
     : <ChevronDown size={10} color="#1B6B65" />;
 }
 
-// ── Status multi-select filter (inline in column header filter row) ────────────
-function StatusHeaderFilter({ value, onChange }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    function onDown(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, []);
-
+// ── Status filter inside popover ──────────────────────────────────────────────
+function StatusPopoverFilter({ value, onChange }) {
   function toggle(s) {
     onChange(value.includes(s) ? value.filter(x => x !== s) : [...value, s]);
   }
+  return (
+    <div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        {ALL_STATUSES.map(s => {
+          const m = STATUS_META[s];
+          const checked = value.includes(s);
+          return (
+            <button key={s} onClick={() => toggle(s)} style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              padding: '6px 8px',
+              background: checked ? '#FAFAF8' : 'transparent',
+              border: `1px solid ${checked ? '#E8E3DA' : 'transparent'}`,
+              borderRadius: '5px', cursor: 'pointer', textAlign: 'left',
+            }}>
+              <div style={{
+                width: '13px', height: '13px', borderRadius: '2px', flexShrink: 0,
+                border: `2px solid ${checked ? m.color : '#D4CCBF'}`,
+                background: checked ? m.color : 'white',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {checked && <Check size={8} color="white" strokeWidth={3} />}
+              </div>
+              <span style={{ fontSize: '12.5px', color: '#1C1A16' }}>{m.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ borderTop: '1px solid #F4F1EC', marginTop: '8px', paddingTop: '8px', display: 'flex', gap: '12px' }}>
+        <button onClick={() => onChange([...ALL_STATUSES])} style={{ fontSize: '11px', color: '#1B6B65', fontWeight: '600', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>All</button>
+        <button onClick={() => onChange([])} style={{ fontSize: '11px', color: '#8C8070', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>None</button>
+      </div>
+    </div>
+  );
+}
 
-  const active = value.length > 0 && value.length < ALL_STATUSES.length;
-  const label  = value.length === 0 ? 'None'
-    : value.length === ALL_STATUSES.length ? 'All statuses'
-    : value.map(s => STATUS_META[s].label).join(', ');
+// ── FilterPopover — rendered at position:fixed, outside the table DOM ─────────
+function FilterPopover({ col, value, onChange, onClose, anchorRect }) {
+  const ref      = useRef(null);
+  const inputRef = useRef(null);
+
+  // Auto-focus text input
+  useEffect(() => {
+    if (col.type !== 'status') inputRef.current?.focus();
+  }, [col.type]);
+
+  // Close on outside click
+  useEffect(() => {
+    function onDown(e) {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [onClose]);
+
+  // Close on Escape
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  // Close on any scroll so position doesn't go stale
+  useEffect(() => {
+    function onScroll() { onClose(); }
+    window.addEventListener('scroll', onScroll, true);
+    return () => window.removeEventListener('scroll', onScroll, true);
+  }, [onClose]);
+
+  // Position below the anchor, constrain to viewport
+  const left = Math.min(anchorRect.left, window.innerWidth - 252);
+  const top  = anchorRect.bottom + 6;
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '3px 7px', background: 'white',
-          border: `1px solid ${active ? '#1B6B65' : '#D4CCBF'}`, borderRadius: '3px',
-          fontSize: '11px', color: active ? '#1B6B65' : '#8C8070', cursor: 'pointer',
-        }}
-      >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '170px' }}>
-          {label}
-        </span>
-        <ChevronDown size={9} style={{ flexShrink: 0, marginLeft: '4px' }} />
-      </button>
+    <div
+      ref={ref}
+      style={{
+        position: 'fixed', top, left, zIndex: 9999,
+        background: 'white',
+        border: '1px solid #E8E3DA', borderRadius: '8px',
+        boxShadow: '0 8px 28px rgba(28,26,22,0.14)',
+        minWidth: '236px', padding: '14px',
+      }}
+    >
+      {/* Column label */}
+      <p style={{
+        fontSize: '10.5px', fontWeight: '600', color: '#8C8070',
+        textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px',
+      }}>
+        {col.label}
+      </p>
 
-      {open && (
-        <div style={{
-          position: 'absolute', left: 0, top: 'calc(100% + 2px)', zIndex: 200,
-          background: 'white', border: '1px solid #E8E3DA', borderRadius: '6px',
-          boxShadow: '0 8px 24px rgba(28,26,22,0.12)', minWidth: '170px', padding: '4px 0',
-        }}>
-          {ALL_STATUSES.map(s => {
-            const m = STATUS_META[s];
-            const checked = value.includes(s);
-            return (
-              <button key={s} onClick={() => toggle(s)} style={{
-                display: 'flex', alignItems: 'center', gap: '8px',
-                width: '100%', padding: '6px 12px',
-                background: checked ? '#FAFAF8' : 'white',
-                border: 'none', cursor: 'pointer',
-              }}>
-                <div style={{
-                  width: '12px', height: '12px', borderRadius: '2px', flexShrink: 0,
-                  border: `2px solid ${checked ? m.color : '#D4CCBF'}`,
-                  background: checked ? m.color : 'white',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  {checked && <Check size={8} color="white" strokeWidth={3} />}
-                </div>
-                <span style={{ fontSize: '12px', fontWeight: '500', color: '#1C1A16' }}>{m.label}</span>
-              </button>
-            );
-          })}
-          <div style={{ borderTop: '1px solid #F4F1EC', padding: '4px 12px', display: 'flex', gap: '10px', marginTop: '2px' }}>
-            <button onClick={() => onChange([...ALL_STATUSES])} style={{ fontSize: '11px', color: '#1B6B65', fontWeight: '600', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>All</button>
-            <button onClick={() => onChange([])} style={{ fontSize: '11px', color: '#8C8070', fontWeight: '500', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>None</button>
-          </div>
-        </div>
+      {col.type === 'status' ? (
+        <StatusPopoverFilter value={value} onChange={onChange} />
+      ) : (
+        <>
+          <input
+            ref={inputRef}
+            type={col.type === 'number' ? 'number' : 'text'}
+            placeholder="Search…"
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') onClose(); }}
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              padding: '7px 10px',
+              border: '1px solid #D4CCBF', borderRadius: '4px',
+              fontSize: '12.5px', color: '#1C1A16', background: 'white', outline: 'none',
+            }}
+            onFocus={e  => { e.target.style.borderColor = '#1B6B65'; }}
+            onBlur={e   => { e.target.style.borderColor = '#D4CCBF'; }}
+          />
+          {value ? (
+            <button
+              onClick={() => onChange('')}
+              style={{
+                marginTop: '8px', width: '100%', padding: '5px 0',
+                background: 'none', border: '1px solid #E8E3DA', borderRadius: '4px',
+                fontSize: '11.5px', color: '#8C8070', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+              }}
+            >
+              <X size={10} /> Clear
+            </button>
+          ) : (
+            <p style={{ fontSize: '11px', color: '#C4BDB4', marginTop: '6px', textAlign: 'center' }}>
+              Press Enter to apply
+            </p>
+          )}
+        </>
       )}
     </div>
   );
 }
 
-// ── StatusAction (preserved from previous implementation) ─────────────────────
+// ── ColHeader — individual sortable + filterable column header ─────────────────
+function ColHeader({ col, sort, onSort, filterActive, onOpenFilter }) {
+  const [hovered, setHovered] = useState(false);
+
+  function handleFilterClick(e) {
+    e.stopPropagation();
+    onOpenFilter(col.id, e.currentTarget.getBoundingClientRect());
+  }
+
+  return (
+    <th
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        padding: '9px 10px', textAlign: 'left',
+        background: '#FAFAF8', borderBottom: '1px solid #E8E3DA',
+        whiteSpace: 'nowrap', minWidth: `${col.minW}px`, userSelect: 'none',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        {/* Sort trigger */}
+        <button
+          onClick={() => onSort(col.id)}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '3px',
+            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+            color: sort.key === col.id ? '#1C1A16' : '#6B6156',
+            fontWeight: '600', fontSize: '10.5px',
+            textTransform: 'uppercase', letterSpacing: '0.4px',
+          }}
+        >
+          {col.label}
+          {renderSortIcon(col.id, sort)}
+        </button>
+
+        {/* Filter icon — visible on hover or when a filter is active */}
+        <button
+          onClick={handleFilterClick}
+          title={`Filter ${col.label}`}
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: '18px', height: '18px', flexShrink: 0,
+            background: filterActive ? '#EFF6F5' : 'transparent',
+            border: `1px solid ${filterActive ? '#A8D5D0' : 'transparent'}`,
+            borderRadius: '3px', cursor: 'pointer', padding: 0,
+            opacity: hovered || filterActive ? 1 : 0,
+            transition: 'opacity 0.12s',
+          }}
+        >
+          <Filter size={9} color={filterActive ? '#1B6B65' : '#9C9488'} />
+        </button>
+      </div>
+    </th>
+  );
+}
+
+// ── StatusAction (unchanged) ──────────────────────────────────────────────────
 function StatusAction({ requestId, current, onUpdated, token }) {
   const [loading, setLoading] = useState(false);
 
@@ -245,13 +362,12 @@ export default function CustomRequestsPage() {
   const [sort, setSort]                    = useState({ key: 'createdAt', dir: 'desc' });
   const [filters, setFilters]              = useState(initFilters);
   const [page, setPage]                    = useState(1);
+  const [popover, setPopover]              = useState(null); // { colId, anchorRect }
 
-  // Cache token for StatusAction
   useEffect(() => {
     getToken().then(setAuthToken).catch(() => {});
   }, [getToken]);
 
-  // Fetch all rows once — sorting/filtering is done client-side
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -304,14 +420,18 @@ export default function CustomRequestsPage() {
     );
   }
 
+  function openFilterPopover(colId, rect) {
+    setPopover(prev => prev?.colId === colId ? null : { colId, anchorRect: rect });
+  }
+
+  function closePopover() { setPopover(null); }
+
   // ── Derived data ─────────────────────────────────────────────────────────────
   const { filteredRows, filteredTotal } = useMemo(() => {
     let rows = allRows;
     for (const col of COLUMNS) {
       const fv = filters[col.id];
-      if (col.type === 'status') {
-        rows = rows.filter(r => matchesFilter(r, col, fv));
-      } else if (fv) {
+      if (fv !== '' && fv !== undefined) {
         rows = rows.filter(r => matchesFilter(r, col, fv));
       }
     }
@@ -323,26 +443,9 @@ export default function CustomRequestsPage() {
   const pageRows   = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const activeFilterCount = useMemo(() => {
-    let n = 0;
-    for (const col of COLUMNS) {
-      const fv = filters[col.id];
-      if (col.type === 'status') {
-        if (fv.length > 0 && fv.length < ALL_STATUSES.length) n++;
-      } else if (fv) n++;
-    }
-    return n;
+    return COLUMNS.reduce((n, col) => isFilterActive(col, filters[col.id]) ? n + 1 : n, 0);
   }, [filters]);
 
-  // ── Styles ───────────────────────────────────────────────────────────────────
-  const TH = {
-    padding: '8px 10px', textAlign: 'left',
-    background: '#FAFAF8', borderBottom: '1px solid #E8E3DA',
-    whiteSpace: 'nowrap',
-  };
-  const TF = {
-    padding: '4px 10px',
-    background: '#F4F1EC', borderBottom: '2px solid #E8E3DA',
-  };
   const TD = { padding: '9px 10px' };
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -386,71 +489,31 @@ export default function CustomRequestsPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
-
-              {/* ── Sort row (column headers) */}
               <tr>
                 {COLUMNS.map(col => (
-                  <th key={col.id} style={{ ...TH, minWidth: `${col.minW}px` }}>
-                    <button
-                      onClick={() => handleSort(col.id)}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: '4px',
-                        background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                        color: sort.key === col.id ? '#1C1A16' : '#6B6156',
-                        fontWeight: '600', fontSize: '10.5px',
-                        textTransform: 'uppercase', letterSpacing: '0.4px',
-                      }}
-                    >
-                      {col.label}
-                      {renderSortIcon(col.id, sort)}
-                    </button>
-                  </th>
+                  <ColHeader
+                    key={col.id}
+                    col={col}
+                    sort={sort}
+                    onSort={handleSort}
+                    filterActive={isFilterActive(col, filters[col.id])}
+                    onOpenFilter={openFilterPopover}
+                  />
                 ))}
               </tr>
-
-              {/* ── Filter row */}
-              <tr>
-                {COLUMNS.map(col => (
-                  <td key={col.id} style={{ ...TF, minWidth: `${col.minW}px` }}>
-                    {col.type === 'status' ? (
-                      <StatusHeaderFilter
-                        value={filters[col.id]}
-                        onChange={val => setFilter(col.id, val)}
-                      />
-                    ) : (
-                      <input
-                        type={col.type === 'number' ? 'number' : 'text'}
-                        placeholder="Filter…"
-                        value={filters[col.id]}
-                        onChange={e => setFilter(col.id, e.target.value)}
-                        style={{
-                          width: '100%', boxSizing: 'border-box',
-                          padding: '3px 6px',
-                          border: `1px solid ${filters[col.id] ? '#1B6B65' : '#D4CCBF'}`,
-                          borderRadius: '3px', fontSize: '11px',
-                          color: '#1C1A16', background: 'white', outline: 'none',
-                        }}
-                      />
-                    )}
-                  </td>
-                ))}
-              </tr>
-
             </thead>
             <tbody>
 
-              {/* Loading skeletons */}
               {loading && [...Array(8)].map((_, i) => (
                 <tr key={i} style={{ borderTop: '1px solid #F4F1EC' }}>
                   {COLUMNS.map((col, j) => (
-                    <td key={col.id} style={{ ...TD }}>
+                    <td key={col.id} style={TD}>
                       <div style={{ height: '11px', background: '#F4F1EC', borderRadius: '3px', width: j < 3 ? '80%' : '55%' }} />
                     </td>
                   ))}
                 </tr>
               ))}
 
-              {/* Empty state */}
               {!loading && pageRows.length === 0 && (
                 <tr>
                   <td colSpan={COLUMNS.length} style={{ padding: '48px', textAlign: 'center', color: '#B5AA99', fontSize: '13px' }}>
@@ -459,123 +522,43 @@ export default function CustomRequestsPage() {
                 </tr>
               )}
 
-              {/* Data rows */}
               {!loading && pageRows.map((r, i) => (
                 <tr key={r.id} style={{ borderTop: '1px solid #F4F1EC', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
-
-                  {/* 1. Date */}
-                  <td style={{ ...TD, color: '#8C8070', fontSize: '11.5px', whiteSpace: 'nowrap' }}>
-                    {fmtDate(r.createdAt)}
-                  </td>
-
-                  {/* 2. Name */}
-                  <td style={{ ...TD, fontWeight: '500', color: '#1C1A16', whiteSpace: 'nowrap' }}>
-                    {r.fullName || '—'}
-                  </td>
-
-                  {/* 3. Email */}
+                  <td style={{ ...TD, color: '#8C8070', fontSize: '11.5px', whiteSpace: 'nowrap' }}>{fmtDate(r.createdAt)}</td>
+                  <td style={{ ...TD, fontWeight: '500', color: '#1C1A16', whiteSpace: 'nowrap' }}>{r.fullName || '—'}</td>
                   <td style={{ ...TD, maxWidth: '168px' }}>
-                    <a
-                      href={`mailto:${r.email}`}
-                      style={{
-                        color: '#1B6B65', textDecoration: 'none', fontSize: '11.5px',
-                        display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}
-                    >
+                    <a href={`mailto:${r.email}`} style={{ color: '#1B6B65', textDecoration: 'none', fontSize: '11.5px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {r.email || '—'}
                     </a>
                   </td>
-
-                  {/* 4. Phone */}
-                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>
-                    {r.phone || '—'}
-                  </td>
-
-                  {/* 5. Destination */}
-                  <td style={{ ...TD, fontWeight: '500', color: '#1C1A16', whiteSpace: 'nowrap' }}>
-                    {r.destination || '—'}
-                  </td>
-
-                  {/* 6. Trip Date */}
-                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>
-                    {r.dates || '—'}
-                  </td>
-
-                  {/* 7. Duration */}
-                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>
-                    {r.duration ? `${r.duration}d` : '—'}
-                  </td>
-
-                  {/* 8. Group (groupType label) */}
-                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>
-                    {r.groupType || '—'}
-                  </td>
-
-                  {/* 9. Group Type */}
-                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>
-                    {r.groupType || '—'}
-                  </td>
-
-                  {/* 10. Group Size */}
-                  <td style={{ ...TD, color: '#4A433A', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                    {r.groupSize != null ? r.groupSize : '—'}
-                  </td>
-
-                  {/* 11. Budget */}
-                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>
-                    {r.budget || '—'}
-                  </td>
-
-                  {/* 12. Style */}
+                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.phone || '—'}</td>
+                  <td style={{ ...TD, fontWeight: '500', color: '#1C1A16', whiteSpace: 'nowrap' }}>{r.destination || '—'}</td>
+                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.dates || '—'}</td>
+                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.duration ? `${r.duration}d` : '—'}</td>
+                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.groupType || '—'}</td>
+                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.groupType || '—'}</td>
+                  <td style={{ ...TD, color: '#4A433A', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.groupSize != null ? r.groupSize : '—'}</td>
+                  <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.budget || '—'}</td>
                   <td style={{ ...TD, maxWidth: '148px' }}>
-                    <span
-                      title={styleText(r.style)}
-                      style={{
-                        display: 'block', overflow: 'hidden',
-                        textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        color: '#4A433A', fontSize: '11.5px',
-                      }}
-                    >
+                    <span title={styleText(r.style)} style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#4A433A', fontSize: '11.5px' }}>
                       {styleText(r.style) || '—'}
                     </span>
                   </td>
-
-                  {/* 13. Notes */}
                   <td style={{ ...TD, maxWidth: '180px' }}>
-                    <span
-                      title={r.notes ?? ''}
-                      style={{
-                        display: 'block', overflow: 'hidden',
-                        textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        color: '#6B6156', fontSize: '11.5px',
-                      }}
-                    >
+                    <span title={r.notes ?? ''} style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#6B6156', fontSize: '11.5px' }}>
                       {r.notes || '—'}
                     </span>
                   </td>
-
-                  {/* 14. Status */}
-                  <td style={{ ...TD }}>
+                  <td style={TD}>
                     {authToken
-                      ? <StatusAction
-                          requestId={r.id}
-                          current={r.status || 'open'}
-                          onUpdated={handleStatusUpdated}
-                          token={authToken}
-                        />
+                      ? <StatusAction requestId={r.id} current={r.status || 'open'} onUpdated={handleStatusUpdated} token={authToken} />
                       : (
-                        <span style={{
-                          fontSize: '11px', fontWeight: '600',
-                          color: STATUS_META[r.status]?.color ?? '#1B6B65',
-                          background: STATUS_META[r.status]?.bg ?? '#EFF6F5',
-                          padding: '3px 9px', borderRadius: '10px',
-                        }}>
+                        <span style={{ fontSize: '11px', fontWeight: '600', color: STATUS_META[r.status]?.color ?? '#1B6B65', background: STATUS_META[r.status]?.bg ?? '#EFF6F5', padding: '3px 9px', borderRadius: '10px' }}>
                           {STATUS_META[r.status]?.label ?? 'Open'}
                         </span>
                       )
                     }
                   </td>
-
                 </tr>
               ))}
 
@@ -584,10 +567,7 @@ export default function CustomRequestsPage() {
         </div>
 
         {/* Footer / pagination */}
-        <div style={{
-          padding: '10px 16px', borderTop: '1px solid #F4F1EC',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px',
-        }}>
+        <div style={{ padding: '10px 16px', borderTop: '1px solid #F4F1EC', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
           <span style={{ fontSize: '12px', color: '#8C8070' }}>
             {loading ? '—' : `${filteredTotal} result${filteredTotal !== 1 ? 's' : ''}`}
             {!loading && totalPages > 1 && ` · page ${page} of ${totalPages}`}
@@ -600,6 +580,21 @@ export default function CustomRequestsPage() {
           )}
         </div>
       </div>
+
+      {/* ── Filter popover — rendered outside table, position:fixed ── */}
+      {popover && (() => {
+        const col = COLUMNS.find(c => c.id === popover.colId);
+        return col ? (
+          <FilterPopover
+            col={col}
+            value={filters[popover.colId]}
+            onChange={val => setFilter(popover.colId, val)}
+            onClose={closePopover}
+            anchorRect={popover.anchorRect}
+          />
+        ) : null;
+      })()}
+
     </div>
   );
 }
