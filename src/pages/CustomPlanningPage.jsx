@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
+import { useApi } from '../lib/api';
 import { Check, ArrowRight, MapPin, Calendar, Users, Heart } from 'lucide-react';
 
 const ERR_COLOR = '#C97070';
@@ -142,6 +143,7 @@ function SectionLegend({ label, helper }) {
 
 export default function CustomPlanningPage() {
   const { user, isLoaded } = useUser();
+  const api = useApi();
 
   const [formData, setFormData] = useState({
     name: '', email: '', phone: '',
@@ -210,11 +212,7 @@ export default function CustomPlanningPage() {
     setSubmitError(null);
 
     try {
-      const res = await fetch('/api/custom-planning', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
+      const res = await api.post('/api/custom-planning', formData);
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

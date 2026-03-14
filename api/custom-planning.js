@@ -1,13 +1,15 @@
 import pg from 'pg';
+import { verifyAuth } from './_lib/verifyAuth.js';
 
 const { Pool } = pg;
 
 // POST /api/custom-planning
-// 1. Always attempts DB insert (original schema columns — works even if migration not yet applied)
-// 2. Best-effort UPDATE for new columns (phone, duration, groupType, budget, style, status)
-// 3. Sends notification email via Resend if RESEND_API_KEY is configured
-// 4. Returns 200 if DB insert succeeded (email failure is logged but non-fatal)
-// 5. Returns 500 only if the DB insert itself failed
+// 1. Optionally authenticates the caller — if a valid JWT is present, looks up the internal userId
+// 2. Always attempts DB insert (original schema columns — works even if migration not yet applied)
+// 3. Best-effort UPDATE for new columns (phone, duration, groupType, budget, style, status, userId)
+// 4. Sends notification emails via Resend if RESEND_API_KEY is configured
+// 5. Returns 200 if DB insert succeeded (email failure is logged but non-fatal)
+// 6. Returns 500 only if the DB insert itself failed
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -34,6 +36,26 @@ export default async function handler(req, res) {
 
   if (!name?.trim() || !email?.trim()) {
     return res.status(400).json({ error: 'Name and email are required.' });
+  }
+
+  // ── Optional auth — look up internal userId if a JWT is present ────────────
+  // Non-fatal: form works for anonymous users too.
+  let internalUserId = null;
+  if (req.headers.authorization?.startsWith('Bearer ')) {
+    try {
+      const clerkId = await verifyAuth(req.headers.authorization);
+      const authPool = new Pool({ connectionString: process.env.DATABASE_URL });
+      try {
+        const { rows } = await authPool.query(
+          `SELECT id FROM "User" WHERE "clerkId" = $1 LIMIT 1`, [clerkId]
+        );
+        internalUserId = rows[0]?.id ?? null;
+      } finally {
+        await authPool.end().catch(() => {});
+      }
+    } catch {
+      // Token invalid or user not found — continue as anonymous
+    }
   }
 
   // ── DB insert ──────────────────────────────────────────────────────────────
@@ -103,14 +125,15 @@ export default async function handler(req, res) {
     try {
       await pool.query(
         `UPDATE "CustomRequest"
-         SET phone=$1, duration=$2, "groupType"=$3, budget=$4, style=$5, status='open'
-         WHERE id=$6`,
+         SET phone=$1, duration=$2, "groupType"=$3, budget=$4, style=$5, status='open', "userId"=$6
+         WHERE id=$7`,
         [
           phone?.trim()     || null,
           duration?.trim()  || null,
           groupType?.trim() || null,
           budget?.trim()    || null,
           JSON.stringify(Array.isArray(style) ? style : []),
+          internalUserId,
           insertedId,
         ]
       );

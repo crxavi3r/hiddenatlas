@@ -168,8 +168,11 @@ model CustomRequest {
   style       Json     @default("[]")
   notes       String?
   status      String   @default("open")  // open | in_progress | closed
+  userId      String?  // internal User.id of the submitter (nullable: anonymous submissions)
+  tripId      String?  // Trip.id once admin links an itinerary to this request
   createdAt   DateTime @default(now())
 
   @@index([status])
   @@index([createdAt])
+  @@index([userId])
 }

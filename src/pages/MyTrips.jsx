@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Download, Calendar, BookOpen, MapPin, Clock, Trash2 } from 'lucide-react';
+import { ArrowRight, Download, Calendar, BookOpen, MapPin, Clock, Trash2, Sparkles } from 'lucide-react';
 import { useUser } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
 import { getTripSource } from '../lib/tripSource';
@@ -389,6 +389,130 @@ function PurchasedTripCard({ trip }) {
   );
 }
 
+// ── Custom Request card ──────────────────────────────────────────────────────
+const REQUEST_STATUS = {
+  open:        { label: 'Request received',     color: '#1B6B65', bg: '#EFF6F5' },
+  in_progress: { label: 'Planning your journey', color: '#A07830', bg: '#FBF6EE' },
+  closed:      { label: 'Itinerary ready',       color: '#1B6B65', bg: '#EFF6F5' },
+};
+
+function CustomRequestCard({ request }) {
+  const [hovered, setHovered] = useState(false);
+  const meta = REQUEST_STATUS[request.status] ?? REQUEST_STATUS.open;
+
+  // If a trip has been linked, the card links to that trip
+  const hasTripLink = !!request.tripId;
+
+  const content = (
+    <div
+      style={{
+        background: 'white', borderRadius: '10px',
+        border: '1px solid #E8E3DA',
+        boxShadow: hovered ? '0 20px 60px rgba(28,26,22,0.12)' : '0 2px 16px rgba(28,26,22,0.05)',
+        transform: hovered ? 'translateY(-4px)' : 'translateY(0)',
+        transition: 'box-shadow 0.3s ease, transform 0.3s ease',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        cursor: hasTripLink ? 'pointer' : 'default',
+        textDecoration: 'none',
+      }}
+    >
+      {/* Banner */}
+      <div style={{
+        height: '140px',
+        background: 'linear-gradient(135deg, #0E3D39 0%, #1B6B65 60%, #2A8A7E 100%)',
+        position: 'relative', flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Sparkles size={32} color="rgba(255,255,255,0.25)" />
+        {/* Badge */}
+        <div style={{
+          position: 'absolute', top: '12px', left: '14px',
+          padding: '4px 10px', borderRadius: '3px',
+          fontSize: '9.5px', fontWeight: '700', letterSpacing: '0.8px',
+          textTransform: 'uppercase', background: 'rgba(201,169,110,0.9)', color: '#3A2A0A',
+        }}>
+          Custom Journey
+        </div>
+        {/* Status pill */}
+        <div style={{
+          position: 'absolute', bottom: '12px', left: '14px',
+          fontSize: '10.5px', fontWeight: '600',
+          color: 'white', background: 'rgba(0,0,0,0.35)',
+          padding: '3px 9px', borderRadius: '10px',
+          backdropFilter: 'blur(4px)',
+        }}>
+          {meta.label}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{ padding: '18px 20px 16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <h3 style={{
+          fontFamily: "'Playfair Display', Georgia, serif",
+          fontSize: '18px', fontWeight: '600', color: '#1C1A16',
+          lineHeight: '1.3', marginBottom: '6px',
+        }}>
+          {request.destination || 'Custom trip'}
+        </h3>
+        {request.dates && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#8C8070', marginBottom: '10px' }}>
+            <Calendar size={10} strokeWidth={2} />
+            {request.dates}
+          </div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: '#B5AA99', marginBottom: '14px' }}>
+          <Calendar size={11} strokeWidth={2} />
+          Submitted {formatDate(request.createdAt)}
+        </div>
+
+        {/* CTA */}
+        {hasTripLink ? (
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            padding: '11px 16px', background: '#1B6B65', color: 'white',
+            borderRadius: '4px', fontSize: '12.5px', fontWeight: '600',
+            letterSpacing: '0.4px', textTransform: 'uppercase',
+            justifyContent: 'center',
+          }}>
+            <BookOpen size={13} /> View Itinerary
+          </div>
+        ) : (
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            padding: '11px 16px',
+            background: meta.bg, color: meta.color,
+            border: `1px solid ${meta.color}22`,
+            borderRadius: '4px', fontSize: '12px', fontWeight: '600',
+            letterSpacing: '0.4px',
+            justifyContent: 'center',
+          }}>
+            {meta.label}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  if (hasTripLink) {
+    return (
+      <Link
+        to={`/my-trips/${request.tripId}`}
+        style={{ textDecoration: 'none' }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      {content}
+    </div>
+  );
+}
+
 // Returns first name → first word of full name → null (triggers "Your trips" fallback)
 function resolveFirstName(user) {
   if (user.firstName?.trim()) return user.firstName.trim();
@@ -414,6 +538,7 @@ export default function MyTrips() {
 
   const [aiTrips, setAiTrips] = useState([]);
   const [purchases, setPurchases] = useState([]);
+  const [customRequests, setCustomRequests] = useState([]);
   const [status, setStatus] = useState('loading');
 
   async function handleDeleteTrip(tripId) {
@@ -441,14 +566,18 @@ export default function MyTrips() {
       api.get('/api/my-trips')
         .then(r => r.ok ? r.json() : [])
         .catch(() => []),
-    ]).then(([trips, bought]) => {
+      api.get('/api/custom-requests')
+        .then(r => r.ok ? r.json() : [])
+        .catch(() => []),
+    ]).then(([trips, bought, requests]) => {
       setAiTrips(trips);
       setPurchases(bought);
+      setCustomRequests(requests);
       setStatus('ok');
     });
   }, [isLoaded, isSignedIn]);
 
-  const totalCount = aiTrips.length + purchases.length;
+  const totalCount = aiTrips.length + purchases.length + customRequests.length;
 
   return (
     <div style={{ background: '#FAFAF8', paddingTop: '72px', minHeight: '100vh' }}>
@@ -540,6 +669,21 @@ export default function MyTrips() {
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '28px' }}>
                     {aiTrips.map(trip => <AiTripCard key={trip.id} trip={trip} onDelete={handleDeleteTrip} />)}
+                  </div>
+                </div>
+              )}
+
+              {/* Custom Journeys section */}
+              {customRequests.length > 0 && (
+                <div style={{ marginBottom: '60px' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '24px' }}>
+                    <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600', color: '#1C1A16' }}>
+                      Custom Journeys
+                    </h2>
+                    <span style={{ fontSize: '13px', color: '#9C9488' }}>{customRequests.length}</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '28px' }}>
+                    {customRequests.map(r => <CustomRequestCard key={r.id} request={r} />)}
                   </div>
                 </div>
               )}
