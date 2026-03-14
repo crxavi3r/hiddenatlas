@@ -327,10 +327,10 @@ const api = useApi();
 
   // Fire ITINERARY_VIEW once when a valid itinerary page loads
   useEffect(() => {
-    if (itinerary?.slug) {
-      track('ITINERARY_VIEW', { itinerarySlug: itinerary.slug, pagePath: `/itineraries/${id}` });
+    if (itinerary?.id) {
+      track('ITINERARY_VIEW', { itinerarySlug: itinerary.id, pagePath: `/itineraries/${id}` });
     }
-  }, [itinerary?.slug]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [itinerary?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Mobile sticky buy bar — watch both the sidebar and the inline lock gate.
   // Bar is visible when neither purchase element is in the viewport.
