@@ -104,9 +104,8 @@ async function handleSession(req, res, body) {
 
   try {
     const sessionParams = {
-      automatic_payment_methods: { enabled: true },
-      line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
       mode: 'payment',
+      line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
       customer_email: userEmail,
       success_url: `${origin}/itineraries/${slug}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${origin}/itineraries/${slug}`,
@@ -117,16 +116,16 @@ async function handleSession(req, res, body) {
       },
     };
 
-    console.log('[checkout/session] creating session — slug:', slug, '| automatic_payment_methods: true');
+    console.log('[checkout/session] creating session — slug:', slug);
 
     const session = await stripe.checkout.sessions.create(sessionParams);
 
-    console.log('[checkout/session] session created — id:', session.id, '| payment_method_types returned by Stripe:', JSON.stringify(session.payment_method_types));
+    console.log('[checkout/session] session created — id:', session.id);
 
     return res.status(200).json({ url: session.url });
   } catch (err) {
-    console.error('[checkout/session] Stripe error — type:', err.type, '| code:', err.code, '| requestId:', err.requestId ?? 'n/a', '| message:', err.message);
-    return res.status(500).json({ error: 'Failed to create checkout session' });
+    console.error('[checkout/session] Stripe error:', err);
+    return res.status(500).json({ error: err.message });
   }
 }
 
