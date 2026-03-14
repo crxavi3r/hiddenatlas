@@ -200,21 +200,31 @@ export default function DashboardPage() {
   const [period, setPeriod] = useState('7d');
   const [data, setData]     = useState(null);
   const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState(null);
   const { getToken } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setLoading(true);
+      setApiError(null);
       try {
         const token = await getToken();
         const res = await fetch(`/api/admin?action=dashboard&period=${period}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const json = await res.json();
-        if (!cancelled) setData(json);
+        if (!cancelled) {
+          if (json.error) {
+            console.error('[admin/dashboard] API error:', json.error, json.detail ?? '');
+            setApiError(json.detail || json.error);
+          } else {
+            setData(json);
+          }
+        }
       } catch (err) {
         console.error('[admin/dashboard]', err);
+        if (!cancelled) setApiError(err.message);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -258,6 +268,13 @@ export default function DashboardPage() {
           {[...Array(6)].map((_, i) => (
             <div key={i} style={{ ...card, height: '90px', background: 'white', opacity: 0.5 }} />
           ))}
+        </div>
+      ) : apiError ? (
+        <div style={{ ...card, padding: '32px', textAlign: 'center' }}>
+          <p style={{ fontSize: '13px', fontWeight: '600', color: '#C0392B', marginBottom: '8px' }}>
+            Dashboard failed to load
+          </p>
+          <p style={{ fontSize: '12px', color: '#8C8070', fontFamily: 'monospace' }}>{apiError}</p>
         </div>
       ) : (
         <>

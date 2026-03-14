@@ -74,13 +74,26 @@ export default async function handler(req, res) {
 
     // ── GET actions ───────────────────────────────────────────────────────
     if (action === 'dashboard') {
+      // Each sub-query runs independently — one failure returns a safe default
+      // instead of killing the entire dashboard payload.
+      async function safe(name, fn, fallback) {
+        try { return await fn(); }
+        catch (e) {
+          console.error(`[api/admin] dashboard sub-query "${name}" failed: ${e.message}`);
+          return fallback;
+        }
+      }
+
+      const KPI_ZERO = { visitors: 0, newUsers: 0, itineraryViews: 0, downloads: 0, sales: 0, revenue: 0, conversionRate: 0 };
+      const FUNNEL_ZERO = { visitors: 0, itineraryViews: 0, downloads: 0, purchases: 0 };
+
       const [kpis, chart, funnel, topItineraries, sources, activity] = await Promise.all([
-        getDashboardKPIs(pool, interval),
-        getChartData(pool, interval),
-        getFunnelData(pool, interval),
-        getTopItineraries(pool, interval),
-        getTrafficSources(pool, interval),
-        getRecentActivity(pool),
+        safe('kpis',           () => getDashboardKPIs(pool, interval),    KPI_ZERO),
+        safe('chart',          () => getChartData(pool, interval),         []),
+        safe('funnel',         () => getFunnelData(pool, interval),        FUNNEL_ZERO),
+        safe('topItineraries', () => getTopItineraries(pool, interval),    []),
+        safe('sources',        () => getTrafficSources(pool, interval),    []),
+        safe('activity',       () => getRecentActivity(pool),              []),
       ]);
       return res.status(200).json({ kpis, chart, funnel, topItineraries, sources, activity });
     }
@@ -98,8 +111,8 @@ export default async function handler(req, res) {
 
     return res.status(400).json({ error: 'Unknown action' });
   } catch (err) {
-    console.error('[api/admin] error:', err.message);
-    return res.status(500).json({ error: 'Database error' });
+    console.error(`[api/admin] action=${action} error: ${err.message}`, err.stack);
+    return res.status(500).json({ error: 'Database error', detail: err.message });
   } finally {
     await pool.end();
   }
