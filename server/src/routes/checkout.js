@@ -23,7 +23,7 @@ router.post('/session', protect, syncUser, async (req, res) => {
     const cancelUrl  = `${process.env.CLIENT_ORIGIN}/itineraries/${slug}`;
 
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      automatic_payment_methods: { enabled: true },
       line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
       mode: 'payment',
       success_url: successUrl,

@@ -104,7 +104,7 @@ async function handleSession(req, res, body) {
 
   try {
     const sessionParams = {
-      payment_method_types: ['card'],
+      automatic_payment_methods: { enabled: true },
       line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
       mode: 'payment',
       customer_email: userEmail,
@@ -117,7 +117,7 @@ async function handleSession(req, res, body) {
       },
     };
 
-    console.log('[checkout/session] creating session — slug:', slug, '| payment_method_types:', JSON.stringify(sessionParams.payment_method_types));
+    console.log('[checkout/session] creating session — slug:', slug, '| automatic_payment_methods: true');
 
     const session = await stripe.checkout.sessions.create(sessionParams);
 
