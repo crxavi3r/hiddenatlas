@@ -372,10 +372,10 @@ export default function TripDetailPage() {
               Take it further
             </span>
             <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 'clamp(20px, 2.8vw, 30px)', fontWeight: '600', color: 'white', marginBottom: '14px', lineHeight: '1.25' }}>
-              Turn this into a fully booked journey
+              Turn this into a fully planned journey
             </h3>
             <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.65)', lineHeight: '1.75', marginBottom: '32px', maxWidth: '480px', margin: '0 auto 32px' }}>
-              Our planners take AI-generated itineraries and build them into fully confirmed, bookable trips.
+              Our travel planners can transform this itinerary into a fully personalised trip — with handpicked stays, experiences and seamless logistics.
             </p>
             <Link
               to="/custom"
