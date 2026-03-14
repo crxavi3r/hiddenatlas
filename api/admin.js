@@ -93,7 +93,7 @@ export default async function handler(req, res) {
         safe('funnel',         () => getFunnelData(pool, interval),        FUNNEL_ZERO),
         safe('topItineraries', () => getTopItineraries(pool, interval),    []),
         safe('sources',        () => getTrafficSources(pool, interval),    []),
-        safe('activity',       () => getRecentActivity(pool),              []),
+        safe('activity',       () => getRecentActivity(pool, interval),    []),
       ]);
       return res.status(200).json({ kpis, chart, funnel, topItineraries, sources, activity });
     }
@@ -256,32 +256,36 @@ async function getTrafficSources(pool, interval) {
 }
 
 // ── Recent activity ───────────────────────────────────────────────────────────
-async function getRecentActivity(pool) {
+async function getRecentActivity(pool, interval) {
   const { rows } = await pool.query(`
     (
       SELECT 'signup' AS type, u.email, u.name, NULL::text AS country, NULL::text AS detail, u."createdAt" AS ts
-      FROM "User" u ORDER BY ts DESC LIMIT 15
+      FROM "User" u
+      WHERE u."createdAt" >= NOW() - $1::interval
+      ORDER BY ts DESC LIMIT 15
     ) UNION ALL (
       SELECT 'download' AS type, u.email, u.name, NULL::text AS country,
         COALESCE(te.metadata->>'title', te.metadata->>'destination', 'trip') AS detail,
         te."createdAt" AS ts
       FROM "TripEvent" te JOIN "User" u ON u.id=te."userId"
-      WHERE te."eventType"='DOWNLOADED' ORDER BY ts DESC LIMIT 15
+      WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= NOW() - $1::interval
+      ORDER BY ts DESC LIMIT 15
     ) UNION ALL (
       SELECT 'purchase' AS type, u.email, u.name, NULL::text AS country, i.title AS detail, p."purchasedAt" AS ts
       FROM "Purchase" p
       JOIN "User" u ON u.id=p."userId"
       JOIN "Itinerary" i ON i.id=p."itineraryId"
+      WHERE p."purchasedAt" >= NOW() - $1::interval
       ORDER BY ts DESC LIMIT 15
     ) UNION ALL (
       SELECT 'itinerary_view' AS type, u.email, u.name, e.country, e."itinerarySlug" AS detail, e."createdAt" AS ts
       FROM "Event" e
       LEFT JOIN "User" u ON u.id = e."userId"
-      WHERE e."eventType"='ITINERARY_VIEW'
+      WHERE e."eventType"='ITINERARY_VIEW' AND e."createdAt" >= NOW() - $1::interval
       ORDER BY ts DESC LIMIT 15
     )
     ORDER BY ts DESC LIMIT 50
-  `);
+  `, [interval]);
   return rows;
 }
 
