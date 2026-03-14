@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { ChevronDown, ChevronUp, ChevronsUpDown, Check, X, Filter, ChevronRight } from 'lucide-react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STATUS_META = {
@@ -380,6 +381,7 @@ export default function CustomRequestsPage() {
   const [page, setPage]                    = useState(1);
   const [popover, setPopover]              = useState(null); // { colId, anchorRect }
   const [expandedRows, setExpandedRows]    = useState(new Set());
+  const isMobile                           = useIsMobile();
 
   useEffect(() => {
     getToken().then(setAuthToken).catch(() => {});
@@ -474,9 +476,48 @@ export default function CustomRequestsPage() {
 
   const TD = { padding: '9px 10px' };
 
+  // ── Mobile card list ─────────────────────────────────────────────────────────
+  function MobileCard({ r, i }) {
+    const m = STATUS_META[r.status] ?? STATUS_META.open;
+    return (
+      <div style={{ padding: '14px 16px', borderTop: i > 0 ? '1px solid #F4F1EC' : 'none', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <p style={{ fontWeight: '600', color: '#1C1A16', fontSize: '13px' }}>{r.fullName || '—'}</p>
+            <a href={`mailto:${r.email}`} style={{ color: '#1B6B65', fontSize: '12px', textDecoration: 'none' }}>{r.email}</a>
+          </div>
+          <span style={{ flexShrink: 0, fontSize: '10.5px', fontWeight: '600', color: m.color, background: m.bg, padding: '3px 9px', borderRadius: '10px', marginLeft: '10px' }}>
+            {m.label}
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', marginBottom: '8px' }}>
+          <span style={{ fontSize: '12px', color: '#4A433A' }}>
+            <span style={{ color: '#B5AA99', fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>To </span>
+            {r.destination || '—'}
+          </span>
+          {r.dates && <span style={{ fontSize: '12px', color: '#4A433A' }}>{r.dates}</span>}
+          {r.duration && <span style={{ fontSize: '12px', color: '#4A433A' }}>{r.duration}</span>}
+          {r.groupSize != null && <span style={{ fontSize: '12px', color: '#4A433A' }}>{r.groupSize} pax</span>}
+          {r.budget && <span style={{ fontSize: '12px', color: '#4A433A' }}>{r.budget}</span>}
+        </div>
+        {r.notes && (
+          <p style={{ fontSize: '11.5px', color: '#6B6156', lineHeight: '1.4', marginBottom: '8px' }} title={r.notes}>
+            {r.notes.length > 100 ? r.notes.slice(0, 100) + '…' : r.notes}
+          </p>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: '11px', color: '#B5AA99' }}>{fmtDate(r.createdAt)}</span>
+          {authToken && (
+            <StatusAction requestId={r.id} current={r.status || 'open'} onUpdated={handleStatusUpdated} token={authToken} />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div style={{ padding: '28px 32px' }}>
+    <div style={{ padding: isMobile ? '16px' : '28px 32px' }}>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
@@ -510,8 +551,23 @@ export default function CustomRequestsPage() {
         )}
       </div>
 
-      {/* Table */}
+      {/* Table / Card list */}
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA', overflow: 'hidden' }}>
+        {isMobile ? (
+          /* ── Mobile card list ── */
+          <div>
+            {loading && [...Array(5)].map((_, i) => (
+              <div key={i} style={{ padding: '14px 16px', borderTop: i > 0 ? '1px solid #F4F1EC' : 'none' }}>
+                <div style={{ height: '13px', background: '#F4F1EC', borderRadius: '3px', width: '60%', marginBottom: '8px' }} />
+                <div style={{ height: '11px', background: '#F4F1EC', borderRadius: '3px', width: '80%' }} />
+              </div>
+            ))}
+            {!loading && pageRows.length === 0 && (
+              <p style={{ padding: '40px', textAlign: 'center', color: '#B5AA99', fontSize: '13px' }}>No custom requests match the current filters.</p>
+            )}
+            {!loading && pageRows.map((r, i) => <MobileCard key={r.id} r={r} i={i} />)}
+          </div>
+        ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
@@ -662,6 +718,7 @@ export default function CustomRequestsPage() {
             </tbody>
           </table>
         </div>
+        )} {/* end isMobile ternary */}
 
         {/* Footer / pagination */}
         <div style={{ padding: '10px 16px', borderTop: '1px solid #F4F1EC', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { Link } from 'react-router-dom';
 import { Search, ArrowRight } from 'lucide-react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
 
@@ -44,9 +45,10 @@ export default function UsersPage() {
   useEffect(() => { load(); }, [load]);
 
   const totalPages = data ? Math.ceil(data.total / 50) : 1;
+  const isMobile = useIsMobile();
 
   return (
-    <div style={{ padding: '28px 32px' }}>
+    <div style={{ padding: isMobile ? '16px' : '28px 32px' }}>
       <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '24px', fontWeight: '600', color: '#1C1A16', marginBottom: '6px' }}>
         Users
       </h1>
@@ -70,53 +72,85 @@ export default function UsersPage() {
         />
       </div>
 
-      {/* Table */}
+      {/* Table / Card list */}
       <div style={{ ...card, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
-            <thead>
-              <tr style={{ background: '#FAFAF8' }}>
-                {['User', 'Joined', 'Downloads', 'Purchases', 'Revenue', 'Last Active', ''].map(h => (
-                  <th key={h} style={{ padding: '10px 14px', textAlign: h === 'User' || h === '' ? 'left' : 'right', color: '#8C8070', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.4px', whiteSpace: 'nowrap' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading
-                ? [...Array(8)].map((_, i) => (
-                    <tr key={i} style={{ borderTop: '1px solid #F4F1EC' }}>
-                      {[...Array(7)].map((_, j) => (
-                        <td key={j} style={{ padding: '12px 14px' }}>
-                          <div style={{ height: '12px', background: '#F4F1EC', borderRadius: '4px', width: j === 0 ? '160px' : '50px' }} />
+        {isMobile ? (
+          /* Mobile card list */
+          <div>
+            {loading && [...Array(6)].map((_, i) => (
+              <div key={i} style={{ padding: '14px 16px', borderTop: i > 0 ? '1px solid #F4F1EC' : 'none' }}>
+                <div style={{ height: '13px', background: '#F4F1EC', borderRadius: '3px', width: '55%', marginBottom: '7px' }} />
+                <div style={{ height: '11px', background: '#F4F1EC', borderRadius: '3px', width: '75%' }} />
+              </div>
+            ))}
+            {!loading && (data?.users ?? []).map((u, i) => (
+              <Link key={u.id} to={`/admin/users/${u.id}`} style={{ display: 'block', textDecoration: 'none', padding: '14px 16px', borderTop: i > 0 ? '1px solid #F4F1EC' : 'none', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontWeight: '600', color: '#1C1A16', fontSize: '13px' }}>{u.name || '—'}</p>
+                    <p style={{ color: '#8C8070', fontSize: '12px', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</p>
+                  </div>
+                  <ArrowRight size={14} color="#B5AA99" style={{ flexShrink: 0, marginTop: '2px', marginLeft: '8px' }} />
+                </div>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '11.5px', color: '#4A433A' }}>{fmt(u.downloads)} downloads</span>
+                  <span style={{ fontSize: '11.5px', color: '#4A433A' }}>{fmt(u.purchases)} purchases</span>
+                  <span style={{ fontSize: '11.5px', fontWeight: '600', color: '#1B6B65' }}>{fmtEur(u.revenue)}</span>
+                </div>
+              </Link>
+            ))}
+            {!loading && !data?.users?.length && (
+              <p style={{ padding: '32px', textAlign: 'center', color: '#B5AA99' }}>No users found</p>
+            )}
+          </div>
+        ) : (
+          /* Desktop table */
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+              <thead>
+                <tr style={{ background: '#FAFAF8' }}>
+                  {['User', 'Joined', 'Downloads', 'Purchases', 'Revenue', 'Last Active', ''].map(h => (
+                    <th key={h} style={{ padding: '10px 14px', textAlign: h === 'User' || h === '' ? 'left' : 'right', color: '#8C8070', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.4px', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loading
+                  ? [...Array(8)].map((_, i) => (
+                      <tr key={i} style={{ borderTop: '1px solid #F4F1EC' }}>
+                        {[...Array(7)].map((_, j) => (
+                          <td key={j} style={{ padding: '12px 14px' }}>
+                            <div style={{ height: '12px', background: '#F4F1EC', borderRadius: '4px', width: j === 0 ? '160px' : '50px' }} />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  : (data?.users ?? []).map((u, i) => (
+                      <tr key={u.id} style={{ borderTop: '1px solid #F4F1EC', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
+                        <td style={{ padding: '10px 14px' }}>
+                          <p style={{ fontWeight: '500', color: '#1C1A16', fontSize: '12.5px' }}>{u.name || '—'}</p>
+                          <p style={{ color: '#8C8070', fontSize: '11.5px' }}>{u.email}</p>
                         </td>
-                      ))}
-                    </tr>
-                  ))
-                : (data?.users ?? []).map((u, i) => (
-                    <tr key={u.id} style={{ borderTop: '1px solid #F4F1EC', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
-                      <td style={{ padding: '10px 14px' }}>
-                        <p style={{ fontWeight: '500', color: '#1C1A16', fontSize: '12.5px' }}>{u.name || '—'}</p>
-                        <p style={{ color: '#8C8070', fontSize: '11.5px' }}>{u.email}</p>
-                      </td>
-                      <td style={{ padding: '10px 14px', textAlign: 'right', color: '#4A433A', whiteSpace: 'nowrap' }}>{fmtDate(u.createdAt)}</td>
-                      <td style={{ padding: '10px 14px', textAlign: 'right', color: '#4A433A' }}>{fmt(u.downloads)}</td>
-                      <td style={{ padding: '10px 14px', textAlign: 'right', color: '#4A433A' }}>{fmt(u.purchases)}</td>
-                      <td style={{ padding: '10px 14px', textAlign: 'right', color: '#1C1A16', fontWeight: '600' }}>{fmtEur(u.revenue)}</td>
-                      <td style={{ padding: '10px 14px', textAlign: 'right', color: '#8C8070', fontSize: '11.5px', whiteSpace: 'nowrap' }}>{fmtDate(u.last_activity)}</td>
-                      <td style={{ padding: '10px 14px' }}>
-                        <Link to={`/admin/users/${u.id}`} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#1B6B65', textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                          View <ArrowRight size={10} />
-                        </Link>
-                      </td>
-                    </tr>
-                  ))
-              }
-              {!loading && !data?.users?.length && (
-                <tr><td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: '#B5AA99' }}>No users found</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                        <td style={{ padding: '10px 14px', textAlign: 'right', color: '#4A433A', whiteSpace: 'nowrap' }}>{fmtDate(u.createdAt)}</td>
+                        <td style={{ padding: '10px 14px', textAlign: 'right', color: '#4A433A' }}>{fmt(u.downloads)}</td>
+                        <td style={{ padding: '10px 14px', textAlign: 'right', color: '#4A433A' }}>{fmt(u.purchases)}</td>
+                        <td style={{ padding: '10px 14px', textAlign: 'right', color: '#1C1A16', fontWeight: '600' }}>{fmtEur(u.revenue)}</td>
+                        <td style={{ padding: '10px 14px', textAlign: 'right', color: '#8C8070', fontSize: '11.5px', whiteSpace: 'nowrap' }}>{fmtDate(u.last_activity)}</td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <Link to={`/admin/users/${u.id}`} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#1B6B65', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                            View <ArrowRight size={10} />
+                          </Link>
+                        </td>
+                      </tr>
+                    ))
+                }
+                {!loading && !data?.users?.length && (
+                  <tr><td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: '#B5AA99' }}>No users found</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Pagination */}
         {totalPages > 1 && (

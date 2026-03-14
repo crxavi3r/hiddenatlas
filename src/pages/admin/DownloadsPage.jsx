@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { Download } from 'lucide-react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
 
@@ -45,9 +46,10 @@ export default function DownloadsPage() {
   useEffect(() => { load(); }, [load]);
 
   const totalPages = data ? Math.ceil((data.total || 0) / 50) : 1;
+  const isMobile = useIsMobile();
 
   return (
-    <div style={{ padding: '28px 32px' }}>
+    <div style={{ padding: isMobile ? '16px' : '28px 32px' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
@@ -85,56 +87,88 @@ export default function DownloadsPage() {
         </div>
       </div>
 
-      {/* Table */}
+      {/* Table / Card list */}
       <div style={{ ...card, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
-            <thead>
-              <tr style={{ background: '#FAFAF8' }}>
-                {['Date', 'User', 'Itinerary / Trip', 'Source', 'Destination'].map(h => (
-                  <th key={h} style={{ padding: '10px 14px', textAlign: 'left', color: '#8C8070', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.4px', whiteSpace: 'nowrap' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading
-                ? [...Array(8)].map((_, i) => (
-                    <tr key={i} style={{ borderTop: '1px solid #F4F1EC' }}>
-                      {[...Array(5)].map((_, j) => (
-                        <td key={j} style={{ padding: '12px 14px' }}>
-                          <div style={{ height: '12px', background: '#F4F1EC', borderRadius: '4px', width: j === 2 ? '160px' : '90px' }} />
+        {isMobile ? (
+          <div>
+            {loading && [...Array(5)].map((_, i) => (
+              <div key={i} style={{ padding: '14px 16px', borderTop: i > 0 ? '1px solid #F4F1EC' : 'none' }}>
+                <div style={{ height: '12px', background: '#F4F1EC', borderRadius: '3px', width: '50%', marginBottom: '7px' }} />
+                <div style={{ height: '11px', background: '#F4F1EC', borderRadius: '3px', width: '70%' }} />
+              </div>
+            ))}
+            {!loading && (data?.downloads ?? []).map((d, i) => (
+              <div key={i} style={{ padding: '14px 16px', borderTop: i > 0 ? '1px solid #F4F1EC' : 'none', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontWeight: '600', color: '#1C1A16', fontSize: '13px' }}>{d.name || '—'}</p>
+                    <p style={{ color: '#8C8070', fontSize: '12px', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.email}</p>
+                  </div>
+                  <span style={{ fontSize: '10.5px', fontWeight: '600', color: '#6B6156', background: '#F4F1EC', padding: '2px 7px', borderRadius: '8px', flexShrink: 0, marginLeft: '10px' }}>
+                    {sourceLabel(d.trip_source)}
+                  </span>
+                </div>
+                <p style={{ fontSize: '12px', color: '#4A433A', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {d.title || d.itinerarySlug || '—'}
+                  {d.destination && <span style={{ color: '#8C8070' }}> · {d.destination}</span>}
+                </p>
+                <p style={{ fontSize: '11px', color: '#B5AA99' }}>{fmtDate(d.createdAt)}</p>
+              </div>
+            ))}
+            {!loading && !data?.downloads?.length && (
+              <p style={{ padding: '32px', textAlign: 'center', color: '#B5AA99' }}>No downloads in this period</p>
+            )}
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+              <thead>
+                <tr style={{ background: '#FAFAF8' }}>
+                  {['Date', 'User', 'Itinerary / Trip', 'Source', 'Destination'].map(h => (
+                    <th key={h} style={{ padding: '10px 14px', textAlign: 'left', color: '#8C8070', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.4px', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loading
+                  ? [...Array(8)].map((_, i) => (
+                      <tr key={i} style={{ borderTop: '1px solid #F4F1EC' }}>
+                        {[...Array(5)].map((_, j) => (
+                          <td key={j} style={{ padding: '12px 14px' }}>
+                            <div style={{ height: '12px', background: '#F4F1EC', borderRadius: '4px', width: j === 2 ? '160px' : '90px' }} />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  : (data?.downloads ?? []).map((d, i) => (
+                      <tr key={i} style={{ borderTop: '1px solid #F4F1EC', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
+                        <td style={{ padding: '10px 14px', color: '#8C8070', fontSize: '12px', whiteSpace: 'nowrap' }}>{fmtDate(d.createdAt)}</td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <p style={{ fontWeight: '500', color: '#1C1A16' }}>{d.name || '—'}</p>
+                          <p style={{ color: '#8C8070', fontSize: '11.5px' }}>{d.email}</p>
                         </td>
-                      ))}
-                    </tr>
-                  ))
-                : (data?.downloads ?? []).map((d, i) => (
-                    <tr key={i} style={{ borderTop: '1px solid #F4F1EC', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
-                      <td style={{ padding: '10px 14px', color: '#8C8070', fontSize: '12px', whiteSpace: 'nowrap' }}>{fmtDate(d.createdAt)}</td>
-                      <td style={{ padding: '10px 14px' }}>
-                        <p style={{ fontWeight: '500', color: '#1C1A16' }}>{d.name || '—'}</p>
-                        <p style={{ color: '#8C8070', fontSize: '11.5px' }}>{d.email}</p>
-                      </td>
-                      <td style={{ padding: '10px 14px', color: '#4A433A', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {d.title || d.itinerarySlug || '—'}
-                        {d.itinerarySlug && (
-                          <span style={{ marginLeft: '6px', fontSize: '10.5px', color: '#B5AA99' }}>/{d.itinerarySlug}</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '10px 14px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: '600', color: '#6B6156', background: '#F4F1EC', padding: '2px 7px', borderRadius: '8px' }}>
-                          {sourceLabel(d.trip_source)}
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px 14px', color: '#4A433A' }}>{d.destination || '—'}</td>
-                    </tr>
-                  ))
-              }
-              {!loading && !data?.downloads?.length && (
-                <tr><td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: '#B5AA99' }}>No downloads in this period</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                        <td style={{ padding: '10px 14px', color: '#4A433A', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {d.title || d.itinerarySlug || '—'}
+                          {d.itinerarySlug && (
+                            <span style={{ marginLeft: '6px', fontSize: '10.5px', color: '#B5AA99' }}>/{d.itinerarySlug}</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '10px 14px' }}>
+                          <span style={{ fontSize: '11px', fontWeight: '600', color: '#6B6156', background: '#F4F1EC', padding: '2px 7px', borderRadius: '8px' }}>
+                            {sourceLabel(d.trip_source)}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 14px', color: '#4A433A' }}>{d.destination || '—'}</td>
+                      </tr>
+                    ))
+                }
+                {!loading && !data?.downloads?.length && (
+                  <tr><td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: '#B5AA99' }}>No downloads in this period</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {totalPages > 1 && (
           <div style={{ padding: '12px 16px', borderTop: '1px solid #F4F1EC', display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'flex-end' }}>

@@ -5,6 +5,7 @@ import {
   Eye, Users, Download, ShoppingBag, DollarSign, TrendingUp,
   ArrowRight, Clock,
 } from 'lucide-react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 const PERIODS = [
   { label: 'Today',   value: 'today' },
@@ -61,7 +62,7 @@ function TrendChart({ data = [] }) {
     </div>;
   }
 
-  const W = 520; const H = 200;
+  const W = 680; const H = 210;
   const padL = 36; const padR = 10; const padT = 12; const padB = 28;
   const cW = W - padL - padR;
   const cH = H - padT - padB;
@@ -117,7 +118,7 @@ function TrendChart({ data = [] }) {
       <div style={{ position: 'relative' }}>
         <svg
           viewBox={`0 0 ${W} ${H}`}
-          style={{ width: '100%', height: '200px', display: 'block', overflow: 'visible' }}
+          style={{ width: '100%', height: '210px', display: 'block', overflow: 'visible' }}
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHovered(null)}
         >
@@ -188,6 +189,15 @@ function TrendChart({ data = [] }) {
               {fmtDay(data[i].day)}
             </text>
           ))}
+
+          {/* Invisible overlay — ensures mouse events fire across the full chart area,
+              including empty space between data points */}
+          <rect
+            x={padL} y={padT}
+            width={cW} height={cH}
+            fill="transparent"
+            style={{ cursor: 'crosshair' }}
+          />
         </svg>
 
         {/* Tooltip */}
@@ -327,6 +337,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
   const { getToken } = useAuth();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     let cancelled = false;
@@ -361,7 +372,7 @@ export default function DashboardPage() {
   const kpis = data?.kpis;
 
   return (
-    <div style={{ padding: '28px 32px' }}>
+    <div style={{ padding: isMobile ? '16px' : '28px 32px' }}>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
@@ -404,7 +415,7 @@ export default function DashboardPage() {
       ) : (
         <>
           {/* ── KPI Cards ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px', marginBottom: '22px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(160px, 1fr))', gap: isMobile ? '10px' : '14px', marginBottom: '22px' }}>
             {[
               { icon: Eye,          label: 'Visitors',        value: fmt(kpis?.visitors),       sub: 'page views' },
               { icon: Users,        label: 'New Users',       value: fmt(kpis?.newUsers),       sub: 'signups' },
@@ -425,7 +436,7 @@ export default function DashboardPage() {
           </div>
 
           {/* ── Chart + Funnel ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '16px', marginBottom: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 300px', gap: '16px', marginBottom: '20px' }}>
             <div style={card}>
               <p style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16', marginBottom: '16px' }}>Trends</p>
               <TrendChart data={data?.chart} />
@@ -438,45 +449,67 @@ export default function DashboardPage() {
 
           {/* ── Top Itineraries ── */}
           <div style={{ ...card, marginBottom: '20px', padding: 0, overflow: 'hidden' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #F4F1EC', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #F4F1EC' }}>
               <p style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16' }}>Top Itineraries</p>
             </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
-                <thead>
-                  <tr style={{ background: '#FAFAF8' }}>
-                    {['Itinerary', 'Views', 'Downloads', 'Sales', 'Conv.', 'Revenue'].map(h => (
-                      <th key={h} style={{ padding: '10px 16px', textAlign: h === 'Itinerary' ? 'left' : 'right', color: '#8C8070', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.4px', whiteSpace: 'nowrap' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(data?.topItineraries ?? []).map((row, i) => (
-                    <tr key={row.slug} style={{ borderTop: '1px solid #F4F1EC', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
-                      <td style={{ padding: '10px 16px', color: '#1C1A16', fontWeight: '500', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {row.title}
-                      </td>
-                      <td style={{ padding: '10px 16px', textAlign: 'right', color: '#4A433A' }}>{fmt(row.views)}</td>
-                      <td style={{ padding: '10px 16px', textAlign: 'right', color: '#4A433A' }}>{fmt(row.downloads)}</td>
-                      <td style={{ padding: '10px 16px', textAlign: 'right', color: '#4A433A' }}>{fmt(row.sales)}</td>
-                      <td style={{ padding: '10px 16px', textAlign: 'right' }}>
-                        <span style={{ fontSize: '11px', fontWeight: '600', color: row.conversionRate > 5 ? '#1B6B65' : row.conversionRate > 0 ? '#C9A96E' : '#B5AA99', background: row.conversionRate > 5 ? '#EFF6F5' : row.conversionRate > 0 ? '#FBF8F1' : 'transparent', padding: '2px 6px', borderRadius: '8px' }}>
-                          {row.conversionRate}%
-                        </span>
-                      </td>
-                      <td style={{ padding: '10px 16px', textAlign: 'right', color: '#1C1A16', fontWeight: '600' }}>{fmtEur(row.revenue)}</td>
+            {isMobile ? (
+              /* Mobile card list */
+              <div>
+                {(data?.topItineraries ?? []).map((row, i) => (
+                  <div key={row.slug} style={{ padding: '12px 16px', borderTop: i > 0 ? '1px solid #F4F1EC' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontWeight: '500', color: '#1C1A16', fontSize: '12.5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.title}</p>
+                      <p style={{ fontSize: '11.5px', color: '#8C8070', marginTop: '3px' }}>
+                        {fmt(row.views)} views · {fmt(row.downloads)} dl · {fmt(row.sales)} sales
+                      </p>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <p style={{ fontWeight: '700', color: '#1C1A16', fontSize: '13px' }}>{fmtEur(row.revenue)}</p>
+                      <p style={{ fontSize: '11px', color: row.conversionRate > 5 ? '#1B6B65' : '#8C8070', marginTop: '2px' }}>{row.conversionRate}%</p>
+                    </div>
+                  </div>
+                ))}
+                {!data?.topItineraries?.length && (
+                  <p style={{ padding: '20px', textAlign: 'center', color: '#B5AA99', fontSize: '12.5px' }}>No data yet</p>
+                )}
+              </div>
+            ) : (
+              /* Desktop table */
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                  <thead>
+                    <tr style={{ background: '#FAFAF8' }}>
+                      {['Itinerary', 'Views', 'Downloads', 'Sales', 'Conv.', 'Revenue'].map(h => (
+                        <th key={h} style={{ padding: '10px 16px', textAlign: h === 'Itinerary' ? 'left' : 'right', color: '#8C8070', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.4px', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
                     </tr>
-                  ))}
-                  {!data?.topItineraries?.length && (
-                    <tr><td colSpan={6} style={{ padding: '20px', textAlign: 'center', color: '#B5AA99', fontSize: '12.5px' }}>No data yet</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {(data?.topItineraries ?? []).map((row, i) => (
+                      <tr key={row.slug} style={{ borderTop: '1px solid #F4F1EC', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
+                        <td style={{ padding: '10px 16px', color: '#1C1A16', fontWeight: '500', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.title}</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'right', color: '#4A433A' }}>{fmt(row.views)}</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'right', color: '#4A433A' }}>{fmt(row.downloads)}</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'right', color: '#4A433A' }}>{fmt(row.sales)}</td>
+                        <td style={{ padding: '10px 16px', textAlign: 'right' }}>
+                          <span style={{ fontSize: '11px', fontWeight: '600', color: row.conversionRate > 5 ? '#1B6B65' : row.conversionRate > 0 ? '#C9A96E' : '#B5AA99', background: row.conversionRate > 5 ? '#EFF6F5' : row.conversionRate > 0 ? '#FBF8F1' : 'transparent', padding: '2px 6px', borderRadius: '8px' }}>
+                            {row.conversionRate}%
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px 16px', textAlign: 'right', color: '#1C1A16', fontWeight: '600' }}>{fmtEur(row.revenue)}</td>
+                      </tr>
+                    ))}
+                    {!data?.topItineraries?.length && (
+                      <tr><td colSpan={6} style={{ padding: '20px', textAlign: 'center', color: '#B5AA99', fontSize: '12.5px' }}>No data yet</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* ── Sources + Activity ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
             {/* Traffic Sources */}
             <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
               <div style={{ padding: '16px 20px', borderBottom: '1px solid #F4F1EC' }}>
