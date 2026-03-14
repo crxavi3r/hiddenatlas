@@ -269,23 +269,46 @@ const ACTIVITY_STYLES = {
   itinerary_view: { label: 'Viewed itinerary', color: '#8C8070', bg: '#FAFAF8' },
 };
 
+const COUNTRY_NAMES = {
+  AF:'Afghanistan',AL:'Albania',DZ:'Algeria',AR:'Argentina',AU:'Australia',
+  AT:'Austria',BE:'Belgium',BR:'Brazil',CA:'Canada',CL:'Chile',CN:'China',
+  CO:'Colombia',HR:'Croatia',CZ:'Czech Republic',DK:'Denmark',EG:'Egypt',
+  FI:'Finland',FR:'France',DE:'Germany',GR:'Greece',HU:'Hungary',IN:'India',
+  ID:'Indonesia',IE:'Ireland',IL:'Israel',IT:'Italy',JP:'Japan',KE:'Kenya',
+  MX:'Mexico',MA:'Morocco',NL:'Netherlands',NZ:'New Zealand',NG:'Nigeria',
+  NO:'Norway',PK:'Pakistan',PE:'Peru',PH:'Philippines',PL:'Poland',PT:'Portugal',
+  RO:'Romania',RU:'Russia',SA:'Saudi Arabia',ZA:'South Africa',ES:'Spain',
+  SE:'Sweden',CH:'Switzerland',TH:'Thailand',TR:'Turkey',GB:'United Kingdom',
+  US:'United States',UA:'Ukraine',VN:'Vietnam',
+};
+
+function resolveCountry(code) {
+  if (!code) return 'Unknown';
+  return COUNTRY_NAMES[code.toUpperCase()] ?? code.toUpperCase();
+}
+
 function ActivityItem({ item }) {
   const style = ACTIVITY_STYLES[item.type] ?? { label: item.type, color: '#8C8070', bg: '#FAFAF8' };
+  const displayName = item.name || (item.email ? item.email : null) || 'Unknown';
+  const country = resolveCountry(item.country);
+
   return (
     <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '8px 0', borderBottom: '1px solid #F4F1EC' }}>
       <span style={{
         flexShrink: 0, fontSize: '10px', fontWeight: '600', color: style.color,
-        background: style.bg, padding: '2px 7px', borderRadius: '10px', marginTop: '1px',
+        background: style.bg, padding: '2px 7px', borderRadius: '10px', marginTop: '2px',
         whiteSpace: 'nowrap',
       }}>
         {style.label}
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ fontSize: '12px', color: '#1C1A16', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {item.email ?? item.detail ?? '—'}
+          {displayName}
+          <span style={{ color: '#D4CCBF', margin: '0 5px', fontSize: '10px' }}>·</span>
+          <span style={{ color: '#8C8070' }}>{country}</span>
         </p>
-        {item.detail && item.email && (
-          <p style={{ fontSize: '11px', color: '#8C8070', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {item.detail && (
+          <p style={{ fontSize: '11px', color: '#B5AA99', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '1px' }}>
             {item.detail}
           </p>
         )}

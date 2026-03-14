@@ -259,23 +259,25 @@ async function getTrafficSources(pool, interval) {
 async function getRecentActivity(pool) {
   const { rows } = await pool.query(`
     (
-      SELECT 'signup' AS type, u.email, NULL AS detail, u."createdAt" AS ts
+      SELECT 'signup' AS type, u.email, u.name, NULL::text AS country, NULL::text AS detail, u."createdAt" AS ts
       FROM "User" u ORDER BY ts DESC LIMIT 15
     ) UNION ALL (
-      SELECT 'download' AS type, u.email,
+      SELECT 'download' AS type, u.email, u.name, NULL::text AS country,
         COALESCE(te.metadata->>'title', te.metadata->>'destination', 'trip') AS detail,
         te."createdAt" AS ts
       FROM "TripEvent" te JOIN "User" u ON u.id=te."userId"
       WHERE te."eventType"='DOWNLOADED' ORDER BY ts DESC LIMIT 15
     ) UNION ALL (
-      SELECT 'purchase' AS type, u.email, i.title AS detail, p."purchasedAt" AS ts
+      SELECT 'purchase' AS type, u.email, u.name, NULL::text AS country, i.title AS detail, p."purchasedAt" AS ts
       FROM "Purchase" p
       JOIN "User" u ON u.id=p."userId"
       JOIN "Itinerary" i ON i.id=p."itineraryId"
       ORDER BY ts DESC LIMIT 15
     ) UNION ALL (
-      SELECT 'itinerary_view' AS type, NULL AS email, e."itinerarySlug" AS detail, e."createdAt" AS ts
-      FROM "Event" e WHERE e."eventType"='ITINERARY_VIEW'
+      SELECT 'itinerary_view' AS type, u.email, u.name, e.country, e."itinerarySlug" AS detail, e."createdAt" AS ts
+      FROM "Event" e
+      LEFT JOIN "User" u ON u.id = e."userId"
+      WHERE e."eventType"='ITINERARY_VIEW'
       ORDER BY ts DESC LIMIT 15
     )
     ORDER BY ts DESC LIMIT 50
