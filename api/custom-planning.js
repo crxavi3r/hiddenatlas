@@ -124,16 +124,26 @@ export default async function handler(req, res) {
 
   // ── Email notification ─────────────────────────────────────────────────────
   // Non-fatal: request is already saved — email failure must not cancel the 200 response.
-  let emailSent = false;
-  if (process.env.RESEND_API_KEY) {
+  // emailError is returned in the response so failures are visible without needing logs.
+  let emailSent  = false;
+  let emailError = null;
+
+  if (!process.env.RESEND_API_KEY) {
+    emailError = 'RESEND_API_KEY environment variable is not set in production';
+    console.warn('[custom-planning]', emailError);
+  } else {
     try {
       const { Resend } = await import('resend');
       const resend = new Resend(process.env.RESEND_API_KEY);
       const travelStyle = Array.isArray(style) && style.length ? style.join(', ') : 'None selected';
 
-      const TO = 'contact@hiddenatlas.travel';
+      const TO   = 'contact@hiddenatlas.travel';
+      const FROM = 'HiddenAtlas <brief@hiddenatlas.travel>';
+
+      console.log(`[custom-planning] Sending email from=${FROM} to=${TO}`);
+
       const result = await resend.emails.send({
-        from: 'HiddenAtlas <brief@hiddenatlas.travel>',
+        from: FROM,
         to:   [TO],
         subject: `HiddenAtlas Trip Request – ${destination || 'New Inquiry'}`,
         html: `
@@ -158,20 +168,18 @@ export default async function handler(req, res) {
       });
 
       // Resend SDK v2+ returns { data, error } instead of throwing on API errors.
-      // Must check result.error explicitly — a missing throw does NOT mean success.
       if (result.error) {
-        console.error(`[custom-planning] Resend rejected email to ${TO}:`, JSON.stringify(result.error));
-        throw new Error(result.error.message || 'Email rejected by Resend');
+        emailError = `Resend API error: ${JSON.stringify(result.error)}`;
+        console.error(`[custom-planning] ${emailError}`);
+      } else {
+        emailSent = true;
+        console.log(`[custom-planning] Email OK — Resend id=${result.data?.id} to=${TO} request=${insertedId}`);
       }
-
-      emailSent = true;
-      console.log(`[custom-planning] Email delivered — Resend id=${result.data?.id} to=${TO} request=${insertedId}`);
     } catch (err) {
-      console.error('[custom-planning] Email send FAILED:', err.message);
+      emailError = err.message || 'Unknown error';
+      console.error('[custom-planning] Email exception:', emailError);
     }
-  } else {
-    console.warn('[custom-planning] RESEND_API_KEY not set — email skipped');
   }
 
-  return res.status(200).json({ success: true, emailSent });
+  return res.status(200).json({ success: true, emailSent, emailError });
 }
