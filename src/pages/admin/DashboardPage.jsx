@@ -38,8 +38,17 @@ function fmtDay(day) {
   return new Date(day + 'T12:00:00').toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function niceMax(v) {
+  if (v <= 0) return 5;
+  const candidates = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000];
+  return candidates.find(c => c >= v) ?? Math.ceil(v / 1000) * 1000;
+}
+
 // ── SVG area/line chart ───────────────────────────────────────────────────────
 function TrendChart({ data = [] }) {
+  const [hovered, setHovered] = useState(null);
+
   const lines = [
     { key: 'visitors',  color: '#1B6B65', label: 'Visitors' },
     { key: 'downloads', color: '#C9A96E', label: 'Downloads' },
@@ -47,39 +56,54 @@ function TrendChart({ data = [] }) {
   ];
 
   if (!data.length) {
-    return <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    return <div style={{ height: '220px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p style={{ fontSize: '13px', color: '#B5AA99' }}>No data for this period</p>
     </div>;
   }
 
-  const W = 520; const H = 180;
-  const padL = 0; const padR = 0; const padT = 10; const padB = 28;
+  const W = 520; const H = 200;
+  const padL = 36; const padR = 10; const padT = 12; const padB = 28;
   const cW = W - padL - padR;
   const cH = H - padT - padB;
   const n = data.length;
 
-  // Separate max for visitors (can be much larger) vs others
-  const maxVisitors = Math.max(...data.map(d => d.visitors || 0), 1);
-  const maxOther    = Math.max(...data.map(d => Math.max(d.downloads || 0, d.sales || 0)), 1);
+  const rawMax = Math.max(...data.map(d => Math.max(d.visitors || 0, d.downloads || 0, d.sales || 0)), 1);
+  const yMax = niceMax(rawMax);
+  const YTICKS = 5;
+  const yTicks = Array.from({ length: YTICKS + 1 }, (_, i) => Math.round((yMax / YTICKS) * i));
 
-  function getMax(key) { return key === 'visitors' ? maxVisitors : maxOther; }
-  function xPos(i)    { return padL + (n <= 1 ? cW / 2 : (i / (n - 1)) * cW); }
-  function yPos(v, key) { return padT + cH - (v / getMax(key)) * cH; }
+  const xPos = (i) => padL + (n <= 1 ? cW / 2 : (i / (n - 1)) * cW);
+  const yPos = (v) => padT + cH - (v / yMax) * cH;
 
-  function buildPath(key) {
-    return data.map((d, i) => `${i === 0 ? 'M' : 'L'}${xPos(i)},${yPos(d[key] || 0, key)}`).join(' ');
-  }
-  function buildArea(key) {
-    const pts = data.map((d, i) => `${xPos(i)},${yPos(d[key] || 0, key)}`).join(' L ');
-    return `M${xPos(0)},${padT + cH} L ${pts} L${xPos(n - 1)},${padT + cH} Z`;
-  }
+  const buildPath = (key) =>
+    data.map((d, i) => `${i === 0 ? 'M' : 'L'}${xPos(i).toFixed(1)},${yPos(d[key] || 0).toFixed(1)}`).join(' ');
+  const buildArea = (key) => {
+    const pts = data.map((d, i) => `${xPos(i).toFixed(1)},${yPos(d[key] || 0).toFixed(1)}`).join(' L ');
+    return `M${xPos(0).toFixed(1)},${(padT + cH).toFixed(1)} L ${pts} L${xPos(n - 1).toFixed(1)},${(padT + cH).toFixed(1)} Z`;
+  };
 
   // X labels — show at most 7
   const step = Math.ceil(n / 7);
-  const xLabels = data.filter((_, i) => i % step === 0 || i === n - 1);
+  const xLabelIdxs = data.reduce((a, _, i) => { if (i % step === 0 || i === n - 1) a.push(i); return a; }, []);
+
+  const handleMouseMove = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mouseX = ((e.clientX - rect.left) / rect.width) * W;
+    let closest = 0, minDist = Infinity;
+    for (let i = 0; i < n; i++) {
+      const d = Math.abs(xPos(i) - mouseX);
+      if (d < minDist) { minDist = d; closest = i; }
+    }
+    setHovered(closest);
+  };
+
+  const hd = hovered != null ? data[hovered] : null;
+
+  // Tooltip: show to right of point unless near right edge
+  const tooltipFlip = hovered != null && xPos(hovered) / W > 0.62;
 
   return (
-    <div>
+    <div style={{ position: 'relative', userSelect: 'none' }}>
       {/* Legend */}
       <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', flexWrap: 'wrap' }}>
         {lines.map(l => (
@@ -89,35 +113,113 @@ function TrendChart({ data = [] }) {
           </div>
         ))}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: '180px' }}>
-        {/* Grid */}
-        {[0, 0.33, 0.66, 1].map(f => (
-          <line key={f}
-            x1={padL} y1={padT + cH * (1 - f)}
-            x2={W - padR} y2={padT + cH * (1 - f)}
-            stroke="#F0EBE3" strokeWidth="1"
-          />
-        ))}
-        {/* Areas */}
-        {lines.map(l => (
-          <path key={`a-${l.key}`} d={buildArea(l.key)} fill={l.color} fillOpacity="0.07" />
-        ))}
-        {/* Lines */}
-        {lines.map(l => (
-          <path key={`l-${l.key}`} d={buildPath(l.key)}
-            fill="none" stroke={l.color} strokeWidth="1.8"
-            strokeLinejoin="round" strokeLinecap="round"
-          />
-        ))}
-        {/* X labels */}
-        {xLabels.map(d => (
-          <text key={d.day} x={xPos(data.indexOf(d))} y={H - 4}
-            textAnchor="middle" fontSize="9.5" fill="#B5AA99"
-          >
-            {fmtDay(d.day)}
-          </text>
-        ))}
-      </svg>
+
+      <div style={{ position: 'relative' }}>
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          style={{ width: '100%', height: '200px', display: 'block', overflow: 'visible' }}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={() => setHovered(null)}
+        >
+          {/* Y-axis labels */}
+          {yTicks.map(v => (
+            <text key={v} x={padL - 6} y={yPos(v) + 3.5} textAnchor="end" fontSize="9" fill="#B5AA99">
+              {v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}
+            </text>
+          ))}
+
+          {/* Grid lines — one per Y tick */}
+          {yTicks.map(v => (
+            <line key={v} x1={padL} y1={yPos(v)} x2={W - padR} y2={yPos(v)} stroke="#F0EBE3" strokeWidth="1" />
+          ))}
+
+          {/* Hover crosshair */}
+          {hovered != null && (
+            <line
+              x1={xPos(hovered)} y1={padT}
+              x2={xPos(hovered)} y2={padT + cH}
+              stroke="#D4CCBF" strokeWidth="1" strokeDasharray="3,3"
+            />
+          )}
+
+          {/* Areas */}
+          {lines.map(l => (
+            <path key={`a-${l.key}`} d={buildArea(l.key)} fill={l.color} fillOpacity="0.07" />
+          ))}
+
+          {/* Lines */}
+          {lines.map(l => (
+            <path key={`l-${l.key}`} d={buildPath(l.key)}
+              fill="none" stroke={l.color} strokeWidth="1.8"
+              strokeLinejoin="round" strokeLinecap="round"
+            />
+          ))}
+
+          {/* Dots — small always; enlarged + labeled on hover */}
+          {lines.map(l =>
+            data.map((d, i) => {
+              const val = d[l.key] || 0;
+              const cx = xPos(i); const cy = yPos(val);
+              const isHov = hovered === i;
+              const labelRight = cx < W - padR - 20;
+              return (
+                <g key={`dot-${l.key}-${i}`}>
+                  <circle cx={cx} cy={cy} r={isHov ? 4 : 2} fill="white" stroke={l.color} strokeWidth={isHov ? 2 : 1.2} />
+                  {isHov && (
+                    <text
+                      x={labelRight ? cx + 7 : cx - 7}
+                      y={cy - 6}
+                      textAnchor={labelRight ? 'start' : 'end'}
+                      fontSize="9.5" fontWeight="600" fill={l.color}
+                    >
+                      {val}
+                    </text>
+                  )}
+                </g>
+              );
+            })
+          )}
+
+          {/* X labels */}
+          {xLabelIdxs.map(i => (
+            <text key={i} x={xPos(i)} y={H - 4} textAnchor="middle" fontSize="9.5"
+              fill={hovered === i ? '#6B6156' : '#B5AA99'}
+            >
+              {fmtDay(data[i].day)}
+            </text>
+          ))}
+        </svg>
+
+        {/* Tooltip */}
+        {hd && (
+          <div style={{
+            position: 'absolute',
+            top: '4px',
+            ...(tooltipFlip
+              ? { right: `${((W - xPos(hovered)) / W) * 100}%`, marginRight: '10px' }
+              : { left:  `${(xPos(hovered) / W) * 100}%`,        marginLeft:  '10px' }
+            ),
+            background: 'white',
+            border: '1px solid #E8E3DA',
+            borderRadius: '8px',
+            padding: '10px 12px',
+            boxShadow: '0 4px 16px rgba(28,26,22,0.10)',
+            pointerEvents: 'none',
+            zIndex: 10,
+            minWidth: '130px',
+          }}>
+            <p style={{ fontSize: '11px', fontWeight: '700', color: '#1C1A16', marginBottom: '7px' }}>
+              {fmtDay(hd.day)}
+            </p>
+            {lines.map(l => (
+              <div key={l.key} style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', marginBottom: '3px' }}>
+                <span style={{ fontSize: '11.5px', color: '#8C8070' }}>{l.label}</span>
+                <span style={{ fontSize: '11.5px', fontWeight: '600', color: l.color }}>{hd[l.key] || 0}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
