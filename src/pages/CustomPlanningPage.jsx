@@ -151,6 +151,8 @@ export default function CustomPlanningPage() {
   });
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
 
   // Prefill name and email from Clerk once the user object is available.
   // Only sets fields that are still empty so manual edits are never overwritten.
@@ -203,17 +205,29 @@ export default function CustomPlanningPage() {
       }
       return;
     }
+
+    setSubmitting(true);
+    setSubmitError(null);
+
     try {
-      await fetch('/api/custom-planning', {
+      const res = await fetch('/api/custom-planning', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
-    } catch (_) {
-      // Submission notification failed silently — still show success to user
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Something went wrong. Please try again.');
+      }
+
+      setSubmitted(true);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      setSubmitError(err.message || 'Something went wrong. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitted(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   if (submitted) {
@@ -607,22 +621,33 @@ export default function CustomPlanningPage() {
               }}>
                 <button
                   type="submit"
+                  disabled={submitting}
                   style={{
                     width: '100%', padding: '18px',
-                    background: '#1B6B65', color: 'white',
+                    background: submitting ? '#4A9E98' : '#1B6B65', color: 'white',
                     border: 'none', borderRadius: '6px',
                     fontSize: '15px', fontWeight: '600',
                     letterSpacing: '0.5px', textTransform: 'uppercase',
-                    cursor: 'pointer',
+                    cursor: submitting ? 'wait' : 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                     transition: 'background 0.2s',
-                    marginBottom: '16px',
+                    marginBottom: '12px',
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#145550'}
-                  onMouseLeave={e => e.currentTarget.style.background = '#1B6B65'}
+                  onMouseEnter={e => { if (!submitting) e.currentTarget.style.background = '#145550'; }}
+                  onMouseLeave={e => { if (!submitting) e.currentTarget.style.background = '#1B6B65'; }}
                 >
-                  Send My Brief <ArrowRight size={16} />
+                  {submitting ? 'Sending…' : 'Send My Brief'} {!submitting && <ArrowRight size={16} />}
                 </button>
+
+                {submitError && (
+                  <p style={{
+                    fontSize: '13px', color: '#B04040', textAlign: 'center',
+                    marginBottom: '10px', lineHeight: '1.5',
+                  }}>
+                    {submitError}
+                  </p>
+                )}
+
                 <p style={{ fontSize: '13px', color: '#6B6156', textAlign: 'center', lineHeight: '1.6' }}>
                   No payment required now. We'll review your brief and reply within 48 hours.
                 </p>
