@@ -51,7 +51,10 @@
       "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas/content/itineraries -type f | grep -iE '\\\\.\\(jpg|jpeg|png|webp\\)$' | sort)",
       "Bash(ls -la /Users/cristianoxavier/Documents/Projects/HiddenAtlas/.env* 2>/dev/null)",
       "Bash(which vercel:*)",
-      "Bash(sudo npm:*)"
+      "Bash(sudo npm:*)",
+      "Bash(cat /Users/cristianoxavier/Documents/Projects/HiddenAtlas/src/lib/usePurchasedSlugs.js 2>/dev/null || find /Users/cristianoxavier/Documents/Projects/HiddenAtlas/src -name \"usePurchasedSlugs*\" | head -5)",
+      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas -maxdepth 2 -name \"*.json\" | xargs grep -l \"postinstall\\\\|prisma generate\\\\|migrate\" 2>/dev/null\nfind /Users/cristianoxavier/Documents/Projects/HiddenAtlas -maxdepth 1 -name \".env*\" | head -5\nls /Users/cristianoxavier/Documents/Projects/HiddenAtlas/api/_lib/)",
+      "Bash(cd /Users/cristianoxavier/Documents/Projects/HiddenAtlas/server && cat .env | grep -v \"^#\" | grep -v \"^$\" | sed 's/=.*/=<redacted>/')"
     ]
   }
 }
