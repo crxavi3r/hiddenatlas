@@ -106,9 +106,10 @@ export default async function handler(req, res) {
       const resend = new Resend(process.env.RESEND_API_KEY);
       const travelStyle = Array.isArray(style) && style.length ? style.join(', ') : 'None selected';
 
-      await resend.emails.send({
+      const TO = 'contact@hiddenatlas.travel';
+      const result = await resend.emails.send({
         from: 'HiddenAtlas <brief@hiddenatlas.travel>',
-        to:   ['contact@hiddenatlas.travel'],
+        to:   [TO],
         subject: `HiddenAtlas Trip Request – ${destination || 'New Inquiry'}`,
         html: `
           <h2>New HiddenAtlas Travel Brief</h2>
@@ -130,8 +131,16 @@ export default async function handler(req, res) {
           <p style="color:#888;font-size:12px;">Submitted via HiddenAtlas custom planning form.</p>
         `,
       });
+
+      // Resend SDK v2+ returns { data, error } instead of throwing on API errors.
+      // Must check result.error explicitly — a missing throw does NOT mean success.
+      if (result.error) {
+        console.error(`[custom-planning] Resend rejected email to ${TO}:`, JSON.stringify(result.error));
+        throw new Error(result.error.message || 'Email rejected by Resend');
+      }
+
       emailSent = true;
-      console.log(`[custom-planning] Email sent OK for id=${insertedId}`);
+      console.log(`[custom-planning] Email delivered — Resend id=${result.data?.id} to=${TO} request=${insertedId}`);
     } catch (err) {
       console.error('[custom-planning] Email send FAILED:', err.message);
     }

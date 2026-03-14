@@ -394,36 +394,67 @@ async function getCustomRequests(pool, statusParam, offset) {
     : [];
   const useFilter = statuses.length > 0;
 
-  const { rows: requests } = await pool.query(
-    `SELECT id, "fullName", email, phone, destination, dates, duration,
-            "groupSize", "groupType", budget, style, notes, status, "createdAt"
-     FROM "CustomRequest"
-     ${useFilter ? `WHERE status = ANY($1::text[])` : ''}
-     ORDER BY "createdAt" DESC
-     LIMIT 50 OFFSET ${useFilter ? '$2' : '$1'}`,
-    useFilter ? [statuses, offset] : [offset]
-  );
+  let requests, total, counts;
 
-  const countRes = await pool.query(
-    `SELECT COUNT(*) AS total FROM "CustomRequest"
-     ${useFilter ? `WHERE status = ANY($1::text[])` : ''}`,
-    useFilter ? [statuses] : []
-  );
+  try {
+    // Full query — works once migration 20260313400000 has been applied
+    const { rows } = await pool.query(
+      `SELECT id, "fullName", email, phone, destination, dates, duration,
+              "groupSize", "groupType", budget, style, notes, status, "createdAt"
+       FROM "CustomRequest"
+       ${useFilter ? `WHERE status = ANY($1::text[])` : ''}
+       ORDER BY "createdAt" DESC
+       LIMIT 50 OFFSET ${useFilter ? '$2' : '$1'}`,
+      useFilter ? [statuses, offset] : [offset]
+    );
+    requests = rows;
 
-  const countsRes = await pool.query(
-    `SELECT status, COUNT(*) AS n FROM "CustomRequest" GROUP BY status`
-  );
-  const counts = { open: 0, in_progress: 0, closed: 0, all: 0 };
-  for (const row of countsRes.rows) {
-    counts[row.status] = parseInt(row.n, 10);
-    counts.all += parseInt(row.n, 10);
+    const countRes = await pool.query(
+      `SELECT COUNT(*) AS total FROM "CustomRequest"
+       ${useFilter ? `WHERE status = ANY($1::text[])` : ''}`,
+      useFilter ? [statuses] : []
+    );
+    total = parseInt(countRes.rows[0].total, 10);
+
+    const countsRes = await pool.query(
+      `SELECT status, COUNT(*) AS n FROM "CustomRequest" GROUP BY status`
+    );
+    counts = { open: 0, in_progress: 0, closed: 0, all: 0 };
+    for (const row of countsRes.rows) {
+      counts[row.status] = parseInt(row.n, 10);
+      counts.all += parseInt(row.n, 10);
+    }
+  } catch (err) {
+    // If the error is a missing-column error the migration hasn't been applied yet.
+    // Fall back to original schema columns so the page still shows data.
+    if (!err.message.toLowerCase().includes('column')) throw err;
+
+    console.warn('[admin/custom-requests] Extended columns missing — using fallback query:', err.message);
+
+    // Fallback: select only original-schema columns; synthesise NULL/default values
+    // for the new fields so the frontend receives a consistent shape.
+    // Status filter is skipped here (column doesn't exist yet); all rows shown.
+    const { rows } = await pool.query(
+      `SELECT id, "fullName", email, destination, dates, "groupSize", notes, "createdAt",
+              'open'::text  AS status,
+              NULL::text    AS phone,
+              NULL::text    AS duration,
+              NULL::text    AS "groupType",
+              NULL::text    AS budget,
+              '[]'::jsonb   AS style
+       FROM "CustomRequest"
+       ORDER BY "createdAt" DESC
+       LIMIT 50 OFFSET $1`,
+      [offset]
+    );
+    requests = rows;
+
+    const countRes = await pool.query(`SELECT COUNT(*) AS total FROM "CustomRequest"`);
+    total  = parseInt(countRes.rows[0].total, 10);
+    counts = { open: total, in_progress: 0, closed: 0, all: total };
   }
 
-  return {
-    requests,
-    total:  parseInt(countRes.rows[0].total, 10),
-    counts,
-  };
+  return { requests, total, counts };
 }
 
 // ── Downloads ─────────────────────────────────────────────────────────────────
