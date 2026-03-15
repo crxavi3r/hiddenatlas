@@ -117,8 +117,8 @@ export default async function handler(req, res) {
       if (!data) return res.status(404).json({ error: 'User not found' });
       return res.status(200).json(data);
     }
-    if (action === 'sales')     return res.status(200).json(await getSales(pool, interval, offset));
-    if (action === 'downloads') return res.status(200).json(await getDownloads(pool, interval, offset));
+    if (action === 'sales')     return res.status(200).json(await getSales(pool, cutoff, offset));
+    if (action === 'downloads') return res.status(200).json(await getDownloads(pool, cutoff, offset));
     if (action === 'custom-requests') return res.status(200).json(await getCustomRequests(pool, status, offset, req.query.all === 'true'));
 
     return res.status(400).json({ error: 'Unknown action' });
@@ -398,21 +398,21 @@ async function getUserDetail(pool, id) {
 }
 
 // ── Sales ─────────────────────────────────────────────────────────────────────
-async function getSales(pool, interval, offset) {
+async function getSales(pool, cutoff, offset) {
   const { rows: sales } = await pool.query(`
     SELECT p."purchasedAt", u.email, u.name, i.title AS itinerary, i.slug, p.amount, p.status
     FROM "Purchase" p
     JOIN "User" u ON u.id=p."userId"
     JOIN "Itinerary" i ON i.id=p."itineraryId"
-    WHERE p."purchasedAt" >= NOW()-$1::interval
+    WHERE p."purchasedAt" >= $1
     ORDER BY p."purchasedAt" DESC
     LIMIT 50 OFFSET $2
-  `, [interval, offset]);
+  `, [cutoff, offset]);
 
   const { rows: [{ total, revenue }] } = await pool.query(`
     SELECT COUNT(*) AS total, COALESCE(SUM(amount),0) AS revenue
-    FROM "Purchase" WHERE "purchasedAt" >= NOW()-$1::interval
-  `, [interval]);
+    FROM "Purchase" WHERE "purchasedAt" >= $1
+  `, [cutoff]);
 
   const { rows: [allTime] } = await pool.query(
     `SELECT COUNT(*) AS total, COALESCE(SUM(amount),0) AS revenue FROM "Purchase"`
@@ -497,7 +497,7 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false) {
 }
 
 // ── Downloads ─────────────────────────────────────────────────────────────────
-async function getDownloads(pool, interval, offset) {
+async function getDownloads(pool, cutoff, offset) {
   const { rows: downloads } = await pool.query(`
     SELECT
       te."createdAt", u.email, u.name,
@@ -506,15 +506,15 @@ async function getDownloads(pool, interval, offset) {
     FROM "TripEvent" te
     JOIN "User" u ON u.id=te."userId"
     LEFT JOIN "Trip" t ON t.id=te."tripId"
-    WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= NOW()-$1::interval
+    WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1
     ORDER BY te."createdAt" DESC
     LIMIT 50 OFFSET $2
-  `, [interval, offset]);
+  `, [cutoff, offset]);
 
   const { rows: [{ total }] } = await pool.query(`
     SELECT COUNT(*) AS total FROM "TripEvent"
-    WHERE "eventType"='DOWNLOADED' AND "createdAt" >= NOW()-$1::interval
-  `, [interval]);
+    WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1
+  `, [cutoff]);
 
   return { downloads, total: parseInt(total, 10) };
 }

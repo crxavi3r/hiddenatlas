@@ -12,6 +12,18 @@ const PERIODS = [
   { label: '30 days', value: '30d' },
 ];
 
+function getPeriodFrom(period) {
+  const now = new Date();
+  if (period === 'today') {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    return start.toISOString();
+  }
+  if (period === '7d')  return new Date(now - 7  * 24 * 60 * 60 * 1000).toISOString();
+  if (period === '30d') return new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+  return new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+}
+
 function fmtEur(n)  { return `€${parseFloat(n || 0).toFixed(2)}`; }
 function fmtDate(ts) {
   if (!ts) return '—';
@@ -29,7 +41,8 @@ export default function SalesPage() {
     setLoading(true);
     try {
       const token = await getToken();
-      const res = await fetch(`/api/admin?action=sales&period=${period}&page=${page}`, {
+      const from = encodeURIComponent(getPeriodFrom(period));
+      const res = await fetch(`/api/admin?action=sales&period=${period}&page=${page}&from=${from}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setData(await res.json());
