@@ -13,6 +13,21 @@ const PERIODS = [
   { label: '30 days', value: '30d' },
 ];
 
+// Compute the start-of-period timestamp in the browser's local timezone.
+// For 'today': midnight of the current calendar day (respects local TZ).
+// For '7d'/'30d': exact N-day lookback from now.
+function getPeriodFrom(period) {
+  const now = new Date();
+  if (period === 'today') {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    return start.toISOString();
+  }
+  if (period === '7d')  return new Date(now - 7  * 24 * 60 * 60 * 1000).toISOString();
+  if (period === '30d') return new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+  return new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+}
+
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const card = {
   background: 'white', borderRadius: '10px',
@@ -343,7 +358,8 @@ export default function DashboardPage() {
       setApiError(null);
       try {
         const token = await getToken();
-        const res = await fetch(`/api/admin?action=dashboard&period=${period}`, {
+        const from = getPeriodFrom(period);
+        const res = await fetch(`/api/admin?action=dashboard&period=${period}&from=${encodeURIComponent(from)}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const json = await res.json();

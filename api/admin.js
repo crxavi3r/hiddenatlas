@@ -8,10 +8,22 @@ const ADMIN_EMAILS = [
   'cristiano.xavier@hiddenatlas.travel',
 ];
 
-function periodToInterval(period) {
-  if (period === '7d')  return '7 days';
-  if (period === '30d') return '30 days';
-  return '1 day'; // 'today'
+// Returns a Date object representing the start of the requested period.
+// Prefers the `from` timestamp sent by the browser (which uses the local
+// calendar timezone for 'today'). Falls back to UTC-based intervals if
+// `from` is absent or unparseable (e.g. direct API calls).
+function parseCutoff(from, period) {
+  if (from) {
+    const d = new Date(from);
+    if (!isNaN(d)) return d;
+  }
+  const now = new Date();
+  if (period === '7d')  return new Date(now - 7  * 24 * 60 * 60 * 1000);
+  if (period === '30d') return new Date(now - 30 * 24 * 60 * 60 * 1000);
+  // 'today' fallback (UTC midnight — only used if browser did not send `from`)
+  const start = new Date(now);
+  start.setUTCHours(0, 0, 0, 0);
+  return start;
 }
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
@@ -48,9 +60,9 @@ export default async function handler(req, res) {
     return res.status(err.status ?? 401).json({ error: err.message });
   }
 
-  const { action, period = '7d', page = '1', q = '', id, status } = req.query;
-  const interval = periodToInterval(period);
-  const offset   = (Math.max(1, parseInt(page, 10)) - 1) * 50;
+  const { action, period = '7d', page = '1', q = '', id, status, from } = req.query;
+  const cutoff = parseCutoff(from, period);
+  const offset = (Math.max(1, parseInt(page, 10)) - 1) * 50;
 
   try {
     // ── PATCH: status updates ─────────────────────────────────────────────
@@ -88,12 +100,12 @@ export default async function handler(req, res) {
       const FUNNEL_ZERO = { visitors: 0, itineraryViews: 0, downloads: 0, purchases: 0 };
 
       const [kpis, chart, funnel, topItineraries, sources, activity] = await Promise.all([
-        safe('kpis',           () => getDashboardKPIs(pool, interval),    KPI_ZERO),
-        safe('chart',          () => getChartData(pool, interval),         []),
-        safe('funnel',         () => getFunnelData(pool, interval),        FUNNEL_ZERO),
-        safe('topItineraries', () => getTopItineraries(pool, interval),    []),
-        safe('sources',        () => getTrafficSources(pool, interval),    []),
-        safe('activity',       () => getRecentActivity(pool, interval),    []),
+        safe('kpis',           () => getDashboardKPIs(pool, cutoff),    KPI_ZERO),
+        safe('chart',          () => getChartData(pool, cutoff),         []),
+        safe('funnel',         () => getFunnelData(pool, cutoff),        FUNNEL_ZERO),
+        safe('topItineraries', () => getTopItineraries(pool, cutoff),    []),
+        safe('sources',        () => getTrafficSources(pool, cutoff),    []),
+        safe('activity',       () => getRecentActivity(pool, cutoff),    []),
       ]);
       return res.status(200).json({ kpis, chart, funnel, topItineraries, sources, activity });
     }
@@ -119,13 +131,13 @@ export default async function handler(req, res) {
 }
 
 // ── Dashboard KPIs ────────────────────────────────────────────────────────────
-async function getDashboardKPIs(pool, interval) {
+async function getDashboardKPIs(pool, cutoff) {
   const [visitors, newUsers, itinViews, downloads, sales] = await Promise.all([
-    pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='PAGE_VIEW' AND "createdAt" >= NOW()-$1::interval`, [interval]),
-    pool.query(`SELECT COUNT(*) AS n FROM "User" WHERE "createdAt" >= NOW()-$1::interval`, [interval]),
-    pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= NOW()-$1::interval`, [interval]),
-    pool.query(`SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= NOW()-$1::interval`, [interval]),
-    pool.query(`SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS revenue FROM "Purchase" WHERE "purchasedAt" >= NOW()-$1::interval`, [interval]),
+    pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='PAGE_VIEW' AND "createdAt" >= $1`, [cutoff]),
+    pool.query(`SELECT COUNT(*) AS n FROM "User" WHERE "createdAt" >= $1`, [cutoff]),
+    pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= $1`, [cutoff]),
+    pool.query(`SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1`, [cutoff]),
+    pool.query(`SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS revenue FROM "Purchase" WHERE "purchasedAt" >= $1`, [cutoff]),
   ]);
   const v = parseInt(visitors.rows[0].n, 10) || 0;
   const s = parseInt(sales.rows[0].n, 10) || 0;
@@ -141,11 +153,11 @@ async function getDashboardKPIs(pool, interval) {
 }
 
 // ── Daily chart data ──────────────────────────────────────────────────────────
-async function getChartData(pool, interval) {
+async function getChartData(pool, cutoff) {
   const { rows } = await pool.query(`
     WITH d AS (
       SELECT generate_series(
-        DATE_TRUNC('day', NOW()-$1::interval),
+        DATE_TRUNC('day', $1::timestamptz),
         DATE_TRUNC('day', NOW()),
         '1 day'
       )::date AS day
@@ -154,20 +166,20 @@ async function getChartData(pool, interval) {
       SELECT DATE("createdAt") AS day,
         COUNT(*) FILTER (WHERE "eventType"='PAGE_VIEW')       AS visitors,
         COUNT(*) FILTER (WHERE "eventType"='ITINERARY_VIEW')  AS itinerary_views
-      FROM "Event" WHERE "createdAt" >= NOW()-$1::interval
+      FROM "Event" WHERE "createdAt" >= $1
       GROUP BY DATE("createdAt")
     ),
     sl AS (
       SELECT DATE("purchasedAt") AS day,
         COUNT(*)                       AS sales,
         COALESCE(SUM(amount),0)        AS revenue
-      FROM "Purchase" WHERE "purchasedAt" >= NOW()-$1::interval
+      FROM "Purchase" WHERE "purchasedAt" >= $1
       GROUP BY DATE("purchasedAt")
     ),
     dl AS (
       SELECT DATE("createdAt") AS day, COUNT(*) AS downloads
       FROM "TripEvent"
-      WHERE "eventType"='DOWNLOADED' AND "createdAt" >= NOW()-$1::interval
+      WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1
       GROUP BY DATE("createdAt")
     )
     SELECT
@@ -182,17 +194,17 @@ async function getChartData(pool, interval) {
     LEFT JOIN sl ON sl.day = d.day
     LEFT JOIN dl ON dl.day = d.day
     ORDER BY d.day
-  `, [interval]);
+  `, [cutoff]);
   return rows;
 }
 
 // ── Funnel ────────────────────────────────────────────────────────────────────
-async function getFunnelData(pool, interval) {
+async function getFunnelData(pool, cutoff) {
   const [v, iv, dl, p] = await Promise.all([
-    pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='PAGE_VIEW' AND "createdAt" >= NOW()-$1::interval`, [interval]),
-    pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= NOW()-$1::interval`, [interval]),
-    pool.query(`SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= NOW()-$1::interval`, [interval]),
-    pool.query(`SELECT COUNT(*) AS n FROM "Purchase" WHERE "purchasedAt" >= NOW()-$1::interval`, [interval]),
+    pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='PAGE_VIEW' AND "createdAt" >= $1`, [cutoff]),
+    pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= $1`, [cutoff]),
+    pool.query(`SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1`, [cutoff]),
+    pool.query(`SELECT COUNT(*) AS n FROM "Purchase" WHERE "purchasedAt" >= $1`, [cutoff]),
   ]);
   return {
     visitors:       parseInt(v.rows[0].n, 10)  || 0,
@@ -203,7 +215,7 @@ async function getFunnelData(pool, interval) {
 }
 
 // ── Top itineraries ───────────────────────────────────────────────────────────
-async function getTopItineraries(pool, interval) {
+async function getTopItineraries(pool, cutoff) {
   const { rows } = await pool.query(`
     SELECT
       i.slug, i.title, i.price,
@@ -214,24 +226,24 @@ async function getTopItineraries(pool, interval) {
     FROM "Itinerary" i
     LEFT JOIN (
       SELECT "itinerarySlug", COUNT(*) AS views
-      FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= NOW()-$1::interval
+      FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= $1
       GROUP BY "itinerarySlug"
     ) v ON v."itinerarySlug" = i.slug
     LEFT JOIN (
       SELECT t."itinerarySlug", COUNT(*) AS downloads
       FROM "TripEvent" te JOIN "Trip" t ON t.id = te."tripId"
-      WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= NOW()-$1::interval
+      WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1
         AND t."itinerarySlug" IS NOT NULL
       GROUP BY t."itinerarySlug"
     ) d ON d."itinerarySlug" = i.slug
     LEFT JOIN (
       SELECT "itineraryId", COUNT(*) AS sales, SUM(amount) AS revenue
-      FROM "Purchase" WHERE "purchasedAt" >= NOW()-$1::interval
+      FROM "Purchase" WHERE "purchasedAt" >= $1
       GROUP BY "itineraryId"
     ) s ON s."itineraryId" = i.id
     ORDER BY COALESCE(s.sales,0) DESC, COALESCE(d.downloads,0) DESC, COALESCE(v.views,0) DESC
     LIMIT 20
-  `, [interval]);
+  `, [cutoff]);
   return rows.map(r => ({
     ...r,
     conversionRate: r.views > 0 ? +((r.sales / r.views) * 100).toFixed(1) : 0,
@@ -239,7 +251,7 @@ async function getTopItineraries(pool, interval) {
 }
 
 // ── Traffic sources ───────────────────────────────────────────────────────────
-async function getTrafficSources(pool, interval) {
+async function getTrafficSources(pool, cutoff) {
   const { rows } = await pool.query(`
     SELECT
       COALESCE(NULLIF(TRIM(source), ''), 'direct') AS source,
@@ -247,45 +259,45 @@ async function getTrafficSources(pool, interval) {
       COUNT(*) FILTER (WHERE "eventType"='ITINERARY_VIEW') AS itinerary_views,
       COUNT(DISTINCT "userId") FILTER (WHERE "userId" IS NOT NULL) AS users
     FROM "Event"
-    WHERE "createdAt" >= NOW()-$1::interval
+    WHERE "createdAt" >= $1
     GROUP BY COALESCE(NULLIF(TRIM(source), ''), 'direct')
     ORDER BY visitors DESC
     LIMIT 10
-  `, [interval]);
+  `, [cutoff]);
   return rows;
 }
 
 // ── Recent activity ───────────────────────────────────────────────────────────
-async function getRecentActivity(pool, interval) {
+async function getRecentActivity(pool, cutoff) {
   const { rows } = await pool.query(`
     (
       SELECT 'signup' AS type, u.email, u.name, NULL::text AS country, NULL::text AS detail, u."createdAt" AS ts
       FROM "User" u
-      WHERE u."createdAt" >= NOW() - $1::interval
+      WHERE u."createdAt" >= $1
       ORDER BY ts DESC LIMIT 15
     ) UNION ALL (
       SELECT 'download' AS type, u.email, u.name, NULL::text AS country,
         COALESCE(te.metadata->>'title', te.metadata->>'destination', 'trip') AS detail,
         te."createdAt" AS ts
       FROM "TripEvent" te JOIN "User" u ON u.id=te."userId"
-      WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= NOW() - $1::interval
+      WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1
       ORDER BY ts DESC LIMIT 15
     ) UNION ALL (
       SELECT 'purchase' AS type, u.email, u.name, NULL::text AS country, i.title AS detail, p."purchasedAt" AS ts
       FROM "Purchase" p
       JOIN "User" u ON u.id=p."userId"
       JOIN "Itinerary" i ON i.id=p."itineraryId"
-      WHERE p."purchasedAt" >= NOW() - $1::interval
+      WHERE p."purchasedAt" >= $1
       ORDER BY ts DESC LIMIT 15
     ) UNION ALL (
       SELECT 'itinerary_view' AS type, u.email, u.name, e.country, e."itinerarySlug" AS detail, e."createdAt" AS ts
       FROM "Event" e
       LEFT JOIN "User" u ON u.id = e."userId"
-      WHERE e."eventType"='ITINERARY_VIEW' AND e."createdAt" >= NOW() - $1::interval
+      WHERE e."eventType"='ITINERARY_VIEW' AND e."createdAt" >= $1
       ORDER BY ts DESC LIMIT 15
     )
     ORDER BY ts DESC LIMIT 50
-  `, [interval]);
+  `, [cutoff]);
   return rows;
 }
 
