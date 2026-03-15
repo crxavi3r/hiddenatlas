@@ -16,7 +16,7 @@ const faqs = [
       },
       {
         q: 'Are your itineraries suitable for first-time visitors?',
-        a: 'Absolutely. Our guides are designed to help travellers understand a destination quickly — where to start, how to structure each day, and what experiences are truly worth prioritising.',
+        a: 'Absolutely. Our guides are designed to help travellers understand a destination quickly: where to start, how to structure each day, and what experiences are truly worth prioritising.',
       },
       {
         q: 'How do I receive my itinerary after purchase?',

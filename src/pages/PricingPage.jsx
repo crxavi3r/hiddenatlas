@@ -97,7 +97,7 @@ export default function PricingPage() {
               Curated travel itineraries
             </h2>
             <p style={{ fontSize: '16px', color: '#6B6156', maxWidth: '440px', margin: '0 auto', lineHeight: '1.7' }}>
-              Travel routes designed from real journeys — ready for your own trip.
+              Travel routes designed from real journeys, ready for your own trip.
             </p>
           </div>
 
