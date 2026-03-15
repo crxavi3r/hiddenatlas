@@ -792,10 +792,16 @@ export default function HomePage() {
               <div>
                 <span style={{ ...T.label, color: '#C9A96E' }}>Custom trip planning</span>
                 <h2 style={{ ...T.h2, color: 'white', marginBottom: '20px' }}>
-                  Prefer a fully<br />custom journey?
+                  Prefer a journey designed<br />entirely around you?
                 </h2>
-                <p style={{ fontSize: '17px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.8', marginBottom: '36px' }}>
-                  We design personalised travel itineraries built around boutique hotels, private guides, and hidden places most travellers never find. One dedicated planner, shaped entirely around how you travel.
+                <p style={{ fontSize: '17px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.8', marginBottom: '16px' }}>
+                  We design deeply personalised travel itineraries shaped around exceptional places, remarkable experiences and thoughtful pacing.
+                </p>
+                <p style={{ fontSize: '17px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.8', marginBottom: '16px' }}>
+                  You receive a fully crafted plan with carefully curated recommendations — ready for you to book directly, at your own pace.
+                </p>
+                <p style={{ fontSize: '14px', color: 'rgba(201,169,110,0.75)', lineHeight: '1.7', marginBottom: '36px', fontStyle: 'italic' }}>
+                  Independent travel planning. No commissions. Only thoughtful recommendations.
                 </p>
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                   <Link
