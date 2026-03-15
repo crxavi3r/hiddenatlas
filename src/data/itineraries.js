@@ -1424,7 +1424,7 @@ export const testimonials = [
     type: "Couple",
     avatar: "/avatars/marta.svg",
     fallbackAvatar: "https://i.pravatar.cc/100?img=47",
-    text: "We've used travel agencies, spent hours on Reddit, and bought three guidebooks for Japan. Nothing came close to our HiddenAtlas itinerary. The ryokan they recommended — I still think about it. Every single pick was exactly right.",
+    text: "We've used travel agencies, spent hours on Reddit, and bought three guidebooks for Japan. Nothing came close to our HiddenAtlas itinerary. There's a ryokan it pointed us to that I still think about. Every single recommendation was exactly right.",
     itinerary: "Japan Cultural Grand Journey",
     rating: 5,
   },

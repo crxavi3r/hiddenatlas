@@ -706,7 +706,7 @@ export default function HomePage() {
           <div className="resp-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
             {[
               {
-                quote: 'The best trip we ever took as a family. Every hotel, every restaurant was exactly right. We\'ve already started planning our next one with HiddenAtlas.',
+                quote: 'The best trip we ever took as a family. The itinerary was thoughtful and every place we visited felt just right. We\'ve already started planning our next one with HiddenAtlas.',
                 name: 'Marta',
                 location: 'Lisbon',
                 trip: 'Bali Island Journey',
@@ -724,7 +724,7 @@ export default function HomePage() {
                 type: 'Couple',
               },
               {
-                quote: 'Every hotel and experience was exactly right: understated, elegant, local. Our group of six had completely different tastes and everyone came home happy.',
+                quote: 'Every place and experience was exactly right: understated, elegant, local. Our group of six had completely different tastes and everyone came home happy.',
                 name: 'Sofia',
                 location: 'Milan',
                 trip: 'Puglia Road Journey',
