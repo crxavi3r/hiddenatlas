@@ -287,6 +287,92 @@ const s = StyleSheet.create({
     flex: 1,
   },
 
+  // ── Transport page ─────────────────────────────────────────────────────────
+  transportPage: {
+    backgroundColor: C.white,
+  },
+  transportBody: {
+    paddingHorizontal: 48,
+    paddingTop: 28,
+    paddingBottom: 32,
+  },
+  transportSectionTitle: {
+    fontFamily: 'Times-Bold',
+    fontSize: 20,
+    color: C.charcoal,
+    marginBottom: 20,
+  },
+  transportLuggageTip: {
+    backgroundColor: C.mapBg,
+    borderRadius: 4,
+    padding: 16,
+    marginBottom: 24,
+    borderLeftWidth: 3,
+    borderLeftColor: C.teal,
+    borderLeftStyle: 'solid',
+  },
+  transportTipLabel: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 7,
+    letterSpacing: 1.8,
+    color: C.teal,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  transportTipText: {
+    fontFamily: 'Helvetica',
+    fontSize: 9.5,
+    color: C.tealMid,
+    lineHeight: 1.65,
+  },
+  transportRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: C.border,
+    breakInside: 'avoid',
+  },
+  transportRowLast: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: 12,
+    breakInside: 'avoid',
+  },
+  transportModeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 4,
+    flexShrink: 0,
+  },
+  transportSegment: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 10,
+    color: C.charcoal,
+    marginBottom: 2,
+  },
+  transportService: {
+    fontFamily: 'Helvetica',
+    fontSize: 9.5,
+    color: C.muted,
+    marginBottom: 2,
+  },
+  transportDuration: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 9,
+    color: C.teal,
+    marginBottom: 3,
+  },
+  transportNote: {
+    fontFamily: 'Helvetica',
+    fontSize: 8.5,
+    color: '#8C8070',
+    lineHeight: 1.5,
+  },
+
   // ── Day pages ──────────────────────────────────────────────────────────────
   dayPage: {
     backgroundColor: C.white,
@@ -763,6 +849,48 @@ function DayPage({ day, index, itinerary }) {
   );
 }
 
+// ── Transport page ─────────────────────────────────────────────────────────────
+
+function TransportPage({ itinerary }) {
+  const { title: itinTitle, country, transport } = itinerary;
+  if (!transport) return null;
+
+  const modeColor = (mode) => mode === 'train' ? C.teal : mode === 'bus' ? '#7B5F3A' : '#4A3A7A';
+
+  return (
+    <Page size="A4" style={s.transportPage}>
+      <RunHeader country={country} title={itinTitle} />
+
+      <View style={s.transportBody}>
+        <Text style={s.transportSectionTitle}>Transport Between Cities</Text>
+
+        {/* Luggage tip */}
+        <View style={s.transportLuggageTip}>
+          <Text style={s.transportTipLabel}>Insider Tip: Luggage Forwarding</Text>
+          <Text style={s.transportTipText}>{transport.luggageTip}</Text>
+        </View>
+
+        {/* Routes */}
+        {transport.routes.map((route, i) => (
+          <View key={i} style={i === transport.routes.length - 1 ? s.transportRowLast : s.transportRow}>
+            <View style={[s.transportModeDot, { backgroundColor: modeColor(route.mode) }]} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.transportSegment}>{route.segment}</Text>
+              <Text style={s.transportService}>{route.service}</Text>
+              <Text style={s.transportDuration}>{route.duration}</Text>
+              {route.notes.map((note, ni) => (
+                <Text key={ni} style={s.transportNote}>{note}</Text>
+              ))}
+            </View>
+          </View>
+        ))}
+      </View>
+
+      <Text style={s.pageNum} render={({ pageNumber }) => String(pageNumber)} fixed />
+    </Page>
+  );
+}
+
 function CTAPage({ itinerary }) {
   const { title, country, isPremium, price, currency } = itinerary;
 
@@ -835,7 +963,10 @@ export default function ItineraryPDF({ itinerary }) {
       {/* Page 2 – Route Map + Highlights */}
       <RouteMapPage itinerary={itinerary} />
 
-      {/* Pages 3…N – Day by day */}
+      {/* Page 3 (optional) – Transport Between Cities */}
+      {itinerary.transport && <TransportPage itinerary={itinerary} />}
+
+      {/* Pages 3/4…N – Day by day */}
       {days.map((day, i) => (
         <DayPage key={i} day={day} index={i} itinerary={itinerary} />
       ))}
