@@ -14,6 +14,7 @@
   "difficulty": "Moderate",
   "bestFor": ["Friend Groups", "Adventurers", "Culture Seekers"],
   "heroImage": "cover.jpg",
+  "cover_image": "cover.jpg",
   "gallery": [
     { "file": "gallery/chefchaouen-blue-alleys.jpg",      "alt": "Chefchaouen blue-painted medina alleys",            "caption": "Chefchaouen" },
     { "file": "gallery/fes-medina-tanneries.jpg",         "alt": "Fes leather tanneries from above",                   "caption": "Fes Tanneries" },

@@ -10,7 +10,7 @@ const ADMIN_EMAILS = [
 import { itineraries } from '../data/itineraries';
 import { downloadItineraryPDF } from '../utils/downloadPDF';
 import { useApi } from '../lib/api';
-import { getGalleryImages, getResearchImages, getDayImage } from '../lib/itineraryImages';
+import { getGalleryImages, getResearchImages, getDayImage, getCoverImage } from '../lib/itineraryImages';
 import { useTrack } from '../hooks/useTrack';
 
 // ─────────────────────────────────────────────────────────────
@@ -549,6 +549,8 @@ const api = useApi();
 
   const galleryImages  = getGalleryImages(itinerary.id);
   const researchImages = getResearchImages(itinerary.id);
+  // Local cover takes priority over the Unsplash-based coverImage fallback.
+  const localCover = getCoverImage(itinerary.id);
 
 
   return (
@@ -557,7 +559,7 @@ const api = useApi();
       {/* Hero */}
       <section style={{ position: 'relative', height: 'clamp(400px, 55vw, 600px)', overflow: 'hidden' }}>
         <img
-          src={coverImage || image}
+          src={localCover || coverImage || image}
           alt={title}
           style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }}
           onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1600&q=80'; }}

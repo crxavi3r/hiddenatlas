@@ -2,15 +2,16 @@
 // Paths are relative to this file: src/lib/ → ../../content/
 //
 // Usage:
-//   import { getGalleryImages, getResearchImages, getDayImage } from '../lib/itineraryImages';
+//   import { getGalleryImages, getResearchImages, getDayImage, getCoverImage } from '../lib/itineraryImages';
 //   const gallery  = getGalleryImages('rome-4-day-city-break');  // [] if none
 //   const research = getResearchImages('rome-4-day-city-break'); // [] if none
 //   const img      = getDayImage('rome-4-day-city-break', 4);    // asset URL or null
+//   const cover    = getCoverImage('morocco-motorcycle-expedition'); // asset URL or null
 //
 // Day images live in per-day subfolders: day-images/day1/, day-images/day2/, …
 // Place one image per folder. If the folder is empty, getDayImage returns null.
-// Day images are intentionally excluded from gallery/research so they never
-// appear in auto-rendered grid sections.
+// Day images and cover images are intentionally excluded from gallery/research
+// so they never appear in auto-rendered grid sections.
 
 const galleryModules = import.meta.glob(
   '../../content/itineraries/*/gallery/*.{jpg,jpeg,png,webp}',
@@ -24,6 +25,11 @@ const researchModules = import.meta.glob(
 
 const dayFolderModules = import.meta.glob(
   '../../content/itineraries/*/day-images/day*/*.{jpg,jpeg,png,webp}',
+  { eager: true }
+);
+
+const coverModules = import.meta.glob(
+  '../../content/itineraries/*/cover.{jpg,jpeg,png,webp}',
   { eager: true }
 );
 
@@ -52,5 +58,17 @@ export function getResearchImages(slug) {
 export function getDayImage(slug, dayNumber) {
   const needle = `/itineraries/${slug}/day-images/day${dayNumber}/`;
   const entry = Object.entries(dayFolderModules).find(([path]) => path.includes(needle));
+  return entry ? entry[1].default : null;
+}
+
+/**
+ * Returns the bundled asset URL for the itinerary cover image, or null if none is present.
+ * Place the cover image at: content/itineraries/<slug>/cover.{jpg,jpeg,png,webp}
+ * Takes priority over any Unsplash-based fallback in both the hero and PDF.
+ */
+export function getCoverImage(slug) {
+  const entry = Object.entries(coverModules).find(([path]) =>
+    path.includes(`/itineraries/${slug}/cover.`)
+  );
   return entry ? entry[1].default : null;
 }
