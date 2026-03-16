@@ -61,7 +61,8 @@
       "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas -name \"*pdf*\" -o -name \"*PDF*\" 2>/dev/null | grep -v node_modules | grep -v \".git\")",
       "WebFetch(domain:api.unsplash.com)",
       "WebFetch(domain:www.google.com)",
-      "WebFetch(domain:html.duckduckgo.com)"
+      "WebFetch(domain:html.duckduckgo.com)",
+      "Bash(mkdir:*)"
     ]
   }
 }
