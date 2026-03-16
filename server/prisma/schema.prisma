@@ -30,19 +30,78 @@ model User {
 // Itinerary
 // ─────────────────────────────────────────────
 model Itinerary {
-  id          String   @id @default(uuid())
-  title       String
-  slug        String   @unique
-  description String
-  excerpt     String?
-  htmlContent String?
-  pdfUrl      String?
-  price       Float
-  coverImage  String
-  isPublished Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id            String   @id @default(uuid())
+  title         String
+  slug          String   @unique
+  description   String   // mirrors content.summary.shortDescription
+  excerpt       String?
+  htmlContent   String?
+  pdfUrl        String?
+  price         Float
+  coverImage    String   // mirrors content.hero.coverImage
+  isPublished   Boolean  @default(false)  // mirrors status === 'published'
+  createdAt     DateTime @default(now())
 
-  purchases Purchase[]
+  // ── CMS fields ────────────────────────────
+  subtitle      String?
+  destination   String?
+  country       String?
+  region        String?
+  durationDays  Int?
+  accessType    String   @default("paid")   // free | paid
+  stripePriceId String?
+  status        String   @default("draft")  // draft | published
+  schemaVersion Int      @default(1)
+  content       Json     @default("{}")     // structured editorial content (see CONTENT_SCHEMA)
+  updatedAt     DateTime @default(now())    // updated via raw SQL; @updatedAt not used (raw pool)
+
+  purchases         Purchase[]
+  assets            ItineraryAsset[]
+  aiGenerations     ItineraryAIGeneration[]
+
+  @@index([status])
+  @@index([accessType])
+  @@index([updatedAt])
+}
+
+// ─────────────────────────────────────────────
+// ItineraryAsset  (images per itinerary)
+// assetType: hero | gallery | research | ai_suggested | manual
+// source:    ai | manual
+// ─────────────────────────────────────────────
+model ItineraryAsset {
+  id           String   @id @default(uuid())
+  itineraryId  String
+  assetType    String   @default("gallery")
+  url          String
+  alt          String?
+  caption      String?
+  sortOrder    Int      @default(0)
+  source       String   @default("manual")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  itinerary Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+
+  @@index([itineraryId])
+  @@index([assetType])
+}
+
+// ─────────────────────────────────────────────
+// ItineraryAIGeneration  (immutable AI draft log)
+// AI output is NEVER auto-published.
+// ─────────────────────────────────────────────
+model ItineraryAIGeneration {
+  id            String   @id @default(uuid())
+  itineraryId   String?  // nullable: can generate before saving
+  prompt        String
+  rawOutput     String   @default("")
+  parsedOutput  Json     @default("{}")
+  createdBy     String?  // admin email
+  createdAt     DateTime @default(now())
+
+  @@index([itineraryId])
+  @@index([createdAt])
 }
 
 // ─────────────────────────────────────────────

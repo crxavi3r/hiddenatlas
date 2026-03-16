@@ -31,6 +31,8 @@ import UserDetailPage from './pages/admin/UserDetailPage';
 import SalesPage from './pages/admin/SalesPage';
 import DownloadsPage from './pages/admin/DownloadsPage';
 import CustomRequestsPage from './pages/admin/CustomRequestsPage';
+import ItinerariesCMSPage from './pages/admin/ItinerariesCMSPage';
+import ItineraryCMSEditorPage from './pages/admin/ItineraryCMSEditorPage';
 
 // ── Scroll to top on route change ────────────────────────────────────────────
 function ScrollToTop() {
@@ -83,6 +85,8 @@ export default function App() {
           <Route path="sales" element={<SalesPage />} />
           <Route path="downloads" element={<DownloadsPage />} />
           <Route path="custom-requests" element={<CustomRequestsPage />} />
+          <Route path="itineraries" element={<ItinerariesCMSPage />} />
+          <Route path="itineraries/:id" element={<ItineraryCMSEditorPage />} />
         </Route>
 
         {/* ── Public pages — shared Navbar + Footer ── */}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet, NavLink, Navigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
-import { LayoutDashboard, Users, CreditCard, Download, ExternalLink, Inbox, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Users, CreditCard, Download, ExternalLink, Inbox, Menu, X, Map } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 const ADMIN_EMAILS = [
@@ -11,6 +11,7 @@ const ADMIN_EMAILS = [
 
 const NAV = [
   { label: 'Dashboard',       path: '/admin',                   icon: LayoutDashboard, end: true },
+  { label: 'Itineraries CMS', path: '/admin/itineraries',        icon: Map },
   { label: 'Users',           path: '/admin/users',              icon: Users },
   { label: 'Sales',           path: '/admin/sales',              icon: CreditCard },
   { label: 'Downloads',       path: '/admin/downloads',          icon: Download },
