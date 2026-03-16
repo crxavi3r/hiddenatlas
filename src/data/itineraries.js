@@ -701,7 +701,7 @@ export const itineraries = [
           "Giardino degli Aranci — the Aventine orange garden, with a terrace view of St Peter's dome framed in pines",
           "Baths of Caracalla — the imperial bathhouse of 216 AD; one of the best-preserved Roman structures in the city",
         ],
-        img: "https://images.unsplash.com/photo-1516483638261-8ae3d6fdc756?w=800&q=80",
+        img: "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=800&q=80",
         tip: "Galleria Borghese must be booked in advance through the official gallery website — same-day availability is rarely possible, and the two-hour limit is strictly enforced. The Giardino degli Aranci is free, almost entirely unknown to first-time visitors, and the finest free viewpoint in Rome. The Baths of Caracalla are at their best in the late afternoon when the angle of the light enters through the broken vaults.",
       },
     ],
