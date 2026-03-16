@@ -4,7 +4,7 @@
 
 import {
   Document, Page, Text, View, Image, StyleSheet,
-  Svg, Rect, Circle, Line, Polygon,
+  Svg, Polygon,
 } from '@react-pdf/renderer';
 
 // ── Colour tokens ─────────────────────────────────────────────────────────────
@@ -171,6 +171,53 @@ const s = StyleSheet.create({
     color: C.muted,
   },
 
+  // ── Route Timeline ─────────────────────────────────────────────────────────
+  timelineWrap: {
+    paddingHorizontal: 48,
+    paddingTop: 22,
+    paddingBottom: 10,
+  },
+  timelineRow: {
+    flexDirection: 'row',
+  },
+  timelineTrack: {
+    width: 22,
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  timelineDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: C.teal,
+    marginTop: 4,
+    flexShrink: 0,
+  },
+  timelineConnector: {
+    width: 1.5,
+    flex: 1,
+    backgroundColor: C.border,
+    marginTop: 2,
+  },
+  timelineContent: {
+    flex: 1,
+    paddingLeft: 14,
+    paddingBottom: 17,
+  },
+  timelineDayLabel: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 7,
+    letterSpacing: 2,
+    color: C.gold,
+    marginBottom: 4,
+  },
+  timelineRoute: {
+    fontFamily: 'Helvetica',
+    fontSize: 10.5,
+    color: C.charcoal,
+    lineHeight: 1.45,
+  },
+
   // ── Route Map page ─────────────────────────────────────────────────────────
   mapPage: {
     backgroundColor: C.stone,
@@ -199,12 +246,7 @@ const s = StyleSheet.create({
     fontSize: 10,
     color: 'rgba(255,255,255,0.60)',
   },
-  mapSvgWrap: {
-    paddingHorizontal: 40,
-    paddingTop: 24,
-    paddingBottom: 8,
-  },
-  // Highlights below the map
+  // Highlights below the timeline
   mapHighlights: {
     paddingHorizontal: 48,
     paddingTop: 16,
@@ -483,11 +525,6 @@ function imgUrl(src, w = 1000) {
   return `${src.replace(/\?.*/, '')}?w=${w}&q=85`;
 }
 
-/** Extract the primary place name from a day title (text before ' — ') */
-function placeName(title) {
-  return title.split(' — ')[0].trim();
-}
-
 /**
  * Compass-star mark — same polygon as logo-hiddenatlas.svg.
  * @react-pdf/renderer cannot load external SVG via Image, so we
@@ -518,102 +555,31 @@ function RunHeader({ country, title }) {
   );
 }
 
-// ── SVG Route Map ─────────────────────────────────────────────────────────────
+// ── Vertical Expedition Timeline ──────────────────────────────────────────────
 //
-// Builds a schematic numbered-stop diagram using react-pdf SVG primitives.
-// Stops are arranged in horizontal rows of up to 5; odd rows run right-to-left
-// (zigzag), creating a clean S-curve route for long itineraries.
+// Replaces the zig-zag SVG map with a clean per-day timeline.
+// Each row shows the day number and the real route locations.
+// Uses day.route if present; falls back to day.title for itineraries
+// that have not yet been given a route field.
 
-function RouteMapSvg({ stops }) {
-  const W       = 515;    // SVG canvas width (matches paddingHorizontal:40 on page)
-  const MX      = 38;     // left/right margin inside SVG
-  const CR      = 13;     // circle radius
-  const ROW_H   = 88;     // vertical distance between rows
-  const PER_ROW = stops.length <= 5 ? stops.length : 5;
-  const ROWS    = Math.ceil(stops.length / PER_ROW);
-  const H       = ROWS * ROW_H + 28;
-  const CW      = W - MX * 2;   // usable width
-
-  // Compute x,y for every stop
-  const pts = stops.map((name, i) => {
-    const row = Math.floor(i / PER_ROW);
-    const col = i % PER_ROW;
-    const inRow = Math.min(PER_ROW, stops.length - row * PER_ROW);
-    const step  = inRow > 1 ? CW / (inRow - 1) : 0;
-    const adjCol = (row % 2 === 1) ? (inRow - 1 - col) : col;
-    return {
-      name: name.length > 14 ? name.slice(0, 13) + '\u2026' : name,
-      x: MX + adjCol * step,
-      y: 18 + row * ROW_H + CR,
-    };
-  });
-
+function RouteTimeline({ days }) {
   return (
-    <Svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
-
-      {/* ── Background ───────────────────────────────────────────── */}
-      <Rect x={0} y={0} width={W} height={H} fill={C.mapBg} rx={6} />
-
-      {/* Subtle horizontal grid lines */}
-      {[0.2, 0.45, 0.7, 0.95].map((t, i) => (
-        <Line
-          key={`g${i}`}
-          x1={16} y1={H * t}
-          x2={W - 16} y2={H * t}
-          stroke="#D8EAE8"
-          strokeWidth={0.6}
-        />
+    <View style={s.timelineWrap}>
+      {days.map((day, i) => (
+        <View key={i} style={s.timelineRow}>
+          {/* Vertical track: dot + connector line */}
+          <View style={s.timelineTrack}>
+            <View style={s.timelineDot} />
+            {i < days.length - 1 ? <View style={s.timelineConnector} /> : null}
+          </View>
+          {/* Day label + route locations */}
+          <View style={[s.timelineContent, i === days.length - 1 ? { paddingBottom: 0 } : {}]}>
+            <Text style={s.timelineDayLabel}>DAY {day.day}</Text>
+            <Text style={s.timelineRoute}>{day.route || day.title}</Text>
+          </View>
+        </View>
       ))}
-
-      {/* ── Route connecting lines (gold dashes, drawn before circles) ── */}
-      {pts.map((pt, i) => {
-        if (i === 0) return null;
-        const prev = pts[i - 1];
-        return (
-          <Line
-            key={`l${i}`}
-            x1={prev.x} y1={prev.y}
-            x2={pt.x}   y2={pt.y}
-            stroke={C.gold}
-            strokeWidth={1.5}
-            strokeDasharray="5 3"
-          />
-        );
-      })}
-
-      {/* ── Stop markers ─────────────────────────────────────────── */}
-      {pts.map((pt, i) => (
-        // White halo → teal circle → number (drawn as flat sibling elements)
-        [
-          <Circle key={`h${i}`}  cx={pt.x} cy={pt.y} r={CR + 2.5} fill={C.white} />,
-          <Circle key={`c${i}`}  cx={pt.x} cy={pt.y} r={CR}       fill={C.teal}  />,
-
-          // Day number inside circle
-          <Text
-            key={`n${i}`}
-            x={pt.x} y={pt.y + 4}
-            textAnchor="middle"
-            fill={C.white}
-            fontSize={8.5}
-            fontFamily="Helvetica-Bold"
-          >
-            {String(i + 1)}
-          </Text>,
-
-          // Place-name label below circle
-          <Text
-            key={`lb${i}`}
-            x={pt.x} y={pt.y + CR + 16}
-            textAnchor="middle"
-            fill={C.charcoal}
-            fontSize={8.5}
-            fontFamily="Helvetica"
-          >
-            {pt.name}
-          </Text>,
-        ]
-      ))}
-    </Svg>
+    </View>
   );
 }
 
@@ -692,8 +658,6 @@ function RouteMapPage({ itinerary }) {
     days = [], highlights = [],
   } = itinerary;
 
-  const stops = days.map(d => placeName(d.title));
-
   return (
     <Page size="A4" style={s.mapPage}>
       <RunHeader country={country} title={title} />
@@ -701,16 +665,14 @@ function RouteMapPage({ itinerary }) {
       {/* Banner */}
       <View style={s.mapBanner}>
         <Text style={s.mapBannerEyebrow}>YOUR JOURNEY</Text>
-        <Text style={s.mapBannerTitle}>Route Map</Text>
+        <Text style={s.mapBannerTitle}>Expedition Route</Text>
         <Text style={s.mapBannerSub}>
-          {country}{region ? ` · ${region}` : ''}{duration ? `  ·  ${duration}` : ''}
+          {country}{region ? ` \u00B7 ${region}` : ''}{duration ? `  \u00B7  ${duration}` : ''}
         </Text>
       </View>
 
-      {/* Visual route diagram */}
-      <View style={s.mapSvgWrap}>
-        <RouteMapSvg stops={stops} />
-      </View>
+      {/* Vertical day-by-day timeline */}
+      <RouteTimeline days={days} />
 
       {/* Key highlights */}
       {highlights.length > 0 ? (

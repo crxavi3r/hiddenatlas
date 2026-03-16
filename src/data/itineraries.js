@@ -749,6 +749,7 @@ export const itineraries = [
           "Evening arrival in Fes: 190 kilometres from Chefchaouen on the N8",
         ],
         img: null,
+        route: "Ceuta \u00B7 Chefchaouen \u00B7 Fes",
         tip: "The Fnideq (Ceuta) border can be slow on Friday afternoons and summer weekends. Allow two hours from the ferry landing to clear the border area. The Tangier Med route is faster overall for groups with larger bikes or panniers, and skips the Tangier city traffic entirely.",
       },
       {
@@ -763,6 +764,7 @@ export const itineraries = [
           "Errachidia: the gateway before the gorge roads of the deep south",
         ],
         img: null,
+        route: "Fes \u00B7 Middle Atlas \u00B7 Errachidia",
         tip: "Fuel in Midelt before continuing south. The stretch beyond Midelt has long gaps between stations. The N13 from Fes is well-surfaced; the back roads through the cedar forest near Azrou add twenty minutes and considerable reward for those who have them.",
       },
       {
@@ -777,6 +779,7 @@ export const itineraries = [
           "Merzouga arrival: sand on the road surface signals you are close; reduce speed accordingly",
         ],
         img: null,
+        route: "Errachidia \u00B7 Erfoud \u00B7 Rissani \u00B7 Merzouga",
         tip: "The road surface is good until the last few kilometres approaching Merzouga, where sand can drift across the tarmac close to the dune edge. Rissani has a fuel station and a covered market on Sundays and Thursdays. Allow the afternoon at Merzouga to settle in before exploring; the light on the dunes in the last two hours before dark is exceptional.",
       },
       {
@@ -792,6 +795,7 @@ export const itineraries = [
           "Camel ride to the dune crest: available as a complement to the day; not the main focus",
         ],
         img: null,
+        route: "Erg Chebbi, Sahara (full desert day)",
         tip: "The 4x4 outing is best arranged through your accommodation, which maintains established relationships with local operators. Early morning departure, before 9am, avoids the midday heat and catches the dunes in their sharpest light. Bring significantly more water than you think necessary. The dry desert air is deceptive in every direction.",
       },
       {
@@ -807,6 +811,7 @@ export const itineraries = [
           "Ouarzazate: the overnight base before the High Atlas crossing",
         ],
         img: null,
+        route: "Merzouga \u00B7 Tinghir \u00B7 Todra Gorge \u00B7 Dades Valley \u00B7 Skoura \u00B7 Ouarzazate",
         tip: "The Dades switchback section is narrow with loose gravel in places. Manageable for loaded touring bikes but requires attention, particularly on the downhill return. Fill up in Tinghir before the valley road; the next reliable fuel is in Boumalne Dades or Ouarzazate. Total distance from Merzouga to Ouarzazate via the gorges is around 320 kilometres.",
       },
       {
@@ -821,6 +826,7 @@ export const itineraries = [
           "Marrakech: the medina, the Djemaa el-Fna and an abrupt change of register",
         ],
         img: null,
+        route: "Ouarzazate \u00B7 A\u00EFt Benhaddou \u00B7 Tizi n\u2019Tichka \u00B7 Marrakech",
         tip: "The Tizi n'Tichka carries significant truck traffic. Overtaking on the switchbacks requires patience; the surface is generally good but some bends near the summit can have loose stone debris after rain. Fill up in Ouarzazate before the pass. The next reliable fuel stations are in the Marrakech suburbs.",
       },
       {
@@ -834,6 +840,7 @@ export const itineraries = [
           "Oualidia oysters: served at the water's edge, the correct end to a long day",
         ],
         img: null,
+        route: "Marrakech \u00B7 Oualidia",
         tip: "Oualidia has a small number of excellent restaurants along the lagoon; arrive by early afternoon to secure a table. The town fills on weekends with day-trippers from Casablanca. A weekday arrival is quieter and gives you the lagoon more or less to yourselves.",
       },
       {
@@ -847,6 +854,7 @@ export const itineraries = [
           "Tangier Med: the return ferry port for the Algeciras, Ceuta or Tarifa crossing",
         ],
         img: null,
+        route: "Oualidia \u00B7 Casablanca \u00B7 Rabat \u00B7 Tangier Med",
         tip: "The Hassan II Mosque accepts visitors outside of prayer times; guided entry is available and worth it. Arrive in Casablanca before 10am to clear the city before the Rabat run. Tangier Med is 40 kilometres east of Tangier city. Follow signs for Port Tanger Med and not Tanger Ville, or you will arrive at the wrong terminal.",
       },
     ],
