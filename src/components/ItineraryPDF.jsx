@@ -473,10 +473,9 @@ const s = StyleSheet.create({
 /** Normalise image URL — strip existing query params and append w/q */
 function imgUrl(src, w = 1000) {
   if (!src) return null;
-  const base = src.startsWith('http')
-    ? src.replace(/\?.*/, '')
-    : `https://images.unsplash.com/photo-${src}`;
-  return `${base}?w=${w}&q=85`;
+  // Local bundled asset (resolved by downloadPDF.js) — pass through unchanged
+  if (!src.startsWith('http')) return src;
+  return `${src.replace(/\?.*/, '')}?w=${w}&q=85`;
 }
 
 /** Extract the primary place name from a day title (text before ' — ') */
