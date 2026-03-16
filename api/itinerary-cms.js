@@ -97,18 +97,17 @@ export default async function handler(req, res) {
 }
 
 // ── List all itineraries (CMS view) ──────────────────────────────────────────
+// Uses SELECT i.* so the query works on both the base schema (pre-migration) and
+// the extended schema (post-migration). New columns (subtitle, destination, status,
+// updatedAt, etc.) will be undefined in rows until the 20260316100000 migration runs.
+// ORDER BY createdAt is always safe; updatedAt is used by the UI when available.
 async function handleList(pool) {
   const { rows } = await pool.query(`
-    SELECT
-      i.id, i.slug, i.title, i.subtitle, i.destination, i.country,
-      i."durationDays", i."accessType", i.price, i."stripePriceId",
-      i.status, i."isPublished", i."coverImage", i."updatedAt", i."createdAt",
-      i."schemaVersion",
-      COUNT(p.id)::int AS purchase_count
+    SELECT i.*, COUNT(p.id)::int AS purchase_count
     FROM "Itinerary" i
     LEFT JOIN "Purchase" p ON p."itineraryId" = i.id
     GROUP BY i.id
-    ORDER BY i."updatedAt" DESC
+    ORDER BY i."createdAt" DESC
   `);
   return { itineraries: rows };
 }
