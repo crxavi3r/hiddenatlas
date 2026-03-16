@@ -201,8 +201,8 @@ export default function PricingPage() {
             margin: '32px auto 0',
             lineHeight: '1.7',
           }}>
-            One-time itinerary fee. Not per person. No booking commissions.<br />
-            HiddenAtlas designs your itinerary but does not operate or book travel services.
+            One-time itinerary fee — not per person.<br />
+            HiddenAtlas designs your itinerary but does not operate or book travel services. All reservations are made directly by you.
           </p>
         </div>
       </section>
