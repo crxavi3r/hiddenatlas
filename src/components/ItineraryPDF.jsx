@@ -316,7 +316,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 48,
     paddingTop: 22,
     paddingBottom: 24,
-    flex: 1,
   },
   dayChip: {
     fontFamily: 'Helvetica-Bold',
@@ -760,7 +759,7 @@ function DayPage({ day, index, itinerary }) {
 }
 
 function CTAPage({ itinerary }) {
-  const { title, country } = itinerary;
+  const { title, country, isPremium, price, currency } = itinerary;
 
   const bullets = [
     'Refined route planning and pacing',
@@ -805,7 +804,7 @@ function CTAPage({ itinerary }) {
         </View>
 
         <Text style={s.ctaFootnote}>
-          {title} · {country} · Free Itinerary{'\n'}
+          {title} · {country}{isPremium ? ` · Premium Guide · ${currency ?? 'EUR'}${price ?? ''}` : ' · Free Itinerary'}{'\n'}
           © HiddenAtlas · hiddenatlas.travel
         </Text>
       </View>
@@ -820,7 +819,7 @@ export default function ItineraryPDF({ itinerary }) {
 
   return (
     <Document
-      title={`${itinerary.title} – Free Itinerary`}
+      title={`${itinerary.title} – ${itinerary.isPremium ? 'Premium Guide' : 'Free Itinerary'}`}
       author="HiddenAtlas"
       subject={`${itinerary.title} – Curated Travel Guide`}
       keywords="travel, itinerary, luxury, HiddenAtlas"
