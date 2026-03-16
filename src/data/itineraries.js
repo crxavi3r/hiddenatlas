@@ -60,6 +60,7 @@ export const itineraries = [
       {
         day: 1,
         title: "Seminyak & the Bukit Peninsula — Arrival & Uluwatu",
+        route: "Denpasar · Seminyak · Uluwatu",
         desc: "Arrive at Denpasar, transfer to Seminyak for the first night. Afternoon acclimatisation walk along the beach. Evening drive south to the Bukit Peninsula: Uluwatu Temple at sunset — the sea temple on a 70-metre cliff above the Indian Ocean, with Kecak fire dance performances as the light fades.",
         bullets: [
           "Uluwatu Temple — the 11th-century sea temple on a cliff at the peninsula's southern tip",
@@ -73,6 +74,7 @@ export const itineraries = [
       {
         day: 2,
         title: "Ubud — Tegallalang Rice Terraces & the Monkey Forest",
+        route: "Seminyak · Ubud · Tegallalang",
         desc: "Drive north to Ubud — the cultural capital. Morning at the Tegallalang Rice Terraces before nine: the terraced hillside of the Pakerisan River valley, farmed under the traditional subak irrigation system. Walk the terraces for an hour, then south through Ubud's gallery district to the Sacred Monkey Forest Sanctuary. Afternoon at the Ubud Palace and traditional market.",
         bullets: [
           "Tegallalang Rice Terraces — a UNESCO-listed subak irrigation landscape above the Pakerisan gorge",
@@ -86,6 +88,7 @@ export const itineraries = [
       {
         day: 3,
         title: "Ubud — Tirta Empul, Goa Gajah & Sidemen",
+        route: "Ubud · Tirta Empul · Sidemen",
         desc: "The temple morning. Tirta Empul at dawn: the Hindu water temple where Balinese worshippers bathe in holy spring water, one of the most visually arresting ceremonies on the island. Drive to Goa Gajah — the 9th-century Elephant Cave temple carved into a rock face. Afternoon drive to Sidemen: the valley east of Ubud, narrower and quieter, with rice terrace views that Tegallalang no longer has.",
         bullets: [
           "Tirta Empul — the holy spring temple where purification ceremonies occur daily",
@@ -98,6 +101,7 @@ export const itineraries = [
       {
         day: 4,
         title: "Mount Batur — Pre-Dawn Volcano Ascent",
+        route: "Ubud · Kintamani · Mount Batur",
         desc: "A 3am departure. The Mount Batur sunrise trek is a two-hour ascent in the dark, reaching the crater rim before dawn to watch the sun rise over Mount Rinjani on Lombok. The descent is through coffee and coconut plantations. Return to Ubud or continue north to Lovina for a different pace.",
         bullets: [
           "Mount Batur — an active 1,717-metre volcano, last erupted in 2000",
@@ -110,6 +114,7 @@ export const itineraries = [
       {
         day: 5,
         title: "North Bali — Ulun Danu Beratan & the Bedugul Highlands",
+        route: "Ubud · Bedugul · Ulun Danu Beratan",
         desc: "Drive north through the volcanic highlands to Bedugul. Ulun Danu Beratan: the Pura Ulun Danu temple appears to float on the surface of the crater lake, with the volcanic caldera rising behind it. Morning mist usually lingers here until ten. Continue north to the black sand beaches of Lovina or return south through the Munduk waterfall route.",
         bullets: [
           "Ulun Danu Beratan — the lake temple dedicated to the goddess of water",
@@ -123,6 +128,7 @@ export const itineraries = [
       {
         day: 6,
         title: "Nusa Penida — the Offshore Cliffs & Kelingking Beach",
+        route: "Sanur · Nusa Penida · Kelingking Beach",
         desc: "Take the 45-minute fast boat from Sanur to Nusa Penida. The island sits offshore from Bali's southeast coast and is dramatically different: limestone cliffs, wild coastline, rough roads, and the carved T-Rex headland of Kelingking Beach. Angel's Billabong and Broken Beach are natural infinity pools in the cliff face. Return to Bali in the evening.",
         bullets: [
           "Kelingking Beach — the T-Rex shaped limestone headland above an inaccessible turquoise bay",
@@ -136,6 +142,7 @@ export const itineraries = [
       {
         day: 7,
         title: "East Bali — Amed, Tulamben & the Coast",
+        route: "Nusa Penida · Amed · Tulamben",
         desc: "Drive east along the coast to Amed: the fishing village strip facing Lombok across the Lombok Strait, black volcanic sand, colourful jukung fishing boats, and the ruins of the USS Liberty wreck at Tulamben — one of the most accessible wreck dives in the world. Quiet, slow and genuinely local in a way that the south of Bali no longer is.",
         bullets: [
           "Amed — a string of fishing villages on Bali's dry, dramatic east coast",
@@ -148,6 +155,7 @@ export const itineraries = [
       {
         day: 8,
         title: "Canggu — the North of Seminyak",
+        route: "East Bali · Canggu",
         desc: "Return to the south. Canggu has absorbed what Seminyak once was: rice fields between the villas, black sand beaches, a surf culture that coexists with good restaurants without either dominating. The Tanah Lot sea temple at sunset — the offshore rock temple reached by a narrow causeway, at its most dramatic when the tide surrounds it.",
         bullets: [
           "Tanah Lot — the iconic offshore sea temple on a rocky islet, best at sunset",
@@ -160,6 +168,7 @@ export const itineraries = [
       {
         day: 9,
         title: "Seminyak — Beach, Spa & the Last Sunset",
+        route: "Canggu · Seminyak",
         desc: "The slow day. The Seminyak beach strip for the morning. A traditional Balinese massage. The boutique design shops and galleries around Jalan Petitenget. Sunset from Potato Head Beach Club or from the beach itself — the Bali sunset is not a cliché, it is genuinely worth staying for.",
         bullets: [
           "Seminyak Beach — the refined stretch of sand north of Kuta",
@@ -172,6 +181,7 @@ export const itineraries = [
       {
         day: 10,
         title: "Departure Day — Jimbaran & Denpasar",
+        route: "Seminyak · Jimbaran · Denpasar",
         desc: "Final morning at Jimbaran Bay: the fishing beach south of the airport where jukung boats leave at dawn and return by eight. The seafood restaurants on the beach are the reason Jimbaran exists. Transfer to Ngurah Rai International Airport.",
         bullets: [
           "Jimbaran Bay — the fishing beach and seafood restaurant strip south of Seminyak",
@@ -224,6 +234,7 @@ export const itineraries = [
       {
         day: 1,
         title: "Tirana — Skanderbeg Square & the New Bazar",
+        route: "Tirana · Skanderbeg Square · New Bazar",
         desc: "Arrive at Tirana International Airport. The capital has changed faster than any city in Europe since 2000: the concrete has been painted, the Blloku district opened, the Lana River uncovered. Begin at Skanderbeg Square — the national monument and equestrian statue at the city's centre — then walk north through the New Bazar to the Et'hem Bey Mosque. Afternoon at the National History Museum and the coloured buildings of the former communist quarter.",
         bullets: [
           "Skanderbeg Square — the vast city-centre square with the equestrian statue of Albania's national hero",
@@ -237,6 +248,7 @@ export const itineraries = [
       {
         day: 2,
         title: "Llogara Pass — The Descent to the Riviera",
+        route: "Tirana · Llogara Pass · Riviera",
         desc: "Drive south from Tirana toward Vlorë, then up into the Llogara National Park. The pass road climbs to 1,025 metres through pine forest, then cuts sharply south with the first view of the Ionian coast: the full arc of the Albanian Riviera, four shades of blue, stretching to Greece. The descent is 18 hairpin bends and takes thirty minutes. Check in at Himarë. Sunset from the Venetian castle above the village.",
         bullets: [
           "Llogara Pass — the mountain threshold between the Adriatic and Ionian coasts",
@@ -250,6 +262,7 @@ export const itineraries = [
       {
         day: 3,
         title: "Himarë & Jala — The Ionian Riviera in Full",
+        route: "Himare · Jala · Ionian Coast",
         desc: "The Riviera day. Drive the coast road south of Himarë through the succession of bays and beaches: Livadh, Llamani, Jala. The water here is exceptionally clear — the Albanian coast has no heavy industry and very little agricultural runoff. Jala is the most photogenic: a narrow bay between limestone cliffs, accessible by a short road down from the main coastal highway. Afternoon at Palasa or Drymades Beach. Return to Himarë for dinner.",
         bullets: [
           "Jala Beach — a narrow turquoise bay between limestone cliffs with no permanent development",
@@ -263,6 +276,7 @@ export const itineraries = [
       {
         day: 4,
         title: "Qeparo, Borsh & Porto Palermo",
+        route: "Himare · Qeparo · Borsh · Porto Palermo",
         desc: "Drive south along the Riviera. Stop first at Qeparo: the village splits into an upper Ottoman settlement on the limestone hillside and a lower beach section, with the remains of a Byzantine castle above. Continue to Borsh — the longest beach on the Albanian Riviera at seven kilometres, almost entirely undeveloped. The castle of Borsh sits on the cliff above it, reached by a 20-minute walk. Afternoon at Porto Palermo: Ali Pasha's fortress on a small peninsula, three-sided by the Ionian.",
         bullets: [
           "Qeparo old village — an Ottoman hilltop settlement with Byzantine fortifications above",
@@ -276,6 +290,7 @@ export const itineraries = [
       {
         day: 5,
         title: "Ksamil Islands & Butrint",
+        route: "Porto Palermo · Ksamil · Butrint",
         desc: "Drive to Ksamil: the village at the southernmost tip of the Albanian Riviera, with four small islands accessible by a short swim or kayak from the beach. The water is the colour and clarity you usually associate with the Maldives or the Seychelles. Afternoon at Butrint: 2,500 years of layered civilisation — Greek theatre, Roman baths, Byzantine baptistery, Venetian tower — all inside a nature reserve on the edge of a lagoon. Return to Sarandë for the night.",
         bullets: [
           "Ksamil Islands — four turquoise islets in a sheltered bay, the most Instagrammed spot in Albania",
@@ -289,6 +304,7 @@ export const itineraries = [
       {
         day: 6,
         title: "Gjirokastër — The Ottoman Stone City",
+        route: "Saranda · Gjirokaster",
         desc: "Drive north from Sarandë through the Drino Valley to Gjirokastër — the UNESCO city of stone. The old town is built on a steep hillside with a medieval castle at the summit and layered Ottoman tower houses below. Gjirokastër is the birthplace of both Enver Hoxha and Ismail Kadare: dictator and novelist, the two extremes of Albanian twentieth-century life. The Bazaar Quarter and the Old Bazaar are among the best-preserved Ottoman streetscapes in the Balkans. Overnight in the old town.",
         bullets: [
           "Gjirokastër Castle — the medieval hilltop fortress housing a military museum and a captured U.S. spy plane",
@@ -302,6 +318,7 @@ export const itineraries = [
       {
         day: 7,
         title: "Berat — The City of a Thousand Windows",
+        route: "Gjirokaster · Berat",
         desc: "Drive north through the Skrapar highlands to Berat: the other UNESCO Albanian city, built on a steep hill above the Osum River with Ottoman houses stacked so close together that their many windows face each other across the gorge. The Kalaja fortress sits at the top, still inhabited. Walk up through the Mangalem quarter and into the castle walls. Afternoon free to explore the lower city. Drive on to Shkodër in the north.",
         bullets: [
           "Berat old town — the UNESCO Ottoman quarter of white-washed houses with identical bay windows",
@@ -315,6 +332,7 @@ export const itineraries = [
       {
         day: 8,
         title: "Shkodër — the Gateway to the Alps",
+        route: "Berat · Shkoder",
         desc: "Arrive in Shkodër, Albania's northern city on the edge of Lake Shkodër — the Balkans' largest lake, shared with Montenegro. The Rozafa Castle occupies a promontory above the lake, with views back toward Tirana and north toward the Albanian Alps that are visible on clear mornings. The pedestrianised Kolë Idromeno Street is the city's social centre. Shkodër was once the capital of the Illyrian kingdom and has been fought over consistently ever since. It is now quiet, civilised and genuinely welcoming.",
         bullets: [
           "Rozafa Castle — the Illyrian-era hilltop fortress above Lake Shkodër and the Buna River",
@@ -328,6 +346,7 @@ export const itineraries = [
       {
         day: 9,
         title: "Komani Lake — The Ferry Through the Fjords",
+        route: "Shkoder · Komani Lake · Fierze",
         desc: "Drive east from Shkodër to the Komani Dam. The Komani Lake ferry is a two-and-a-half-hour boat journey through a reservoir that resembles a Norwegian fjord: sheer limestone walls 500 metres high, narrow passages between rock faces, occasional village landings where no road reaches. It is one of the strangest and most beautiful transport experiences in Europe. The ferry arrives at Fierzë. Drive the rough road to Valbonë in the late afternoon.",
         bullets: [
           "Komani Lake — a man-made reservoir in the Drin canyon with fjord-like limestone walls",
@@ -341,6 +360,7 @@ export const itineraries = [
       {
         day: 10,
         title: "Valbonë to Theth — The Accursed Mountains Traverse",
+        route: "Valbona · Theth (mountain traverse)",
         desc: "The classic Albanian Alps hike: 16 kilometres from Valbonë over the 1,793-metre Valbona Pass to Theth, through the highest and most dramatic mountain scenery in the Western Balkans. The ascent takes three hours through beech forest and alpine meadow; the descent into the Theth Valley reveals one of the most spectacular mountain views in Europe. Theth village: a handful of stone guesthouses, the lock-in tower, and the mountain church. The world feels very far away.",
         bullets: [
           "Valbona Pass — the 1,793-metre crossing between the two most dramatic Albanian alpine valleys",
@@ -387,6 +407,7 @@ export const itineraries = [
       {
         day: 1,
         title: "Rio de Janeiro — Arrival & Ipanema",
+        route: "Rio de Janeiro · Ipanema",
         desc: "Arrive at Galeão International Airport, transfer to Ipanema. The afternoon is free for orientation: the famous beachfront boulevard between Ipanema and Leblon, the neighbourhood's tree-lined streets, and the local beach culture that is unlike anything else in South America. Sunset at Arpoador Rock — the granite headland at the east end of Ipanema where the whole beach falls silent to watch the sun drop behind the Dois Irmãos peaks.",
         bullets: [
           "Ipanema Beach — the 2.9-kilometre arc of beach between the Dois Irmãos mountains and Leblon",
@@ -400,6 +421,7 @@ export const itineraries = [
       {
         day: 2,
         title: "Arraial do Cabo — Brazil's Blue Water, En Route to Búzios",
+        route: "Rio de Janeiro · Arraial do Cabo · Búzios",
         desc: "Depart early for the Costa do Sol highway east. Stop at Arraial do Cabo — a small fishing town often described as the 'Brazilian Caribbean' for the luminous blue-green transparency of its water. The cold Falkland Current meets the warm tropical Atlantic here, producing water clarity that is genuinely extraordinary. Praia do Forno is accessible only on foot through the dunes; Gruta Azul is a sea cave reached by boat. Continue 30 minutes to Búzios for the night.",
         bullets: [
           "Arraial do Cabo — the meeting point of two ocean currents, producing the clearest water on Brazil's Atlantic coast",
@@ -413,6 +435,7 @@ export const itineraries = [
       {
         day: 3,
         title: "Búzios — The 23 Beaches",
+        route: "Buzios · The 23 Beaches",
         desc: "A full day on the Búzios peninsula. The eastern beaches face the open Atlantic and have surf and wind: Praia Brava, Praia João Fernandes. The sheltered western beaches face the bay and are calm, warm, and transparent. Ferradura is the most dramatically beautiful of the protected beaches — a horseshoe bay with still water and cliffs on three sides. The cobblestone Rua das Pedras is the pedestrian restaurant and bar street; walk it in the afternoon as the light turns golden on the bay.",
         bullets: [
           "Praia Ferradura — the horseshoe-shaped bay on the protected western side of the peninsula",
@@ -426,6 +449,7 @@ export const itineraries = [
       {
         day: 4,
         title: "Búzios — Sailing Day & Hidden Coves",
+        route: "Buzios (sailing day)",
         desc: "A full-day catamaran or schooner tour around the peninsula is the defining experience of Búzios. The boats depart from Orla Bardot at 9am and move through 6–8 beaches, stopping for swimming and snorkelling at each. The east-side coves — Praia do Forno (the local one, not Arraial's), Azeda, Azedinha — are inaccessible by road and look entirely different from the water. Lunch is served on board. Return by 5pm.",
         bullets: [
           "Praia Azeda and Azedinha — twin coves inaccessible by road, with snorkelling coral",
@@ -439,6 +463,7 @@ export const itineraries = [
       {
         day: 5,
         title: "Return to Rio — Copacabana & the Bay",
+        route: "Buzios · Rio de Janeiro · Copacabana",
         desc: "Drive back to Rio de Janeiro. Check in to Copacabana or Flamengo — the old Zona Sul hotels that face the bay directly. Afternoon walk the Copacabana promenade: the black-and-white wave mosaic, the beach volleyball courts, the kiosks serving coconut water. Evening at a churrasqueira in Botafogo or a kilo restaurant in Flamengo — the local format where you pay by weight and the cuts rotate all night.",
         bullets: [
           "Copacabana Beach — the 4.7-kilometre crescent beach below the classic Rio skyline",
@@ -452,6 +477,7 @@ export const itineraries = [
       {
         day: 6,
         title: "Rio Icons — Sugarloaf & Christ the Redeemer",
+        route: "Rio de Janeiro · Sugarloaf · Christ the Redeemer",
         desc: "The two great viewpoints, on the same day. Sugarloaf first: the cable car departs from Praia Vermelha and rises in two stages to the 396-metre summit above Guanabara Bay. The city spreads below in every direction. Then Corcovado: either the rack railway from Cosme Velho or the van service through Tijuca Forest to the 710-metre peak where Christ the Redeemer stands. The 360-degree view from the base of the statue — Guanabara Bay, Copacabana, the Atlantic, the Serra do Mar — is the context for everything else.",
         bullets: [
           "Sugarloaf Mountain (Pão de Açúcar) — the 396-metre granite monolith at the mouth of Guanabara Bay",
@@ -465,6 +491,7 @@ export const itineraries = [
       {
         day: 7,
         title: "Drive to Angra dos Reis — Arrival by Catamaran",
+        route: "Rio de Janeiro · Angra dos Reis",
         desc: "Take the BR-101 coast road west toward Angra dos Reis — two and a half hours from Rio along a spectacular stretch of the Serra do Mar dropping toward the sea. Angra is the gateway to the Baía de Ilha Grande, a UNESCO-listed bay containing 365 islands of Atlantic forest. Afternoon catamaran cruise around the inner bay: the first islands and coves, timed to arrive at Praia do Dentista for the late afternoon light on the water.",
         bullets: [
           "BR-101 coastal highway — the mountain coastal road between Rio and Angra, with ocean viewpoints",
@@ -478,6 +505,7 @@ export const itineraries = [
       {
         day: 8,
         title: "Ilha Grande — Atlantic Rainforest & Lopes Mendes",
+        route: "Angra dos Reis · Ilha Grande · Lopes Mendes",
         desc: "Day trip to Ilha Grande — the largest island in the bay, a car-free reserve of Atlantic rainforest with 102 beaches. The main village Vila do Abraão is reached by ferry from Angra in 90 minutes. From there, trails fan out through the forest: the main route south to Lopes Mendes, consistently rated among the top ten beaches in Brazil — a 3.5-kilometre arc of white sand and heavy Atlantic surf completely without any infrastructure beyond a path through the trees.",
         bullets: [
           "Ilha Grande — a car-free island with no roads, 102 beaches and 193 km² of Atlantic rainforest",
@@ -491,6 +519,7 @@ export const itineraries = [
       {
         day: 9,
         title: "Angra dos Reis — Island Hopping & Secluded Anchorages",
+        route: "Angra dos Reis (island hopping)",
         desc: "Private or shared boat day through the outer islands of the bay. The 365 islands of Angra range from small rocky outcrops to forested islands with hidden beaches. Ilha Cataguases has the clearest snorkelling water in the bay. Ilha da Gipóia is the largest inhabited island and has a restaurant under mango trees on the beach. Ilha Jorge Grego is the smallest — a single palm tree on a circle of rock — and has appeared in advertising for the bay since the 1990s.",
         bullets: [
           "Ilha Cataguases — the inner-bay island with the most transparent water for snorkelling",
@@ -504,6 +533,7 @@ export const itineraries = [
       {
         day: 10,
         title: "Return to Rio — Flamengo & the Bay Views",
+        route: "Angra dos Reis · Rio de Janeiro · Flamengo",
         desc: "Drive back to Rio along the coast. Check in to the Flamengo or Gloria neighbourhood — the old waterfront zone facing directly onto Guanabara Bay with Sugarloaf framed at the end of the inlet. Afternoon walk the Aterro do Flamengo, Burle Marx's great linear park on reclaimed land beside the bay. Evening in Lapa: the colonial neighbourhood around the Arcos da Lapa aqueduct, which becomes a street party on weekend nights.",
         bullets: [
           "Aterro do Flamengo — Roberto Burle Marx's 1.2-kilometre waterfront park, now a linear leisure space",
@@ -517,6 +547,7 @@ export const itineraries = [
       {
         day: 11,
         title: "Historic Rio — Santa Teresa & the Selarón Steps",
+        route: "Rio de Janeiro · Santa Teresa · Selaron Steps",
         desc: "Santa Teresa: the hilltop bohemian neighbourhood above Lapa, reached by the last working tram in Rio (the Santa Teresa Bonde). Cobbled streets, colonial mansions converted to art studios, views across the entire city. The neighbourhood resisted demolition in the 1970s and retains an organic texture that the rest of Rio's Centro has lost. Then the Selarón Steps: Chilean artist Jorge Selarón's 250-step mosaic stairway connecting Lapa to Santa Teresa, covered in 2,000 tiles from 60 countries — his life's work, completed in 2013.",
         bullets: [
           "Santa Teresa Bonde — the historic tram connecting Lapa to the hillside neighbourhood above",
@@ -530,6 +561,7 @@ export const itineraries = [
       {
         day: 12,
         title: "Final Morning — Ipanema Last Swim & Departure",
+        route: "Ipanema · Galeao Airport",
         desc: "A final morning swim at Ipanema before departure. The beach before 8am belongs to the cariocas — the early runners, the open-water swimmers, the old men playing altinha with a football above the surf. This is the Rio that doesn't photograph well but stays longest. Açaí breakfast at a juice bar on Rua Visconde de Pirajá. Transfer to Galeão or Santos Dumont airport for onward flights.",
         bullets: [
           "Ipanema at dawn — the beach before the tourists arrive, used by locals for training and swimming",
@@ -580,6 +612,7 @@ export const itineraries = [
       {
         day: 1,
         title: "Pest — Parliament, the Danube Promenade & the Jewish Quarter",
+        route: "Pest · Parliament · Jewish Quarter",
         desc: "Begin on the Pest side. Walk the Danube promenade to the Hungarian Parliament — the building is best seen from the water at the golden hour. Visit St Stephen's Basilica and climb the dome. Afternoon at the Central Market Hall: three floors of produce, paprika and craft stalls. Evening in the old Jewish Quarter: ruin bars, kosher restaurants and the Dohány Street Synagogue by night.",
         bullets: [
           "Hungarian Parliament — the neo-Gothic masterpiece on the Danube, completed in 1904",
@@ -593,6 +626,7 @@ export const itineraries = [
       {
         day: 2,
         title: "Buda — Fisherman's Bastion, Matthias Church & the Castle District",
+        route: "Buda · Castle District · Fisherman's Bastion",
         desc: "Cross to Buda on foot via the Chain Bridge at first light. The Castle District is best before nine: Fisherman's Bastion without the crowds, the Neo-Gothic spires of Matthias Church in the morning quiet. Walk the castle walls for views across the Danube. Afternoon at the Hungarian National Museum and the Hungarian State Opera. Return to Pest for dinner.",
         bullets: [
           "Fisherman's Bastion — the neo-Romanesque terrace with the city's finest panoramic view",
@@ -606,6 +640,7 @@ export const itineraries = [
       {
         day: 3,
         title: "City Park — Széchenyi Baths, Heroes' Square & Vajdahunyad Castle",
+        route: "City Park · Széchenyi Baths · Heroes' Square",
         desc: "A final morning at Széchenyi thermal baths: the yellow neo-baroque building, the outdoor pools, the chess players in the water. Walk across City Park to Heroes' Square — the millennium monument and its seven chieftains. Vajdahunyad Castle sits behind it, an improbable Gothic-Romanesque-Baroque structure that somehow works. Afternoon free for the Hungarian National Museum or a final walk along the Danube.",
         bullets: [
           "Széchenyi Thermal Baths — the largest medicinal bath complex in Europe",
@@ -652,6 +687,7 @@ export const itineraries = [
       {
         day: 1,
         title: "The Vatican, Castel Sant'Angelo & Trastevere",
+        route: "Vatican City · Castel Sant'Angelo · Trastevere",
         desc: "Start early at the Vatican Museums; book the first available entry slot and arrive at opening. Allow two hours for the galleries, moving through the Gallery of Maps and the Raphael Rooms before the corridors lead into the Sistine Chapel. Exit directly into St Peter's Basilica, where the interior is larger than photographs suggest. Climb the dome for the finest view over Rome. In the afternoon, descend to St Peter's Square and read the full scale of Bernini's colonnade from ground level. Walk across the Tiber via the Ponte Sant'Angelo, its ten angel statues designed by Bernini, to reach the Castel Sant'Angelo, Hadrian's mausoleum converted into a papal fortress. In the evening, cross the river into Trastevere, Rome's best-preserved medieval neighbourhood, as the restaurants open and the alleys fill with light.",
         bullets: [
           "Vatican Museums. One of the world's great art collections, with the Gallery of Maps and the Raphael Rooms.",
@@ -666,6 +702,7 @@ export const itineraries = [
       {
         day: 2,
         title: "The Colosseum, Roman Forum, Palatine Hill & Capitoline Hill",
+        route: "Colosseum · Roman Forum · Palatine Hill · Capitoline Hill",
         desc: "Start as early as possible. The Colosseum must be reached before mid-morning and timed entry must be booked in advance. The arena floor has been accessible to general ticket holders since 2023 and should not be missed. From the Colosseum, walk directly into the Roman Forum, the civic and religious centre of ancient Rome; the ruins are most legible with a basic site map. The Arch of Titus, the Temple of Saturn, the Via Sacra: the scale of what once stood here becomes clear on foot. Continue uphill to Palatine Hill, the highest and oldest of Rome's seven hills, with imperial palace ruins and views directly down into the Forum. In the afternoon, walk northwest to Capitoline Hill, where Michelangelo designed the piazza in 1536, and the twin Capitoline Museums, which hold the finest Roman sculpture collection in the world. Descend to Piazza Venezia. In the evening, walk north to the Pantheon area; the piazza reads quite differently at night, when the crowds thin and the building reclaims its mass.",
         bullets: [
           "Colosseum. The Flavian Amphitheatre, completed in 80 AD and the largest amphitheatre ever built.",
@@ -680,6 +717,7 @@ export const itineraries = [
       {
         day: 3,
         title: "Pantheon, Piazza Navona, Trevi Fountain & the Spanish Steps",
+        route: "Pantheon · Piazza Navona · Trevi Fountain · Spanish Steps",
         desc: "Begin at the Pantheon, and go before nine. Rome's most perfectly preserved ancient building, now a church, is entirely free to enter. The oculus at the crown of the dome is 8.7 metres in diameter, open to the sky, and the only source of natural light inside. Walk north to Piazza Navona, built over the footprint of Domitian's stadium, with Bernini's Fountain of the Four Rivers at its centre. In the afternoon, walk northeast to the Trevi Fountain, the largest and most theatrical of Rome's baroque fountains, completed by Nicola Salvi in 1762. Continue north to the Spanish Steps, the 135-step staircase linking Piazza di Spagna to the hilltop church of Trinità dei Monti, with views back across the roofline. The lanes of the historic centre are best explored on foot in the evening; follow the maze between Campo de' Fiori and Via del Corso for aperitivo as the city moves into its evening register.",
         bullets: [
           "Pantheon. Built in 125 AD, the best-preserved Roman building in the world, with an oculus open to the sky.",
@@ -694,6 +732,7 @@ export const itineraries = [
       {
         day: 4,
         title: "Galleria Borghese, Villa Borghese & the Baths of Caracalla",
+        route: "Galleria Borghese · Villa Borghese · Baths of Caracalla",
         desc: "Rome's fourth day moves deliberately. The morning belongs to the Galleria Borghese: Bernini's Apollo and Daphne and Pluto and Proserpina, and Canova's reclining Pauline Borghese, all within a single baroque villa in the middle of a city park. Entry is strictly timed to two-hour slots and should be booked several weeks ahead. After the gallery, walk through the Villa Borghese gardens, Rome's most central park, elevated above the surrounding streets. Follow the Viale delle Magnolie to the Pincio terrace for the view over Piazza del Popolo and the roofline to the south. In the afternoon, cross to the Aventine Hill for the Giardino degli Aranci, an orange garden on a terrace above the Tiber with one of Rome's finest and least-visited panoramas: the dome of St Peter's framed between umbrella pines. Later in the afternoon, descend to the Baths of Caracalla, the vast imperial bathhouse completed in 216 AD, built for over 1,600 bathers at once, its vaulted halls still standing at their original height.",
         bullets: [
           "Galleria Borghese. Bernini's Apollo and Daphne and Pluto and Proserpina, and Canova's Pauline Borghese.",
@@ -893,6 +932,7 @@ export const itineraries = [
       {
         day: 1,
         title: "Yorkshire Dales — Skipton & the Limestone Country",
+        route: "Skipton · Yorkshire Dales",
         desc: "Arrive via Leeds Bradford Airport and collect your car. Drive directly north into the Dales on B-roads, none of the motorway. Skipton's medieval castle is still a working town fixture, not a theme park. Lunch at a market café. Afternoon in the Dales: Malham Cove and Gordale Scar for those who want to walk, the limestone valley drive for everyone else. Settle in Grassington for the night.",
         bullets: [
           "Skipton Castle — intact medieval fortress at the gateway to the Dales",
@@ -906,6 +946,7 @@ export const itineraries = [
       {
         day: 2,
         title: "Lake District — Ullswater, Blea Tarn & Castlerigg Stone Circle",
+        route: "Yorkshire · Ullswater · Lake District",
         desc: "An early start into Cumbria. Drive the A66 past Penrith and drop down to Ullswater before nine — the lake at its clearest and most still. Take the steamer or walk the eastern shore. Castlerigg Stone Circle mid-morning: 38 standing stones, a 360-degree panorama of fells, and rarely more than a dozen other visitors. Afternoon in Keswick. Drive the Honister Pass before dark.",
         bullets: [
           "Ullswater — the longest of the northern lakes and the wildest of the popular ones",
@@ -919,6 +960,7 @@ export const itineraries = [
       {
         day: 3,
         title: "Ambleside, Grasmere & the Latrigg Viewpoint",
+        route: "Ambleside · Grasmere · Latrigg",
         desc: "A slower morning in the central Lakes. Grasmere village before the coaches arrive: Dove Cottage and the churchyard where Wordsworth is buried. Lunch by the lake. Afternoon ascent of Latrigg — a short fell walk with the finest view over Derwentwater and the Vale of Keswick. Drive east over the Kirkstone Pass toward the North York Moors.",
         bullets: [
           "Grasmere village — heart of Lakeland literary history, genuine beauty",
@@ -932,6 +974,7 @@ export const itineraries = [
       {
         day: 4,
         title: "North York Moors — Whitby, Scarborough & York",
+        route: "Lake District · Whitby · Scarborough · York",
         desc: "Drive south through the North York Moors: high heather moorland, remote farmsteads, the occasional steam railway crossing. Whitby by mid-morning — the harbour, the 199 steps, the abbey above the cliff. Lunch on the quayside. South along the coast to Scarborough, then inland to York for the final night. Walk the city walls at dusk and visit the Shambles after the day-trippers have left.",
         bullets: [
           "Whitby Abbey — the ruined Benedictine monastery that inspired Bram Stoker",
@@ -979,6 +1022,7 @@ export const itineraries = [
       {
         day: 1,
         title: "Bari & Polignano a Mare",
+        route: "Bari · Polignano a Mare",
         desc: "Arrive in Bari and walk the old city before the heat of the day. Bari Vecchia is a labyrinth of limestone alleys and women making orecchiette in doorways — the most honest two square kilometres in southern Italy. Drive south to Polignano a Mare in the afternoon: the village built on a cliff above sea caves, with the Adriatic directly below the main square.",
         bullets: [
           "Bari Vecchia — the medieval walled city with its street pasta makers",
@@ -992,6 +1036,7 @@ export const itineraries = [
       {
         day: 2,
         title: "Ostuni, Brindisi & Lecce",
+        route: "Polignano · Ostuni · Brindisi · Lecce",
         desc: "Drive south through the olive-grove flatlands to Ostuni — the White City on its limestone hill, visible for miles before you arrive. Walk the old town before lunch. Continue to Brindisi: the end of the Appian Way, the column that marked the final mile of Rome. Arrive in Lecce in the late afternoon: the baroque city that makes even Italian baroque look restrained.",
         bullets: [
           "Ostuni — the whitewashed hilltop city at the edge of the Murge plateau",
@@ -1005,6 +1050,7 @@ export const itineraries = [
       {
         day: 3,
         title: "Valle d'Itria — Alberobello & the Trulli Country",
+        route: "Lecce · Valle d'Itria · Alberobello",
         desc: "Drive north into the Valle d'Itria. Alberobello is the reason to come here: the only town in the world built entirely of trulli — the conical limestone drystone houses with whitewashed walls. UNESCO designation has made it popular but not ruined it. Afternoon in the valley: Locorotondo, Cisternino, Martina Franca. The valleys here are genuinely beautiful at dusk.",
         bullets: [
           "Alberobello trulli — 1,500 conical limestone structures, a UNESCO World Heritage Site",
@@ -1018,6 +1064,7 @@ export const itineraries = [
       {
         day: 4,
         title: "Matera — the Ancient Cave City",
+        route: "Alberobello · Matera",
         desc: "Cross the regional border into Basilicata. Matera is one of the oldest continuously inhabited cities in the world — a Sassi of cave dwellings carved into the ravine walls, occupied since the Palaeolithic, which the Italian government emptied in the 1950s and the city has slowly been reoccupying since. It is unlike anywhere else. Return to Bari for departure.",
         bullets: [
           "Matera Sassi — cave dwellings inhabited for over 9,000 years, a UNESCO World Heritage Site",
@@ -1064,6 +1111,7 @@ export const itineraries = [
       {
         day: 1,
         title: "Normandy — Rouen, Étretat & Honfleur",
+        route: "Paris · Rouen · Étretat · Honfleur",
         desc: "Begin in Rouen — the old town, the Gothic cathedral, the square where Joan of Arc was burned. Drive the Alabaster Coast to Étretat: the chalk arches and needle are best in early morning when the light hits them obliquely. Lunch in the village. Drive along the coast to Honfleur for the night: the Vieux Bassin harbour, the timber-framed houses, the restaurants that don't need to try.",
         bullets: [
           "Rouen Cathedral — the subject of Monet's most famous series, a masterwork of Gothic stone",
@@ -1076,6 +1124,7 @@ export const itineraries = [
       {
         day: 2,
         title: "D-Day Beaches — Omaha, Pointe du Hoc & Mont-Saint-Michel",
+        route: "Honfleur · Omaha Beach · Mont-Saint-Michel",
         desc: "Drive west along the coast. Omaha Beach in the morning: the sand, the bluffs, the cemetery where 9,387 Americans are buried. Pointe du Hoc — the cliffs the Rangers scaled on June 6th, 1944. Drive south in the afternoon toward Mont-Saint-Michel, timed for arrival near high tide when the mount becomes an island. Dinner in Saint-Malo.",
         bullets: [
           "Omaha Beach — the most contested of the D-Day landing beaches",
@@ -1089,6 +1138,7 @@ export const itineraries = [
       {
         day: 3,
         title: "Brittany — Saint-Malo & Dinan",
+        route: "Mont-Saint-Michel · Saint-Malo · Dinan",
         desc: "Morning inside the walls of Saint-Malo — the granite ramparts, the old corsair city rebuilt stone by stone after 1944. Drive south to Dinan: a perfectly preserved medieval town above the River Rance that almost no one visits. Lunch in the old town. Drive south toward the Loire Valley for the night.",
         bullets: [
           "Saint-Malo ramparts — the intra-muros city rebuilt identically after wartime destruction",
@@ -1101,6 +1151,7 @@ export const itineraries = [
       {
         day: 4,
         title: "Loire Valley — Chenonceau & Chambord",
+        route: "Dinan · Chenonceau · Chambord",
         desc: "Two châteaux, chosen because they represent opposite ends of the same ambition. Chenonceau in the morning: the feminine château, built over the river by women, quieter and more human than its neighbours. Chambord after lunch: Francis I's hunting lodge that became an obsession, an unfinished palace with 440 rooms and a double-helix staircase that may or may not have been designed by Leonardo.",
         bullets: [
           "Château de Chenonceau — the Renaissance château bridging the River Cher",
@@ -1146,6 +1197,7 @@ export const itineraries = [
       {
         day: 1,
         title: "The First District — St Stephen's, Hofburg & the Ringstrasse",
+        route: "Vienna · St Stephen's · Hofburg · Ringstrasse",
         desc: "Begin at St Stephen's Cathedral in the morning — climb the south tower for the view over the old city. Walk through the first district to the Hofburg: the Habsburg imperial complex that grew for six centuries and never quite finished. The Spanish Riding School if there is a morning exercise session. Afternoon on the Ringstrasse boulevard: the Opera, the Parliament, the Kunsthistorisches Museum.",
         bullets: [
           "St Stephen's Cathedral — Vienna's Gothic masterpiece and the city's spiritual centre",
@@ -1159,6 +1211,7 @@ export const itineraries = [
       {
         day: 2,
         title: "Schönbrunn Palace & the Vienna Woods",
+        route: "Vienna · Schönbrunn Palace · Vienna Woods",
         desc: "The day outside the city centre. Schönbrunn in the morning before the coach tours: the Baroque palace's 1,441 rooms, the formal French gardens, the Gloriette hilltop pavilion with its view back over Vienna. Afternoon in the Vienna Woods — the forested hills above the city that Beethoven walked and Schubert set to music. Return for an evening coffee in a first-district café.",
         bullets: [
           "Schönbrunn Palace — the Habsburg summer residence, a UNESCO World Heritage Site",
@@ -1172,6 +1225,7 @@ export const itineraries = [
       {
         day: 3,
         title: "The Belvedere, Klimt & Vienna Secession",
+        route: "Vienna · Belvedere · Secession",
         desc: "The art morning. Upper Belvedere for Klimt: The Kiss is here, along with Schiele's self-portraits and a Monet view of the palace gardens. Walk to the Vienna Secession — the 1897 building whose gold-leaf dome is one of the city's architectural jokes, and in the basement Klimt's Beethoven Frieze. Afternoon at the Kunsthistorisches Museum: the Bruegel collection is among the finest in the world.",
         bullets: [
           "Upper Belvedere — the Baroque summer palace housing Klimt's The Kiss",
@@ -1185,6 +1239,7 @@ export const itineraries = [
       {
         day: 4,
         title: "Naschmarkt, Prater & the Vienna State Opera",
+        route: "Naschmarkt · Prater · Vienna State Opera",
         desc: "Final morning at the Naschmarkt — Vienna's outdoor market running along the Wienzeile: produce, cheese, wine and the Saturday flea market. Walk to the Prater for the afternoon: the public park that has been open to everyone since 1766, and the Wiener Riesenrad — the 1897 giant Ferris wheel with its wooden gondolas and panoramic views. Evening at the Vienna State Opera if there is a performance.",
         bullets: [
           "Naschmarkt — Vienna's 1.5-kilometre open-air market, open since the 16th century",
@@ -1238,6 +1293,7 @@ export const itineraries = [
       {
         day: 1,
         title: "Tokyo — Arrival, Shinjuku & the First Night",
+        route: "Tokyo · Shinjuku (arrival)",
         desc: "Arrive at Narita or Haneda and take the express train to central Tokyo. Shinjuku in the evening: the controlled chaos of Kabukicho, the department store food halls, the memory of jet lag dissolving into neon. Walk Omoide Yokocho — Memory Lane — for skewers under the railway arches. Sleep well: the next 17 days require it.",
         bullets: [
           "Shinjuku — Tokyo's entertainment and commerce district, endlessly navigable",
@@ -1249,6 +1305,7 @@ export const itineraries = [
       {
         day: 2,
         title: "Tokyo — Asakusa, Akihabara & Yanaka",
+        route: "Tokyo · Asakusa · Yanaka",
         desc: "Begin at Senso-ji in Asakusa before eight — the orange lantern, the incense, the temple complex before it fills. Walk north to Yanaka: the neighbourhood that escaped the 1923 earthquake and 1945 bombing, where Tokyo's old residential fabric survives in wooden temples and tea shops. Akihabara in the afternoon if electronics or manga interest you; Shimokitazawa if they don't.",
         bullets: [
           "Senso-ji Temple, Asakusa — Tokyo's oldest temple, founded in 645 AD",
@@ -1261,6 +1318,7 @@ export const itineraries = [
       {
         day: 3,
         title: "Tokyo — Shibuya Crossing, Harajuku & Meiji Shrine",
+        route: "Shibuya · Harajuku · Meiji Shrine",
         desc: "Shibuya Crossing at rush hour from the Starbucks window — the 3,000 people who cross simultaneously every two minutes. Walk up Omotesando to Harajuku: the boulevard of architecture firms and the street market that only exists on Sundays. Meiji Shrine in the afternoon: the forested Shinto shrine in the middle of the city, an improbable silence twenty metres from Harajuku station.",
         bullets: [
           "Shibuya Crossing — the busiest pedestrian crossing in the world",
@@ -1273,6 +1331,7 @@ export const itineraries = [
       {
         day: 4,
         title: "Kanazawa — Kenroku-en & the Higashi Chaya District",
+        route: "Tokyo · Kanazawa (Shinkansen)",
         desc: "Take the Hokuriku shinkansen to Kanazawa: two and a half hours, a completely different Japan. Kenroku-en garden in the afternoon — one of Japan's three great gardens, designed over two centuries around a central pond. Higashi Chaya in the evening: the preserved geisha district, the only place in Japan outside Kyoto where you can walk through an Edo-period entertainment quarter.",
         bullets: [
           "Kanazawa — the 'little Kyoto' of the Japan Sea coast, a castle town of extraordinary culture",
@@ -1285,6 +1344,7 @@ export const itineraries = [
       {
         day: 5,
         title: "Kanazawa — Wajima Morning Market & Gold Leaf Workshop",
+        route: "Kanazawa · Wajima",
         desc: "Drive or bus north to the Noto Peninsula and Wajima morning market — a 1,000-year-old market held every morning along a 360-metre street, the last of its kind in Japan. Return to Kanazawa for the afternoon: a gold leaf workshop (Kanazawa produces 99% of Japan's gold leaf) and the Nagamachi samurai quarter. Final night in a Kanazawa ryokan.",
         bullets: [
           "Wajima morning market — a 360-metre street market held every morning since the 11th century",
@@ -1297,6 +1357,7 @@ export const itineraries = [
       {
         day: 6,
         title: "Shirakawa-go — UNESCO Gassho-zukuri Village",
+        route: "Wajima · Shirakawa-go",
         desc: "Drive south through mountain passes into the Shogawa River valley and Shirakawa-go: the UNESCO World Heritage village of gassho-zukuri farmhouses, their steeply pitched thatched roofs designed to bear the weight of heavy mountain snow. The village is best in late afternoon light. Stay overnight in a working farmhouse — dinner is prepared by the family, breakfast is a negotiation between tradition and appetite.",
         bullets: [
           "Shirakawa-go — the UNESCO gassho-zukuri village in the Shogawa valley",
@@ -1309,6 +1370,7 @@ export const itineraries = [
       {
         day: 7,
         title: "Takayama — the Edo Merchant Town",
+        route: "Shirakawa-go · Takayama",
         desc: "Drive south to Takayama: the mountain town whose relative isolation preserved its Edo-period merchant district so completely that it looks like a film set, but functions as a living town. Sanmachi Suji in the morning — the sake breweries, the craft shops, the preserved facades. The Jinya government house. Takayama market for Hida beef and morning pickles. A ryokan on the Miyagawa river.",
         bullets: [
           "Sanmachi Suji — three streets of perfectly preserved Edo-period merchant buildings",
@@ -1321,6 +1383,7 @@ export const itineraries = [
       {
         day: 8,
         title: "Hida Folk Village & the Road to Kyoto",
+        route: "Takayama · Hida Folk Village · Kyoto",
         desc: "Morning at Hida no Sato — the open-air museum of relocated traditional buildings from across the Hida region, set in a landscape of winter-bare fields above Takayama. Board the Hida Express train south through mountain gorges. Change at Nagoya for Kyoto. Arrive in the late afternoon for a first walk through Gion as darkness comes.",
         bullets: [
           "Hida Folk Village — 30 relocated farmhouses and traditional buildings in a mountain setting",
@@ -1332,6 +1395,7 @@ export const itineraries = [
       {
         day: 9,
         title: "Kyoto — Fushimi Inari & Eastern Higashiyama",
+        route: "Kyoto · Fushimi Inari · Higashiyama",
         desc: "Fushimi Inari at 5.30am: the 10,000 vermillion torii gates in the pre-dawn silence are among the most extraordinary experiences Japan offers. The upper trails are empty until eight. Return for breakfast then walk eastern Higashiyama: the preserved machiya district, Ninenzaka and Sannenzaka, Kiyomizu-dera temple balanced on its wooden platform above the city.",
         bullets: [
           "Fushimi Inari Taisha — 10,000 torii gates climbing the sacred Inari mountain",
@@ -1344,6 +1408,7 @@ export const itineraries = [
       {
         day: 10,
         title: "Kyoto — Kinkaku-ji, Ryoan-ji & Arashiyama",
+        route: "Kyoto · Kinkaku-ji · Arashiyama",
         desc: "The golden morning. Kinkaku-ji at opening time when the light catches the gold leaf on the water — the photographs do not convey the scale or the stillness. Ryoan-ji: the 15 stones and the raked gravel, best understood as something you either get immediately or need twenty minutes to allow. Arashiyama bamboo grove in the afternoon — genuinely beautiful at the right time of day.",
         bullets: [
           "Kinkaku-ji — the 14th-century Golden Pavilion reflected in the mirror pond",
@@ -1356,6 +1421,7 @@ export const itineraries = [
       {
         day: 11,
         title: "Nara — the Deer Park & Todai-ji",
+        route: "Kyoto · Nara",
         desc: "Day trip south from Kyoto to Nara: Japan's first permanent capital, now a small city living in the shadow of its 8th-century temples and 1,300 free-roaming deer. Todai-ji houses the largest bronze Buddha in Japan inside the world's largest wooden building. Kasuga Taisha and its 3,000 stone and bronze lanterns. Return to Kyoto for the evening.",
         bullets: [
           "Nara deer — 1,300 sika deer that roam freely through the park and approach visitors",
@@ -1368,6 +1434,7 @@ export const itineraries = [
       {
         day: 12,
         title: "Kyoto — Private Tea Ceremony & Philosopher's Path",
+        route: "Nara · Kyoto · Philosopher's Path",
         desc: "A private tea ceremony in the morning with a fourth-generation tea master in a machiya house in Nishijin — the experience that changes how you think about slowness. Walk the Philosopher's Path in the afternoon: the canal-side walk lined with cherry trees from Nanzen-ji to Ginkaku-ji. Nanzen-ji's aqueduct. Ginkaku-ji — the Silver Pavilion that was never silvered.",
         bullets: [
           "Traditional tea ceremony — four-generation tea master in a Nishijin machiya",
@@ -1380,6 +1447,7 @@ export const itineraries = [
       {
         day: 13,
         title: "Osaka — Dotonbori, Kuromon Market & the Food City",
+        route: "Kyoto · Osaka",
         desc: "Take the Hankyu line to Osaka: twenty minutes and a completely different energy. Osaka is Japan's eating city — blunter, louder, more direct and more interested in feeding you than any other. Kuromon Ichiba market in the morning: fresh seafood, skewers, the fishmonger who has been there since 1946. Dotonbori canal in the evening: the neon glico runner, takoyaki in paper cups, the organised chaos of Namba.",
         bullets: [
           "Kuromon Ichiba — 'Osaka's kitchen', 170 specialist stalls on a single covered street",
@@ -1392,6 +1460,7 @@ export const itineraries = [
       {
         day: 14,
         title: "Koyasan — the Mountain Temple Town",
+        route: "Osaka · Koyasan",
         desc: "Take the Nankai Koya Line to the mountaintop temple complex of Koyasan — the headquarters of Shingon Buddhism, founded by Kobo Daishi in 816 AD. Okunoin cemetery at dusk: the 200,000 moss-covered tombstones and stone lanterns in a cedar forest, some belonging to the most powerful families in Japanese history. Stay overnight in a shukubo temple lodging — dinner is a shojin ryori vegetarian feast.",
         bullets: [
           "Koyasan — the mountain town of 117 Buddhist temples, 1,200 years of continuous practice",
@@ -1404,6 +1473,7 @@ export const itineraries = [
       {
         day: 15,
         title: "Himeji — the White Heron Castle",
+        route: "Koyasan · Himeji",
         desc: "Return from Koyasan and take the shinkansen west to Himeji. Himeji Castle is the finest surviving example of Japanese feudal architecture — the original 1333 structure expanded into its current form in 1609, never burned, never bombed, never significantly altered. White plastered walls, a complex of interlocking baileys, 83 buildings surviving. Give it a full morning.",
         bullets: [
           "Himeji Castle — Japan's most complete feudal castle, a National Treasure and UNESCO site",
@@ -1415,6 +1485,7 @@ export const itineraries = [
       {
         day: 16,
         title: "Okayama — Korakuen Garden & Kurashiki Canal Quarter",
+        route: "Himeji · Okayama · Kurashiki",
         desc: "Continue east to Okayama. Korakuen — Japan's third great garden, and the one that is least visited: water features, crane aviary, tea houses, the castle reflected in the south pond. Afternoon in Kurashiki's Bikan historical quarter: the Edo-period canal district with its white-walled merchant storehouses, now galleries and craft shops, built in the Meiji and Taisho eras.",
         bullets: [
           "Korakuen — one of Japan's three great gardens, built over 14 years from 1686",
@@ -1427,6 +1498,7 @@ export const itineraries = [
       {
         day: 17,
         title: "Hakone — Owakudani, Lake Ashi & Mount Fuji Views",
+        route: "Okayama · Hakone · Mount Fuji views",
         desc: "Shinkansen north to Odawara, then into Hakone by mountain railway. Owakudani — the active volcanic zone of sulphur vents and boiling ponds on the rim of a caldera. The ropeway across to Lake Ashi. On a clear day (and they come in winter especially) Fuji rises above the far shore in a profile that explains why it has been painted, photographed and climbed for 1,400 years. Stay in a Hakone ryokan with onsen and a mountain view.",
         bullets: [
           "Owakudani — the volcanic crater zone with sulphur vents and hot springs",
@@ -1439,6 +1511,7 @@ export const itineraries = [
       {
         day: 18,
         title: "Return to Tokyo & Departure",
+        route: "Hakone · Tokyo · Departure",
         desc: "Final morning in Hakone — an early soak in the onsen before the day begins. Take the Romancecar express back to Shinjuku. If time allows: Shibuya Sky observation deck for a final aerial view, or Yanaka for a last quiet hour. Transfer to Narita or Haneda for departure.",
         bullets: [
           "Hakone Romancecar — the scenic limited express back to Shinjuku",
@@ -1493,6 +1566,7 @@ export const itineraries = [
       {
         day: 1,
         title: "Manila — Intramuros & the Night Market",
+        route: "Manila · Intramuros",
         desc: "Arrive at Ninoy Aquino International Airport and transfer to Intramuros — the Spanish walled city built in 1571, the oldest district in Manila and the most legible piece of the city's history. Fort Santiago, the Manila Cathedral, Rizal's cell. Dinner in the Binondo district: Chinatown, the oldest in the world outside China, where the food is better and cheaper than anywhere else in Manila.",
         bullets: [
           "Intramuros — the Spanish colonial walled city at the mouth of the Pasig River",
@@ -1505,6 +1579,7 @@ export const itineraries = [
       {
         day: 2,
         title: "Puerto Princesa — the Underground River",
+        route: "Manila · Puerto Princesa · Underground River",
         desc: "Fly to Puerto Princesa, Palawan's capital, and transfer to the underground river: a 24-kilometre navigable cave river system through a limestone karst landscape, a UNESCO World Heritage Site and one of the new Seven Wonders of Nature. The boat goes eight kilometres inside the cave. Return to Puerto Princesa. Van north toward El Nido along the coast road.",
         bullets: [
           "Puerto Princesa Subterranean River — 24km cave river system, navigable by boat for 8km",
@@ -1516,6 +1591,7 @@ export const itineraries = [
       {
         day: 3,
         title: "El Nido — Arrival & the Town",
+        route: "Puerto Princesa · El Nido",
         desc: "Arrive in El Nido: the small town on the northern tip of Palawan, surrounded on three sides by karst limestone towers and on the fourth by the Bacuit Bay. The town itself is low-key — a single main street, beach bars, tricycles. But from here the Bacuit Archipelago is accessible by boat, and it is among the most beautiful collections of islands and lagoons in the world. This evening is for orientation.",
         bullets: [
           "El Nido town — the gateway to the Bacuit Archipelago and Palawan's north",
@@ -1527,6 +1603,7 @@ export const itineraries = [
       {
         day: 4,
         title: "El Nido — Tour A: Big Lagoon, Small Lagoon & Seven Commandos Beach",
+        route: "El Nido · Big Lagoon · Small Lagoon",
         desc: "The standard Tour A by private boat: Miniloc Island's Big Lagoon by kayak — the most photographed lagoon in Palawan, its turquoise water surrounded by vertical limestone walls. Small Lagoon reached through a gap in the rock at low tide. Snake Island sandbar. Seven Commandos Beach for the afternoon. Snorkelling over the reef between stops.",
         bullets: [
           "Big Lagoon, Miniloc Island — a turquoise enclosure ringed by vertical limestone",
@@ -1539,6 +1616,7 @@ export const itineraries = [
       {
         day: 5,
         title: "El Nido — Tour C: Secret Lagoon, Shimizu Island & Matinloc Shrine",
+        route: "El Nido · Secret Lagoon · Shimizu Island",
         desc: "The second essential El Nido island route: Secret Lagoon on Miniloc, accessed through a narrow rock crevice. Shimizu Island for the best snorkelling in the archipelago — the coral is intact and the fish density is high. Matinloc Shrine on its limestone cliff above the sea. Helicopter Island beach for the afternoon — the island shaped exactly like a helicopter from above.",
         bullets: [
           "Secret Lagoon — a hidden enclosure accessed through a gap in the limestone",
@@ -1551,6 +1629,7 @@ export const itineraries = [
       {
         day: 6,
         title: "El Nido — Nacpan Beach & the North",
+        route: "El Nido · Nacpan Beach",
         desc: "The day away from the islands. Drive north to Nacpan Beach: a four-kilometre undeveloped white sand beach in the north of Palawan, facing the South China Sea, with almost no facilities and almost no crowds. One of the finest beaches in the Philippines, and one of the least visited because reaching it requires a dirt road and patience.",
         bullets: [
           "Nacpan Beach — 4km of undeveloped white sand facing the South China Sea",
@@ -1562,6 +1641,7 @@ export const itineraries = [
       {
         day: 7,
         title: "Ferry to Coron — the Overnight Crossing",
+        route: "El Nido · Coron (overnight ferry)",
         desc: "Take the fast ferry or overnight boat from El Nido south through the Calamian islands to Coron: a different world from Palawan's north. Coron sits above the Calauit islands in the Busuanga group, and its underwater landscape — sunk Japanese supply ships from the Second World War, now colonised by coral — is among the most extraordinary in Southeast Asia.",
         bullets: [
           "El Nido to Coron ferry — the 4-hour fast boat or overnight ferry through the Calamians",
@@ -1573,6 +1653,7 @@ export const itineraries = [
       {
         day: 8,
         title: "Coron — Kayangan Lake & Twin Lagoon",
+        route: "Coron · Kayangan Lake · Twin Lagoon",
         desc: "The day the Philippines is best known for. Kayangan Lake: a 20-minute hike over a limestone ridge leads to the lake hidden inside the karst — the clearest freshwater lake in Asia, fed by mountain springs and shaded by vertical stone walls. Twin Lagoon: two lagoons connected by a limestone arch you swim through. Barracuda Lake in the afternoon: a thermocline dive.",
         bullets: [
           "Kayangan Lake — consistently voted the cleanest lake in Asia, inside a limestone karst",
@@ -1585,6 +1666,7 @@ export const itineraries = [
       {
         day: 9,
         title: "Coron — WWII Japanese Shipwrecks",
+        route: "Coron · Barracuda Lake · Shipwrecks",
         desc: "The wreck dives. On 24 September 1944, a US Navy air strike sank 24 Japanese supply ships in Coron Bay. Twelve are now diveable at depths between 10 and 40 metres, colonised by coral and fish, some with their cargo still intact. The Okikawa Maru, the Irako, the Olympia Maru. Non-divers can snorkel the shallower wrecks. There is nothing else like this in Southeast Asia.",
         bullets: [
           "Okikawa Maru — the tanker wreck at 10–47m, accessible to snorkellers",
@@ -1597,6 +1679,7 @@ export const itineraries = [
       {
         day: 10,
         title: "Coron — Pass Island & Malcapuya Beach",
+        route: "Coron · Pass Island · Malcapuya Beach",
         desc: "The above-water day. Pass Island for a morning of white sand and clear water. Malcapuya Beach in the afternoon: the uninhabited island with the white sand that Boracay used to have before the hotels arrived. Almost no one here on a weekday. This is the Philippines as it was before the infrastructure caught up.",
         bullets: [
           "Pass Island — the small reef island north of Busuanga with snorkelling around it",
@@ -1608,6 +1691,7 @@ export const itineraries = [
       {
         day: 11,
         title: "Flight to Boracay — Arrival at White Beach",
+        route: "Coron · Boracay · White Beach",
         desc: "Fly from Busuanga to Caticlan, then take the 10-minute bancaferry crossing to Boracay. The island is four kilometres long with most of the tourism concentrated on White Beach — a 4km arc of white sand with infrastructure ranging from excellent to excessive. The northern shore is different: quieter, less developed, the original Boracay.",
         bullets: [
           "White Beach, Boracay — the 4km arc of white sand that made the island famous",
@@ -1620,6 +1704,7 @@ export const itineraries = [
       {
         day: 12,
         title: "Boracay — Puka Shell Beach & the North",
+        route: "Boracay · Puka Shell Beach",
         desc: "The quiet Boracay. Puka Shell Beach on the northern tip: the longest beach on the island's quiet side, named for the shells that accumulate on its shoreline, with no sunbeds and no vendors. Walk to the lighthouse above Diniwid Beach. Sail the paraw outrigger at sunset — the traditional Filipino wooden sailing canoe that navigates White Beach every evening.",
         bullets: [
           "Puka Shell Beach — the undeveloped northern beach, named for its shell shoreline",
@@ -1632,6 +1717,7 @@ export const itineraries = [
       {
         day: 13,
         title: "Boracay — Ariel's Point & the Last Reef",
+        route: "Boracay · Ariel's Point",
         desc: "Morning boat to Ariel's Point: the headland off Boracay's north coast with cliff jumps from five different heights, snorkelling and free kayaking. Return for a final afternoon on White Beach. Dinner at the Station 1 end — the quieter restaurants that don't face the sunset strip, where the food is better and the price reflects it.",
         bullets: [
           "Ariel's Point — the day-trip headland with cliff jumps at 3m, 5m, 8m and 15m",
@@ -1643,6 +1729,7 @@ export const itineraries = [
       {
         day: 14,
         title: "Departure — Caticlan & Manila",
+        route: "Boracay · Caticlan · Manila",
         desc: "Morning ferry from Boracay to Caticlan. Flight to Manila's Ninoy Aquino International Airport and onward connections. If there is time between flights, the Makati rooftop restaurants in the BGC district are thirty minutes from the terminal — a final Filipino meal worth the detour.",
         bullets: [
           "Boracay to Caticlan ferry — the 10-minute crossing to the Malay mainland",
