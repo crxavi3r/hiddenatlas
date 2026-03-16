@@ -632,53 +632,6 @@ const api = useApi();
               </div>
             </section>
 
-            {/* Transport Between Cities */}
-            {transport && (hasAccess || !isPremium) && (
-              <section style={{ marginBottom: '60px' }}>
-                <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '24px' }}>
-                  Transport Between Cities
-                </h2>
-
-                {/* Luggage tip */}
-                <div style={{ background: '#EFF6F5', borderRadius: '8px', padding: '20px 24px', marginBottom: '32px', borderLeft: '4px solid #1B6B65' }}>
-                  <p style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', color: '#1B6B65', marginBottom: '10px' }}>Insider Tip: Luggage Forwarding</p>
-                  <p style={{ fontSize: '15px', color: '#2C5F5A', lineHeight: '1.75' }}>{transport.luggageTip}</p>
-                </div>
-
-                {/* Route list */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-                  {transport.routes.map((route, i) => {
-                    const ModeIcon = route.mode === 'train' ? Train : route.mode === 'bus' ? Bus : Shuffle;
-                    const modeColor = route.mode === 'train' ? '#1B6B65' : route.mode === 'bus' ? '#7B5F3A' : '#4A3A7A';
-                    const modeBg   = route.mode === 'train' ? '#EFF6F5' : route.mode === 'bus' ? '#F7F2EB' : '#F0EDF8';
-                    return (
-                      <div key={i} style={{
-                        display: 'flex', gap: '16px', alignItems: 'flex-start',
-                        paddingTop: '20px', paddingBottom: '20px',
-                        borderBottom: i < transport.routes.length - 1 ? '1px solid #E8E3DA' : 'none',
-                      }}>
-                        {/* Mode icon */}
-                        <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: modeBg, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '2px' }}>
-                          <ModeIcon size={15} color={modeColor} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <p style={{ fontSize: '14px', fontWeight: '700', color: '#1C1A16', marginBottom: '3px', letterSpacing: '0.2px' }}>{route.segment}</p>
-                          <p style={{ fontSize: '14px', color: '#4A433A', marginBottom: '4px' }}>{route.service}</p>
-                          <p style={{ fontSize: '13px', color: '#1B6B65', fontWeight: '600', marginBottom: route.notes.length ? '8px' : '0' }}>{route.duration}</p>
-                          {route.notes.map((note, ni) => (
-                            <p key={ni} style={{ fontSize: '13px', color: '#6B6156', lineHeight: '1.55', marginBottom: ni < route.notes.length - 1 ? '4px' : '0' }}>{note}</p>
-                          ))}
-                          {route.website && (
-                            <a href={route.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#1B6B65', textDecoration: 'underline', display: 'inline-block', marginTop: '6px' }}>{route.website}</a>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
             {/* Highlights */}
             <section style={{ marginBottom: '60px' }}>
               <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '24px' }}>
@@ -811,6 +764,53 @@ const api = useApi();
                   <p style={{ fontSize: '15px', color: '#2C5F5A', lineHeight: '1.7', fontWeight: '500' }}>
                     {routeOverview}
                   </p>
+                </div>
+              </section>
+            )}
+
+            {/* Transport Between Cities */}
+            {transport && (hasAccess || !isPremium) && (
+              <section style={{ marginBottom: '60px' }}>
+                <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '24px' }}>
+                  Transport Between Cities
+                </h2>
+
+                {/* Luggage tip */}
+                <div style={{ background: '#EFF6F5', borderRadius: '8px', padding: '20px 24px', marginBottom: '32px', borderLeft: '4px solid #1B6B65' }}>
+                  <p style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', color: '#1B6B65', marginBottom: '10px' }}>Insider Tip: Luggage Forwarding</p>
+                  <p style={{ fontSize: '15px', color: '#2C5F5A', lineHeight: '1.75' }}>{transport.luggageTip}</p>
+                </div>
+
+                {/* Route list */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                  {transport.routes.map((route, i) => {
+                    const ModeIcon = route.mode === 'train' ? Train : route.mode === 'bus' ? Bus : Shuffle;
+                    const modeColor = route.mode === 'train' ? '#1B6B65' : route.mode === 'bus' ? '#7B5F3A' : '#4A3A7A';
+                    const modeBg   = route.mode === 'train' ? '#EFF6F5' : route.mode === 'bus' ? '#F7F2EB' : '#F0EDF8';
+                    return (
+                      <div key={i} style={{
+                        display: 'flex', gap: '16px', alignItems: 'flex-start',
+                        paddingTop: '20px', paddingBottom: '20px',
+                        borderBottom: i < transport.routes.length - 1 ? '1px solid #E8E3DA' : 'none',
+                      }}>
+                        {/* Mode icon */}
+                        <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: modeBg, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '2px' }}>
+                          <ModeIcon size={15} color={modeColor} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontSize: '14px', fontWeight: '700', color: '#1C1A16', marginBottom: '3px', letterSpacing: '0.2px' }}>{route.segment}</p>
+                          <p style={{ fontSize: '14px', color: '#4A433A', marginBottom: '4px' }}>{route.service}</p>
+                          <p style={{ fontSize: '13px', color: '#1B6B65', fontWeight: '600', marginBottom: route.notes.length ? '8px' : '0' }}>{route.duration}</p>
+                          {route.notes.map((note, ni) => (
+                            <p key={ni} style={{ fontSize: '13px', color: '#6B6156', lineHeight: '1.55', marginBottom: ni < route.notes.length - 1 ? '4px' : '0' }}>{note}</p>
+                          ))}
+                          {route.website && (
+                            <a href={route.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#1B6B65', textDecoration: 'underline', display: 'inline-block', marginTop: '6px' }}>{route.website}</a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             )}
