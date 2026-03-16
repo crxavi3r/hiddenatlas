@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
+import { useSearchParams } from 'react-router-dom';
 import { useApi } from '../lib/api';
-import { Check, ArrowRight, MapPin, Calendar, Users, Heart } from 'lucide-react';
+import { Check, ArrowRight, MapPin, Calendar, Users, Heart, Lock } from 'lucide-react';
+import { CUSTOM_TIERS, GROUP_SIZE_OPTIONS, getTierByGroupSize } from '../data/customPricingTiers';
 
 const ERR_COLOR = '#C97070';
 const ERR_TEXT  = '#B04040';
@@ -33,8 +35,8 @@ function validate(data) {
     e.dates = 'Please enter your approximate dates';
   if (!data.duration.trim() || !/^\d+$/.test(data.duration.trim()))
     e.duration = 'Please enter trip duration in days';
-  if (!data.groupSize.trim() || !/^\d+$/.test(data.groupSize.trim()))
-    e.groupSize = 'Please enter group size as a number';
+  if (!data.groupSize)
+    e.groupSize = 'Please select your group size';
   if (!data.groupType.trim())
     e.groupType = 'Please tell us how to describe the trip';
   if (data.style.length === 0)
@@ -46,19 +48,53 @@ function validate(data) {
 
 const SCROLL_ORDER = ['name', 'email', 'phone', 'destination', 'dates', 'duration', 'groupSize', 'groupType', 'style', 'budget'];
 
-const pricingTiers = [
-  { label: 'Couple / Duo', price: '€349', desc: '2 people · up to 14 days' },
-  { label: 'Small Group', price: '€549', desc: '3–6 people · up to 14 days' },
-  { label: 'Large Group / Family', price: 'From €849', desc: '7+ people · custom scope' },
+/* ─── Next steps for each flow ─── */
+const STEPS_PAID = [
+  'Secure payment processed immediately',
+  'Your planner reaches out within 24–48h',
+  'We design your itinerary (7–10 working days)',
+  'You review. Revisions included.',
+  'Final delivery, ready to book',
 ];
 
-const nextSteps = [
+const STEPS_REVIEW = [
   'We review your brief and confirm scope (within 24h)',
   'Your planner reaches out to discuss the details',
   'We design your itinerary (7–10 working days)',
   'You review. Revisions included.',
   'Final delivery, ready to book',
 ];
+
+/* ─── Pricing display — sidebar and mobile ─── */
+function PricingTierList({ dark }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+      {CUSTOM_TIERS.map((tier, i) => (
+        <div key={i} style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          paddingTop: i === 0 ? '0' : '16px',
+          paddingBottom: i < CUSTOM_TIERS.length - 1 ? '16px' : '0',
+          borderBottom: i < CUSTOM_TIERS.length - 1 ? `1px solid ${dark ? '#2E2922' : '#E8E3DA'}` : 'none',
+        }}>
+          <div>
+            <p style={{ fontSize: dark ? '14px' : '13.5px', fontWeight: '600', color: dark ? 'white' : '#1C1A16', marginBottom: '2px' }}>{tier.label}</p>
+            <p style={{ fontSize: '11.5px', color: '#8C8070' }}>{tier.range}</p>
+          </div>
+          <span style={{
+            fontSize: tier.customQuote ? '13px' : (dark ? '19px' : '17px'),
+            fontWeight: tier.customQuote ? '500' : '700',
+            color: tier.customQuote ? '#8C8070' : '#C9A96E',
+            fontFamily: tier.customQuote ? 'inherit' : "'Playfair Display', Georgia, serif",
+            fontStyle: tier.customQuote ? 'italic' : 'normal',
+            flexShrink: 0, marginLeft: '16px',
+          }}>
+            {tier.displayPrice}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /* ─── Mobile-only pricing block ─── */
 function MobilePricingBlock() {
@@ -80,29 +116,7 @@ function MobilePricingBlock() {
         A personalised itinerary designed around your travel style, pace and priorities.
       </p>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-        {pricingTiers.map((tier, i) => (
-          <div key={i} style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            paddingTop: i === 0 ? '0' : '16px',
-            paddingBottom: i < pricingTiers.length - 1 ? '16px' : '0',
-            borderBottom: i < pricingTiers.length - 1 ? '1px solid #2E2922' : 'none',
-          }}>
-            <div>
-              <p style={{ fontSize: '14px', fontWeight: '600', color: 'white', marginBottom: '2px' }}>{tier.label}</p>
-              <p style={{ fontSize: '11.5px', color: '#8C8070' }}>{tier.desc}</p>
-            </div>
-            <span style={{
-              fontSize: '19px', fontWeight: '700',
-              color: '#C9A96E',
-              fontFamily: "'Playfair Display', Georgia, serif",
-              flexShrink: 0, marginLeft: '16px',
-            }}>
-              {tier.price}
-            </span>
-          </div>
-        ))}
-      </div>
+      <PricingTierList dark />
 
       <p style={{
         fontSize: '11.5px', color: 'rgba(255,255,255,0.3)',
@@ -144,6 +158,7 @@ function SectionLegend({ label, helper }) {
 export default function CustomPlanningPage() {
   const { user, isLoaded } = useUser();
   const api = useApi();
+  const [searchParams] = useSearchParams();
 
   const [formData, setFormData] = useState({
     name: '', email: '', phone: '',
@@ -151,13 +166,14 @@ export default function CustomPlanningPage() {
     groupSize: '', groupType: '', budget: '',
     style: [], notes: '',
   });
-  const [errors, setErrors] = useState({});
-  const [submitted, setSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors]           = useState({});
+  const [submitted, setSubmitted]     = useState(false);
+  const [submittedType, setSubmittedType] = useState('review'); // 'review' | 'paid'
+  const [submitting, setSubmitting]   = useState(false);
+  const [verifying, setVerifying]     = useState(false);
   const [submitError, setSubmitError] = useState(null);
 
-  // Prefill name and email from Clerk once the user object is available.
-  // Only sets fields that are still empty so manual edits are never overwritten.
+  // Prefill from Clerk if signed in
   useEffect(() => {
     if (!isLoaded || !user) return;
     const name  = user.fullName || [user.firstName, user.lastName].filter(Boolean).join(' ');
@@ -169,13 +185,35 @@ export default function CustomPlanningPage() {
     }));
   }, [isLoaded, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Verify Stripe payment on return from checkout
+  useEffect(() => {
+    const sessionId = searchParams.get('session_id');
+    if (!sessionId) return;
+    setVerifying(true);
+    api.post('/api/checkout?action=custom-verify', { sessionId })
+      .then(r => r.json())
+      .then(data => {
+        setVerifying(false);
+        if (data.success) {
+          setSubmittedType('paid');
+          setSubmitted(true);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          setSubmitError('We could not confirm your payment. Please contact us at contact@hiddenatlas.travel.');
+        }
+      })
+      .catch(() => {
+        setVerifying(false);
+        setSubmitError('We could not confirm your payment. Please contact us at contact@hiddenatlas.travel.');
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const clearError = key =>
     setErrors(prev => { const next = { ...prev }; delete next[key]; return next; });
 
   const handleChange = e => {
     const { name, value } = e.target;
-    const numericFields = ['duration', 'groupSize'];
-    const newValue = numericFields.includes(name) ? value.replace(/\D/g, '') : value;
+    const newValue = name === 'duration' ? value.replace(/\D/g, '') : value;
     setFormData(prev => ({ ...prev, [name]: newValue }));
     if (errors[name]) clearError(name);
   };
@@ -211,24 +249,103 @@ export default function CustomPlanningPage() {
     setSubmitting(true);
     setSubmitError(null);
 
-    try {
-      const res = await api.post('/api/custom-planning', formData);
+    const tier = getTierByGroupSize(formData.groupSize);
 
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || 'Something went wrong. Please try again.');
+    if (!tier?.customQuote) {
+      // Fixed-price tier: redirect to Stripe Checkout
+      try {
+        const res = await api.post('/api/checkout?action=custom-session', {
+          tierKey: tier.key,
+          formData,
+        });
+        const data = await res.json();
+        if (!res.ok || !data.url) throw new Error(data.error || 'Failed to start checkout. Please try again.');
+        window.location.href = data.url;
+        // page is navigating — don't reset submitting
+      } catch (err) {
+        setSubmitError(err.message || 'Something went wrong. Please try again.');
+        setSubmitting(false);
       }
-
-      setSubmitted(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (err) {
-      setSubmitError(err.message || 'Something went wrong. Please try again.');
-    } finally {
-      setSubmitting(false);
+    } else {
+      // 13+ review-first flow
+      try {
+        const res = await api.post('/api/custom-planning', formData);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || 'Something went wrong. Please try again.');
+        }
+        setSubmittedType('review');
+        setSubmitted(true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (err) {
+        setSubmitError(err.message || 'Something went wrong. Please try again.');
+      } finally {
+        setSubmitting(false);
+      }
     }
   };
 
-  if (submitted) {
+  // ── Derived state ──────────────────────────────────────────────────────────
+  const selectedTier  = getTierByGroupSize(formData.groupSize);
+  const isCustomQuote = selectedTier?.customQuote === true;
+  const nextSteps     = isCustomQuote ? STEPS_REVIEW : STEPS_PAID;
+
+  // ── Loading: verifying payment ─────────────────────────────────────────────
+  if (verifying) {
+    return (
+      <div style={{ background: '#FAFAF8', paddingTop: '72px', minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', padding: '24px' }}>
+          <div style={{
+            width: '48px', height: '48px', borderRadius: '50%',
+            border: '3px solid #E8E3DA', borderTopColor: '#1B6B65',
+            margin: '0 auto 20px',
+            animation: 'spin 0.8s linear infinite',
+          }} />
+          <p style={{ fontSize: '17px', color: '#6B6156' }}>Confirming your payment...</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Success: payment confirmed ─────────────────────────────────────────────
+  if (submitted && submittedType === 'paid') {
+    return (
+      <div style={{ background: '#FAFAF8', paddingTop: '72px', minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', maxWidth: '520px', padding: '24px' }}>
+          <div style={{
+            width: '64px', height: '64px', borderRadius: '50%',
+            background: '#EFF6F5', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 24px',
+          }}>
+            <Check size={28} color="#1B6B65" strokeWidth={2} />
+          </div>
+          <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '36px', fontWeight: '600', color: '#1C1A16', marginBottom: '16px' }}>
+            Payment confirmed.
+          </h1>
+          <p style={{ fontSize: '17px', color: '#6B6156', lineHeight: '1.7', marginBottom: '32px' }}>
+            Your trip planning is now in progress. Your dedicated planner will reach out within 48 hours to begin designing your itinerary.
+          </p>
+          <a
+            href="/itineraries"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+              padding: '14px 28px',
+              background: '#1B6B65', color: 'white',
+              borderRadius: '4px', fontSize: '14px', fontWeight: '600',
+              letterSpacing: '0.5px', textTransform: 'uppercase',
+              textDecoration: 'none',
+            }}
+          >
+            Browse Itineraries <ArrowRight size={14} />
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Success: brief submitted (13+ review flow) ─────────────────────────────
+  if (submitted && submittedType === 'review') {
     return (
       <div style={{ background: '#FAFAF8', paddingTop: '72px', minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center', maxWidth: '520px', padding: '24px' }}>
@@ -243,7 +360,7 @@ export default function CustomPlanningPage() {
             We've received your brief.
           </h1>
           <p style={{ fontSize: '17px', color: '#6B6156', lineHeight: '1.7', marginBottom: '32px' }}>
-            One of our planners will reach out to {formData.email} within 48 hours to begin designing your itinerary. In the meantime, feel free to browse our existing collection for inspiration.
+            One of our planners will reach out to {formData.email} within 48 hours to review scope and confirm your planning fee before we begin.
           </p>
           <a
             href="/itineraries"
@@ -281,6 +398,18 @@ export default function CustomPlanningPage() {
     fontSize: '15px', color: '#1C1A16', background: 'white',
     outline: 'none', transition: 'border-color 0.2s',
     boxSizing: 'border-box',
+  });
+
+  const selectStyle = hasError => ({
+    ...inputStyle(hasError),
+    cursor: 'pointer',
+    WebkitAppearance: 'none',
+    MozAppearance: 'none',
+    appearance: 'none',
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238C8070' d='M6 8L0 0h12z'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'right 14px center',
+    paddingRight: '40px',
   });
 
   return (
@@ -374,10 +503,10 @@ export default function CustomPlanningPage() {
                 Tell us about your trip
               </h2>
               <p style={{ fontSize: '15px', color: '#6B6156', marginBottom: '36px', lineHeight: '1.7', maxWidth: '560px' }}>
-                The more you share, the better we can plan. We'll reply within 48 hours with a call or message to discuss your itinerary.
+                The more you share, the better we can plan. We'll be in touch within 48 hours.
               </p>
 
-              {/* Mobile pricing block — shown above form on small screens */}
+              {/* Mobile pricing block */}
               <MobilePricingBlock />
 
               {/* ── Your Details ── */}
@@ -482,18 +611,51 @@ export default function CustomPlanningPage() {
                     <ErrorMsg msg={errors.duration} />
                   </div>
 
+                  {/* ── Group size selector ── */}
                   <div id="field-groupSize">
                     <label style={{ fontSize: '13px', fontWeight: '500', color: '#4A433A', display: 'block', marginBottom: '6px' }}>
-                      Group size
+                      Number of travellers
                     </label>
-                    <input
-                      type="text" inputMode="numeric" pattern="[0-9]*"
-                      name="groupSize" value={formData.groupSize}
-                      onChange={handleChange} placeholder="e.g. 2"
-                      style={inputStyle(!!errors.groupSize)}
+                    <select
+                      name="groupSize"
+                      value={formData.groupSize}
+                      onChange={handleChange}
+                      style={selectStyle(!!errors.groupSize)}
                       onFocus={e => e.target.style.borderColor = '#1B6B65'}
                       onBlur={e => { e.target.style.borderColor = errors.groupSize ? ERR_COLOR : '#D4CCBF'; }}
-                    />
+                    >
+                      <option value="" disabled>Select group size</option>
+                      {GROUP_SIZE_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+
+                    {/* Selected plan indicator */}
+                    {selectedTier && (
+                      <div style={{
+                        marginTop: '8px',
+                        padding: '9px 12px',
+                        background: selectedTier.customQuote ? '#F4F1EC' : '#EFF6F5',
+                        borderRadius: '6px',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        gap: '8px',
+                      }}>
+                        <span style={{ fontSize: '12.5px', color: '#4A433A', fontWeight: '500' }}>
+                          Selected plan: {selectedTier.label}
+                        </span>
+                        <span style={{
+                          fontSize: selectedTier.customQuote ? '12.5px' : '14px',
+                          fontWeight: '700',
+                          color: selectedTier.customQuote ? '#8C8070' : '#1B6B65',
+                          fontFamily: selectedTier.customQuote ? 'inherit' : "'Playfair Display', Georgia, serif",
+                          fontStyle: selectedTier.customQuote ? 'italic' : 'normal',
+                          flexShrink: 0,
+                        }}>
+                          {selectedTier.displayPrice}
+                        </span>
+                      </div>
+                    )}
+
                     <ErrorMsg msg={errors.groupSize} />
                   </div>
 
@@ -541,9 +703,7 @@ export default function CustomPlanningPage() {
                           display: 'flex', alignItems: 'center', gap: '6px',
                         }}
                       >
-                        {active && (
-                          <span style={{ fontSize: '10px', color: '#1B6B65' }}>✓</span>
-                        )}
+                        {active && <span style={{ fontSize: '10px', color: '#1B6B65' }}>✓</span>}
                         {style}
                       </button>
                     );
@@ -588,9 +748,7 @@ export default function CustomPlanningPage() {
 
               {/* ── Notes ── */}
               <fieldset style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
-                <SectionLegend
-                  label="Anything else we should know?"
-                />
+                <SectionLegend label="Anything else we should know?" />
                 <textarea
                   name="notes"
                   value={formData.notes}
@@ -634,7 +792,13 @@ export default function CustomPlanningPage() {
                   onMouseEnter={e => { if (!submitting) e.currentTarget.style.background = '#145550'; }}
                   onMouseLeave={e => { if (!submitting) e.currentTarget.style.background = '#1B6B65'; }}
                 >
-                  {submitting ? 'Sending…' : 'Send My Brief'} {!submitting && <ArrowRight size={16} />}
+                  {submitting ? (
+                    isCustomQuote ? 'Sending…' : 'Redirecting…'
+                  ) : isCustomQuote ? (
+                    <>Send My Brief <ArrowRight size={16} /></>
+                  ) : (
+                    <>Proceed to Secure Checkout <Lock size={15} /></>
+                  )}
                 </button>
 
                 {submitError && (
@@ -647,7 +811,9 @@ export default function CustomPlanningPage() {
                 )}
 
                 <p style={{ fontSize: '13px', color: '#6B6156', textAlign: 'center', lineHeight: '1.6' }}>
-                  No payment required now. We'll review your brief and reply within 48 hours.
+                  {isCustomQuote
+                    ? "We'll review your brief and confirm scope before any payment."
+                    : 'One-time planning fee. Secure checkout via Stripe. No subscription.'}
                 </p>
               </div>
             </form>
@@ -655,7 +821,7 @@ export default function CustomPlanningPage() {
             {/* ── SIDEBAR ── */}
             <div style={{ position: 'sticky', top: '100px' }}>
 
-              {/* Pricing card — hidden on mobile since it's shown above the form */}
+              {/* Pricing card — hidden on mobile */}
               <div className="ha-desktop-sidebar-pricing" style={{
                 background: '#1C1A16',
                 borderRadius: '12px',
@@ -673,28 +839,8 @@ export default function CustomPlanningPage() {
                   A personalised itinerary designed around your travel style, pace and priorities.
                 </p>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0', marginBottom: '28px' }}>
-                  {pricingTiers.map((tier, i) => (
-                    <div key={i} style={{
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-                      paddingTop: i === 0 ? '0' : '20px',
-                      paddingBottom: i < pricingTiers.length - 1 ? '20px' : '0',
-                      borderBottom: i < pricingTiers.length - 1 ? '1px solid #2E2922' : 'none',
-                    }}>
-                      <div>
-                        <p style={{ fontSize: '15px', fontWeight: '600', color: 'white' }}>{tier.label}</p>
-                        <p style={{ fontSize: '12px', color: '#8C8070', marginTop: '2px' }}>{tier.desc}</p>
-                      </div>
-                      <span style={{
-                        fontSize: '18px', fontWeight: '700',
-                        color: '#C9A96E',
-                        fontFamily: "'Playfair Display', Georgia, serif",
-                        flexShrink: 0, marginLeft: '16px',
-                      }}>
-                        {tier.price}
-                      </span>
-                    </div>
-                  ))}
+                <div style={{ marginBottom: '28px' }}>
+                  <PricingTierList dark />
                 </div>
 
                 <p style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.28)', lineHeight: '1.6', marginBottom: '12px' }}>
@@ -743,90 +889,43 @@ export default function CustomPlanningPage() {
       </section>
 
       <style>{`
-        /* Main form + sidebar grid */
         .ha-custom-grid {
           display: grid;
           grid-template-columns: 1fr 380px;
           gap: 64px;
           align-items: start;
         }
-
-        /* 2-column form field grid */
         .ha-form-2col {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 16px;
         }
-
-        /* 3-column budget grid */
         .ha-budget-grid {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
           gap: 12px;
         }
-
-        /* Value props grid */
         .ha-value-props {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
           gap: 36px;
         }
-
-        /* Mobile-only pricing block — hidden on desktop */
-        .ha-mobile-only {
-          display: none;
-        }
-
-        /* Desktop sidebar pricing — always visible on desktop */
-        .ha-desktop-sidebar-pricing {
-          display: block;
-        }
+        .ha-mobile-only { display: none; }
+        .ha-desktop-sidebar-pricing { display: block; }
 
         @media (max-width: 900px) {
-          /* Stack form and sidebar vertically */
-          .ha-custom-grid {
-            grid-template-columns: 1fr;
-            gap: 0;
-          }
-
-          /* Show mobile pricing block above form */
-          .ha-mobile-only {
-            display: block;
-          }
-
-          /* Hide sidebar pricing on mobile (shown by mobile block above) */
-          .ha-desktop-sidebar-pricing {
-            display: none;
-          }
+          .ha-custom-grid { grid-template-columns: 1fr; gap: 0; }
+          .ha-mobile-only { display: block; }
+          .ha-desktop-sidebar-pricing { display: none; }
         }
-
         @media (max-width: 640px) {
-          /* Collapse 2-col form fields to single column */
-          .ha-form-2col {
-            grid-template-columns: 1fr;
-          }
-
-          /* On single-column form, full-width fields don't need the span */
-          .ha-form-2col > [style*="gridColumn"] {
-            grid-column: 1 / -1;
-          }
-
-          /* Stack budget cards vertically */
-          .ha-budget-grid {
-            grid-template-columns: 1fr;
-          }
-
-          /* Phone field max-width full on mobile */
-          #field-phone input {
-            max-width: 100% !important;
-          }
+          .ha-form-2col { grid-template-columns: 1fr; }
+          .ha-form-2col > [style*="gridColumn"] { grid-column: 1 / -1; }
+          .ha-budget-grid { grid-template-columns: 1fr; }
+          #field-phone input { max-width: 100% !important; }
         }
-
         @media (max-width: 480px) {
-          .ha-value-props {
-            grid-template-columns: 1fr;
-            gap: 28px;
-          }
+          .ha-value-props { grid-template-columns: 1fr; gap: 28px; }
         }
       `}</style>
     </div>

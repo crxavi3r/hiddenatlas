@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Check, ArrowRight } from 'lucide-react';
+import { CUSTOM_TIERS } from '../data/customPricingTiers';
 
 const itineraryIncludes = [
   'Day-by-day travel route and schedule',
@@ -7,56 +8,6 @@ const itineraryIncludes = [
   'Route planning and trip structure',
   'Transport and logistics notes',
   'Downloadable travel guide (PDF)',
-];
-
-const customTiers = [
-  {
-    name: 'Couple / Duo',
-    price: '€349',
-    group: '2 people',
-    duration: 'Up to 14 days',
-    best: false,
-    features: [
-      'Dedicated trip planner',
-      'Fully custom day-by-day itinerary',
-      'Accommodation shortlist and booking guidance',
-      'Restaurant and experience recommendations',
-      'Logistics and transport planning',
-      '2 rounds of revisions',
-      'Final digital itinerary package (PDF)',
-    ],
-  },
-  {
-    name: 'Small Group',
-    price: '€549',
-    group: '3–6 people',
-    duration: 'Up to 14 days',
-    best: true,
-    features: [
-      'Everything in Couple / Duo',
-      'Group logistics and transport planning',
-      'Multiple accommodation configurations researched',
-      'Group dining and activity recommendations',
-      '3 rounds of revisions',
-      'Final digital itinerary package (PDF)',
-    ],
-  },
-  {
-    name: 'Large Group / Family',
-    price: 'From €849',
-    group: '7+ people',
-    duration: 'Custom scope',
-    best: false,
-    features: [
-      'Everything in Small Group',
-      'Multi-room and villa research',
-      'Complex multi-destination logistics planning',
-      'Activity and experience sourcing',
-      'Child and multi-gen travel considerations',
-      'Unlimited revisions',
-      'Final digital itinerary package (PDF)',
-    ],
-  },
 ];
 
 export default function PricingPage() {
@@ -158,9 +109,9 @@ export default function PricingPage() {
             </p>
           </div>
 
-          {/* Cards grid — mt-14px gives badge clearance */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', alignItems: 'stretch', marginTop: '14px' }}>
-            {customTiers.map((tier, i) => (
+          {/* Cards grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '24px', alignItems: 'stretch', marginTop: '14px' }}>
+            {CUSTOM_TIERS.map((tier, i) => (
               <div
                 key={i}
                 style={{
@@ -168,7 +119,7 @@ export default function PricingPage() {
                   border: tier.best ? 'none' : '1px solid #E8E3DA',
                   borderRadius: '12px',
                   padding: '36px 32px',
-                  paddingTop: '42px', /* uniform top padding absorbs badge height on all cards */
+                  paddingTop: '42px',
                   position: 'relative',
                   boxShadow: tier.best ? '0 24px 80px rgba(28,26,22,0.22)' : 'none',
                   display: 'flex', flexDirection: 'column',
@@ -187,25 +138,31 @@ export default function PricingPage() {
                 )}
 
                 <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600', color: tier.best ? 'white' : '#1C1A16', marginBottom: '4px' }}>
-                  {tier.name}
+                  {tier.label}
                 </h3>
                 <p style={{ fontSize: '13px', color: '#8C8070', marginBottom: '20px' }}>
-                  {tier.group} · {tier.duration}
+                  {tier.range}
                 </p>
 
-                {/* Fixed-height price block so "From €849" never pushes content down */}
+                {/* Price block */}
                 <div style={{
-                  fontSize: '38px', fontWeight: '700',
-                  color: tier.best ? '#C9A96E' : '#1B6B65',
                   fontFamily: "'Playfair Display', Georgia, serif",
                   lineHeight: '1', whiteSpace: 'nowrap',
                   minHeight: '48px', marginBottom: '28px',
                   display: 'flex', alignItems: 'flex-end',
                 }}>
-                  {tier.price}
+                  {tier.customQuote ? (
+                    <span style={{ fontSize: '22px', fontWeight: '600', color: '#8C8070', fontStyle: 'italic' }}>
+                      Custom quote
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '38px', fontWeight: '700', color: tier.best ? '#C9A96E' : '#1B6B65' }}>
+                      {tier.displayPrice}
+                    </span>
+                  )}
                 </div>
 
-                {/* Features — flex:1 pushes CTA to bottom */}
+                {/* Features */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, marginBottom: '32px' }}>
                   {tier.features.map((f, j) => (
                     <div key={j} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
@@ -215,7 +172,7 @@ export default function PricingPage() {
                   ))}
                 </div>
 
-                {/* CTA pinned to bottom via flex column */}
+                {/* CTA */}
                 <Link
                   to="/custom"
                   style={{
@@ -229,7 +186,7 @@ export default function PricingPage() {
                     marginTop: 'auto',
                   }}
                 >
-                  Request Custom Planning <ArrowRight size={13} />
+                  {tier.customQuote ? 'Request a Quote' : 'Start Planning'} <ArrowRight size={13} />
                 </Link>
               </div>
             ))}
@@ -244,7 +201,8 @@ export default function PricingPage() {
             margin: '32px auto 0',
             lineHeight: '1.7',
           }}>
-            HiddenAtlas designs your itinerary but does not operate or book travel services. All bookings are made directly by you.
+            One-time itinerary fee. Not per person. No booking commissions.<br />
+            HiddenAtlas designs your itinerary but does not operate or book travel services.
           </p>
         </div>
       </section>

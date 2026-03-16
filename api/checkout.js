@@ -44,10 +44,12 @@ export default async function handler(req, res) {
   }
 
   const { action } = req.query;
-  if (action === 'session') return handleSession(req, res, body);
-  if (action === 'verify') return handleVerify(req, res, body);
+  if (action === 'session')        return handleSession(req, res, body);
+  if (action === 'verify')         return handleVerify(req, res, body);
+  if (action === 'custom-session') return handleCustomSession(req, res, body);
+  if (action === 'custom-verify')  return handleCustomVerify(req, res, body);
 
-  return res.status(400).json({ error: 'Unknown checkout action. Use ?action=session or ?action=verify' });
+  return res.status(400).json({ error: 'Unknown checkout action' });
 }
 
 // ── POST /api/checkout?action=session ────────────────────────────────────────
@@ -202,6 +204,186 @@ async function handleVerify(req, res, body) {
   }
 }
 
+// ── POST /api/checkout?action=custom-session ─────────────────────────────────
+// Creates a Stripe Checkout Session for a fixed-price custom planning tier.
+// Saves the CustomRequest to DB first so it exists before the user leaves the site.
+async function handleCustomSession(req, res, body) {
+  if (!process.env.STRIPE_SECRET_KEY || !process.env.DATABASE_URL) {
+    return res.status(500).json({ error: 'Server misconfigured' });
+  }
+
+  const { tierKey, formData: fd } = body;
+  if (!tierKey || !fd) return res.status(400).json({ error: 'tierKey and formData are required' });
+
+  const PRICE_ID_MAP = {
+    couple:      process.env.STRIPE_CUSTOM_COUPLE_PRICE_ID,
+    small_group: process.env.STRIPE_CUSTOM_SMALL_GROUP_PRICE_ID,
+    large_group: process.env.STRIPE_CUSTOM_LARGE_GROUP_PRICE_ID,
+  };
+  const priceId = PRICE_ID_MAP[tierKey];
+  if (!priceId) {
+    return res.status(400).json({ error: `Stripe price not configured for tier: ${tierKey}` });
+  }
+
+  // Optional auth — look up internal userId if a JWT is present
+  let internalUserId = null;
+  if (req.headers.authorization?.startsWith('Bearer ')) {
+    try {
+      const clerkId = await verifyAuth(req.headers.authorization);
+      const authPool = new Pool({ connectionString: process.env.DATABASE_URL });
+      try {
+        const { rows } = await authPool.query(
+          `SELECT id FROM "User" WHERE "clerkId" = $1 LIMIT 1`, [clerkId]
+        );
+        internalUserId = rows[0]?.id ?? null;
+      } finally {
+        await authPool.end().catch(() => {});
+      }
+    } catch { /* anonymous — continue */ }
+  }
+
+  // Save CustomRequest with status='pending_payment' before redirecting to Stripe
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  let requestId = null;
+
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO "CustomRequest"
+         (id, "fullName", email, destination, dates, "groupSize", notes, status, "createdAt")
+       VALUES
+         (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'pending_payment', NOW())
+       RETURNING id`,
+      [
+        fd.name?.trim()        || '',
+        fd.email?.trim().toLowerCase() || '',
+        fd.destination?.trim() || null,
+        fd.dates?.trim()       || null,
+        fd.groupSize ? parseInt(fd.groupSize, 10) : null, // '1-2' → 1, '3-8' → 3, etc.
+        fd.notes?.trim()       || null,
+      ]
+    );
+    requestId = rows[0]?.id ?? null;
+    console.log('[checkout/custom-session] CustomRequest created — id:', requestId, '| tier:', tierKey);
+  } catch (err) {
+    // Fallback: try without status column (migration may be pending)
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO "CustomRequest" (id, "fullName", email, destination, dates, "groupSize", notes, "createdAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW())
+         RETURNING id`,
+        [
+          fd.name?.trim()        || '',
+          fd.email?.trim().toLowerCase() || '',
+          fd.destination?.trim() || null,
+          fd.dates?.trim()       || null,
+          fd.groupSize ? parseInt(fd.groupSize, 10) : null,
+          fd.notes?.trim()       || null,
+        ]
+      );
+      requestId = rows[0]?.id ?? null;
+      console.log('[checkout/custom-session] CustomRequest created (fallback) — id:', requestId);
+    } catch (fbErr) {
+      console.error('[checkout/custom-session] DB insert failed:', fbErr.message);
+      await pool.end();
+      return res.status(500).json({ error: 'Failed to save request. Please try again.' });
+    }
+  }
+
+  // Best-effort: save extended fields (phone, duration, groupType, budget, style, userId)
+  if (requestId) {
+    pool.query(
+      `UPDATE "CustomRequest"
+       SET phone=$1, duration=$2, "groupType"=$3, budget=$4, style=$5, "userId"=$6
+       WHERE id=$7`,
+      [
+        fd.phone?.trim()     || null,
+        fd.duration?.trim()  || null,
+        fd.groupType?.trim() || null,
+        fd.budget?.trim()    || null,
+        JSON.stringify(Array.isArray(fd.style) ? fd.style : []),
+        internalUserId,
+        requestId,
+      ]
+    ).catch(err => console.warn('[checkout/custom-session] Extended UPDATE skipped:', err.message));
+  }
+
+  await pool.end();
+
+  // Create Stripe Checkout Session
+  const origin = req.headers.origin || 'https://hiddenatlas.travel';
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [{ price: priceId, quantity: 1 }],
+      customer_email: fd.email?.trim().toLowerCase() || undefined,
+      success_url: `${origin}/custom?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url:  `${origin}/custom`,
+      metadata: {
+        type:              'custom_planning',
+        custom_request_id: requestId ?? '',
+        tier_key:          tierKey,
+      },
+    });
+    console.log('[checkout/custom-session] Stripe session created — id:', session.id, '| requestId:', requestId);
+    return res.status(200).json({ url: session.url });
+  } catch (err) {
+    console.error('[checkout/custom-session] Stripe error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+// ── POST /api/checkout?action=custom-verify ───────────────────────────────────
+// Called client-side after Stripe redirects back on success.
+// Confirms payment and updates CustomRequest status to 'paid'.
+async function handleCustomVerify(req, res, body) {
+  if (!process.env.STRIPE_SECRET_KEY || !process.env.DATABASE_URL) {
+    return res.status(500).json({ error: 'Server misconfigured' });
+  }
+
+  const { sessionId } = body;
+  if (!sessionId) return res.status(400).json({ error: 'sessionId is required' });
+
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  let session;
+  try {
+    session = await stripe.checkout.sessions.retrieve(sessionId);
+  } catch {
+    return res.status(400).json({ error: 'Invalid session', success: false });
+  }
+
+  if (session.payment_status !== 'paid') {
+    return res.status(400).json({ error: 'Payment not completed', success: false });
+  }
+
+  const { custom_request_id: requestId } = session.metadata || {};
+  if (!requestId) {
+    return res.status(400).json({ error: 'Session not linked to a custom request', success: false });
+  }
+
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    // Update status to 'paid' — idempotent (only if still pending_payment or open)
+    await pool.query(
+      `UPDATE "CustomRequest" SET status='paid' WHERE id=$1 AND status IN ('pending_payment','open')`,
+      [requestId]
+    );
+    // Best-effort: set paidAt and stripeSessionId columns (added by migration)
+    pool.query(
+      `UPDATE "CustomRequest" SET "paidAt"=NOW(), "stripeSessionId"=$1 WHERE id=$2`,
+      [sessionId, requestId]
+    ).catch(() => {}); // columns may not exist yet — non-fatal
+    console.log('[checkout/custom-verify] CustomRequest marked paid — id:', requestId);
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('[checkout/custom-verify] DB error:', err.message);
+    return res.status(500).json({ error: 'Verification failed', success: false });
+  } finally {
+    await pool.end();
+  }
+}
+
 // ── POST /api/checkout (stripe-signature header present) ─────────────────────
 async function handleWebhook(req, res, rawBody) {
   if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET || !process.env.DATABASE_URL) {
@@ -230,6 +412,31 @@ async function handleWebhook(req, res, rawBody) {
 
   if (session.payment_status !== 'paid') {
     console.log('[checkout/webhook] payment not paid — skipping');
+    return res.status(200).json({ received: true });
+  }
+
+  // ── Route by session type ─────────────────────────────────────────────────
+  if (session.metadata?.type === 'custom_planning') {
+    const requestId = session.metadata?.custom_request_id;
+    console.log('[checkout/webhook] custom_planning payment — requestId:', requestId);
+    if (requestId) {
+      const wpPool = new Pool({ connectionString: process.env.DATABASE_URL });
+      try {
+        await wpPool.query(
+          `UPDATE "CustomRequest" SET status='paid' WHERE id=$1 AND status IN ('pending_payment','open')`,
+          [requestId]
+        );
+        wpPool.query(
+          `UPDATE "CustomRequest" SET "paidAt"=NOW(), "stripeSessionId"=$1 WHERE id=$2`,
+          [session.id, requestId]
+        ).catch(() => {});
+        console.log('[checkout/webhook] CustomRequest marked paid — id:', requestId);
+      } catch (err) {
+        console.error('[checkout/webhook] custom_planning DB error:', err.message);
+      } finally {
+        await wpPool.end();
+      }
+    }
     return res.status(200).json({ received: true });
   }
 
