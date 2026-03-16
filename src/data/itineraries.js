@@ -13,6 +13,7 @@ export const journeyImages = {
   'brazil-coastal-journey':       '1515700281303-5a0a73d9c584', // Sugarloaf / Rio bay
   'japan-grand-cultural-journey': '1570692890937-f60db72ac6b4',
   'philippines-island-journey':   '1531761535209-180857e963b9',
+  'rome-4-day-city-break':        '1552832230-c0197dd311b5', // Colosseum — placeholder, replace with editorial cover
 };
 
 export function journeyImg(id, width = 800, quality = 80) {
@@ -618,6 +619,94 @@ export const itineraries = [
     ],
     whySpecial: "Budapest rewards those who stay long enough to get beyond the obvious. The thermal baths are not a tourist gimmick — they are how the city has begun its mornings for more than 150 years. The ruin bars are genuinely strange in a way that cannot be manufactured. And the architecture — the remarkable number of nineteenth century buildings that survived the twentieth century — is unlike anything else in Western Europe.",
     routeOverview: "Pest: Danube Promenade → Hungarian Parliament → St Stephen's Basilica → Central Market Hall → Jewish Quarter → Dohány Synagogue → Buda: Chain Bridge → Fisherman's Bastion → Matthias Church → Castle District → City Park: Széchenyi Baths → Heroes' Square → Vajdahunyad Castle",
+  },
+
+  {
+    id: "rome-4-day-city-break",
+    title: "Rome",
+    subtitle: "4 Day City Break",
+    tagline: "A classic first-time itinerary through the Eternal City",
+    shortDescription: "St Peter's Basilica, the Colosseum, the Pantheon, and the Trevi Fountain — Rome's essential itinerary, done properly. Short on time? Follow Days 1–3 for a perfect three-day Rome itinerary.",
+    country: "Italy",
+    region: "Rome, Lazio",
+    duration: "4 days",
+    groupSize: "2–4 people",
+    price: 0,
+    isPremium: false,
+    tag: "Free Journey",
+    category: "City Break",
+    bestFor: ["Couples", "Families", "Culture Seekers"],
+    difficulty: "Relaxed",
+    image: journeyImg('rome-4-day-city-break', 800),
+    coverImage: journeyImg('rome-4-day-city-break', 1600),
+    description: "Rome is the only European city where the ancient, the medieval and the baroque occupy the same street. The Colosseum and a café sit fifty metres apart. A Roman aqueduct runs through a residential neighbourhood. Four days is enough to see the city properly — not the breathless pace of a weekend, but a measured rhythm that allows each area to register. For those with only three days, Days 1 through 3 cover the essential Rome.",
+    highlights: [
+      "Exploring the Vatican Museums and Sistine Chapel — Michelangelo's ceiling in its full monumental scale",
+      "Walking through Ancient Rome — the Colosseum, the Roman Forum and Palatine Hill in a single morning",
+      "Seeing the Colosseum and Roman Forum as they were meant to be read, on foot and without rushing",
+      "Discovering Rome's iconic baroque fountains and piazzas — the Pantheon, Piazza Navona, Trevi Fountain",
+      "Relaxing in Villa Borghese and the Galleria Borghese — the finest Bernini sculptures in the world",
+      "Visiting the Baths of Caracalla — an imperial bathhouse on a scale that still defies comprehension",
+    ],
+    days: [
+      {
+        day: 1,
+        title: "The Vatican, Castel Sant'Angelo & Trastevere",
+        desc: "Start early at the Vatican Museums — book the first available entry slot online and arrive at opening. Allow two hours for the galleries, including the Gallery of Maps and the Raphael Rooms, before the corridors lead into the Sistine Chapel. Exit directly into St Peter's Basilica; the interior is larger than photographs suggest. Climb the dome for the highest view over Rome. Afternoon: descend to St Peter's Square to read the scale of Bernini's colonnade from ground level, then walk across the Tiber via the Ponte Sant'Angelo — its ten angel statues were designed by Bernini himself. The Castel Sant'Angelo, Hadrian's mausoleum-turned-papal-fortress, rises directly ahead. Evening: cross the river into Trastevere, Rome's best-preserved medieval neighbourhood, as the restaurants open and the alleys fill with light.",
+        bullets: [
+          "Vatican Museums — one of the world's great art collections, including the Gallery of Maps and the Raphael Rooms",
+          "Sistine Chapel — Michelangelo's ceiling fresco (1508–12), a defining work of Western art",
+          "St Peter's Basilica — the world's largest church; climb the dome for the highest panorama over Rome",
+          "Castel Sant'Angelo — Hadrian's mausoleum, converted into a papal fortress on the bank of the Tiber",
+          "Trastevere — Rome's most intact medieval neighbourhood, best explored on foot after dark",
+        ],
+        img: "https://images.unsplash.com/photo-1555992828-ca4dbe41d294?w=800&q=80",
+        tip: "Book Vatican Museums tickets online — walk-up queues can exceed two hours in peak season. The best approach: first entry slot, Gallery of Maps first, Raphael Rooms second, Sistine Chapel as the morning rush thins. St Peter's Basilica entry is free; dome access has a separate charge. For Trastevere, begin at Piazza Santa Maria in Trastevere and walk southeast from there.",
+      },
+      {
+        day: 2,
+        title: "The Colosseum, Roman Forum, Palatine Hill & Capitoline Hill",
+        desc: "Start as early as possible — the Colosseum must be reached before mid-morning, and timed entry must be booked in advance. The arena floor has been accessible to general ticket holders since 2023 and should not be missed. From the Colosseum, walk directly into the Roman Forum: the civic and religious centre of ancient Rome, its ruins most legible with a basic site map. The Arch of Titus, the Temple of Saturn, the Via Sacra — the scale of what once stood here becomes clear on foot. Continue uphill to Palatine Hill, the highest and oldest of Rome's seven hills, with imperial palace ruins and views directly down into the Forum. Afternoon: walk northwest to Capitoline Hill — Michelangelo designed its piazza in 1536 — and the twin Capitoline Museums, which hold the finest Roman sculpture collection in the world. Descend to Piazza Venezia. Evening: walk north to the Pantheon area; the piazza reads quite differently at night, when the crowds thin and the building reclaims its mass.",
+        bullets: [
+          "Colosseum — the Flavian Amphitheatre, completed in 80 AD; the largest amphitheatre ever built",
+          "Roman Forum — the civic heart of ancient Rome, with the Arch of Titus, Temple of Saturn and Via Sacra",
+          "Palatine Hill — the legendary founding hill of Rome, with palace ruins and views over the Forum below",
+          "Capitoline Hill — Michelangelo-designed piazza with the world's finest Roman sculpture collection inside",
+          "Piazza Venezia — the geographical centre of modern Rome, with the Altar of the Fatherland",
+        ],
+        img: "https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=800&q=80",
+        tip: "Book Colosseum tickets as far in advance as possible — slots are released 30 days ahead and sell out quickly. Palatine Hill is included with the Colosseum ticket and is usually less crowded than the Forum. The Capitoline Museums are closed on Mondays. The roof of the Altar of the Fatherland (Vittoriano) has free elevator access — one of Rome's finest panoramas and almost always overlooked.",
+      },
+      {
+        day: 3,
+        title: "Pantheon, Piazza Navona, Trevi Fountain & the Spanish Steps",
+        desc: "Begin at the Pantheon — go before nine. Rome's most perfectly preserved ancient building, now a church, is entirely free to enter. The oculus at the crown of the dome is 8.7 metres in diameter, open to the sky, and the only source of natural light inside. Walk north to Piazza Navona, built over the footprint of Domitian's stadium, with Bernini's Fountain of the Four Rivers at its centre. Afternoon: walk northeast to the Trevi Fountain — the largest and most theatrical of Rome's baroque fountains, by Nicola Salvi, completed in 1762. Continue north to the Spanish Steps: the 135-step staircase linking Piazza di Spagna to the hilltop church of Trinità dei Monti, with views back across the roofline. Evening: the lanes of the historic centre are best on foot — follow the maze between Campo de' Fiori and Via del Corso for aperitivo as the city moves into its evening register.",
+        bullets: [
+          "Pantheon — built 125 AD; the best-preserved Roman building in the world; the oculus is open to the sky",
+          "Piazza Navona — Rome's finest baroque piazza, built over Domitian's stadium, with Bernini's Four Rivers fountain",
+          "Trevi Fountain — Rome's largest baroque fountain, by Nicola Salvi (1762)",
+          "Spanish Steps — the 135-step staircase from Piazza di Spagna to the hilltop church of Trinità dei Monti",
+          "Historic centre at dusk — Campo de' Fiori to Piazza della Rotonda for the evening aperitivo circuit",
+        ],
+        img: "https://images.unsplash.com/photo-1525874684015-58379d421a52?w=800&q=80",
+        tip: "The Pantheon now charges an admission fee — confirm the current rate locally. Go before 9am to experience it before the crowds arrive. The Trevi Fountain is most photogenic at dawn or after 10pm when the tour groups clear. The Spanish Steps are least crowded in the early morning or late at night. Campo de' Fiori operates as a fresh produce market until around 2pm, and as a social piazza from evening onwards.",
+      },
+      {
+        day: 4,
+        title: "Galleria Borghese, Villa Borghese & the Baths of Caracalla",
+        desc: "Rome's fourth day moves deliberately. Morning at the Galleria Borghese: Bernini's Apollo and Daphne and Pluto and Proserpina, and Canova's reclining Pauline Borghese, all in a single baroque villa in the middle of a city park. Entry is strictly timed to two-hour slots — book several weeks ahead. After the gallery, walk through the Villa Borghese gardens, Rome's most central park, elevated above the surrounding streets. Follow the Viale delle Magnolie to the Pincio terrace for the view over Piazza del Popolo and the roofline to the south. Afternoon: cross to the Aventine Hill for the Giardino degli Aranci — an orange garden on a terrace above the Tiber, with one of Rome's finest and least-visited panoramas: the dome of St Peter's framed between umbrella pines. Late afternoon: descend to the Baths of Caracalla, the vast imperial bathhouse completed in 216 AD, built for over 1,600 bathers at once, its vaulted halls still standing at their original height.",
+        bullets: [
+          "Galleria Borghese — Bernini's Apollo and Daphne and Pluto and Proserpina; Canova's Pauline Borghese",
+          "Villa Borghese — Rome's most central large park; walk to the Pincio terrace for views over Piazza del Popolo",
+          "Giardino degli Aranci — the Aventine orange garden, with a terrace view of St Peter's dome framed in pines",
+          "Baths of Caracalla — the imperial bathhouse of 216 AD; one of the best-preserved Roman structures in the city",
+        ],
+        img: "https://images.unsplash.com/photo-1516483638261-8ae3d6fdc756?w=800&q=80",
+        tip: "Galleria Borghese must be booked in advance through the official gallery website — same-day availability is rarely possible, and the two-hour limit is strictly enforced. The Giardino degli Aranci is free, almost entirely unknown to first-time visitors, and the finest free viewpoint in Rome. The Baths of Caracalla are at their best in the late afternoon when the angle of the light enters through the broken vaults.",
+      },
+    ],
+    whySpecial: "Rome does not fit into a day or two — anyone who has tried it knows the feeling of returning with a long list of things they missed. Four days changes the nature of the visit. The Vatican is not rushed. Ancient Rome gets an unhurried morning. The baroque fountains and piazzas of the historic centre get an evening. And day four exists entirely for the things that rarely appear on first-time itineraries: one of the world's great sculpture collections, a hidden orange garden above the Tiber, and a Roman bathhouse on a scale that is still genuinely difficult to comprehend. Rome rewards the visit that allows it to be slow.",
+    routeOverview: "Vatican: Vatican Museums → Sistine Chapel → St Peter's Basilica → St Peter's Square → Castel Sant'Angelo → Trastevere → Ancient Rome: Colosseum → Roman Forum → Palatine Hill → Capitoline Hill → Piazza Venezia → Baroque Rome: Pantheon → Piazza Navona → Trevi Fountain → Spanish Steps → Art & Parks: Galleria Borghese → Villa Borghese → Giardino degli Aranci → Baths of Caracalla",
   },
 
   {
