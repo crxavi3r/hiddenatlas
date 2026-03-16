@@ -2,7 +2,7 @@ export async function downloadItineraryPDF(itinerary) {
   console.log('[download-free] clicked', itinerary.id);
 
   const { createElement } = await import('react');
-  const [{ pdf }, { default: ItineraryPDF }, { getDayImage, getCoverImage }] = await Promise.all([
+  const [{ pdf }, { default: ItineraryPDF }, { getDayImages, getCoverImage }] = await Promise.all([
     import('@react-pdf/renderer'),
     import('../components/ItineraryPDF'),
     import('../lib/itineraryImages'),
@@ -12,13 +12,13 @@ export async function downloadItineraryPDF(itinerary) {
   const localCover = getCoverImage(itinerary.id);
 
   // Resolve day images from per-day subfolders: day-images/dayN/
-  // No external URLs. Returns null if the folder is empty.
+  // Up to 2 images per day. Returns empty array if the folder is empty.
   const resolvedItinerary = {
     ...itinerary,
     coverImage: localCover || itinerary.coverImage,
     days: (itinerary.days || []).map(day => ({
       ...day,
-      img: getDayImage(itinerary.id, day.day),
+      imgs: getDayImages(itinerary.id, day.day),
     })),
   };
 

@@ -57,6 +57,19 @@ export function getDayImage(slug, dayNumber) {
 }
 
 /**
+ * Returns up to 2 bundled asset URLs for a day's images.
+ * Images must be placed in: content/itineraries/<slug>/day-images/day<N>/<image>
+ * Returns an empty array if the folder is empty.
+ */
+export function getDayImages(slug, dayNumber) {
+  const needle = `/itineraries/${slug}/day-images/day${dayNumber}/`;
+  return Object.entries(dayFolderModules)
+    .filter(([path]) => path.includes(needle))
+    .slice(0, 2)
+    .map(([, mod]) => mod.default);
+}
+
+/**
  * Returns the public URL for the itinerary cover image.
  * Place the cover image at: public/content/itineraries/<slug>/cover.jpg
  * This uses a stable URL (not content-hashed) so image replacements take effect immediately.

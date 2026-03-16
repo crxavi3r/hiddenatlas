@@ -695,18 +695,23 @@ function RouteMapPage({ itinerary }) {
 
 function DayPage({ day, index, itinerary }) {
   const { title: itinTitle, country } = itinerary;
-  const { title, desc, description, bullets = [], activities = [], stay, img, tip } = day;
+  const { title, desc, description, bullets = [], activities = [], stay, imgs = [], tip } = day;
   const body       = desc || description || null;
   const highlights = bullets.length ? bullets : activities;
-  const hero       = imgUrl(img);
+  const resolvedImgs = imgs.map(imgUrl).filter(Boolean);
 
   return (
     <Page size="A4" style={s.dayPage}>
       <RunHeader country={country} title={itinTitle} />
 
-      {/* Top banner image */}
-      {hero ? (
-        <Image src={hero} style={s.dayImg} />
+      {/* Top banner image(s) */}
+      {resolvedImgs.length === 2 ? (
+        <View style={{ flexDirection: 'row', width: '100%', height: 205, breakInside: 'avoid' }}>
+          <Image src={resolvedImgs[0]} style={{ width: '50%', height: 205, objectFit: 'cover', objectPosition: 'center' }} />
+          <Image src={resolvedImgs[1]} style={{ width: '50%', height: 205, objectFit: 'cover', objectPosition: 'center' }} />
+        </View>
+      ) : resolvedImgs.length === 1 ? (
+        <Image src={resolvedImgs[0]} style={s.dayImg} />
       ) : (
         <View style={s.dayImgPlaceholder}>
           <Text style={s.dayPlaceholderText}>{country.toUpperCase()}</Text>
