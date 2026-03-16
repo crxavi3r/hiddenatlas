@@ -14,7 +14,7 @@ export const journeyImages = {
   'japan-grand-cultural-journey': '1570692890937-f60db72ac6b4',
   'philippines-island-journey':   '1531761535209-180857e963b9',
   'rome-4-day-city-break':        '1552832230-c0197dd311b5', // Colosseum — placeholder, replace with editorial cover
-  'morocco-motorcycle-expedition': '1539650776942-63dc7de3f1ce', // Sahara dunes — placeholder, replace with editorial cover
+  'morocco-motorcycle-expedition': 'LzVB84KkZOE', // Sahara rolling dunes, Morocco (Nicolas Jehly / Unsplash)
 };
 
 export function journeyImg(id, width = 800, quality = 80) {
@@ -712,8 +712,8 @@ export const itineraries = [
 
   {
     id: "morocco-motorcycle-expedition",
-    title: "Morocco",
-    subtitle: "Motorcycle Expedition",
+    title: "Morocco Motorcycle Expedition",
+    subtitle: "From the Rif and imperial cities to the Atlas and the Sahara.",
     tagline: "Eight days from the Rif and imperial cities to the Atlas and the Sahara",
     shortDescription: "Chefchaouen, Fes, Todra Gorge, the Dades switchbacks, Aït Benhaddou, two nights at Erg Chebbi in the Sahara, the Tizi n'Tichka pass and the Atlantic coast at Oualidia. Morocco's great motorcycle route, done properly.",
     country: "Morocco",
@@ -749,7 +749,7 @@ export const itineraries = [
           "Chefchaouen medina — the blue-painted hillside quarter of the Rif mountains",
           "Evening arrival in Fes — 190 kilometres from Chefchaouen on the N8",
         ],
-        img: "chefchaouen-rif.jpeg",
+        img: "https://images.unsplash.com/photo-Oj3lWTdj1aY?w=800&q=80",
         tip: "The Fnideq (Ceuta) border can be slow on Friday afternoons and summer weekends. Allow two hours from the ferry landing to clear the border area. The Tangier Med route is faster overall for groups with larger bikes or panniers, and skips the Tangier city traffic entirely.",
       },
       {
@@ -763,7 +763,7 @@ export const itineraries = [
           "Midelt — the halfway town; fuel, lunch and the first desert light",
           "Errachidia — the gateway before the gorge roads of the deep south",
         ],
-        img: "atlas-road-midelt.jpeg",
+        img: "https://images.unsplash.com/photo-vxAC1R3_dFA?w=800&q=80",
         tip: "Fuel in Midelt before continuing south. The stretch beyond Midelt has long gaps between stations. The N13 from Fes is well-surfaced; the back roads through the cedar forest near Azrou add twenty minutes and considerable reward for those who have them.",
       },
       {
@@ -776,7 +776,7 @@ export const itineraries = [
           "Dades Gorge switchbacks — tight bends above the valley floor, a road that earns its reputation",
           "Aït Benhaddou — the UNESCO-listed ksar above the Ounila River, best at golden hour",
         ],
-        img: "todra-gorge.jpeg",
+        img: "https://images.unsplash.com/photo-5tfETPLIjbo?w=800&q=80",
         tip: "The Dades switchback section is narrow with loose gravel in places. Manageable for loaded touring bikes but requires attention, particularly on the downhill return. The viewpoint at the top looks back over the valley and the palmeries — allow time for it.",
       },
       {
@@ -790,7 +790,7 @@ export const itineraries = [
           "Erg Chebbi approach — the dune ridge visible from 30 kilometres, rising sharply from the plain",
           "First evening in the desert — reach the dune edge before sunset if the road allows",
         ],
-        img: "erg-chebbi-approach.jpeg",
+        img: "https://images.unsplash.com/photo-PV1Y6JdSNzo?w=800&q=80",
         tip: "The route from Aït Benhaddou via Zagora is longer but passes through better country than the direct N9 alone. Roads east of Ouarzazate are well-surfaced until the last 15 kilometres into Merzouga, where the surface can be sandy close to the dune edge. Reduce speed accordingly.",
       },
       {
@@ -805,7 +805,7 @@ export const itineraries = [
           "Stargazing — no light pollution at this distance from any settlement of scale",
           "Camel ride to the dune crest — available as a complement to the day; not the main focus",
         ],
-        img: "erg-chebbi-dunes.jpeg",
+        img: "https://images.unsplash.com/photo-PDcABuRlJ2Y?w=800&q=80",
         tip: "The 4x4 outing is best arranged through your accommodation, which maintains established relationships with local operators. Early morning (before 9am) avoids the midday heat and catches the dunes in their sharpest light. Bring significantly more water than you think necessary — the dry desert air is deceptive in every direction.",
       },
       {
@@ -818,7 +818,7 @@ export const itineraries = [
           "Draa Valley return — the northbound perspective through the palmeries and kasbahs",
           "Marrakech arrival — the Djemaa el-Fna square and the medina in the evening",
         ],
-        img: "tizi-ntichka-pass.jpeg",
+        img: "https://images.unsplash.com/photo-FeZmD1H56_Q?w=800&q=80",
         tip: "The Tizi n'Tichka carries significant truck traffic. Overtaking on the switchbacks requires patience — the surface is generally good but some bends near the summit have loose stone debris after rain. Fill up in Ouarzazate before the pass; the next reliable stations are in the Marrakech suburbs.",
       },
       {
@@ -831,7 +831,7 @@ export const itineraries = [
           "Oualidia lagoon — a protected tidal inlet famous throughout Morocco for its oysters",
           "Oualidia oysters — served at the water's edge, the correct end to a long day",
         ],
-        img: "oualidia-lagoon.jpeg",
+        img: null,
         tip: "Oualidia has a small number of excellent restaurants along the lagoon; arrive by early afternoon to secure a table. The town fills on weekends with day-trippers from Casablanca. A weekday arrival is quieter and gives you the lagoon more or less to yourselves.",
       },
       {
@@ -844,7 +844,7 @@ export const itineraries = [
           "Hassan Tower — the 12th-century minaret of the unfinished Almohad mosque",
           "Tangier Med — the return ferry port for the Algeciras, Ceuta or Tarifa crossing",
         ],
-        img: "hassan-ii-casablanca.jpeg",
+        img: "https://images.unsplash.com/photo-ABWzLDO4Y4Y?w=800&q=80",
         tip: "The Hassan II Mosque accepts visitors outside of prayer times; guided entry is available and worth it. Arrive in Casablanca before 10am to clear the city before the Rabat run. Tangier Med is 40 kilometres east of Tangier city — follow signs for Port Tanger Med and not Tanger Ville, or you will arrive at the wrong terminal.",
       },
     ],
