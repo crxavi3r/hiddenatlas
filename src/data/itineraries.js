@@ -1271,8 +1271,8 @@ export const itineraries = [
     category: "Cultural Journey",
     bestFor: ["Couples", "Culture Seekers", "Design Lovers"],
     difficulty: "Moderate",
-    image: journeyImg('japan-grand-cultural-journey', 800),
-    coverImage: journeyImg('japan-grand-cultural-journey', 1600),
+    image: '/content/itineraries/japan-grand-cultural-journey/cover.jpg',
+    coverImage: '/content/itineraries/japan-grand-cultural-journey/cover.jpg',
     description: "Japan does not reveal itself quickly. This 18-day route follows the old road between Tokyo and Osaka — not the shinkansen route, but the cultural one: the lacquerware workshops of Kanazawa, the preserved farmhouse villages of Shirakawa-go, the temple city of Kyoto approached slowly from the north. Every overnight stay has been chosen for its relationship to the place. Every day has at least one thing that cannot be found in any guidebook.",
     highlights: [
       "Shirakawa-go at dusk — the UNESCO thatched-roof village in the snow mountains",

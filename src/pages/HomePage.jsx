@@ -1037,7 +1037,7 @@ function DestinationCard({ it }) {
             transition: 'transform 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
           }}
           loading="lazy"
-          onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=900&q=80'; }}
+          onError={e => { e.currentTarget.onerror = null; }}
         />
         {/* Gradient */}
         <div style={{

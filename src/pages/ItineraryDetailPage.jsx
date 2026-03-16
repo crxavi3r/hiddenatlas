@@ -559,10 +559,10 @@ const api = useApi();
       {/* Hero */}
       <section style={{ position: 'relative', height: 'clamp(400px, 55vw, 600px)', overflow: 'hidden' }}>
         <img
-          src={localCover || coverImage || image}
+          src={localCover}
           alt={title}
           style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }}
-          onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1600&q=80'; }}
+          onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = coverImage || image || ''; }}
         />
         <div style={{
           position: 'absolute', inset: 0,

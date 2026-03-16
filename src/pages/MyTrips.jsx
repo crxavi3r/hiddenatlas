@@ -319,7 +319,7 @@ function PurchasedTripCard({ trip }) {
             transform: hovered ? 'scale(1.05)' : 'scale(1)',
             transition: 'transform 0.5s ease',
           }}
-          onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=800&q=80'; }}
+          onError={e => { e.currentTarget.onerror = null; }}
         />
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(28,26,22,0.5) 0%, transparent 55%)' }} />
         <div style={{
