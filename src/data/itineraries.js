@@ -14,7 +14,6 @@ export const journeyImages = {
   'japan-grand-cultural-journey': '1570692890937-f60db72ac6b4',
   'philippines-island-journey':   '1531761535209-180857e963b9',
   'rome-4-day-city-break':        '1552832230-c0197dd311b5', // Colosseum — placeholder, replace with editorial cover
-  'morocco-motorcycle-expedition': 'LzVB84KkZOE', // Sahara rolling dunes, Morocco (Nicolas Jehly / Unsplash)
 };
 
 export function journeyImg(id, width = 800, quality = 80) {
@@ -726,8 +725,8 @@ export const itineraries = [
     category: "Motorcycle Road Trip",
     bestFor: ["Friend Groups", "Adventurers", "Culture Seekers"],
     difficulty: "Moderate",
-    image: journeyImg('morocco-motorcycle-expedition', 800),
-    coverImage: journeyImg('morocco-motorcycle-expedition', 1600),
+    image: '/content/itineraries/morocco-motorcycle-expedition/cover.jpg',
+    coverImage: '/content/itineraries/morocco-motorcycle-expedition/cover.jpg',
     description: "Morocco has been drawing motorcycle travellers for decades, and the route that keeps circulating — Chefchaouen, Fes, the southern gorges, the Sahara, Marrakech — endures because it is genuinely excellent. This eight-day itinerary connects those places without padding, giving each section the time it needs. Two nights in the desert is the correct call; one is never enough. The return via the Atlantic coast at Oualidia closes the route quietly, with oysters and flat water two days after the dunes.",
     highlights: [
       "Chefchaouen: the blue-painted hillside medina of the Rif, at its most striking before midday",
