@@ -1,0 +1,83 @@
+{
+  "slug": "morocco-motorcycle-expedition",
+  "title": "Morocco",
+  "subtitle": "Motorcycle Expedition",
+  "tagline": "Eight days from the Rif and imperial cities to the Atlas and the Sahara",
+  "price": 0,
+  "currency": "EUR",
+  "isPremium": false,
+  "durationDays": 8,
+  "country": "Morocco",
+  "region": "Northern Morocco to the Sahara",
+  "groupSize": "4–10 riders",
+  "category": "Motorcycle Road Trip",
+  "difficulty": "Moderate",
+  "bestFor": ["Friend Groups", "Adventurers", "Culture Seekers"],
+  "heroImage": "cover.jpg",
+  "gallery": [
+    { "file": "gallery/chefchaouen-blue-alleys.jpg",      "alt": "Chefchaouen blue-painted medina alleys",            "caption": "Chefchaouen" },
+    { "file": "gallery/fes-medina-tanneries.jpg",         "alt": "Fes leather tanneries from above",                   "caption": "Fes Tanneries" },
+    { "file": "gallery/todra-gorge-walls.jpg",            "alt": "Todra Gorge limestone canyon walls",                 "caption": "Todra Gorge" },
+    { "file": "gallery/dades-gorge-switchbacks.jpg",      "alt": "Dades Gorge road switchbacks above the valley",      "caption": "Dades Gorge" },
+    { "file": "gallery/ait-benhaddou-ksar.jpg",           "alt": "Aït Benhaddou ksar at golden hour",                  "caption": "Aït Benhaddou" },
+    { "file": "gallery/tizi-ntichka-pass.jpg",            "alt": "Tizi n'Tichka High Atlas road pass",                 "caption": "Tizi n'Tichka" },
+    { "file": "gallery/erg-chebbi-dunes-sunset.jpg",      "alt": "Erg Chebbi dunes at sunset, Merzouga",              "caption": "Erg Chebbi at Sunset" },
+    { "file": "gallery/desert-camp-stars.jpg",            "alt": "Desert camp beneath the Sahara night sky",           "caption": "Desert Stargazing" },
+    { "file": "gallery/marrakech-djemaa-elfna.jpg",       "alt": "Djemaa el-Fna square, Marrakech at dusk",           "caption": "Djemaa el-Fna" },
+    { "file": "gallery/oualidia-lagoon.jpg",              "alt": "Oualidia Atlantic lagoon, oyster beds",              "caption": "Oualidia Lagoon" },
+    { "file": "gallery/hassan-ii-mosque.jpg",             "alt": "Hassan II Mosque minaret, Casablanca Atlantic",      "caption": "Hassan II Mosque" },
+    { "file": "gallery/rabat-kasbah-udayas.jpg",          "alt": "Kasbah of the Udayas above the Bou Regreg river",   "caption": "Rabat Kasbah" }
+  ],
+  "research": [
+    { "file": "research/chefchaouen-blue-alleys.jpg",     "alt": "Chefchaouen medina research photo" },
+    { "file": "research/fes-medina-tanneries.jpg",        "alt": "Fes tanneries research photo" },
+    { "file": "research/todra-gorge-walls.jpg",           "alt": "Todra Gorge research photo" },
+    { "file": "research/dades-gorge-switchbacks.jpg",     "alt": "Dades Gorge research photo" },
+    { "file": "research/ait-benhaddou-ksar.jpg",          "alt": "Aït Benhaddou research photo" },
+    { "file": "research/tizi-ntichka-pass.jpg",           "alt": "Tizi n'Tichka research photo" },
+    { "file": "research/erg-chebbi-dunes-sunset.jpg",     "alt": "Erg Chebbi research photo" },
+    { "file": "research/desert-camp-stars.jpg",           "alt": "Desert camp research photo" },
+    { "file": "research/marrakech-djemaa-elfna.jpg",      "alt": "Marrakech research photo" },
+    { "file": "research/oualidia-lagoon.jpg",             "alt": "Oualidia research photo" },
+    { "file": "research/hassan-ii-mosque.jpg",            "alt": "Casablanca research photo" },
+    { "file": "research/rabat-kasbah-udayas.jpg",         "alt": "Rabat research photo" }
+  ],
+  "dayImages": [
+    { "day": 1, "file": "day-images/chefchaouen-rif.jpeg",      "alt": "Chefchaouen medina and the Rif mountains" },
+    { "day": 2, "file": "day-images/atlas-road-midelt.jpeg",    "alt": "Middle Atlas road toward Midelt" },
+    { "day": 3, "file": "day-images/todra-gorge.jpeg",          "alt": "Todra Gorge canyon walls" },
+    { "day": 4, "file": "day-images/erg-chebbi-approach.jpeg",  "alt": "First sight of the Erg Chebbi dunes" },
+    { "day": 5, "file": "day-images/erg-chebbi-dunes.jpeg",     "alt": "Erg Chebbi dunes at sunset" },
+    { "day": 6, "file": "day-images/tizi-ntichka-pass.jpeg",    "alt": "Tizi n'Tichka High Atlas pass" },
+    { "day": 7, "file": "day-images/oualidia-lagoon.jpeg",      "alt": "Oualidia Atlantic lagoon" },
+    { "day": 8, "file": "day-images/hassan-ii-casablanca.jpeg", "alt": "Hassan II Mosque, Casablanca" }
+  ],
+  "pdf": null,
+  "isResearchedInPerson": false,
+  "seo": {
+    "ogImage": "seo/og-cover.jpg",
+    "seoTitle": "Morocco Motorcycle Expedition — 8 Days from the Rif to the Sahara | HiddenAtlas",
+    "seoDescription": "The definitive Morocco motorcycle itinerary: Chefchaouen, Fes, Todra Gorge, Aït Benhaddou, two nights in the Sahara at Erg Chebbi, Marrakech and the Atlantic coast — structured for a group of riders.",
+    "keywords": [
+      "morocco motorcycle itinerary",
+      "morocco motorcycle road trip",
+      "morocco desert motorcycle tour",
+      "morocco sahara motorcycle itinerary",
+      "7 day morocco motorcycle trip",
+      "8 days morocco motorcycle",
+      "morocco group motorcycle tour",
+      "chefchaouen fes motorcycle route",
+      "erg chebbi motorcycle",
+      "tizi ntichka motorcycle",
+      "morocco atlas motorcycle"
+    ]
+  },
+  "notes": {
+    "bestSeason": "March to May and September to November. Summer temperatures in the Sahara exceed 45°C; winter passes can carry snow.",
+    "ridingDays": "Days 2, 4 and 6 are long-distance riding days (280–500 km). Days 3 and 7 are shorter and more scenic. Day 5 is a desert day with no significant riding.",
+    "fuelPlanning": "Fuel between Midelt and Errachidia is available but gaps exist. Fill in Midelt and Errachidia before the gorge roads. Fill in Ouarzazate before the Tizi n'Tichka.",
+    "ferryTiming": "Algeciras–Ceuta runs frequently (35 min, hourly). Tarifa–Tangier Med takes 90 min. Book outward and return crossings the day before to guarantee your slot with loaded bikes.",
+    "roadQuality": "Main routes (N1, N8, N9, N13) are well-surfaced. The Dades switchback section has loose gravel in places. The final approach to Merzouga can be sandy within 15 km of the dune edge.",
+    "imageStatus": "Gallery and research images are placeholders. Day images require local files in day-images/ before rendering."
+  }
+}
