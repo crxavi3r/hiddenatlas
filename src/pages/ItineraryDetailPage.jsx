@@ -10,7 +10,7 @@ const ADMIN_EMAILS = [
 import { itineraries } from '../data/itineraries';
 import { downloadItineraryPDF } from '../utils/downloadPDF';
 import { useApi } from '../lib/api';
-import { getGalleryImages, getResearchImages } from '../lib/itineraryImages';
+import { getGalleryImages, getResearchImages, getDayImages } from '../lib/itineraryImages';
 import { useTrack } from '../hooks/useTrack';
 
 // ─────────────────────────────────────────────────────────────
@@ -550,6 +550,12 @@ const api = useApi();
   const galleryImages  = getGalleryImages(itinerary.id);
   const researchImages = getResearchImages(itinerary.id);
 
+  // Build a filename → bundled asset URL map for day-images/
+  // day.img values that don't start with 'http' are resolved from this map.
+  const dayImgMap = Object.fromEntries(
+    getDayImages(itinerary.id).map(({ filename, src }) => [filename, src])
+  );
+
   return (
     <div style={{ background: '#FAFAF8', paddingTop: '72px' }}>
 
@@ -687,10 +693,15 @@ const api = useApi();
                   // Premium + no access: blur from day 3 onwards (show 2 as preview)
                   // Premium + access: all unlocked
                   const isLocked = isPremium && !hasAccess && i >= 2;
+                  // Resolve local day image: if img is a filename (not a URL), look it up
+                  // in the day-images/ folder. Falls back to null if file is not yet present.
+                  const resolvedImg = day.img
+                    ? (day.img.startsWith('http') ? day.img : (dayImgMap[day.img] ?? null))
+                    : null;
                   return (
                     <DayEntry
                       key={i}
-                      day={day}
+                      day={{ ...day, img: resolvedImg }}
                       index={i}
                       isLocked={isLocked}
                       isLast={i === days.length - 1}

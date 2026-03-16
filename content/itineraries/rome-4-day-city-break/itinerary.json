@@ -50,6 +50,9 @@
     { "file": "research/orange-garden.jpg",      "alt": "Giardino degli Aranci research photo" },
     { "file": "research/baths-of-caracalla.jpg", "alt": "Baths of Caracalla research photo" }
   ],
+  "dayImages": [
+    { "day": 4, "file": "day-images/baths-of-caracalla.jpeg", "alt": "Baths of Caracalla" }
+  ],
   "pdf": null,
   "isResearchedInPerson": false,
   "seo": {
