@@ -12,6 +12,12 @@ const STATUS_META = {
 const ALL_STATUSES          = Object.keys(STATUS_META);
 const DEFAULT_STATUS_FILTER = ['open', 'in_progress'];
 
+const PAYMENT_META = {
+  unpaid: { label: 'Unpaid', color: '#8C8070', bg: '#F4F1EC' },
+  paid:   { label: 'Paid',   color: '#1B6B65', bg: '#EFF6F5' },
+};
+const ALL_PAYMENT_STATUSES = Object.keys(PAYMENT_META);
+
 const NEXT_STATUS = {
   open:        { value: 'in_progress', label: '→ In Progress' },
   in_progress: { value: 'closed',      label: '→ Close'       },
@@ -19,20 +25,19 @@ const NEXT_STATUS = {
 };
 
 // ── Column definitions ────────────────────────────────────────────────────────
-// PRIMARY: visible in the main table with sort + filter icons
 const PRIMARY_COLS = [
-  { id: 'createdAt',   label: 'Date',        field: 'createdAt',   type: 'date',   minW: 100 },
-  { id: 'fullName',    label: 'Name',         field: 'fullName',    type: 'text',   minW: 110 },
-  { id: 'email',       label: 'Email',        field: 'email',       type: 'text',   minW: 152 },
-  { id: 'destination', label: 'Destination',  field: 'destination', type: 'text',   minW: 100 },
-  { id: 'dates',       label: 'Trip Date',    field: 'dates',       type: 'text',   minW: 88  },
-  { id: 'duration',    label: 'Duration',     field: 'duration',    type: 'text',   minW: 64  },
-  { id: 'groupSize',   label: 'Pax',          field: 'groupSize',   type: 'number', minW: 46  },
-  { id: 'budget',      label: 'Budget',       field: 'budget',      type: 'text',   minW: 88  },
-  { id: 'status',      label: 'Status',       field: 'status',      type: 'status', minW: 190 },
+  { id: 'createdAt',     label: 'Date',        field: 'createdAt',     type: 'date',    minW: 100 },
+  { id: 'fullName',      label: 'Name',         field: 'fullName',      type: 'text',    minW: 110 },
+  { id: 'email',         label: 'Email',        field: 'email',         type: 'text',    minW: 152 },
+  { id: 'destination',   label: 'Destination',  field: 'destination',   type: 'text',    minW: 100 },
+  { id: 'dates',         label: 'Trip Date',    field: 'dates',         type: 'text',    minW: 88  },
+  { id: 'duration',      label: 'Duration',     field: 'duration',      type: 'text',    minW: 64  },
+  { id: 'groupSize',     label: 'Pax',          field: 'groupSize',     type: 'number',  minW: 46  },
+  { id: 'budget',        label: 'Budget',       field: 'budget',        type: 'text',    minW: 88  },
+  { id: 'status',        label: 'Status',       field: 'status',        type: 'status',  minW: 190 },
+  { id: 'paymentStatus', label: 'Payment',      field: 'paymentStatus', type: 'payment', minW: 150 },
 ];
 
-// SECONDARY: shown only in the expandable detail row
 const SECONDARY_COLS = [
   { id: 'phone',     label: 'Phone',       field: 'phone',     type: 'text'  },
   { id: 'groupType', label: 'Group Type',  field: 'groupType', type: 'text'  },
@@ -40,12 +45,9 @@ const SECONDARY_COLS = [
   { id: 'notes',     label: 'Notes',       field: 'notes',     type: 'text'  },
 ];
 
-// All columns combined — used for filter state and matching
-const COLUMNS = [...PRIMARY_COLS, ...SECONDARY_COLS];
-
+const COLUMNS   = [...PRIMARY_COLS, ...SECONDARY_COLS];
 const PAGE_SIZE = 25;
-// +1 for the expand-toggle column on the left
-const COL_SPAN  = PRIMARY_COLS.length + 1;
+const COL_SPAN  = PRIMARY_COLS.length + 1; // +1 for expand-toggle column
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtDate(ts) {
@@ -95,6 +97,10 @@ function matchesFilter(row, col, filterVal) {
     if (!filterVal || filterVal.length === 0 || filterVal.length === ALL_STATUSES.length) return true;
     return filterVal.includes(row[col.field] || 'open');
   }
+  if (col.type === 'payment') {
+    if (!filterVal || filterVal.length === 0 || filterVal.length === ALL_PAYMENT_STATUSES.length) return true;
+    return filterVal.includes(row[col.field] || 'unpaid');
+  }
   if (!filterVal) return true;
   const search = String(filterVal).toLowerCase().trim();
   if (!search) return true;
@@ -106,22 +112,26 @@ function matchesFilter(row, col, filterVal) {
 function initFilters() {
   const f = {};
   for (const col of COLUMNS) {
-    f[col.id] = col.type === 'status' ? [...DEFAULT_STATUS_FILTER] : '';
+    if (col.type === 'status')  f[col.id] = [...DEFAULT_STATUS_FILTER];
+    else if (col.type === 'payment') f[col.id] = [...ALL_PAYMENT_STATUSES];
+    else f[col.id] = '';
   }
   return f;
 }
 
-// "No active filters" state — status = all selected, all text empty
 function emptyFilters() {
   const f = {};
   for (const col of COLUMNS) {
-    f[col.id] = col.type === 'status' ? [...ALL_STATUSES] : '';
+    if (col.type === 'status')  f[col.id] = [...ALL_STATUSES];
+    else if (col.type === 'payment') f[col.id] = [...ALL_PAYMENT_STATUSES];
+    else f[col.id] = '';
   }
   return f;
 }
 
 function isFilterActive(col, filterVal) {
-  if (col.type === 'status') return filterVal.length > 0 && filterVal.length < ALL_STATUSES.length;
+  if (col.type === 'status')  return filterVal.length > 0 && filterVal.length < ALL_STATUSES.length;
+  if (col.type === 'payment') return filterVal.length > 0 && filterVal.length < ALL_PAYMENT_STATUSES.length;
   return !!filterVal;
 }
 
@@ -132,7 +142,7 @@ function renderSortIcon(colId, sort) {
     : <ChevronDown size={10} color="#1B6B65" />;
 }
 
-// ── Detail field (used in expanded row) ───────────────────────────────────────
+// ── Detail field ──────────────────────────────────────────────────────────────
 function DetailField({ label, value }) {
   if (!value) return null;
   return (
@@ -146,15 +156,15 @@ function DetailField({ label, value }) {
 }
 
 // ── Status filter inside popover ──────────────────────────────────────────────
-function StatusPopoverFilter({ value, onChange }) {
+function CheckboxPopoverFilter({ meta, allKeys, value, onChange }) {
   function toggle(s) {
     onChange(value.includes(s) ? value.filter(x => x !== s) : [...value, s]);
   }
   return (
     <div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        {ALL_STATUSES.map(s => {
-          const m = STATUS_META[s];
+        {allKeys.map(s => {
+          const m       = meta[s];
           const checked = value.includes(s);
           return (
             <button key={s} onClick={() => toggle(s)} style={{
@@ -178,26 +188,24 @@ function StatusPopoverFilter({ value, onChange }) {
         })}
       </div>
       <div style={{ borderTop: '1px solid #F4F1EC', marginTop: '8px', paddingTop: '8px', display: 'flex', gap: '12px' }}>
-        <button onClick={() => onChange([...ALL_STATUSES])} style={{ fontSize: '11px', color: '#1B6B65', fontWeight: '600', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>All</button>
-        <button onClick={() => onChange([])} style={{ fontSize: '11px', color: '#8C8070', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>None</button>
+        <button onClick={() => onChange([...allKeys])} style={{ fontSize: '11px', color: '#1B6B65', fontWeight: '600', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>All</button>
+        <button onClick={() => onChange([])}           style={{ fontSize: '11px', color: '#8C8070',  background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>None</button>
       </div>
     </div>
   );
 }
 
-// ── FilterPopover — position:fixed, outside table DOM ─────────────────────────
+// ── FilterPopover ─────────────────────────────────────────────────────────────
 function FilterPopover({ col, value, onChange, onClose, anchorRect }) {
   const ref      = useRef(null);
   const inputRef = useRef(null);
 
   useEffect(() => {
-    if (col.type !== 'status') inputRef.current?.focus();
+    if (col.type !== 'status' && col.type !== 'payment') inputRef.current?.focus();
   }, [col.type]);
 
   useEffect(() => {
-    function onDown(e) {
-      if (ref.current && !ref.current.contains(e.target)) onClose();
-    }
+    function onDown(e) { if (ref.current && !ref.current.contains(e.target)) onClose(); }
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [onClose]);
@@ -230,7 +238,9 @@ function FilterPopover({ col, value, onChange, onClose, anchorRect }) {
       </p>
 
       {col.type === 'status' ? (
-        <StatusPopoverFilter value={value} onChange={onChange} />
+        <CheckboxPopoverFilter meta={STATUS_META} allKeys={ALL_STATUSES} value={value} onChange={onChange} />
+      ) : col.type === 'payment' ? (
+        <CheckboxPopoverFilter meta={PAYMENT_META} allKeys={ALL_PAYMENT_STATUSES} value={value} onChange={onChange} />
       ) : (
         <>
           <input
@@ -246,8 +256,8 @@ function FilterPopover({ col, value, onChange, onClose, anchorRect }) {
               border: '1px solid #D4CCBF', borderRadius: '4px',
               fontSize: '12.5px', color: '#1C1A16', background: 'white', outline: 'none',
             }}
-            onFocus={e  => { e.target.style.borderColor = '#1B6B65'; }}
-            onBlur={e   => { e.target.style.borderColor = '#D4CCBF'; }}
+            onFocus={e => { e.target.style.borderColor = '#1B6B65'; }}
+            onBlur={e  => { e.target.style.borderColor = '#D4CCBF'; }}
           />
           {value ? (
             <button
@@ -276,11 +286,6 @@ function FilterPopover({ col, value, onChange, onClose, anchorRect }) {
 function ColHeader({ col, sort, onSort, filterActive, onOpenFilter }) {
   const [hovered, setHovered] = useState(false);
 
-  function handleFilterClick(e) {
-    e.stopPropagation();
-    onOpenFilter(col.id, e.currentTarget.getBoundingClientRect());
-  }
-
   return (
     <th
       onMouseEnter={() => setHovered(true)}
@@ -306,7 +311,7 @@ function ColHeader({ col, sort, onSort, filterActive, onOpenFilter }) {
           {renderSortIcon(col.id, sort)}
         </button>
         <button
-          onClick={handleFilterClick}
+          onClick={e => { e.stopPropagation(); onOpenFilter(col.id, e.currentTarget.getBoundingClientRect()); }}
           title={`Filter ${col.label}`}
           style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -325,7 +330,7 @@ function ColHeader({ col, sort, onSort, filterActive, onOpenFilter }) {
   );
 }
 
-// ── StatusAction ──────────────────────────────────────────────────────────────
+// ── StatusAction — workflow status badge + advance button ─────────────────────
 function StatusAction({ requestId, current, onUpdated, token }) {
   const [loading, setLoading] = useState(false);
 
@@ -369,19 +374,61 @@ function StatusAction({ requestId, current, onUpdated, token }) {
   );
 }
 
+// ── PaymentAction — payment badge + toggle button ─────────────────────────────
+function PaymentAction({ requestId, current, onUpdated, token }) {
+  const [loading, setLoading] = useState(false);
+  const isPaid    = current === 'paid';
+  const nextValue = isPaid ? 'unpaid' : 'paid';
+
+  async function toggle() {
+    setLoading(true);
+    try {
+      await fetch(`/api/admin?action=custom-request-payment`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id: requestId, paymentStatus: nextValue }),
+      });
+      onUpdated(requestId, nextValue);
+    } catch (err) {
+      console.error('[admin/custom-requests] payment update failed:', err);
+    } finally { setLoading(false); }
+  }
+
+  const m = PAYMENT_META[current] ?? PAYMENT_META.unpaid;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
+      <span style={{
+        fontSize: '11px', fontWeight: '600', color: m.color, background: m.bg,
+        padding: '3px 9px', borderRadius: '10px', whiteSpace: 'nowrap',
+      }}>
+        {m.label}
+      </span>
+      <button onClick={toggle} disabled={loading} style={{
+        fontSize: '11px', fontWeight: '500', color: '#4A433A', background: 'white',
+        border: '1px solid #E8E3DA', borderRadius: '6px',
+        padding: '3px 9px', cursor: loading ? 'wait' : 'pointer',
+        whiteSpace: 'nowrap', opacity: loading ? 0.6 : 1,
+      }}>
+        {loading ? '…' : (isPaid ? 'Mark unpaid' : 'Mark paid')}
+      </button>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function CustomRequestsPage() {
-  const { getToken }                       = useAuth();
-  const [allRows, setAllRows]              = useState([]);
-  const [counts, setCounts]                = useState({});
-  const [loading, setLoading]              = useState(true);
-  const [authToken, setAuthToken]          = useState(null);
-  const [sort, setSort]                    = useState({ key: 'createdAt', dir: 'desc' });
-  const [filters, setFilters]              = useState(initFilters);
-  const [page, setPage]                    = useState(1);
-  const [popover, setPopover]              = useState(null); // { colId, anchorRect }
-  const [expandedRows, setExpandedRows]    = useState(new Set());
-  const isMobile                           = useIsMobile();
+  const { getToken }                    = useAuth();
+  const [allRows, setAllRows]           = useState([]);
+  const [counts, setCounts]             = useState({});
+  const [paymentCounts, setPaymentCounts] = useState({});
+  const [loading, setLoading]           = useState(true);
+  const [authToken, setAuthToken]       = useState(null);
+  const [sort, setSort]                 = useState({ key: 'createdAt', dir: 'desc' });
+  const [filters, setFilters]           = useState(initFilters);
+  const [page, setPage]                 = useState(1);
+  const [popover, setPopover]           = useState(null);
+  const [expandedRows, setExpandedRows] = useState(new Set());
+  const isMobile                        = useIsMobile();
 
   useEffect(() => {
     getToken().then(setAuthToken).catch(() => {});
@@ -391,12 +438,13 @@ export default function CustomRequestsPage() {
     setLoading(true);
     try {
       const token = await getToken();
-      const res = await fetch(`/api/admin?action=custom-requests&all=true`, {
+      const res   = await fetch(`/api/admin?action=custom-requests&all=true`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      setAllRows(data.requests ?? []);
-      setCounts(data.counts  ?? {});
+      setAllRows(data.requests       ?? []);
+      setCounts(data.counts          ?? {});
+      setPaymentCounts(data.paymentCounts ?? {});
     } catch (err) {
       console.error('[admin/custom-requests]', err);
     } finally {
@@ -421,12 +469,26 @@ export default function CustomRequestsPage() {
     });
   }
 
+  function handlePaymentUpdated(id, newPaymentStatus) {
+    setAllRows(prev => {
+      const row = prev.find(r => r.id === id);
+      if (row) {
+        const old = row.paymentStatus || 'unpaid';
+        setPaymentCounts(c => ({
+          ...c,
+          [old]:             Math.max(0, (c[old]             ?? 0) - 1),
+          [newPaymentStatus]:           (c[newPaymentStatus]  ?? 0) + 1,
+        }));
+      }
+      return prev.map(r => r.id === id ? { ...r, paymentStatus: newPaymentStatus } : r);
+    });
+  }
+
   function setFilter(colId, val) {
     setFilters(prev => ({ ...prev, [colId]: val }));
     setPage(1);
   }
 
-  // Reset to "no filters active" — status = all selected, text = empty
   function clearAllFilters() {
     setFilters(emptyFilters());
     setPage(1);
@@ -476,9 +538,10 @@ export default function CustomRequestsPage() {
 
   const TD = { padding: '9px 10px' };
 
-  // ── Mobile card list ─────────────────────────────────────────────────────────
+  // ── Mobile card ───────────────────────────────────────────────────────────────
   function MobileCard({ r, i }) {
-    const m = STATUS_META[r.status] ?? STATUS_META.open;
+    const sm = STATUS_META[r.status]        ?? STATUS_META.open;
+    const pm = PAYMENT_META[r.paymentStatus] ?? PAYMENT_META.unpaid;
     return (
       <div style={{ padding: '14px 16px', borderTop: i > 0 ? '1px solid #F4F1EC' : 'none', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
@@ -486,30 +549,40 @@ export default function CustomRequestsPage() {
             <p style={{ fontWeight: '600', color: '#1C1A16', fontSize: '13px' }}>{r.fullName || '—'}</p>
             <a href={`mailto:${r.email}`} style={{ color: '#1B6B65', fontSize: '12px', textDecoration: 'none' }}>{r.email}</a>
           </div>
-          <span style={{ flexShrink: 0, fontSize: '10.5px', fontWeight: '600', color: m.color, background: m.bg, padding: '3px 9px', borderRadius: '10px', marginLeft: '10px' }}>
-            {m.label}
-          </span>
+          <div style={{ display: 'flex', gap: '5px', flexShrink: 0, marginLeft: '10px' }}>
+            <span style={{ fontSize: '10.5px', fontWeight: '600', color: sm.color, background: sm.bg, padding: '3px 8px', borderRadius: '10px', whiteSpace: 'nowrap' }}>
+              {sm.label}
+            </span>
+            <span style={{ fontSize: '10.5px', fontWeight: '600', color: pm.color, background: pm.bg, padding: '3px 8px', borderRadius: '10px', whiteSpace: 'nowrap' }}>
+              {pm.label}
+            </span>
+          </div>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', marginBottom: '8px' }}>
           <span style={{ fontSize: '12px', color: '#4A433A' }}>
             <span style={{ color: '#B5AA99', fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>To </span>
             {r.destination || '—'}
           </span>
-          {r.dates && <span style={{ fontSize: '12px', color: '#4A433A' }}>{r.dates}</span>}
-          {r.duration && <span style={{ fontSize: '12px', color: '#4A433A' }}>{r.duration}</span>}
+          {r.dates     && <span style={{ fontSize: '12px', color: '#4A433A' }}>{r.dates}</span>}
+          {r.duration  && <span style={{ fontSize: '12px', color: '#4A433A' }}>{r.duration}</span>}
           {r.groupSize != null && <span style={{ fontSize: '12px', color: '#4A433A' }}>{r.groupSize} pax</span>}
-          {r.budget && <span style={{ fontSize: '12px', color: '#4A433A' }}>{r.budget}</span>}
+          {r.budget    && <span style={{ fontSize: '12px', color: '#4A433A' }}>{r.budget}</span>}
         </div>
         {r.notes && (
-          <p style={{ fontSize: '11.5px', color: '#6B6156', lineHeight: '1.4', marginBottom: '8px' }} title={r.notes}>
+          <p style={{ fontSize: '11.5px', color: '#6B6156', lineHeight: '1.4', marginBottom: '8px' }}>
             {r.notes.length > 100 ? r.notes.slice(0, 100) + '…' : r.notes}
           </p>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
           <span style={{ fontSize: '11px', color: '#B5AA99' }}>{fmtDate(r.createdAt)}</span>
-          {authToken && (
-            <StatusAction requestId={r.id} current={r.status || 'open'} onUpdated={handleStatusUpdated} token={authToken} />
-          )}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {authToken && (
+              <StatusAction  requestId={r.id} current={r.status        || 'open'}   onUpdated={handleStatusUpdated}  token={authToken} />
+            )}
+            {authToken && (
+              <PaymentAction requestId={r.id} current={r.paymentStatus || 'unpaid'} onUpdated={handlePaymentUpdated} token={authToken} />
+            )}
+          </div>
         </div>
       </div>
     );
@@ -527,7 +600,7 @@ export default function CustomRequestsPage() {
           </h1>
           <p style={{ fontSize: '12.5px', color: '#8C8070', marginTop: '3px' }}>
             {counts.all != null
-              ? `${counts.all} total · ${counts.open ?? 0} open · ${counts.in_progress ?? 0} in progress`
+              ? `${counts.all} total · ${counts.open ?? 0} open · ${counts.in_progress ?? 0} in progress · ${paymentCounts.paid ?? 0} paid`
               : '—'}
             {!loading && filteredTotal !== (counts.all ?? 0) && (
               <span style={{ color: '#1B6B65' }}> · {filteredTotal} shown</span>
@@ -554,7 +627,6 @@ export default function CustomRequestsPage() {
       {/* Table / Card list */}
       <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA', overflow: 'hidden' }}>
         {isMobile ? (
-          /* ── Mobile card list ── */
           <div>
             {loading && [...Array(5)].map((_, i) => (
               <div key={i} style={{ padding: '14px 16px', borderTop: i > 0 ? '1px solid #F4F1EC' : 'none' }}>
@@ -568,157 +640,152 @@ export default function CustomRequestsPage() {
             {!loading && pageRows.map((r, i) => <MobileCard key={r.id} r={r} i={i} />)}
           </div>
         ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-            <thead>
-              <tr>
-                {/* Expand toggle column */}
-                <th style={{ width: '32px', padding: '9px 4px 9px 12px', background: '#FAFAF8', borderBottom: '1px solid #E8E3DA' }} />
-                {PRIMARY_COLS.map(col => (
-                  <ColHeader
-                    key={col.id}
-                    col={col}
-                    sort={sort}
-                    onSort={handleSort}
-                    filterActive={isFilterActive(col, filters[col.id])}
-                    onOpenFilter={openFilterPopover}
-                  />
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-
-              {loading && [...Array(8)].map((_, i) => (
-                <tr key={i} style={{ borderTop: '1px solid #F4F1EC' }}>
-                  <td style={{ ...TD, width: '32px' }} />
-                  {PRIMARY_COLS.map((col, j) => (
-                    <td key={col.id} style={TD}>
-                      <div style={{ height: '11px', background: '#F4F1EC', borderRadius: '3px', width: j < 3 ? '80%' : '55%' }} />
-                    </td>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+              <thead>
+                <tr>
+                  <th style={{ width: '32px', padding: '9px 4px 9px 12px', background: '#FAFAF8', borderBottom: '1px solid #E8E3DA' }} />
+                  {PRIMARY_COLS.map(col => (
+                    <ColHeader
+                      key={col.id}
+                      col={col}
+                      sort={sort}
+                      onSort={handleSort}
+                      filterActive={isFilterActive(col, filters[col.id])}
+                      onOpenFilter={openFilterPopover}
+                    />
                   ))}
                 </tr>
-              ))}
+              </thead>
+              <tbody>
 
-              {!loading && pageRows.length === 0 && (
-                <tr>
-                  <td colSpan={COL_SPAN} style={{ padding: '48px', textAlign: 'center', color: '#B5AA99', fontSize: '13px' }}>
-                    No custom requests match the current filters.
-                  </td>
-                </tr>
-              )}
-
-              {!loading && pageRows.map((r, i) => {
-                const isExpanded = expandedRows.has(r.id);
-                const rowBg = i % 2 === 0 ? 'white' : '#FAFAF8';
-                const hasSecondary = r.phone || r.groupType || styleText(r.style) || r.notes;
-
-                return [
-                  /* ── Main row ── */
-                  <tr key={r.id} style={{ borderTop: '1px solid #F4F1EC', background: rowBg }}>
-                    {/* Expand toggle */}
-                    <td style={{ ...TD, width: '32px', padding: '9px 4px 9px 12px' }}>
-                      {hasSecondary ? (
-                        <button
-                          onClick={() => toggleExpand(r.id)}
-                          title={isExpanded ? 'Collapse details' : 'Show more details'}
-                          style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            width: '20px', height: '20px', padding: 0,
-                            background: isExpanded ? '#EFF6F5' : 'transparent',
-                            border: `1px solid ${isExpanded ? '#A8D5D0' : '#E8E3DA'}`,
-                            borderRadius: '4px', cursor: 'pointer',
-                            transition: 'background 0.1s',
-                          }}
-                        >
-                          <ChevronRight
-                            size={11}
-                            color={isExpanded ? '#1B6B65' : '#B5AA99'}
-                            style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}
-                          />
-                        </button>
-                      ) : (
-                        <div style={{ width: '20px' }} />
-                      )}
-                    </td>
-
-                    <td style={{ ...TD, color: '#8C8070', fontSize: '11.5px', whiteSpace: 'nowrap' }}>
-                      {fmtDate(r.createdAt)}
-                    </td>
-                    <td style={{ ...TD, fontWeight: '500', color: '#1C1A16', whiteSpace: 'nowrap' }}>
-                      {r.fullName || '—'}
-                    </td>
-                    <td style={{ ...TD, maxWidth: '152px' }}>
-                      <a
-                        href={`mailto:${r.email}`}
-                        title={r.email}
-                        style={{ color: '#1B6B65', textDecoration: 'none', fontSize: '11.5px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                      >
-                        {r.email || '—'}
-                      </a>
-                    </td>
-                    <td style={{ ...TD, fontWeight: '500', color: '#1C1A16', whiteSpace: 'nowrap' }}>
-                      {r.destination || '—'}
-                    </td>
-                    <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>
-                      {r.dates || '—'}
-                    </td>
-                    <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>
-                      {r.duration || '—'}
-                    </td>
-                    <td style={{ ...TD, color: '#4A433A', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {r.groupSize != null ? r.groupSize : '—'}
-                    </td>
-                    <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>
-                      {r.budget || '—'}
-                    </td>
-                    <td style={TD}>
-                      {authToken
-                        ? <StatusAction requestId={r.id} current={r.status || 'open'} onUpdated={handleStatusUpdated} token={authToken} />
-                        : (
-                          <span style={{ fontSize: '11px', fontWeight: '600', color: STATUS_META[r.status]?.color ?? '#1B6B65', background: STATUS_META[r.status]?.bg ?? '#EFF6F5', padding: '3px 9px', borderRadius: '10px' }}>
-                            {STATUS_META[r.status]?.label ?? 'Open'}
-                          </span>
-                        )
-                      }
-                    </td>
-                  </tr>,
-
-                  /* ── Expanded detail row ── */
-                  isExpanded && (
-                    <tr key={`${r.id}-detail`} style={{ background: rowBg }}>
-                      <td colSpan={COL_SPAN} style={{ padding: 0, borderTop: 'none' }}>
-                        <div style={{
-                          background: '#F8F6F2',
-                          borderTop: '1px solid #EDE8DF',
-                          borderBottom: '1px solid #EDE8DF',
-                          padding: '14px 16px 14px 44px',
-                        }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px 28px' }}>
-                            {r.phone     && <DetailField label="Phone"      value={r.phone} />}
-                            {r.groupType && <DetailField label="Group Type" value={r.groupType} />}
-                            {styleText(r.style) && <DetailField label="Style" value={styleText(r.style)} />}
-                          </div>
-                          {r.notes && (
-                            <div style={{ marginTop: r.phone || r.groupType || styleText(r.style) ? '12px' : 0 }}>
-                              <p style={{ fontSize: '10px', fontWeight: '600', color: '#B5AA99', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '3px' }}>
-                                Notes
-                              </p>
-                              <p style={{ fontSize: '12.5px', color: '#4A433A', lineHeight: '1.5', maxWidth: '680px' }}>
-                                {r.notes}
-                              </p>
-                            </div>
-                          )}
-                        </div>
+                {loading && [...Array(8)].map((_, i) => (
+                  <tr key={i} style={{ borderTop: '1px solid #F4F1EC' }}>
+                    <td style={{ ...TD, width: '32px' }} />
+                    {PRIMARY_COLS.map((col, j) => (
+                      <td key={col.id} style={TD}>
+                        <div style={{ height: '11px', background: '#F4F1EC', borderRadius: '3px', width: j < 3 ? '80%' : '55%' }} />
                       </td>
-                    </tr>
-                  ),
-                ];
-              })}
+                    ))}
+                  </tr>
+                ))}
 
-            </tbody>
-          </table>
-        </div>
-        )} {/* end isMobile ternary */}
+                {!loading && pageRows.length === 0 && (
+                  <tr>
+                    <td colSpan={COL_SPAN} style={{ padding: '48px', textAlign: 'center', color: '#B5AA99', fontSize: '13px' }}>
+                      No custom requests match the current filters.
+                    </td>
+                  </tr>
+                )}
+
+                {!loading && pageRows.map((r, i) => {
+                  const isExpanded   = expandedRows.has(r.id);
+                  const rowBg        = i % 2 === 0 ? 'white' : '#FAFAF8';
+                  const hasSecondary = r.phone || r.groupType || styleText(r.style) || r.notes;
+
+                  return [
+                    <tr key={r.id} style={{ borderTop: '1px solid #F4F1EC', background: rowBg }}>
+                      {/* Expand toggle */}
+                      <td style={{ ...TD, width: '32px', padding: '9px 4px 9px 12px' }}>
+                        {hasSecondary ? (
+                          <button
+                            onClick={() => toggleExpand(r.id)}
+                            title={isExpanded ? 'Collapse' : 'Show more'}
+                            style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              width: '20px', height: '20px', padding: 0,
+                              background: isExpanded ? '#EFF6F5' : 'transparent',
+                              border: `1px solid ${isExpanded ? '#A8D5D0' : '#E8E3DA'}`,
+                              borderRadius: '4px', cursor: 'pointer',
+                              transition: 'background 0.1s',
+                            }}
+                          >
+                            <ChevronRight
+                              size={11}
+                              color={isExpanded ? '#1B6B65' : '#B5AA99'}
+                              style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}
+                            />
+                          </button>
+                        ) : (
+                          <div style={{ width: '20px' }} />
+                        )}
+                      </td>
+
+                      <td style={{ ...TD, color: '#8C8070', fontSize: '11.5px', whiteSpace: 'nowrap' }}>{fmtDate(r.createdAt)}</td>
+                      <td style={{ ...TD, fontWeight: '500', color: '#1C1A16', whiteSpace: 'nowrap' }}>{r.fullName || '—'}</td>
+                      <td style={{ ...TD, maxWidth: '152px' }}>
+                        <a
+                          href={`mailto:${r.email}`}
+                          title={r.email}
+                          style={{ color: '#1B6B65', textDecoration: 'none', fontSize: '11.5px', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        >
+                          {r.email || '—'}
+                        </a>
+                      </td>
+                      <td style={{ ...TD, fontWeight: '500', color: '#1C1A16', whiteSpace: 'nowrap' }}>{r.destination || '—'}</td>
+                      <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.dates    || '—'}</td>
+                      <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.duration || '—'}</td>
+                      <td style={{ ...TD, color: '#4A433A', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                        {r.groupSize != null ? r.groupSize : '—'}
+                      </td>
+                      <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.budget || '—'}</td>
+
+                      {/* Workflow status */}
+                      <td style={TD}>
+                        {authToken
+                          ? <StatusAction requestId={r.id} current={r.status || 'open'} onUpdated={handleStatusUpdated} token={authToken} />
+                          : (
+                            <span style={{ fontSize: '11px', fontWeight: '600', color: STATUS_META[r.status]?.color ?? '#1B6B65', background: STATUS_META[r.status]?.bg ?? '#EFF6F5', padding: '3px 9px', borderRadius: '10px' }}>
+                              {STATUS_META[r.status]?.label ?? 'Open'}
+                            </span>
+                          )
+                        }
+                      </td>
+
+                      {/* Payment status */}
+                      <td style={TD}>
+                        {authToken
+                          ? <PaymentAction requestId={r.id} current={r.paymentStatus || 'unpaid'} onUpdated={handlePaymentUpdated} token={authToken} />
+                          : (
+                            <span style={{ fontSize: '11px', fontWeight: '600', color: PAYMENT_META[r.paymentStatus]?.color ?? '#8C8070', background: PAYMENT_META[r.paymentStatus]?.bg ?? '#F4F1EC', padding: '3px 9px', borderRadius: '10px' }}>
+                              {PAYMENT_META[r.paymentStatus]?.label ?? 'Unpaid'}
+                            </span>
+                          )
+                        }
+                      </td>
+                    </tr>,
+
+                    isExpanded && (
+                      <tr key={`${r.id}-detail`} style={{ background: rowBg }}>
+                        <td colSpan={COL_SPAN} style={{ padding: 0, borderTop: 'none' }}>
+                          <div style={{
+                            background: '#F8F6F2',
+                            borderTop: '1px solid #EDE8DF',
+                            borderBottom: '1px solid #EDE8DF',
+                            padding: '14px 16px 14px 44px',
+                          }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px 28px' }}>
+                              {r.phone     && <DetailField label="Phone"      value={r.phone} />}
+                              {r.groupType && <DetailField label="Group Type" value={r.groupType} />}
+                              {styleText(r.style) && <DetailField label="Style" value={styleText(r.style)} />}
+                            </div>
+                            {r.notes && (
+                              <div style={{ marginTop: r.phone || r.groupType || styleText(r.style) ? '12px' : 0 }}>
+                                <p style={{ fontSize: '10px', fontWeight: '600', color: '#B5AA99', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '3px' }}>Notes</p>
+                                <p style={{ fontSize: '12.5px', color: '#4A433A', lineHeight: '1.5', maxWidth: '680px' }}>{r.notes}</p>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ),
+                  ];
+                })}
+
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Footer / pagination */}
         <div style={{ padding: '10px 16px', borderTop: '1px solid #F4F1EC', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
@@ -728,14 +795,14 @@ export default function CustomRequestsPage() {
           </span>
           {totalPages > 1 && (
             <div style={{ display: 'flex', gap: '6px' }}>
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={btnStyle(page === 1)}>← Prev</button>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))}         disabled={page === 1}          style={btnStyle(page === 1)}>← Prev</button>
               <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={btnStyle(page === totalPages)}>Next →</button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Filter popover — rendered outside table, position:fixed */}
+      {/* Filter popover */}
       {popover && (() => {
         const col = PRIMARY_COLS.find(c => c.id === popover.colId);
         return col ? (

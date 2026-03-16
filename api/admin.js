@@ -69,11 +69,11 @@ export default async function handler(req, res) {
     if (req.method === 'PATCH') {
       if (action === 'custom-request-status') {
         const { id: bodyId, status: bodyStatus } = req.body ?? {};
-        const requestId  = bodyId     || id;
-        const newStatus  = bodyStatus || status;
-        const VALID = ['open', 'in_progress', 'closed'];
+        const requestId = bodyId     || id;
+        const newStatus = bodyStatus || status;
+        const VALID_STATUS = ['open', 'in_progress', 'closed'];
         if (!requestId) return res.status(400).json({ error: 'id is required' });
-        if (!VALID.includes(newStatus)) return res.status(400).json({ error: 'Invalid status' });
+        if (!VALID_STATUS.includes(newStatus)) return res.status(400).json({ error: 'Invalid status' });
         const { rowCount } = await pool.query(
           `UPDATE "CustomRequest" SET status = $1 WHERE id = $2`,
           [newStatus, requestId]
@@ -81,6 +81,22 @@ export default async function handler(req, res) {
         if (rowCount === 0) return res.status(404).json({ error: 'Request not found' });
         return res.status(200).json({ ok: true });
       }
+
+      if (action === 'custom-request-payment') {
+        const { id: bodyId, paymentStatus: bodyPaymentStatus } = req.body ?? {};
+        const requestId       = bodyId             || id;
+        const newPaymentStatus = bodyPaymentStatus;
+        const VALID_PAYMENT = ['unpaid', 'paid'];
+        if (!requestId)                        return res.status(400).json({ error: 'id is required' });
+        if (!VALID_PAYMENT.includes(newPaymentStatus)) return res.status(400).json({ error: 'Invalid payment status' });
+        const { rowCount } = await pool.query(
+          `UPDATE "CustomRequest" SET "paymentStatus" = $1 WHERE id = $2`,
+          [newPaymentStatus, requestId]
+        );
+        if (rowCount === 0) return res.status(404).json({ error: 'Request not found' });
+        return res.status(200).json({ ok: true });
+      }
+
       return res.status(400).json({ error: 'Unknown action' });
     }
 
@@ -438,7 +454,7 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false) {
     : [];
   const useFilter = statuses.length > 0;
 
-  let requests, total, counts;
+  let requests, total, counts, paymentCounts;
 
   try {
     const limitClause = noLimit ? '' : `LIMIT 50 OFFSET ${useFilter ? '$2' : '$1'}`;
@@ -446,7 +462,8 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false) {
 
     const { rows } = await pool.query(
       `SELECT id, "fullName", email, phone, destination, dates, duration,
-              "groupSize", "groupType", budget, style, notes, status, "createdAt"
+              "groupSize", "groupType", budget, style, notes, status,
+              "paymentStatus", "createdAt"
        FROM "CustomRequest"
        ${useFilter ? `WHERE status = ANY($1::text[])` : ''}
        ORDER BY "createdAt" DESC
@@ -462,13 +479,22 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false) {
     );
     total = parseInt(countRes.rows[0].total, 10);
 
-    const countsRes = await pool.query(
-      `SELECT status, COUNT(*) AS n FROM "CustomRequest" GROUP BY status`
-    );
+    const [countsRes, paymentCountsRes] = await Promise.all([
+      pool.query(`SELECT status, COUNT(*) AS n FROM "CustomRequest" GROUP BY status`),
+      pool.query(`SELECT "paymentStatus", COUNT(*) AS n FROM "CustomRequest" GROUP BY "paymentStatus"`),
+    ]);
     counts = { open: 0, in_progress: 0, closed: 0, all: 0 };
     for (const row of countsRes.rows) {
-      counts[row.status] = parseInt(row.n, 10);
+      if (['open', 'in_progress', 'closed'].includes(row.status)) {
+        counts[row.status] = parseInt(row.n, 10);
+      }
       counts.all += parseInt(row.n, 10);
+    }
+    paymentCounts = { paid: 0, unpaid: 0 };
+    for (const row of paymentCountsRes.rows) {
+      if (row.paymentStatus === 'paid' || row.paymentStatus === 'unpaid') {
+        paymentCounts[row.paymentStatus] = parseInt(row.n, 10);
+      }
     }
   } catch (err) {
     if (!err.message.toLowerCase().includes('column')) throw err;
@@ -476,12 +502,13 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false) {
 
     const { rows } = await pool.query(
       `SELECT id, "fullName", email, destination, dates, "groupSize", notes, "createdAt",
-              'open'::text  AS status,
-              NULL::text    AS phone,
-              NULL::text    AS duration,
-              NULL::text    AS "groupType",
-              NULL::text    AS budget,
-              '[]'::jsonb   AS style
+              'open'::text    AS status,
+              'unpaid'::text  AS "paymentStatus",
+              NULL::text      AS phone,
+              NULL::text      AS duration,
+              NULL::text      AS "groupType",
+              NULL::text      AS budget,
+              '[]'::jsonb     AS style
        FROM "CustomRequest"
        ORDER BY "createdAt" DESC
        ${noLimit ? '' : 'LIMIT 50 OFFSET $1'}`,
@@ -489,11 +516,12 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false) {
     );
     requests = rows;
     const countRes = await pool.query(`SELECT COUNT(*) AS total FROM "CustomRequest"`);
-    total  = parseInt(countRes.rows[0].total, 10);
-    counts = { open: total, in_progress: 0, closed: 0, all: total };
+    total         = parseInt(countRes.rows[0].total, 10);
+    counts        = { open: total, in_progress: 0, closed: 0, all: total };
+    paymentCounts = { paid: 0, unpaid: total };
   }
 
-  return { requests, total, counts };
+  return { requests, total, counts, paymentCounts };
 }
 
 // ── Downloads ─────────────────────────────────────────────────────────────────

@@ -251,7 +251,7 @@ async function handleCustomSession(req, res, body) {
       `INSERT INTO "CustomRequest"
          (id, "fullName", email, destination, dates, "groupSize", notes, status, "createdAt")
        VALUES
-         (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'pending_payment', NOW())
+         (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'open', NOW())
        RETURNING id`,
       [
         fd.name?.trim()        || '',
@@ -268,8 +268,8 @@ async function handleCustomSession(req, res, body) {
     // Fallback: try without status column (migration may be pending)
     try {
       const { rows } = await pool.query(
-        `INSERT INTO "CustomRequest" (id, "fullName", email, destination, dates, "groupSize", notes, "createdAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW())
+        `INSERT INTO "CustomRequest" (id, "fullName", email, destination, dates, "groupSize", notes, status, "createdAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'open', NOW())
          RETURNING id`,
         [
           fd.name?.trim()        || '',
@@ -364,16 +364,11 @@ async function handleCustomVerify(req, res, body) {
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    // Update status to 'paid' — idempotent (only if still pending_payment or open)
+    // Update paymentStatus to 'paid' — idempotent
     await pool.query(
-      `UPDATE "CustomRequest" SET status='paid' WHERE id=$1 AND status IN ('pending_payment','open')`,
-      [requestId]
-    );
-    // Best-effort: set paidAt and stripeSessionId columns (added by migration)
-    pool.query(
-      `UPDATE "CustomRequest" SET "paidAt"=NOW(), "stripeSessionId"=$1 WHERE id=$2`,
+      `UPDATE "CustomRequest" SET "paymentStatus"='paid', "paidAt"=NOW(), "stripeSessionId"=$1 WHERE id=$2`,
       [sessionId, requestId]
-    ).catch(() => {}); // columns may not exist yet — non-fatal
+    );
     console.log('[checkout/custom-verify] CustomRequest marked paid — id:', requestId);
     return res.status(200).json({ success: true });
   } catch (err) {
@@ -423,13 +418,9 @@ async function handleWebhook(req, res, rawBody) {
       const wpPool = new Pool({ connectionString: process.env.DATABASE_URL });
       try {
         await wpPool.query(
-          `UPDATE "CustomRequest" SET status='paid' WHERE id=$1 AND status IN ('pending_payment','open')`,
-          [requestId]
-        );
-        wpPool.query(
-          `UPDATE "CustomRequest" SET "paidAt"=NOW(), "stripeSessionId"=$1 WHERE id=$2`,
+          `UPDATE "CustomRequest" SET "paymentStatus"='paid', "paidAt"=NOW(), "stripeSessionId"=$1 WHERE id=$2`,
           [session.id, requestId]
-        ).catch(() => {});
+        );
         console.log('[checkout/webhook] CustomRequest marked paid — id:', requestId);
       } catch (err) {
         console.error('[checkout/webhook] custom_planning DB error:', err.message);
