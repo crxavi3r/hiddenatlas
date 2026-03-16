@@ -51,7 +51,7 @@
     { "file": "research/baths-of-caracalla.jpg", "alt": "Baths of Caracalla research photo" }
   ],
   "dayImages": [
-    { "day": 4, "file": "day-images/baths-of-caracalla.jpeg", "alt": "Baths of Caracalla" }
+    { "day": 4, "folder": "day-images/day4/", "alt": "Baths of Caracalla" }
   ],
   "pdf": null,
   "isResearchedInPerson": false,

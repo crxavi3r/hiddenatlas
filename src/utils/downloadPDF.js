@@ -2,24 +2,19 @@ export async function downloadItineraryPDF(itinerary) {
   console.log('[download-free] clicked', itinerary.id);
 
   const { createElement } = await import('react');
-  const [{ pdf }, { default: ItineraryPDF }, { getDayImages }] = await Promise.all([
+  const [{ pdf }, { default: ItineraryPDF }, { getDayImage }] = await Promise.all([
     import('@react-pdf/renderer'),
     import('../components/ItineraryPDF'),
     import('../lib/itineraryImages'),
   ]);
 
-  // Resolve local day images (filenames → bundled asset URLs) so the PDF renderer
-  // can fetch them. day.img values starting with 'http' are passed through unchanged.
-  const dayImgMap = Object.fromEntries(
-    getDayImages(itinerary.id).map(({ filename, src }) => [filename, src])
-  );
+  // Resolve day images from per-day subfolders: day-images/dayN/
+  // No external URLs. Returns null if the folder is empty.
   const resolvedItinerary = {
     ...itinerary,
     days: (itinerary.days || []).map(day => ({
       ...day,
-      img: day.img
-        ? (day.img.startsWith('http') ? day.img : (dayImgMap[day.img] ?? null))
-        : null,
+      img: getDayImage(itinerary.id, day.day),
     })),
   };
 

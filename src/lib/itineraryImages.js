@@ -2,13 +2,15 @@
 // Paths are relative to this file: src/lib/ → ../../content/
 //
 // Usage:
-//   import { getGalleryImages, getResearchImages, getDayImages } from '../lib/itineraryImages';
-//   const gallery   = getGalleryImages('budapest-city-break');  // [] if none
-//   const research  = getResearchImages('budapest-city-break'); // [] if none
-//   const dayImages = getDayImages('rome-4-day-city-break');    // [] if none
+//   import { getGalleryImages, getResearchImages, getDayImage } from '../lib/itineraryImages';
+//   const gallery  = getGalleryImages('rome-4-day-city-break');  // [] if none
+//   const research = getResearchImages('rome-4-day-city-break'); // [] if none
+//   const img      = getDayImage('rome-4-day-city-break', 4);    // asset URL or null
 //
-// day-images/ is a separate folder intentionally excluded from gallery/research
-// so these images only appear in their specific day section, not in any auto-rendered grid.
+// Day images live in per-day subfolders: day-images/day1/, day-images/day2/, …
+// Place one image per folder. If the folder is empty, getDayImage returns null.
+// Day images are intentionally excluded from gallery/research so they never
+// appear in auto-rendered grid sections.
 
 const galleryModules = import.meta.glob(
   '../../content/itineraries/*/gallery/*.{jpg,jpeg,png,webp}',
@@ -20,8 +22,8 @@ const researchModules = import.meta.glob(
   { eager: true }
 );
 
-const dayImageModules = import.meta.glob(
-  '../../content/itineraries/*/day-images/*.{jpg,jpeg,png,webp}',
+const dayFolderModules = import.meta.glob(
+  '../../content/itineraries/*/day-images/day*/*.{jpg,jpeg,png,webp}',
   { eager: true }
 );
 
@@ -42,6 +44,13 @@ export function getResearchImages(slug) {
   return toImageList(researchModules, slug, 'research');
 }
 
-export function getDayImages(slug) {
-  return toImageList(dayImageModules, slug, 'day-images');
+/**
+ * Returns the bundled asset URL for a day's image, or null if none is present.
+ * Images must be placed in: content/itineraries/<slug>/day-images/day<N>/<image>
+ * Only the first file found in the folder is used.
+ */
+export function getDayImage(slug, dayNumber) {
+  const needle = `/itineraries/${slug}/day-images/day${dayNumber}/`;
+  const entry = Object.entries(dayFolderModules).find(([path]) => path.includes(needle));
+  return entry ? entry[1].default : null;
 }

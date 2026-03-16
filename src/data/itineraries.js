@@ -702,7 +702,7 @@ export const itineraries = [
           "Giardino degli Aranci. The Aventine orange garden, with a terrace view of St Peter's dome framed in pines.",
           "Baths of Caracalla. The imperial bathhouse of 216 AD and one of the best-preserved Roman structures in the city.",
         ],
-        img: "baths-of-caracalla.jpeg",
+        img: null,
         tip: "Galleria Borghese must be booked in advance through the official gallery website; same-day availability is rarely possible and the two-hour limit is strictly enforced. The Giardino degli Aranci is free and almost entirely unknown to first-time visitors; it is the finest free viewpoint in Rome. The Baths of Caracalla are at their best in the late afternoon, when the angle of the light enters through the broken vaults.",
       },
     ],
@@ -749,7 +749,7 @@ export const itineraries = [
           "Chefchaouen medina — the blue-painted hillside quarter of the Rif mountains",
           "Evening arrival in Fes — 190 kilometres from Chefchaouen on the N8",
         ],
-        img: "https://images.unsplash.com/photo-Oj3lWTdj1aY?w=800&q=80",
+        img: null,
         tip: "The Fnideq (Ceuta) border can be slow on Friday afternoons and summer weekends. Allow two hours from the ferry landing to clear the border area. The Tangier Med route is faster overall for groups with larger bikes or panniers, and skips the Tangier city traffic entirely.",
       },
       {
@@ -763,7 +763,7 @@ export const itineraries = [
           "Midelt — the halfway town; fuel, lunch and the first desert light",
           "Errachidia — the gateway before the gorge roads of the deep south",
         ],
-        img: "https://images.unsplash.com/photo-vxAC1R3_dFA?w=800&q=80",
+        img: null,
         tip: "Fuel in Midelt before continuing south. The stretch beyond Midelt has long gaps between stations. The N13 from Fes is well-surfaced; the back roads through the cedar forest near Azrou add twenty minutes and considerable reward for those who have them.",
       },
       {
@@ -776,7 +776,7 @@ export const itineraries = [
           "Dades Gorge switchbacks — tight bends above the valley floor, a road that earns its reputation",
           "Aït Benhaddou — the UNESCO-listed ksar above the Ounila River, best at golden hour",
         ],
-        img: "https://images.unsplash.com/photo-5tfETPLIjbo?w=800&q=80",
+        img: null,
         tip: "The Dades switchback section is narrow with loose gravel in places. Manageable for loaded touring bikes but requires attention, particularly on the downhill return. The viewpoint at the top looks back over the valley and the palmeries — allow time for it.",
       },
       {
@@ -790,7 +790,7 @@ export const itineraries = [
           "Erg Chebbi approach — the dune ridge visible from 30 kilometres, rising sharply from the plain",
           "First evening in the desert — reach the dune edge before sunset if the road allows",
         ],
-        img: "https://images.unsplash.com/photo-PV1Y6JdSNzo?w=800&q=80",
+        img: null,
         tip: "The route from Aït Benhaddou via Zagora is longer but passes through better country than the direct N9 alone. Roads east of Ouarzazate are well-surfaced until the last 15 kilometres into Merzouga, where the surface can be sandy close to the dune edge. Reduce speed accordingly.",
       },
       {
@@ -805,7 +805,7 @@ export const itineraries = [
           "Stargazing — no light pollution at this distance from any settlement of scale",
           "Camel ride to the dune crest — available as a complement to the day; not the main focus",
         ],
-        img: "https://images.unsplash.com/photo-PDcABuRlJ2Y?w=800&q=80",
+        img: null,
         tip: "The 4x4 outing is best arranged through your accommodation, which maintains established relationships with local operators. Early morning (before 9am) avoids the midday heat and catches the dunes in their sharpest light. Bring significantly more water than you think necessary — the dry desert air is deceptive in every direction.",
       },
       {
@@ -818,7 +818,7 @@ export const itineraries = [
           "Draa Valley return — the northbound perspective through the palmeries and kasbahs",
           "Marrakech arrival — the Djemaa el-Fna square and the medina in the evening",
         ],
-        img: "https://images.unsplash.com/photo-FeZmD1H56_Q?w=800&q=80",
+        img: null,
         tip: "The Tizi n'Tichka carries significant truck traffic. Overtaking on the switchbacks requires patience — the surface is generally good but some bends near the summit have loose stone debris after rain. Fill up in Ouarzazate before the pass; the next reliable stations are in the Marrakech suburbs.",
       },
       {
@@ -844,7 +844,7 @@ export const itineraries = [
           "Hassan Tower — the 12th-century minaret of the unfinished Almohad mosque",
           "Tangier Med — the return ferry port for the Algeciras, Ceuta or Tarifa crossing",
         ],
-        img: "https://images.unsplash.com/photo-ABWzLDO4Y4Y?w=800&q=80",
+        img: null,
         tip: "The Hassan II Mosque accepts visitors outside of prayer times; guided entry is available and worth it. Arrive in Casablanca before 10am to clear the city before the Rabat run. Tangier Med is 40 kilometres east of Tangier city — follow signs for Port Tanger Med and not Tanger Ville, or you will arrive at the wrong terminal.",
       },
     ],

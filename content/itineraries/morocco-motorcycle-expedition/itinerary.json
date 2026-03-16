@@ -43,14 +43,14 @@
     { "file": "research/rabat-kasbah-udayas.jpg",         "alt": "Rabat research photo" }
   ],
   "dayImages": [
-    { "day": 1, "file": "day-images/chefchaouen-rif.jpeg",      "alt": "Chefchaouen medina and the Rif mountains" },
-    { "day": 2, "file": "day-images/atlas-road-midelt.jpeg",    "alt": "Middle Atlas road toward Midelt" },
-    { "day": 3, "file": "day-images/todra-gorge.jpeg",          "alt": "Todra Gorge canyon walls" },
-    { "day": 4, "file": "day-images/erg-chebbi-approach.jpeg",  "alt": "First sight of the Erg Chebbi dunes" },
-    { "day": 5, "file": "day-images/erg-chebbi-dunes.jpeg",     "alt": "Erg Chebbi dunes at sunset" },
-    { "day": 6, "file": "day-images/tizi-ntichka-pass.jpeg",    "alt": "Tizi n'Tichka High Atlas pass" },
-    { "day": 7, "file": "day-images/oualidia-lagoon.jpeg",      "alt": "Oualidia Atlantic lagoon" },
-    { "day": 8, "file": "day-images/hassan-ii-casablanca.jpeg", "alt": "Hassan II Mosque, Casablanca" }
+    { "day": 1, "folder": "day-images/day1/", "alt": "Chefchaouen medina and the Rif mountains" },
+    { "day": 2, "folder": "day-images/day2/", "alt": "Middle Atlas road toward Midelt" },
+    { "day": 3, "folder": "day-images/day3/", "alt": "Todra Gorge canyon walls" },
+    { "day": 4, "folder": "day-images/day4/", "alt": "First sight of the Erg Chebbi dunes" },
+    { "day": 5, "folder": "day-images/day5/", "alt": "Erg Chebbi dunes at sunset" },
+    { "day": 6, "folder": "day-images/day6/", "alt": "Tizi n'Tichka High Atlas pass" },
+    { "day": 7, "folder": "day-images/day7/", "alt": "Oualidia Atlantic lagoon" },
+    { "day": 8, "folder": "day-images/day8/", "alt": "Hassan II Mosque, Casablanca" }
   ],
   "pdf": null,
   "isResearchedInPerson": false,
