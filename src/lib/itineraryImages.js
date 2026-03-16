@@ -6,7 +6,7 @@
 //   const gallery  = getGalleryImages('rome-4-day-city-break');  // [] if none
 //   const research = getResearchImages('rome-4-day-city-break'); // [] if none
 //   const img      = getDayImage('rome-4-day-city-break', 4);    // asset URL or null
-//   const cover    = getCoverImage('morocco-motorcycle-expedition'); // asset URL or null
+//   const cover    = getCoverImage('morocco-motorcycle-expedition'); // public URL string
 //
 // Day images live in per-day subfolders: day-images/day1/, day-images/day2/, …
 // Place one image per folder. If the folder is empty, getDayImage returns null.
@@ -25,11 +25,6 @@ const researchModules = import.meta.glob(
 
 const dayFolderModules = import.meta.glob(
   '../../content/itineraries/*/day-images/day*/*.{jpg,jpeg,png,webp}',
-  { eager: true }
-);
-
-const coverModules = import.meta.glob(
-  '../../content/itineraries/*/cover.{jpg,jpeg,png,webp}',
   { eager: true }
 );
 
@@ -62,13 +57,10 @@ export function getDayImage(slug, dayNumber) {
 }
 
 /**
- * Returns the bundled asset URL for the itinerary cover image, or null if none is present.
- * Place the cover image at: content/itineraries/<slug>/cover.{jpg,jpeg,png,webp}
- * Takes priority over any Unsplash-based fallback in both the hero and PDF.
+ * Returns the public URL for the itinerary cover image.
+ * Place the cover image at: public/content/itineraries/<slug>/cover.jpg
+ * This uses a stable URL (not content-hashed) so image replacements take effect immediately.
  */
 export function getCoverImage(slug) {
-  const entry = Object.entries(coverModules).find(([path]) =>
-    path.includes(`/itineraries/${slug}/cover.`)
-  );
-  return entry ? entry[1].default : null;
+  return `/content/itineraries/${slug}/cover.jpg`;
 }
