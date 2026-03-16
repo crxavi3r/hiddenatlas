@@ -414,7 +414,7 @@ export default function DashboardPage() {
 
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-          {[...Array(6)].map((_, i) => (
+          {[...Array(7)].map((_, i) => (
             <div key={i} style={{ ...card, height: '90px', background: 'white', opacity: 0.5 }} />
           ))}
         </div>
@@ -430,7 +430,8 @@ export default function DashboardPage() {
           {/* ── KPI Cards ── */}
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(160px, 1fr))', gap: isMobile ? '10px' : '14px', marginBottom: '22px' }}>
             {[
-              { icon: Eye,          label: 'Visitors',        value: fmt(kpis?.visitors),       sub: 'page views' },
+              { icon: Eye,          label: 'Visitors',        value: fmt(kpis?.visitors),       sub: 'unique sessions' },
+              { icon: Eye,          label: 'Page Views',      value: fmt(kpis?.pageViews),      sub: 'total page views' },
               { icon: Users,        label: 'New Users',       value: fmt(kpis?.newUsers),       sub: 'signups' },
               { icon: TrendingUp,   label: 'Itinerary Views', value: fmt(kpis?.itineraryViews), sub: 'detail pages' },
               { icon: Download,     label: 'Downloads',       value: fmt(kpis?.downloads),      sub: 'PDFs' },

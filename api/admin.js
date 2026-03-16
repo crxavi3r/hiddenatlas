@@ -148,7 +148,8 @@ export default async function handler(req, res) {
 
 // ── Dashboard KPIs ────────────────────────────────────────────────────────────
 async function getDashboardKPIs(pool, cutoff) {
-  const [visitors, newUsers, itinViews, downloads, sales] = await Promise.all([
+  const [visitors, pageViews, newUsers, itinViews, downloads, sales] = await Promise.all([
+    pool.query(`SELECT COUNT(DISTINCT COALESCE("userId", "sessionId")) AS n FROM "Event" WHERE "eventType"='PAGE_VIEW' AND "createdAt" >= $1`, [cutoff]),
     pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='PAGE_VIEW' AND "createdAt" >= $1`, [cutoff]),
     pool.query(`SELECT COUNT(*) AS n FROM "User" WHERE "createdAt" >= $1`, [cutoff]),
     pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= $1`, [cutoff]),
@@ -159,6 +160,7 @@ async function getDashboardKPIs(pool, cutoff) {
   const s = parseInt(sales.rows[0].n, 10) || 0;
   return {
     visitors:       v,
+    pageViews:      parseInt(pageViews.rows[0].n, 10) || 0,
     newUsers:       parseInt(newUsers.rows[0].n, 10) || 0,
     itineraryViews: parseInt(itinViews.rows[0].n, 10) || 0,
     downloads:      parseInt(downloads.rows[0].n, 10) || 0,
@@ -180,7 +182,7 @@ async function getChartData(pool, cutoff) {
     ),
     ev AS (
       SELECT DATE("createdAt") AS day,
-        COUNT(*) FILTER (WHERE "eventType"='PAGE_VIEW')       AS visitors,
+        COUNT(DISTINCT COALESCE("userId", "sessionId")) FILTER (WHERE "eventType"='PAGE_VIEW') AS visitors,
         COUNT(*) FILTER (WHERE "eventType"='ITINERARY_VIEW')  AS itinerary_views
       FROM "Event" WHERE "createdAt" >= $1
       GROUP BY DATE("createdAt")
@@ -217,7 +219,7 @@ async function getChartData(pool, cutoff) {
 // ── Funnel ────────────────────────────────────────────────────────────────────
 async function getFunnelData(pool, cutoff) {
   const [v, iv, dl, p] = await Promise.all([
-    pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='PAGE_VIEW' AND "createdAt" >= $1`, [cutoff]),
+    pool.query(`SELECT COUNT(DISTINCT COALESCE("userId", "sessionId")) AS n FROM "Event" WHERE "eventType"='PAGE_VIEW' AND "createdAt" >= $1`, [cutoff]),
     pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= $1`, [cutoff]),
     pool.query(`SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1`, [cutoff]),
     pool.query(`SELECT COUNT(*) AS n FROM "Purchase" WHERE "purchasedAt" >= $1`, [cutoff]),
