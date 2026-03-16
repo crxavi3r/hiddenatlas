@@ -44,11 +44,11 @@
   ],
   "dayImages": [
     { "day": 1, "folder": "day-images/day1/", "alt": "Chefchaouen medina and the Rif mountains" },
-    { "day": 2, "folder": "day-images/day2/", "alt": "Middle Atlas road toward Midelt" },
-    { "day": 3, "folder": "day-images/day3/", "alt": "Todra Gorge canyon walls" },
-    { "day": 4, "folder": "day-images/day4/", "alt": "First sight of the Erg Chebbi dunes" },
-    { "day": 5, "folder": "day-images/day5/", "alt": "Erg Chebbi dunes at sunset" },
-    { "day": 6, "folder": "day-images/day6/", "alt": "Tizi n'Tichka High Atlas pass" },
+    { "day": 2, "folder": "day-images/day2/", "alt": "Middle Atlas road toward Errachidia" },
+    { "day": 3, "folder": "day-images/day3/", "alt": "The pre-Saharan plain approaching Merzouga" },
+    { "day": 4, "folder": "day-images/day4/", "alt": "Erg Chebbi dunes at sunset" },
+    { "day": 5, "folder": "day-images/day5/", "alt": "Todra Gorge canyon walls" },
+    { "day": 6, "folder": "day-images/day6/", "alt": "Aït Benhaddou ksar and the Tizi n'Tichka pass" },
     { "day": 7, "folder": "day-images/day7/", "alt": "Oualidia Atlantic lagoon" },
     { "day": 8, "folder": "day-images/day8/", "alt": "Hassan II Mosque, Casablanca" }
   ],
