@@ -254,6 +254,7 @@ const s = StyleSheet.create({
     height: 205,
     objectFit: 'cover',
     objectPosition: 'center',
+    breakInside: 'avoid',
   },
   dayImgPlaceholder: {
     width: '100%',
@@ -261,6 +262,7 @@ const s = StyleSheet.create({
     backgroundColor: C.cream,
     alignItems: 'center',
     justifyContent: 'center',
+    breakInside: 'avoid',
   },
   dayPlaceholderText: {
     fontFamily: 'Helvetica-Bold',
@@ -303,12 +305,14 @@ const s = StyleSheet.create({
   },
   dayBullets: {
     marginBottom: 14,
+    breakInside: 'avoid',
   },
   dayBulletRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 9,
     marginBottom: 5,
+    breakInside: 'avoid',
   },
   dayBulletDot: {
     width: 4,
@@ -333,6 +337,7 @@ const s = StyleSheet.create({
     borderRadius: 4,
     paddingHorizontal: 16,
     paddingVertical: 11,
+    breakInside: 'avoid',
   },
   tipLabel: {
     fontFamily: 'Helvetica-Bold',
@@ -796,10 +801,10 @@ function CTAPage({ itinerary }) {
   const { title, country } = itinerary;
 
   const bullets = [
-    'Handpicked boutique hotels, personally vetted and never generic',
-    'Restaurant reservations at the places locals actually eat',
-    'Private guides & exclusive experiences off the tourist trail',
-    'Seamless logistics and real-time support throughout your trip',
+    'Refined route planning and pacing',
+    'Carefully selected areas to stay',
+    'Logistics guidance for a smooth journey',
+    'Insider tips from on-the-ground research',
   ];
 
   return (
@@ -818,7 +823,7 @@ function CTAPage({ itinerary }) {
         <View style={s.ctaGoldRule} />
 
         <Text style={s.ctaLead}>
-          This guide gives you the framework. Our travel planners build the personalised version:
+          This guide gives you the structure and route.{'\n'}Our planners can build the personalised version around your dates, travel style and pace.
         </Text>
 
         {/* Bullet list */}
