@@ -252,6 +252,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 48,
     paddingTop: 16,
     paddingBottom: 24,
+    breakInside: 'avoid',
   },
   mapHlLabel: {
     fontFamily: 'Helvetica-Bold',
@@ -271,6 +272,7 @@ const s = StyleSheet.create({
     gap: 8,
     marginBottom: 7,
     paddingRight: 12,
+    breakInside: 'avoid',
   },
   mapHlDot: {
     width: 5,
@@ -296,6 +298,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 48,
     paddingTop: 28,
     paddingBottom: 32,
+    breakInside: 'avoid',
   },
   transportSectionTitle: {
     fontFamily: 'Times-Bold',
@@ -404,6 +407,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 48,
     paddingTop: 22,
     paddingBottom: 24,
+    breakInside: 'avoid',
   },
   dayChip: {
     fontFamily: 'Helvetica-Bold',
@@ -436,6 +440,7 @@ const s = StyleSheet.create({
   },
   dayBullets: {
     marginBottom: 14,
+    breakInside: 'avoid',
   },
   dayBulletRow: {
     flexDirection: 'row',
@@ -467,6 +472,7 @@ const s = StyleSheet.create({
     borderRadius: 4,
     paddingHorizontal: 16,
     paddingVertical: 11,
+    breakInside: 'avoid',
   },
   tipLabel: {
     fontFamily: 'Helvetica-Bold',
@@ -874,7 +880,7 @@ function DayPage({ day, index, itinerary }) {
 
         {/* Overnight stay (premium itineraries) */}
         {stay ? (
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.border, alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.border, alignItems: 'center', breakInside: 'avoid' }}>
             <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 1.5, color: C.muted }}>TONIGHT'S STAY:</Text>
             <Text style={{ fontFamily: 'Helvetica', fontSize: 10, color: C.charcoal }}>{stay}</Text>
           </View>
