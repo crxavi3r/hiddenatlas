@@ -13,6 +13,14 @@ import { useApi } from '../lib/api';
 import { getGalleryImages, getResearchImages, getDayImage, getCoverImage, getMapImage } from '../lib/itineraryImages';
 import { useTrack } from '../hooks/useTrack';
 import JapanRouteMap from '../components/JapanRouteMap';
+import MoroccoRouteMap from '../components/MoroccoRouteMap';
+import PhilippinesRouteMap from '../components/PhilippinesRouteMap';
+
+const ROUTE_MAP_COMPONENTS = {
+  'japan-grand-cultural-journey': JapanRouteMap,
+  'morocco-motorcycle-expedition': MoroccoRouteMap,
+  'philippines-island-journey': PhilippinesRouteMap,
+};
 
 // ─────────────────────────────────────────────────────────────
 // Sidebar — locked state
@@ -635,7 +643,7 @@ const api = useApi();
             </section>
 
             {/* Route Map */}
-            {(mapImage || itinerary.id === 'japan-grand-cultural-journey') && (
+            {(mapImage || ROUTE_MAP_COMPONENTS[itinerary.id]) && (
               <section style={{ marginBottom: '60px' }}>
                 <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '6px' }}>
                   Route Map
@@ -643,15 +651,18 @@ const api = useApi();
                 <p style={{ fontSize: '13px', color: '#8C8070', letterSpacing: '0.3px', marginBottom: '24px' }}>
                   {subtitle}
                 </p>
-                {itinerary.id === 'japan-grand-cultural-journey' ? (
-                  <JapanRouteMap
-                    isUnlocked={hasAccess}
-                    onDaySelect={dayNum => {
-                      const el = document.getElementById(`day-${dayNum}`);
-                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }}
-                  />
-                ) : (
+                {ROUTE_MAP_COMPONENTS[itinerary.id] ? (() => {
+                  const RouteMapComponent = ROUTE_MAP_COMPONENTS[itinerary.id];
+                  return (
+                    <RouteMapComponent
+                      isUnlocked={hasAccess}
+                      onDaySelect={dayNum => {
+                        const el = document.getElementById(`day-${dayNum}`);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }}
+                    />
+                  );
+                })() : (
                   <img
                     src={mapImage}
                     alt={`${title} route map`}
