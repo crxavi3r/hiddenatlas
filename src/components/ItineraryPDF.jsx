@@ -899,7 +899,7 @@ function DayPage({ day, index, itinerary }) {
 // Supports JPG and PNG. SVG is not supported by @react-pdf/renderer's Image.
 
 function DestinationMapPage({ itinerary }) {
-  const { title, subtitle, country, mapImage, days = [] } = itinerary;
+  const { title, subtitle, country, mapImage, days = [], duration } = itinerary;
   if (!mapImage || mapImage.endsWith('.svg')) return null;
 
   // Build deduplicated city stop list from day route fields
@@ -909,30 +909,41 @@ function DestinationMapPage({ itinerary }) {
     const city = (d.route || d.title || '').split(/[·–\-]/)[0].trim();
     if (city && !seen.has(city)) { seen.add(city); stops.push(city); }
   }
+  const displayStops = stops.slice(0, 10);
+  const hasMore = stops.length > 10;
 
-  // Map image container: use near-full page width for maximum visual impact.
-  // Height of 390pt accommodates most landscape maps while leaving room for
-  // the header banner and city stops strip.
-  const MAP_H = 390;
+  // Map dominates the page: header(43) + title_strip(68) + map + stops_strip(36) = PAGE_H
+  const MAP_H = Math.floor(PAGE_H - 43 - 68 - 36);   // ≈ 695pt
 
   return (
     <Page size="A4" style={{ backgroundColor: C.stone }}>
       <RunHeader country={country} title={title} />
 
-      {/* Editorial header banner */}
-      <View style={{ backgroundColor: C.tealMid, paddingHorizontal: 48, paddingTop: 24, paddingBottom: 22 }}>
-        <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 2.5, color: 'rgba(255,255,255,0.45)', marginBottom: 7 }}>
-          THE ROUTE
-        </Text>
-        <Text style={{ fontFamily: 'Times-Bold', fontSize: 24, color: C.white, lineHeight: 1.2, marginBottom: 5 }}>
-          {title}
-        </Text>
-        <Text style={{ fontFamily: 'Helvetica', fontSize: 9.5, color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
-          {subtitle}
-        </Text>
+      {/* Slim two-column editorial header — no dark background */}
+      <View style={{
+        paddingHorizontal: 48, paddingTop: 16, paddingBottom: 14,
+        flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between',
+        borderBottomWidth: 1, borderBottomColor: C.border,
+      }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: 2.5, color: C.teal, marginBottom: 7 }}>
+            ROUTE MAP
+          </Text>
+          <Text style={{ fontFamily: 'Times-Bold', fontSize: 26, color: C.charcoal, lineHeight: 1.1 }}>
+            {title}
+          </Text>
+        </View>
+        <View style={{ alignItems: 'flex-end', paddingBottom: 3 }}>
+          {duration ? (
+            <Text style={{ fontFamily: 'Helvetica', fontSize: 8.5, color: C.muted, marginBottom: 6 }}>
+              {duration}
+            </Text>
+          ) : null}
+          <View style={{ width: 30, height: 1.5, backgroundColor: C.gold }} />
+        </View>
       </View>
 
-      {/* Map image — near full-width for maximum impact */}
+      {/* Map — dominant hero element, fills ~82% of the page */}
       <View style={{ width: PAGE_W, height: MAP_H, backgroundColor: C.mapBg }}>
         <Image
           src={mapImage}
@@ -940,26 +951,27 @@ function DestinationMapPage({ itinerary }) {
         />
       </View>
 
-      {/* Gold rule */}
-      <View style={{ height: 2, backgroundColor: C.gold, marginHorizontal: 48, marginTop: 18, marginBottom: 16 }} />
-
-      {/* Journey stops strip */}
-      {stops.length > 0 && (
-        <View style={{ paddingHorizontal: 48, paddingBottom: 20 }}>
-          <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: 2, color: C.teal, marginBottom: 12 }}>
-            JOURNEY STOPS
-          </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
-            {stops.map((stop, i) => (
-              <View key={i} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.gold, marginRight: 5 }} />
-                <Text style={{ fontFamily: 'Helvetica', fontSize: 9.5, color: C.charcoal, marginRight: 4 }}>{stop}</Text>
-                {i < stops.length - 1 && (
-                  <Text style={{ fontFamily: 'Helvetica', fontSize: 10, color: C.muted, marginRight: 8 }}>›</Text>
-                )}
-              </View>
-            ))}
-          </View>
+      {/* Compact journey stops strip */}
+      {displayStops.length > 0 && (
+        <View style={{
+          paddingHorizontal: 48, paddingTop: 10, paddingBottom: 10,
+          borderTopWidth: 0.5, borderTopColor: C.border,
+          flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap',
+        }}>
+          {displayStops.map((stop, i) => (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ width: 3.5, height: 3.5, borderRadius: 2, backgroundColor: C.gold, marginRight: 5 }} />
+              <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: C.charcoal, marginRight: 3 }}>{stop}</Text>
+              {(i < displayStops.length - 1 || hasMore) && (
+                <Text style={{ fontFamily: 'Helvetica', fontSize: 8.5, color: C.border, marginRight: 6 }}>›</Text>
+              )}
+            </View>
+          ))}
+          {hasMore && (
+            <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: C.muted, fontStyle: 'italic' }}>
+              +{stops.length - 10} more
+            </Text>
+          )}
         </View>
       )}
 
