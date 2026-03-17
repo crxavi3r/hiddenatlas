@@ -83,8 +83,13 @@ export function getDayImages(slug, dayNumber) {
  */
 export function getMapImage(slug) {
   const needle = `/itineraries/${slug}/map/`;
-  const entry = Object.entries(mapModules).find(([path]) => path.includes(needle));
-  return entry ? entry[1].default : null;
+  const entries = Object.entries(mapModules).filter(([path]) => path.includes(needle));
+  // Prefer route-map.png (web/PDF version) over route-map-print.png (standalone print)
+  const preferred =
+    entries.find(([path]) => path.endsWith('/route-map.png')) ||
+    entries.find(([path]) => !path.includes('-print')) ||
+    entries[0];
+  return preferred ? preferred[1].default : null;
 }
 
 /**

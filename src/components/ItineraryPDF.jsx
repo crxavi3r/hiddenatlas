@@ -202,21 +202,21 @@ const s = StyleSheet.create({
   },
   timelineContent: {
     flex: 1,
-    paddingLeft: 14,
-    paddingBottom: 17,
+    paddingLeft: 12,
+    paddingBottom: 12,
   },
   timelineDayLabel: {
     fontFamily: 'Helvetica-Bold',
     fontSize: 7,
     letterSpacing: 2,
     color: C.gold,
-    marginBottom: 4,
+    marginBottom: 3,
   },
   timelineRoute: {
     fontFamily: 'Helvetica',
-    fontSize: 10.5,
+    fontSize: 10,
     color: C.charcoal,
-    lineHeight: 1.45,
+    lineHeight: 1.4,
   },
 
   // ── Route Map page ─────────────────────────────────────────────────────────
@@ -644,28 +644,57 @@ function RunHeader({ country, title }) {
 
 // ── Vertical Expedition Timeline ──────────────────────────────────────────────
 //
-// Replaces the zig-zag SVG map with a clean per-day timeline.
+// For itineraries with ≤10 days: single-column vertical timeline.
+// For longer itineraries (11+ days): two-column layout to prevent A4 overflow.
 // Each row shows the day number and the real route locations.
-// Uses day.route if present; falls back to day.title for itineraries
-// that have not yet been given a route field.
+// Uses day.route if present; falls back to day.title.
 
-function RouteTimeline({ days }) {
+function TimelineColumn({ days }) {
   return (
-    <View style={s.timelineWrap}>
+    <View style={{ flex: 1 }}>
       {days.map((day, i) => (
         <View key={i} style={s.timelineRow}>
-          {/* Vertical track: dot + connector line */}
           <View style={s.timelineTrack}>
             <View style={s.timelineDot} />
             {i < days.length - 1 ? <View style={s.timelineConnector} /> : null}
           </View>
-          {/* Day label + route locations */}
           <View style={[s.timelineContent, i === days.length - 1 ? { paddingBottom: 0 } : {}]}>
             <Text style={s.timelineDayLabel}>DAY {day.day}</Text>
             <Text style={s.timelineRoute}>{day.route || day.title}</Text>
           </View>
         </View>
       ))}
+    </View>
+  );
+}
+
+function RouteTimeline({ days }) {
+  if (days.length <= 10) {
+    return (
+      <View style={s.timelineWrap}>
+        {days.map((day, i) => (
+          <View key={i} style={s.timelineRow}>
+            <View style={s.timelineTrack}>
+              <View style={s.timelineDot} />
+              {i < days.length - 1 ? <View style={s.timelineConnector} /> : null}
+            </View>
+            <View style={[s.timelineContent, i === days.length - 1 ? { paddingBottom: 0 } : {}]}>
+              <Text style={s.timelineDayLabel}>DAY {day.day}</Text>
+              <Text style={s.timelineRoute}>{day.route || day.title}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  // Two-column layout for 11+ day itineraries
+  const half = Math.ceil(days.length / 2);
+  return (
+    <View style={[s.timelineWrap, { flexDirection: 'row', gap: 0 }]}>
+      <TimelineColumn days={days.slice(0, half)} />
+      <View style={{ width: 1, backgroundColor: C.border, marginVertical: 6, marginHorizontal: 16 }} />
+      <TimelineColumn days={days.slice(half)} />
     </View>
   );
 }
@@ -853,33 +882,74 @@ function DayPage({ day, index, itinerary }) {
 
 // ── Destination Map page (optional) ───────────────────────────────────────────
 //
-// Renders a full A4 page displaying the itinerary route map image.
+// Full-bleed editorial feature page for the route map image.
 // Only shown when itinerary.mapImage is set (resolved in downloadPDF.js).
 // Supports JPG and PNG. SVG is not supported by @react-pdf/renderer's Image.
 
 function DestinationMapPage({ itinerary }) {
-  const { title, subtitle, country, mapImage } = itinerary;
+  const { title, subtitle, country, mapImage, days = [] } = itinerary;
   if (!mapImage || mapImage.endsWith('.svg')) return null;
 
+  // Build deduplicated city stop list from day route fields
+  const stops = [];
+  const seen = new Set();
+  for (const d of days) {
+    const city = (d.route || d.title || '').split(/[·–\-]/)[0].trim();
+    if (city && !seen.has(city)) { seen.add(city); stops.push(city); }
+  }
+
+  // Map image container: use near-full page width for maximum visual impact.
+  // Height of 390pt accommodates most landscape maps while leaving room for
+  // the header banner and city stops strip.
+  const MAP_H = 390;
+
   return (
-    <Page size="A4" style={{ backgroundColor: C.white }}>
+    <Page size="A4" style={{ backgroundColor: C.stone }}>
       <RunHeader country={country} title={title} />
 
-      <View style={{ paddingHorizontal: 48, paddingTop: 28, paddingBottom: 32 }}>
-        {/* Section header */}
-        <Text style={{ fontFamily: 'Times-Bold', fontSize: 20, color: C.charcoal, marginBottom: 5 }}>
-          Route Map
+      {/* Editorial header banner */}
+      <View style={{ backgroundColor: C.tealMid, paddingHorizontal: 48, paddingTop: 24, paddingBottom: 22 }}>
+        <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 2.5, color: 'rgba(255,255,255,0.45)', marginBottom: 7 }}>
+          THE ROUTE
         </Text>
-        <Text style={{ fontFamily: 'Helvetica', fontSize: 9.5, color: C.muted, letterSpacing: 0.3, marginBottom: 24 }}>
+        <Text style={{ fontFamily: 'Times-Bold', fontSize: 24, color: C.white, lineHeight: 1.2, marginBottom: 5 }}>
+          {title}
+        </Text>
+        <Text style={{ fontFamily: 'Helvetica', fontSize: 9.5, color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
           {subtitle}
         </Text>
+      </View>
 
-        {/* Map image — full available width, natural aspect ratio */}
+      {/* Map image — near full-width for maximum impact */}
+      <View style={{ width: PAGE_W, height: MAP_H, backgroundColor: C.mapBg }}>
         <Image
           src={mapImage}
-          style={{ width: '100%', objectFit: 'contain' }}
+          style={{ width: PAGE_W, height: MAP_H, objectFit: 'contain' }}
         />
       </View>
+
+      {/* Gold rule */}
+      <View style={{ height: 2, backgroundColor: C.gold, marginHorizontal: 48, marginTop: 18, marginBottom: 16 }} />
+
+      {/* Journey stops strip */}
+      {stops.length > 0 && (
+        <View style={{ paddingHorizontal: 48, paddingBottom: 20 }}>
+          <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: 2, color: C.teal, marginBottom: 12 }}>
+            JOURNEY STOPS
+          </Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
+            {stops.map((stop, i) => (
+              <View key={i} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.gold, marginRight: 5 }} />
+                <Text style={{ fontFamily: 'Helvetica', fontSize: 9.5, color: C.charcoal, marginRight: 4 }}>{stop}</Text>
+                {i < stops.length - 1 && (
+                  <Text style={{ fontFamily: 'Helvetica', fontSize: 10, color: C.muted, marginRight: 8 }}>›</Text>
+                )}
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
 
       <Text style={s.pageNum} render={({ pageNumber }) => String(pageNumber)} fixed />
     </Page>
