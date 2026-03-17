@@ -543,7 +543,7 @@ const api = useApi();
   const {
     title, subtitle, country, region, duration, groupSize, price,
     image, coverImage, highlights, description, bestFor, difficulty,
-    days = [], whySpecial, routeOverview, transport,
+    days = [], nights, whySpecial, routeOverview, transport,
   } = itinerary;
 
   const hasAccess = accessState === 'unlocked';
@@ -780,12 +780,23 @@ const api = useApi();
               </section>
             )}
 
-            {/* Route Overview */}
-            {routeOverview && (hasAccess || !isPremium) && (
+            {/* Journey Snapshot / Route Overview */}
+            {routeOverview && (
               <section style={{ marginBottom: '60px' }}>
-                <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '20px' }}>
-                  Route Overview
-                </h2>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                  <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', margin: 0 }}>
+                    Journey Snapshot
+                  </h2>
+                  {nights && (
+                    <span style={{
+                      fontSize: '15px', fontWeight: '600',
+                      color: '#1B6B65',
+                      letterSpacing: '0.3px',
+                    }}>
+                      {duration.replace(/\bdays?\b/i, 'Days')} &bull; {nights} Nights
+                    </span>
+                  )}
+                </div>
                 <div style={{ background: '#EFF6F5', borderRadius: '8px', padding: '24px 28px', display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
                   <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#1B6B65', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Route size={16} color="white" />

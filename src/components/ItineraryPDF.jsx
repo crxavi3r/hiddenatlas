@@ -702,7 +702,10 @@ function RouteTimeline({ days }) {
 // ── Page components ───────────────────────────────────────────────────────────
 
 function CoverPage({ itinerary }) {
-  const { title, subtitle, country, region, duration, groupSize, coverImage, image } = itinerary;
+  const { title, subtitle, country, region, duration, nights, groupSize, coverImage, image } = itinerary;
+  const durationLabel = nights
+    ? `${duration.replace(/\bdays?\b/i, 'Days')} \u2022 ${nights} Nights`
+    : duration;
   const hero = imgUrl(coverImage || image, 1600);
 
   return (
@@ -748,7 +751,7 @@ function CoverPage({ itinerary }) {
               <View style={s.coverMetaSep} />
               <View style={[s.coverMeta, { paddingLeft: 24 }]}>
                 <Text style={s.coverMetaLabel}>DURATION</Text>
-                <Text style={s.coverMetaValue}>{duration}</Text>
+                <Text style={s.coverMetaValue}>{durationLabel}</Text>
               </View>
             </>
           ) : null}
@@ -770,9 +773,12 @@ function CoverPage({ itinerary }) {
 
 function RouteMapPage({ itinerary }) {
   const {
-    title, country, region, duration,
+    title, country, region, duration, nights,
     days = [], highlights = [],
   } = itinerary;
+  const durationLabel = nights
+    ? `${duration.replace(/\bdays?\b/i, 'Days')} \u2022 ${nights} Nights`
+    : duration;
 
   return (
     <Page size="A4" style={s.mapPage}>
@@ -783,7 +789,7 @@ function RouteMapPage({ itinerary }) {
         <Text style={s.mapBannerEyebrow}>YOUR JOURNEY</Text>
         <Text style={s.mapBannerTitle}>Expedition Route</Text>
         <Text style={s.mapBannerSub}>
-          {country}{region ? ` \u00B7 ${region}` : ''}{duration ? `  \u00B7  ${duration}` : ''}
+          {country}{region ? ` \u00B7 ${region}` : ''}{duration ? `  \u00B7  ${durationLabel}` : ''}
         </Text>
       </View>
 
