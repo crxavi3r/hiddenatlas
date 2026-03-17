@@ -222,12 +222,11 @@ export const itineraries = [
       "Valbonë to Theth — the classic Albanian Alps traverse, one of Europe's finest day hikes",
     ],
     included: [
-      "10-day day-by-day route plan",
-      "Self-drive navigation notes",
-      "Ferry & border crossing guidance",
-      "Beach & swimming spot locations",
-      "Hiking route for Valbonë–Theth traverse",
-      "UNESCO site visit logistics",
+      "Complete 10-day Albania itinerary",
+      "Day-by-day route across the Albanian Riviera and Alps",
+      "Key landscapes and places along the journey",
+      "Carefully structured travel framework",
+      "Downloadable PDF travel guide",
     ],
     days: [
       {
@@ -1639,14 +1638,11 @@ export const itineraries = [
       "Boracay's Puka Shell Beach and the island's quiet northern shore",
     ],
     included: [
-      "Complete 17-day itinerary with island logistics and inter-island travel",
-      "Recommended accommodation for each island: from Long Beach cottages to boutique lagoon resorts",
-      "Private boat charter guide for El Nido and Coron: what to negotiate, what to bring",
-      "30+ restaurant and food stall recommendations across all four islands",
-      "Island hopping route planner for El Nido Tour A and Tour C, and Coron's lake circuit",
-      "What to book months ahead and what can be arranged on arrival",
-      "Practical notes: ferry schedules, inter-island flights, power cuts and rainy season timing",
-      "Digital PDF plus mobile-optimised offline format",
+      "Complete 17-day Philippines itinerary",
+      "Day-by-day route across Manila, Palawan and Boracay",
+      "Key landscapes and places across each island",
+      "Carefully structured travel framework",
+      "Downloadable PDF travel guide",
     ],
     days: [
       {
