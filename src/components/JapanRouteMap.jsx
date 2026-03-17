@@ -47,23 +47,24 @@ function catmullPath(lonlats, tension = 0.38) {
 // ── City data ─────────────────────────────────────────────────────────────────
 // labelDx: positive = label right of marker, negative = label left
 const CITIES = [
-  { id: 'tokyo',       name: 'Tokyo',        lon: 139.69, lat: 35.68, tier: 1, days: '1–3',   dayStart: 1,  desc: 'Historic capital and gateway to Japan',                  labelDx: 13,  labelAnchor: 'start' },
-  { id: 'kanazawa',    name: 'Kanazawa',     lon: 136.63, lat: 36.56, tier: 1, days: '4–5',   dayStart: 4,  desc: 'Edo-era streets and samurai culture',                    labelDx: -13, labelAnchor: 'end'   },
-  { id: 'shirakawago', name: 'Shirakawa-go', lon: 136.91, lat: 36.26, tier: 2, days: '6',     dayStart: 6,  desc: 'UNESCO village of straw-roofed farmhouses',              labelDx: 11,  labelAnchor: 'start' },
-  { id: 'takayama',    name: 'Takayama',     lon: 137.25, lat: 36.14, tier: 2, days: '7–8',   dayStart: 7,  desc: 'Preserved merchant town in the Japanese Alps',           labelDx: 11,  labelAnchor: 'start' },
-  { id: 'kyoto',       name: 'Kyoto',        lon: 135.77, lat: 35.01, tier: 1, days: '9–12',  dayStart: 9,  desc: 'Temple city and cultural heart of Japan',                labelDx: -13, labelAnchor: 'end'   },
-  { id: 'osaka',       name: 'Osaka',        lon: 135.50, lat: 34.69, tier: 1, days: '13',    dayStart: 13, desc: 'Street food capital and vibrant urban soul',             labelDx: -13, labelAnchor: 'end'   },
-  { id: 'koyasan',     name: 'Kōyasan',      lon: 135.59, lat: 34.21, tier: 2, days: '14',    dayStart: 14, desc: 'Sacred mountain monastery complex',                      labelDx: 11,  labelAnchor: 'start' },
-  { id: 'himeji',      name: 'Himeji',       lon: 134.69, lat: 34.82, tier: 3, days: '15',    dayStart: 15, desc: "Japan's finest surviving feudal castle",                 labelDx: 9,   labelAnchor: 'start' },
-  { id: 'okayama',     name: 'Okayama',      lon: 133.93, lat: 34.66, tier: 3, days: '16',    dayStart: 16, desc: 'Garden city and gateway to the art island',              labelDx: 9,   labelAnchor: 'start' },
-  { id: 'kurashiki',   name: 'Kurashiki',    lon: 133.77, lat: 34.58, tier: 3, days: '16',    dayStart: 16, desc: 'White-walled canal district of art and craft',           labelDx: -9,  labelAnchor: 'end'   },
-  { id: 'hakone',      name: 'Hakone',       lon: 139.02, lat: 35.23, tier: 2, days: '17',    dayStart: 17, desc: 'Mountain retreat with views of Mount Fuji',              labelDx: 11,  labelAnchor: 'start' },
+  { id: 'tokyo',       name: 'Tokyo',        lon: 139.69, lat: 35.68, tier: 1, days: '1–3',   dayStart: 1,  desc: 'Historic capital and gateway to Japan',                  labelDx: 14,  labelAnchor: 'start' },
+  { id: 'kanazawa',    name: 'Kanazawa',     lon: 136.63, lat: 36.56, tier: 1, days: '4–5',   dayStart: 4,  desc: 'Edo-era streets and samurai culture',                    labelDx: -15, labelAnchor: 'end'   },
+  { id: 'shirakawago', name: 'Shirakawa-go', lon: 136.91, lat: 36.26, tier: 2, days: '6',     dayStart: 6,  desc: 'UNESCO village of straw-roofed farmhouses',              labelDx: 12,  labelAnchor: 'start' },
+  { id: 'takayama',    name: 'Takayama',     lon: 137.25, lat: 36.14, tier: 2, days: '7–8',   dayStart: 7,  desc: 'Preserved merchant town in the Japanese Alps',           labelDx: 12,  labelAnchor: 'start' },
+  { id: 'kyoto',       name: 'Kyoto',        lon: 135.77, lat: 35.01, tier: 1, days: '9–12',  dayStart: 9,  desc: 'Temple city and cultural heart of Japan',                labelDx: -15, labelAnchor: 'end'   },
+  { id: 'osaka',       name: 'Osaka',        lon: 135.50, lat: 34.69, tier: 1, days: '13',    dayStart: 13, desc: 'Street food capital and vibrant urban soul',             labelDx: -15, labelAnchor: 'end'   },
+  { id: 'koyasan',     name: 'Kōyasan',      lon: 135.59, lat: 34.21, tier: 2, days: '14',    dayStart: 14, desc: 'Sacred mountain monastery complex',                      labelDx: 12,  labelAnchor: 'start' },
+  { id: 'himeji',      name: 'Himeji',       lon: 134.69, lat: 34.82, tier: 3, days: '15',    dayStart: 15, desc: "Japan's finest surviving feudal castle",                 labelDx: 12,  labelAnchor: 'start' },
+  { id: 'okayama',     name: 'Okayama',      lon: 133.93, lat: 34.66, tier: 3, days: '16',    dayStart: 16, desc: 'Garden city and gateway to the art island',              labelDx: 14,  labelAnchor: 'start' },
+  { id: 'kurashiki',   name: 'Kurashiki',    lon: 133.77, lat: 34.58, tier: 3, days: '16',    dayStart: 16, desc: 'White-walled canal district of art and craft',           labelDx: -12, labelAnchor: 'end'   },
+  { id: 'hakone',      name: 'Hakone',       lon: 139.02, lat: 35.23, tier: 2, days: '17',    dayStart: 17, desc: 'Mountain retreat with views of Mount Fuji',              labelDx: 14,  labelAnchor: 'start' },
 ];
 
 const NARA = { id: 'nara', name: 'Nara', lon: 135.84, lat: 34.68, tier: 0, days: 'Day trip', dayStart: null, desc: 'Ancient capital with sacred deer and great temples', labelDx: 9, labelAnchor: 'start' };
 
 const ROUTE_LONLAT = [...CITIES.map(c => [c.lon, c.lat]), [139.69, 35.68]];
-const ROUTE_PATH_D = catmullPath(ROUTE_LONLAT);
+// tension 0.20: deliberately minimal curves — route reads as designed, not generated
+const ROUTE_PATH_D = catmullPath(ROUTE_LONLAT, 0.20);
 
 // Approximate stop fractions (geographic distances along route)
 const STOP_FRACTIONS = [0, 0.209, 0.239, 0.263, 0.394, 0.425, 0.463, 0.539, 0.590, 0.602, 0.944];
@@ -74,11 +75,14 @@ const STOP_FRACTIONS = [0, 0.209, 0.239, 0.263, 0.394, 0.425, 0.463, 0.539, 0.59
 const PREVIEW_LABELED = new Set(['tokyo', 'kyoto', 'osaka', 'hakone']);
 
 // ── Tier visual config ────────────────────────────────────────────────────────
+// Tier 1 (Tokyo, Kanazawa, Kyoto, Osaka): larger, bolder — clear primary anchors
+// Tier 2 (Shirakawa-go, Takayama, Kōyasan, Hakone): mid-weight — notable stops
+// Tier 3 (Himeji, Okayama, Kurashiki): compact — secondary waypoints
 const TIER = {
-  1: { r: 7,   rActive: 9.5,  sw: 2.0, fill: '#F2E4CB', edge: '#C9A96E', halo: '#C9A96E', lFs: 11.5, dFs: 8.5  },
-  2: { r: 5,   rActive: 7,    sw: 1.6, fill: '#C8D9D5', edge: '#2A5248', halo: '#2A5248', lFs: 9.5,  dFs: 7.5  },
-  3: { r: 3.5, rActive: 5,    sw: 1.3, fill: '#C8D9D5', edge: '#2A5248', halo: '#2A5248', lFs: 8.2,  dFs: 6.5  },
-  0: { r: 2.5, rActive: 3.5,  sw: 1.0, fill: '#EAE4DA', edge: '#8A9E9B', halo: '#8A9E9B', lFs: 7.5,  dFs: 6.0  },
+  1: { r: 8,   rActive: 11,   sw: 2.2, fill: '#F2E4CB', edge: '#C9A96E', halo: '#C9A96E', lFs: 12,   dFs: 8,   shadow: true  },
+  2: { r: 4.5, rActive: 6.5,  sw: 1.5, fill: '#C8D9D5', edge: '#2A5248', halo: '#2A5248', lFs: 9.5,  dFs: 7.5              },
+  3: { r: 3,   rActive: 4.5,  sw: 1.2, fill: '#C8D9D5', edge: '#2A5248', halo: '#2A5248', lFs: 7.8,  dFs: 6.5              },
+  0: { r: 2.5, rActive: 3.5,  sw: 1.0, fill: '#EAE4DA', edge: '#8A9E9B', halo: '#8A9E9B', lFs: 7.5,  dFs: 6.0              },
 };
 
 // ── Nara projected positions ───────────────────────────────────────────────────
@@ -171,6 +175,10 @@ export default function JapanRouteMap({ onDaySelect, isUnlocked = true }) {
             <feFlood floodColor="#F5F0E8" floodOpacity="0.85" result="bg" />
             <feComposite in="bg" in2="SourceGraphic" operator="over" />
           </filter>
+          {/* Subtle depth for primary city nodes only */}
+          <filter id="node-shadow" x="-60%" y="-60%" width="220%" height="220%">
+            <feDropShadow dx="0" dy="1" stdDeviation="2.5" floodColor="#1A3632" floodOpacity="0.18" />
+          </filter>
         </defs>
 
         {/* Ocean */}
@@ -201,19 +209,19 @@ export default function JapanRouteMap({ onDaySelect, isUnlocked = true }) {
           );
         })}
 
-        {/* Route ghost (full path, very faint) */}
-        <path d={ROUTE_PATH_D} fill="none" stroke="#1F3D3A" strokeWidth="1.8" opacity="0.10" clipPath="url(#japan-map-clip)" />
+        {/* Route ghost (full path, very faint — structural reference) */}
+        <path d={ROUTE_PATH_D} fill="none" stroke="#1F3D3A" strokeWidth="1.2" opacity="0.07" clipPath="url(#japan-map-clip)" />
 
         {/* Route reveal (animated stroke-dashoffset) */}
         <path
           ref={routeRef}
           d={ROUTE_PATH_D}
           fill="none"
-          stroke="#1F3D3A"
-          strokeWidth="2.2"
+          stroke="#1B3D39"
+          strokeWidth="2.0"
           strokeLinecap="round"
           strokeLinejoin="round"
-          opacity="0.90"
+          opacity="0.88"
           style={{
             strokeDasharray: pathLen,
             strokeDashoffset: dashOffset,
@@ -227,7 +235,7 @@ export default function JapanRouteMap({ onDaySelect, isUnlocked = true }) {
         {/* Nara day trip — appears when Kyoto (stop 4) is active */}
         <g opacity={activeStop >= 4 ? 0.80 : 0} style={{ transition: 'opacity 0.6s ease' }}>
           <line x1={KX} y1={KY} x2={NX} y2={NY}
-            stroke="#8A9E9B" strokeWidth="1.4" strokeDasharray="5,4" />
+            stroke="#7A9490" strokeWidth="1.2" strokeDasharray="4,5" />
           {/* Nara dot */}
           <circle cx={NX} cy={NY} r={TIER[0].r} fill={TIER[0].fill} stroke={TIER[0].edge} strokeWidth={TIER[0].sw} />
           <text x={NX + NARA.labelDx} y={NY} textAnchor={NARA.labelAnchor} dominantBaseline="middle"
@@ -264,12 +272,14 @@ export default function JapanRouteMap({ onDaySelect, isUnlocked = true }) {
                 <circle cx={cx} cy={cy} r={r * 2.4} fill={cfg.halo} opacity="0.15"
                   style={{ transition: 'r 0.3s ease' }} />
               )}
-              {/* Outer ring */}
-              <circle cx={cx} cy={cy} r={r + 3.5} fill="none"
-                stroke={cfg.edge} strokeWidth="1" opacity={isActive && showLabel ? 0.5 : 0.22} />
-              {/* Main dot */}
+              {/* Outer ring — reduced for tier 3 to keep Kansai area clean */}
+              <circle cx={cx} cy={cy} r={r + 3} fill="none"
+                stroke={cfg.edge} strokeWidth="0.8"
+                opacity={isActive && showLabel ? 0.45 : city.tier <= 2 ? 0.20 : 0.12} />
+              {/* Main dot — tier 1 gets subtle depth shadow */}
               <circle cx={cx} cy={cy} r={r}
                 fill={cfg.fill} stroke={cfg.edge} strokeWidth={cfg.sw}
+                filter={city.tier === 1 ? 'url(#node-shadow)' : undefined}
                 style={{ transition: 'r 0.3s ease' }}
               />
 
@@ -281,21 +291,21 @@ export default function JapanRouteMap({ onDaySelect, isUnlocked = true }) {
                   dominantBaseline="auto"
                   fontSize={cfg.lFs}
                   fontFamily="Georgia, serif"
-                  fontWeight={city.tier === 1 ? '700' : city.tier === 2 ? '600' : '400'}
-                  fill={isFuture ? '#9A9080' : '#1C1A16'}
-                  style={{ paintOrder: 'stroke', stroke: '#C8DCE8', strokeWidth: '3', strokeLinejoin: 'round' }}
+                  fontWeight={city.tier === 1 ? '800' : city.tier === 2 ? '600' : '400'}
+                  fill={isFuture ? '#9A9080' : city.tier === 1 ? '#131210' : '#1C1A16'}
+                  style={{ paintOrder: 'stroke', stroke: '#C8DCE8', strokeWidth: '4', strokeLinejoin: 'round' }}
                 >
                   {city.name}
                 </text>
               )}
-              {/* Day range — unlocked only */}
+              {/* Day range — unlocked only, intentionally secondary */}
               {isUnlocked && (
                 <text
                   x={cx + city.labelDx} y={cy + cfg.lFs * 0.9 + 1}
                   textAnchor={city.labelAnchor}
                   fontSize={cfg.dFs}
                   fontFamily="Helvetica, sans-serif"
-                  fill={isFuture ? '#B5AA99' : '#7C7060'}
+                  fill={isFuture ? '#C0B8AC' : '#9C9284'}
                   style={{ paintOrder: 'stroke', stroke: '#C8DCE8', strokeWidth: '2.5' }}
                 >
                   {`Days ${city.days}`}
