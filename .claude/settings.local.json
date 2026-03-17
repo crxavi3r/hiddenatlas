@@ -65,7 +65,10 @@
       "Bash(mkdir:*)",
       "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas/content -type f -name *northern* -o -name *england*)",
       "Bash(npx tsx:*)",
-      "Bash(ls /Users/cristianoxavier/Documents/Projects/HiddenAtlas/*.json /Users/cristianoxavier/Documents/Projects/HiddenAtlas/tsconfig*)"
+      "Bash(ls /Users/cristianoxavier/Documents/Projects/HiddenAtlas/*.json /Users/cristianoxavier/Documents/Projects/HiddenAtlas/tsconfig*)",
+      "Bash(convert --version)",
+      "Bash(/tmp/test_sips.svg:*)",
+      "Read(//tmp/**)"
     ]
   }
 }
