@@ -68,7 +68,12 @@
       "Bash(ls /Users/cristianoxavier/Documents/Projects/HiddenAtlas/*.json /Users/cristianoxavier/Documents/Projects/HiddenAtlas/tsconfig*)",
       "Bash(convert --version)",
       "Bash(/tmp/test_sips.svg:*)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(for d:*)",
+      "Read(//Users/cristianoxavier/Documents/Projects/HiddenAtlas/content/itineraries/bali-island-journey/day-images/**)",
+      "Bash(grep -v \"^total\\\\|^\\\\.\\\\.$\\\\|^\\\\.$\")",
+      "Bash(pip3 install:*)",
+      "Bash(npx vite:*)"
     ]
   }
 }
