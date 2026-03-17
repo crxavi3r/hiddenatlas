@@ -62,7 +62,8 @@
       "WebFetch(domain:api.unsplash.com)",
       "WebFetch(domain:www.google.com)",
       "WebFetch(domain:html.duckduckgo.com)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas/content -type f -name *northern* -o -name *england*)"
     ]
   }
 }

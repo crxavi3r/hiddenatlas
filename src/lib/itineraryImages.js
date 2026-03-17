@@ -28,6 +28,11 @@ const dayFolderModules = import.meta.glob(
   { eager: true }
 );
 
+const mapModules = import.meta.glob(
+  '../../content/itineraries/*/map/*.{jpg,jpeg,png,webp,svg}',
+  { eager: true }
+);
+
 function toImageList(modules, slug, folder) {
   return Object.entries(modules)
     .filter(([path]) => path.includes(`/itineraries/${slug}/${folder}/`))
@@ -67,6 +72,19 @@ export function getDayImages(slug, dayNumber) {
     .filter(([path]) => path.includes(needle))
     .slice(0, 2)
     .map(([, mod]) => mod.default);
+}
+
+/**
+ * Returns the bundled asset URL for the route map image, or null if none exists.
+ * Place the map file at: content/itineraries/<slug>/map/<filename>
+ * Supports jpg, jpeg, png, webp, svg. Only the first file in the folder is used.
+ * Note: SVG files render on the web but are not supported by @react-pdf/renderer's
+ * Image component — use JPG or PNG for PDF compatibility.
+ */
+export function getMapImage(slug) {
+  const needle = `/itineraries/${slug}/map/`;
+  const entry = Object.entries(mapModules).find(([path]) => path.includes(needle));
+  return entry ? entry[1].default : null;
 }
 
 /**

@@ -2,7 +2,7 @@ export async function downloadItineraryPDF(itinerary) {
   console.log('[download-free] clicked', itinerary.id);
 
   const { createElement } = await import('react');
-  const [{ pdf }, { default: ItineraryPDF }, { getDayImages, getCoverImage }] = await Promise.all([
+  const [{ pdf }, { default: ItineraryPDF }, { getDayImages, getCoverImage, getMapImage }] = await Promise.all([
     import('@react-pdf/renderer'),
     import('../components/ItineraryPDF'),
     import('../lib/itineraryImages'),
@@ -16,6 +16,7 @@ export async function downloadItineraryPDF(itinerary) {
   const resolvedItinerary = {
     ...itinerary,
     coverImage: localCover || itinerary.coverImage,
+    mapImage: getMapImage(itinerary.id),
     days: (itinerary.days || []).map(day => ({
       ...day,
       imgs: getDayImages(itinerary.id, day.day),

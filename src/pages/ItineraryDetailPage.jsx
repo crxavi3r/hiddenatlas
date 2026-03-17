@@ -10,7 +10,7 @@ const ADMIN_EMAILS = [
 import { itineraries } from '../data/itineraries';
 import { downloadItineraryPDF } from '../utils/downloadPDF';
 import { useApi } from '../lib/api';
-import { getGalleryImages, getResearchImages, getDayImage, getCoverImage } from '../lib/itineraryImages';
+import { getGalleryImages, getResearchImages, getDayImage, getCoverImage, getMapImage } from '../lib/itineraryImages';
 import { useTrack } from '../hooks/useTrack';
 
 // ─────────────────────────────────────────────────────────────
@@ -551,6 +551,7 @@ const api = useApi();
   const researchImages = getResearchImages(itinerary.id);
   // Local cover takes priority over the Unsplash-based coverImage fallback.
   const localCover = getCoverImage(itinerary.id);
+  const mapImage   = getMapImage(itinerary.id);
 
 
   return (
@@ -631,6 +632,23 @@ const api = useApi();
                 </span>
               </div>
             </section>
+
+            {/* Route Map */}
+            {mapImage && (
+              <section style={{ marginBottom: '60px' }}>
+                <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '6px' }}>
+                  Route Map
+                </h2>
+                <p style={{ fontSize: '13px', color: '#8C8070', letterSpacing: '0.3px', marginBottom: '24px' }}>
+                  {subtitle}
+                </p>
+                <img
+                  src={mapImage}
+                  alt={`${title} route map`}
+                  style={{ width: '100%', display: 'block', borderRadius: '6px', border: '1px solid #E8E3DA' }}
+                />
+              </section>
+            )}
 
             {/* Highlights */}
             <section style={{ marginBottom: '60px' }}>

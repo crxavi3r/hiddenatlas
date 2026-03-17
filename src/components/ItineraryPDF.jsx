@@ -179,6 +179,7 @@ const s = StyleSheet.create({
   },
   timelineRow: {
     flexDirection: 'row',
+    breakInside: 'avoid',
   },
   timelineTrack: {
     width: 22,
@@ -310,6 +311,7 @@ const s = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: C.teal,
     borderLeftStyle: 'solid',
+    breakInside: 'avoid',
   },
   transportTipLabel: {
     fontFamily: 'Helvetica-Bold',
@@ -415,6 +417,8 @@ const s = StyleSheet.create({
     fontSize: 21,
     color: C.charcoal,
     lineHeight: 1.22,
+    widows: 2,
+    orphans: 2,
   },
   dayRule: {
     width: 26,
@@ -849,6 +853,41 @@ function DayPage({ day, index, itinerary }) {
   );
 }
 
+// ── Destination Map page (optional) ───────────────────────────────────────────
+//
+// Renders a full A4 page displaying the itinerary route map image.
+// Only shown when itinerary.mapImage is set (resolved in downloadPDF.js).
+// Supports JPG and PNG. SVG is not supported by @react-pdf/renderer's Image.
+
+function DestinationMapPage({ itinerary }) {
+  const { title, subtitle, country, mapImage } = itinerary;
+  if (!mapImage || mapImage.endsWith('.svg')) return null;
+
+  return (
+    <Page size="A4" style={{ backgroundColor: C.white }}>
+      <RunHeader country={country} title={title} />
+
+      <View style={{ paddingHorizontal: 48, paddingTop: 28, paddingBottom: 32 }}>
+        {/* Section header */}
+        <Text style={{ fontFamily: 'Times-Bold', fontSize: 20, color: C.charcoal, marginBottom: 5 }}>
+          Route Map
+        </Text>
+        <Text style={{ fontFamily: 'Helvetica', fontSize: 9.5, color: C.muted, letterSpacing: 0.3, marginBottom: 24 }}>
+          {subtitle}
+        </Text>
+
+        {/* Map image — full available width, natural aspect ratio */}
+        <Image
+          src={mapImage}
+          style={{ width: '100%', objectFit: 'contain' }}
+        />
+      </View>
+
+      <Text style={s.pageNum} render={({ pageNumber }) => String(pageNumber)} fixed />
+    </Page>
+  );
+}
+
 // ── Transport page ─────────────────────────────────────────────────────────────
 
 function TransportPage({ itinerary }) {
@@ -956,20 +995,24 @@ export default function ItineraryPDF({ itinerary }) {
       author="HiddenAtlas"
       subject={`${itinerary.title} – Curated Travel Guide`}
       keywords="travel, itinerary, luxury, HiddenAtlas"
+      hyphenationCallback={word => [word]}
     >
       {/* Page 1 – Cover */}
       <CoverPage itinerary={itinerary} />
 
-      {/* Page 2 – Route Map + Highlights */}
+      {/* Page 2 – Expedition Route + Highlights */}
       <RouteMapPage itinerary={itinerary} />
 
-      {/* Page 3 (optional) – Transport Between Cities */}
-      {itinerary.transport && <TransportPage itinerary={itinerary} />}
+      {/* Page 3 (optional) – Destination route map image */}
+      {itinerary.mapImage && <DestinationMapPage itinerary={itinerary} />}
 
       {/* Pages 3/4…N – Day by day */}
       {days.map((day, i) => (
         <DayPage key={i} day={day} index={i} itinerary={itinerary} />
       ))}
+
+      {/* Transport Between Cities (optional) – after route, before CTA */}
+      {itinerary.transport && <TransportPage itinerary={itinerary} />}
 
       {/* Final page – CTA */}
       <CTAPage itinerary={itinerary} />
