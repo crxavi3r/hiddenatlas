@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 
 // ── Projection ────────────────────────────────────────────────────────────────
 const VW = 800, VH = 620;
-const X0 = -10.5, X1 = -2.0, Y0 = 30.0, Y1 = 36.2;
+const X0 = -10.5, X1 = -2.0, Y0 = 30.0, Y1 = 36.6;
 
 const proj = (lon, lat) => [
   (lon - X0) / (X1 - X0) * VW,
@@ -63,17 +63,20 @@ const CITIES = [
   { id: 'ouarzazate',  name: 'Ouarzazate',  lon: -6.89, lat: 30.92, tier: 2, days: '5',   dayStart: 5, desc: 'Gateway city before the High Atlas crossing',                        labelDx: 12,  labelAnchor: 'start' },
   { id: 'marrakech',   name: 'Marrakech',   lon: -7.99, lat: 31.63, tier: 1, days: '6',   dayStart: 6, desc: 'The medina, Djemaa el-Fna and the city in full',                     labelDx: 12,  labelAnchor: 'start' },
   { id: 'oualidia',    name: 'Oualidia',    lon: -9.04, lat: 32.73, tier: 2, days: '7',   dayStart: 7, desc: 'Atlantic lagoon and oysters two days from the Sahara',               labelDx: 14,  labelAnchor: 'start' },
-  { id: 'casablanca',  name: 'Casablanca',  lon: -7.59, lat: 33.59, tier: 2, days: '8',   dayStart: 8, desc: 'Hassan II Mosque and the road home along the Atlantic',              labelDx: 14,  labelAnchor: 'start' },
+  { id: 'casablanca',  name: 'Casablanca',  lon: -7.59, lat: 33.59, tier: 2, days: '8',   dayStart: 8, desc: 'Hassan II Mosque and the Atlantic coast before the final push north', labelDx: 14,  labelAnchor: 'start' },
+  { id: 'rabat',       name: 'Rabat',       lon: -6.84, lat: 34.02, tier: 2, days: '8',   dayStart: 8, desc: 'Kasbah of the Udayas above the Bou Regreg river and Hassan Tower',    labelDx: 14,  labelAnchor: 'start' },
+  { id: 'tangier-med', name: 'Tangier Med', lon: -5.50, lat: 35.88, tier: 1, days: '8',   dayStart: 8, desc: 'Return ferry port for Algeciras, Ceuta or Tarifa — the ride ends here', labelDx: 12,  labelAnchor: 'start' },
 ];
 
 const ROUTE_LONLAT  = CITIES.map(c => [c.lon, c.lat]);
 const ROUTE_PATH_D  = catmullPath(ROUTE_LONLAT, 0.22);
 
 // Approximate cumulative geographic fractions along the route
-const STOP_FRACTIONS = [0, 0.104, 0.294, 0.375, 0.616, 0.724, 0.858, 1.000];
+// [chefchaouen, fes, errachidia, merzouga, ouarzazate, marrakech, oualidia, casablanca, rabat, tangier-med]
+const STOP_FRACTIONS = [0, 0.092, 0.235, 0.286, 0.474, 0.577, 0.679, 0.781, 0.827, 1.000];
 
 // Cities shown with full labels in preview/teaser state
-const PREVIEW_LABELED = new Set(['chefchaouen', 'merzouga', 'marrakech', 'casablanca']);
+const PREVIEW_LABELED = new Set(['chefchaouen', 'merzouga', 'marrakech', 'tangier-med']);
 
 // ── Tier visual config ────────────────────────────────────────────────────────
 const TIER = {
@@ -356,7 +359,7 @@ export default function MoroccoRouteMap({ onDaySelect, isUnlocked = true }) {
             {isUnlocked ? 'Day 1 · Chefchaouen' : 'Chefchaouen'}
           </span>
           <span style={{ fontSize: '10px', color: '#9A9080' }}>
-            {isUnlocked ? 'Day 8 · Casablanca' : `${CITIES.length} stops`}
+            {isUnlocked ? 'Day 8 · Tangier Med' : `${CITIES.length} stops`}
           </span>
         </div>
         {!isUnlocked && (
