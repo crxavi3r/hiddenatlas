@@ -436,7 +436,6 @@ const s = StyleSheet.create({
   },
   dayBullets: {
     marginBottom: 14,
-    breakInside: 'avoid',
   },
   dayBulletRow: {
     flexDirection: 'row',
@@ -468,7 +467,6 @@ const s = StyleSheet.create({
     borderRadius: 4,
     paddingHorizontal: 16,
     paddingVertical: 11,
-    breakInside: 'avoid',
   },
   tipLabel: {
     fontFamily: 'Helvetica-Bold',

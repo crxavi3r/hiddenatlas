@@ -40,11 +40,16 @@ function resolveCover() {
 }
 
 // ── Resolve map image ─────────────────────────────────────────────────────────
+// Prefers route-map.png (web/PDF version without embedded title) over
+// route-map-print.png (which has its own title block and is for standalone print use).
 function resolveMap() {
   const dir = path.resolve(ROOT, `content/itineraries/${SLUG}/map`);
   if (!fs.existsSync(dir)) return null;
-  const file = fs.readdirSync(dir).find(f => /\.(jpg|jpeg|png|webp)$/i.test(f));
-  return file ? path.join(dir, file) : null;
+  const files = fs.readdirSync(dir).filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f));
+  const preferred = files.find(f => f === 'route-map.png')
+    || files.find(f => !f.includes('-print'))
+    || files[0];
+  return preferred ? path.join(dir, preferred) : null;
 }
 
 // ── Import itinerary data ─────────────────────────────────────────────────────

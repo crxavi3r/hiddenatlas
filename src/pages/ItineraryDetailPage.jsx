@@ -12,6 +12,7 @@ import { downloadItineraryPDF } from '../utils/downloadPDF';
 import { useApi } from '../lib/api';
 import { getGalleryImages, getResearchImages, getDayImage, getCoverImage, getMapImage } from '../lib/itineraryImages';
 import { useTrack } from '../hooks/useTrack';
+import JapanRouteMap from '../components/JapanRouteMap';
 
 // ─────────────────────────────────────────────────────────────
 // Sidebar — locked state
@@ -225,7 +226,7 @@ function UnlockedSidebar({ itinerary, onDownload }) {
 // ─────────────────────────────────────────────────────────────
 function DayEntry({ day, index, isLocked, isLast }) {
   return (
-    <div style={{ display: 'flex', gap: '24px', position: 'relative' }}>
+    <div id={`day-${day.day}`} style={{ display: 'flex', gap: '24px', position: 'relative' }}>
       {/* Timeline dot */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
         <div style={{
@@ -634,7 +635,7 @@ const api = useApi();
             </section>
 
             {/* Route Map */}
-            {mapImage && (
+            {(mapImage || itinerary.id === 'japan-grand-cultural-journey') && (
               <section style={{ marginBottom: '60px' }}>
                 <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '6px' }}>
                   Route Map
@@ -642,11 +643,20 @@ const api = useApi();
                 <p style={{ fontSize: '13px', color: '#8C8070', letterSpacing: '0.3px', marginBottom: '24px' }}>
                   {subtitle}
                 </p>
-                <img
-                  src={mapImage}
-                  alt={`${title} route map`}
-                  style={{ width: '100%', display: 'block', borderRadius: '6px', border: '1px solid #E8E3DA' }}
-                />
+                {itinerary.id === 'japan-grand-cultural-journey' ? (
+                  <JapanRouteMap
+                    onDaySelect={dayNum => {
+                      const el = document.getElementById(`day-${dayNum}`);
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                  />
+                ) : (
+                  <img
+                    src={mapImage}
+                    alt={`${title} route map`}
+                    style={{ width: '100%', display: 'block', borderRadius: '6px', border: '1px solid #E8E3DA' }}
+                  />
+                )}
               </section>
             )}
 
