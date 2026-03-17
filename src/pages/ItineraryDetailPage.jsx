@@ -645,6 +645,7 @@ const api = useApi();
                 </p>
                 {itinerary.id === 'japan-grand-cultural-journey' ? (
                   <JapanRouteMap
+                    isUnlocked={hasAccess}
                     onDaySelect={dayNum => {
                       const el = document.getElementById(`day-${dayNum}`);
                       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });

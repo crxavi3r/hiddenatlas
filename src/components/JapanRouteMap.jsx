@@ -68,6 +68,11 @@ const ROUTE_PATH_D = catmullPath(ROUTE_LONLAT);
 // Approximate stop fractions (geographic distances along route)
 const STOP_FRACTIONS = [0, 0.209, 0.239, 0.263, 0.394, 0.425, 0.463, 0.539, 0.590, 0.602, 0.944];
 
+// ── Preview mode: cities shown with full label in the locked/teaser state ─────
+// Tokyo (start) + Kyoto + Osaka (two anchors) + Hakone (near-end) = 4 cities.
+// All others are rendered as subtle dots only — no name, no day range, no hit area.
+const PREVIEW_LABELED = new Set(['tokyo', 'kyoto', 'osaka', 'hakone']);
+
 // ── Tier visual config ────────────────────────────────────────────────────────
 const TIER = {
   1: { r: 7,   rActive: 9.5,  sw: 2.0, fill: '#F2E4CB', edge: '#C9A96E', halo: '#C9A96E', lFs: 11.5, dFs: 8.5  },
@@ -81,7 +86,7 @@ const [NX, NY] = proj(NARA.lon, NARA.lat);
 const [KX, KY] = proj(CITIES[4].lon, CITIES[4].lat); // Kyoto
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function JapanRouteMap({ onDaySelect }) {
+export default function JapanRouteMap({ onDaySelect, isUnlocked = true }) {
   const [activeStop, setActiveStop] = useState(0);
   const [animating, setAnimating]   = useState(true);
   const [hovered, setHovered]       = useState(null);
@@ -130,10 +135,10 @@ export default function JapanRouteMap({ onDaySelect }) {
     setAnimating(false);
     if (isMobile) {
       setBottomCard(prev => prev?.id === city.id ? null : city);
-    } else if (onDaySelect && city.dayStart) {
+    } else if (isUnlocked && onDaySelect && city.dayStart) {
       onDaySelect(city.dayStart);
     }
-  }, [isMobile, onDaySelect]);
+  }, [isMobile, onDaySelect, isUnlocked]);
 
   // Get tooltip screen position relative to container
   const getTooltipPos = (svgX, svgY) => {
@@ -240,61 +245,72 @@ export default function JapanRouteMap({ onDaySelect }) {
         {/* City markers */}
         {CITIES.map((city, i) => {
           const [cx, cy] = proj(city.lon, city.lat);
-          const isActive = i === activeStop;
-          const isPast   = i < activeStop;
-          const isFuture = i > activeStop;
-          const cfg      = TIER[city.tier];
-          const r        = isActive ? cfg.rActive : cfg.r;
-          const opacity  = isFuture ? 0.28 : 1;
+          const isActive  = i === activeStop;
+          const isFuture  = i > activeStop;
+          const cfg       = TIER[city.tier];
+          const r         = isActive ? cfg.rActive : cfg.r;
+
+          // In preview, only PREVIEW_LABELED cities get full treatment
+          const showLabel = isUnlocked || PREVIEW_LABELED.has(city.id);
+
+          // Opacity: preview-hidden cities are faint static dots;
+          // labeled cities follow the normal active/past/future logic
+          const opacity = !showLabel ? 0.38 : (isFuture ? 0.28 : 1);
 
           return (
-            <g key={city.id} opacity={opacity} style={{ transition: 'opacity 0.4s ease', cursor: 'pointer' }}>
-              {/* Active halo */}
-              {isActive && (
+            <g key={city.id} opacity={opacity} style={{ transition: 'opacity 0.4s ease', cursor: showLabel ? 'pointer' : 'default' }}>
+              {/* Active halo — only for labeled cities */}
+              {isActive && showLabel && (
                 <circle cx={cx} cy={cy} r={r * 2.4} fill={cfg.halo} opacity="0.15"
                   style={{ transition: 'r 0.3s ease' }} />
               )}
               {/* Outer ring */}
               <circle cx={cx} cy={cy} r={r + 3.5} fill="none"
-                stroke={cfg.edge} strokeWidth="1" opacity={isActive ? 0.5 : 0.22} />
+                stroke={cfg.edge} strokeWidth="1" opacity={isActive && showLabel ? 0.5 : 0.22} />
               {/* Main dot */}
               <circle cx={cx} cy={cy} r={r}
                 fill={cfg.fill} stroke={cfg.edge} strokeWidth={cfg.sw}
                 style={{ transition: 'r 0.3s ease' }}
               />
 
-              {/* City name label */}
-              <text
-                x={cx + city.labelDx} y={cy - 1}
-                textAnchor={city.labelAnchor}
-                dominantBaseline="auto"
-                fontSize={cfg.lFs}
-                fontFamily="Georgia, serif"
-                fontWeight={city.tier === 1 ? '700' : city.tier === 2 ? '600' : '400'}
-                fill={isFuture ? '#9A9080' : '#1C1A16'}
-                style={{ paintOrder: 'stroke', stroke: '#C8DCE8', strokeWidth: '3', strokeLinejoin: 'round' }}
-              >
-                {city.name}
-              </text>
-              {/* Day range label */}
-              <text
-                x={cx + city.labelDx} y={cy + cfg.lFs * 0.9 + 1}
-                textAnchor={city.labelAnchor}
-                fontSize={cfg.dFs}
-                fontFamily="Helvetica, sans-serif"
-                fill={isFuture ? '#B5AA99' : '#7C7060'}
-                style={{ paintOrder: 'stroke', stroke: '#C8DCE8', strokeWidth: '2.5' }}
-              >
-                {`Days ${city.days}`}
-              </text>
+              {/* City name — labeled cities only */}
+              {showLabel && (
+                <text
+                  x={cx + city.labelDx} y={cy - 1}
+                  textAnchor={city.labelAnchor}
+                  dominantBaseline="auto"
+                  fontSize={cfg.lFs}
+                  fontFamily="Georgia, serif"
+                  fontWeight={city.tier === 1 ? '700' : city.tier === 2 ? '600' : '400'}
+                  fill={isFuture ? '#9A9080' : '#1C1A16'}
+                  style={{ paintOrder: 'stroke', stroke: '#C8DCE8', strokeWidth: '3', strokeLinejoin: 'round' }}
+                >
+                  {city.name}
+                </text>
+              )}
+              {/* Day range — unlocked only */}
+              {isUnlocked && (
+                <text
+                  x={cx + city.labelDx} y={cy + cfg.lFs * 0.9 + 1}
+                  textAnchor={city.labelAnchor}
+                  fontSize={cfg.dFs}
+                  fontFamily="Helvetica, sans-serif"
+                  fill={isFuture ? '#B5AA99' : '#7C7060'}
+                  style={{ paintOrder: 'stroke', stroke: '#C8DCE8', strokeWidth: '2.5' }}
+                >
+                  {`Days ${city.days}`}
+                </text>
+              )}
 
-              {/* Hit area (invisible, larger for easy tapping) */}
-              <circle cx={cx} cy={cy} r={Math.max(r + 14, 20)} fill="transparent"
-                onMouseEnter={() => !isMobile && !animating && setHovered(i)}
-                onMouseLeave={() => setHovered(null)}
-                onClick={() => handleStopInteract(city, i)}
-                onTouchStart={e => { e.preventDefault(); handleStopInteract(city, i); }}
-              />
+              {/* Hit area — labeled cities only */}
+              {showLabel && (
+                <circle cx={cx} cy={cy} r={Math.max(r + 14, 20)} fill="transparent"
+                  onMouseEnter={() => !isMobile && !animating && setHovered(i)}
+                  onMouseLeave={() => setHovered(null)}
+                  onClick={() => handleStopInteract(city, i)}
+                  onTouchStart={e => { e.preventDefault(); handleStopInteract(city, i); }}
+                />
+              )}
             </g>
           );
         })}
@@ -343,14 +359,16 @@ export default function JapanRouteMap({ onDaySelect }) {
               fontFamily: "'Playfair Display', Georgia, serif" }}>
               {city.name}
             </p>
-            <p style={{ fontSize: '11px', color: '#C9A96E', fontWeight: '600',
-              letterSpacing: '0.5px', margin: '0 0 6px', textTransform: 'uppercase' }}>
-              Days {city.days}
-            </p>
-            <p style={{ fontSize: '12px', color: '#6B6156', lineHeight: '1.5', margin: 0 }}>
+            {isUnlocked && (
+              <p style={{ fontSize: '11px', color: '#C9A96E', fontWeight: '600',
+                letterSpacing: '0.5px', margin: '0 0 6px', textTransform: 'uppercase' }}>
+                Days {city.days}
+              </p>
+            )}
+            <p style={{ fontSize: '12px', color: '#6B6156', lineHeight: '1.5', margin: isUnlocked ? 0 : '0 0 0' }}>
               {city.desc}
             </p>
-            {onDaySelect && city.dayStart && (
+            {isUnlocked && onDaySelect && city.dayStart && (
               <p style={{ fontSize: '10.5px', color: '#1B6B65', marginTop: '8px', fontWeight: '600', cursor: 'pointer' }}
                 onClick={() => onDaySelect(city.dayStart)}>
                 View day →
@@ -367,7 +385,12 @@ export default function JapanRouteMap({ onDaySelect }) {
             Journey Progress
           </span>
           <span style={{ fontSize: '12px', color: '#1B6B65', fontWeight: '600' }}>
-            {CITIES[activeStop].name} · Days {CITIES[activeStop].days}
+            {isUnlocked || PREVIEW_LABELED.has(CITIES[activeStop].id)
+              ? isUnlocked
+                ? `${CITIES[activeStop].name} · Days ${CITIES[activeStop].days}`
+                : CITIES[activeStop].name
+              : '· · ·'
+            }
           </span>
         </div>
 
@@ -395,9 +418,28 @@ export default function JapanRouteMap({ onDaySelect }) {
 
         {/* Stop labels */}
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-          <span style={{ fontSize: '10px', color: '#9A9080' }}>Day 1 · Tokyo</span>
-          <span style={{ fontSize: '10px', color: '#9A9080' }}>Day 17 · Hakone</span>
+          <span style={{ fontSize: '10px', color: '#9A9080' }}>
+            {isUnlocked ? 'Day 1 · Tokyo' : 'Tokyo'}
+          </span>
+          <span style={{ fontSize: '10px', color: '#9A9080' }}>
+            {isUnlocked ? 'Day 17 · Hakone' : `${CITIES.length} stops`}
+          </span>
         </div>
+
+        {/* Preview teaser caption */}
+        {!isUnlocked && (
+          <p style={{
+            marginTop: '14px', marginBottom: '0',
+            textAlign: 'center',
+            fontSize: '12px',
+            color: '#8C8070',
+            fontStyle: 'italic',
+            letterSpacing: '0.2px',
+            lineHeight: '1.5',
+          }}>
+            Full route and day-by-day flow available inside
+          </p>
+        )}
       </div>
 
       {/* ── Mobile bottom card ────────────────────────────────────────────── */}
@@ -425,14 +467,16 @@ export default function JapanRouteMap({ onDaySelect }) {
               fontFamily: "'Playfair Display', Georgia, serif" }}>
               {bottomCard.name}
             </p>
-            <p style={{ fontSize: '12px', color: '#C9A96E', fontWeight: '600', letterSpacing: '0.5px',
-              margin: '0 0 10px', textTransform: 'uppercase' }}>
-              Days {bottomCard.days}
-            </p>
+            {isUnlocked && (
+              <p style={{ fontSize: '12px', color: '#C9A96E', fontWeight: '600', letterSpacing: '0.5px',
+                margin: '0 0 10px', textTransform: 'uppercase' }}>
+                Days {bottomCard.days}
+              </p>
+            )}
             <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.6', margin: 0 }}>
               {bottomCard.desc}
             </p>
-            {onDaySelect && bottomCard.dayStart && (
+            {isUnlocked && onDaySelect && bottomCard.dayStart && (
               <button
                 onClick={() => { onDaySelect(bottomCard.dayStart); setBottomCard(null); }}
                 style={{
