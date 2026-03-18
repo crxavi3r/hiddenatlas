@@ -294,7 +294,6 @@ const s = StyleSheet.create({
   transportPage: {
     backgroundColor: C.white,
     paddingTop: 36,
-    paddingBottom: 28,
   },
   transportBody: {
     paddingHorizontal: 48,
@@ -384,7 +383,6 @@ const s = StyleSheet.create({
   dayPage: {
     backgroundColor: C.white,
     paddingTop: 36,
-    paddingBottom: 28,
   },
   dayImg: {
     width: '100%',

@@ -773,6 +773,13 @@ export const itineraries = [
       "Tizi n'Tichka pass: the High Atlas crossing at 2,260 metres, North Africa's highest main road",
       "Oualidia Atlantic lagoon: oysters, calm water and a quiet coastline two days from the dunes",
     ],
+    included: [
+      "Complete 8-day Morocco itinerary",
+      "Day-by-day route across the Rif, Atlas and Sahara",
+      "Key landscapes and places across the journey",
+      "Carefully structured travel framework",
+      "Downloadable PDF travel guide",
+    ],
     days: [
       {
         day: 1,
