@@ -1012,15 +1012,14 @@ function DayPage({ day, index, itinerary }) {
       ) : null}
 
       <View style={s.dayBody}>
-        {/* DAY N label */}
-        <Text style={s.dayChip}>DAY {index + 1}</Text>
+        {/* Title block — kept together to prevent orphan header */}
+        <View wrap={false}>
+          <Text style={s.dayChip}>DAY {index + 1}</Text>
+          <Text style={s.dayTitle}>{title}</Text>
+          <View style={s.dayRule} />
+          {body ? <Text style={s.dayDesc}>{body}</Text> : null}
+        </View>
 
-        {/* Large serif title */}
-        <Text style={s.dayTitle}>{title}</Text>
-        <View style={s.dayRule} />
-
-        {/* Paragraph description */}
-        {body ? <Text style={s.dayDesc}>{body}</Text> : null}
 
         {/* Bullet highlights */}
         {highlights.length > 0 ? (

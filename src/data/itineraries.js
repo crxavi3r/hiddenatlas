@@ -1773,16 +1773,15 @@ export const itineraries = [
       },
       {
         day: 10,
-        title: "Coron — Kayangan Lake and Twin Lagoon",
+        title: "Coron — Lakes and Lagoons",
         route: "Coron · Kayangan Lake · Twin Lagoon",
-        desc: "A twenty-minute hike over a limestone ridge on Coron Island leads to Kayangan Lake: a freshwater lake fed by mountain springs and enclosed by vertical stone walls. The water is so clear the bottom is visible at depth, and the lake has been consistently named the cleanest in Asia. Twin Lagoon follows: two lagoons connected by a limestone arch low enough to swim through at high tide, the inner lagoon noticeably warmer than the first. Barracuda Lake in the afternoon, where a thermocline brings two distinct water temperatures together in a single body.",
+        desc: "A full day through Coron's most visually intense landscapes. Kayangan Lake sits within limestone walls, its clarity revealing depth in a way few places do. Twin Lagoon follows, where two bodies of water meet through a narrow opening in the rock, the temperature shifting as you move between them. Barracuda Lake adds a final contrast, with distinct thermal layers visible underwater. Between the lakes, time in open water allows for light snorkelling over coral gardens, where reef structure and fish density bring a different dimension to the day.",
         bullets: [
-          "Kayangan Lake: a freshwater mountain lake inside the limestone karst of Coron Island, voted the cleanest lake in Asia",
-          "Twin Lagoon: two lagoons connected by a submerged rock arch, the inner lagoon warmer due to geothermal activity below",
-          "Barracuda Lake: a thermocline lake where cold spring water meets warm surface water at a visible depth",
-          "Coron Island: the ancestral domain of the Tagbanua people, accessible by boat from Coron town",
+          "Kayangan Lake: a freshwater lake enclosed by limestone cliffs, known for exceptional clarity",
+          "Twin Lagoon: two lagoons connected by a narrow rock passage with contrasting water temperatures",
+          "Barracuda Lake: a thermocline lake where warm and cold layers meet",
+          "Coral Garden: shallow reef areas with strong visibility and diverse marine life",
         ],
-        tip: "Arrange the Coron Island tour early: entrance to Kayangan and Twin Lagoon is regulated and visitor numbers are capped each day.",
         img: null,
       },
       {
