@@ -4,7 +4,7 @@
 
 import {
   Document, Page, Text, View, Image, StyleSheet,
-  Svg, Polygon,
+  Svg, Polygon, Path, Rect, Circle,
 } from '@react-pdf/renderer';
 
 // ── Colour tokens ─────────────────────────────────────────────────────────────
@@ -407,7 +407,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 48,
     paddingTop: 22,
     paddingBottom: 24,
-    breakInside: 'avoid',
   },
   dayChip: {
     fontFamily: 'Helvetica-Bold',
@@ -634,6 +633,173 @@ function StarMark({ size = 12, color = C.gold }) {
     </Svg>
   );
 }
+
+// ── PDF-Native SVG Route Maps ──────────────────────────────────────────────────
+// Renders route maps using @react-pdf/renderer SVG primitives.
+// Used for itineraries that have no static PNG map asset.
+
+function _pdfProj(lon, lat, X0, X1, Y0, Y1, VW, VH) {
+  return [
+    (lon - X0) / (X1 - X0) * VW,
+    (1 - (lat - Y0) / (Y1 - Y0)) * VH,
+  ];
+}
+
+function _pdfPoly(coords, proj) {
+  return coords.map(([ln, lt], i) => {
+    const [x, y] = proj(ln, lt);
+    return `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ') + ' Z';
+}
+
+function _pdfCatmull(lonlats, proj, t = 0.22) {
+  const pts = lonlats.map(([ln, lt]) => proj(ln, lt));
+  const n = pts.length;
+  let d = `M ${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i];
+    const p2 = pts[i + 1], p3 = pts[Math.min(n - 1, i + 2)];
+    const c1 = [p1[0] + (p2[0] - p0[0]) * t, p1[1] + (p2[1] - p0[1]) * t];
+    const c2 = [p2[0] - (p3[0] - p1[0]) * t, p2[1] - (p3[1] - p1[1]) * t];
+    d += ` C ${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
+function MoroccoRouteSvgMap() {
+  const VW = 800, VH = 720;
+  const X0 = -10.5, X1 = -2.0, Y0 = 29.0, Y1 = 36.7;
+  const proj = (ln, lt) => _pdfProj(ln, lt, X0, X1, Y0, Y1, VW, VH);
+  const svgH = Math.round(PAGE_W * VH / VW);   // ≈ 535pt
+
+  const LAND = [
+    [-5.8,35.9],[-5.2,35.9],[-4.0,35.65],[-3.2,35.1],[-2.5,34.9],[-2.0,34.2],
+    [-2.0,32.0],[-2.0,30.5],[-3.0,30.0],[-5.5,30.0],[-8.0,30.0],[-9.5,30.0],
+    [-9.8,30.5],[-10.0,31.3],[-9.9,32.0],[-9.6,32.8],[-9.2,33.0],[-8.6,33.4],
+    [-7.6,33.6],[-7.0,33.7],[-6.8,34.0],[-6.0,35.0],[-5.8,35.9],
+  ];
+  const SAHARA = [
+    [-2.0,32.5],[-2.0,29.0],[-5.0,29.0],[-7.5,29.0],[-9.5,29.5],[-10.0,30.5],
+    [-9.8,30.5],[-9.5,30.0],[-8.0,30.0],[-5.5,30.0],[-3.0,30.0],[-2.0,30.5],
+    [-2.0,32.0],[-2.8,32.2],[-3.5,31.8],[-4.5,31.8],[-5.5,31.5],[-6.5,31.2],
+    [-7.5,30.5],[-6.5,30.0],[-4.5,30.0],[-2.0,30.0],[-2.0,32.5],
+  ];
+  const CITIES = [
+    { name:'Chefchaouen', lon:-5.27, lat:35.17, tier:1, dx: 13 },
+    { name:'Fes',         lon:-5.00, lat:34.03, tier:1, dx:-13 },
+    { name:'Errachidia',  lon:-4.43, lat:31.93, tier:2, dx:-12 },
+    { name:'Merzouga',    lon:-3.97, lat:31.10, tier:1, dx:-13 },
+    { name:'Ouarzazate',  lon:-6.89, lat:30.92, tier:2, dx: 12 },
+    { name:'Marrakech',   lon:-7.99, lat:31.63, tier:1, dx: 12 },
+    { name:'Oualidia',    lon:-9.04, lat:32.73, tier:2, dx: 13 },
+    { name:'Casablanca',  lon:-7.59, lat:33.59, tier:2, dx: 13 },
+    { name:'Rabat',       lon:-6.84, lat:34.02, tier:2, dx: 13 },
+    { name:'Tangier Med', lon:-5.50, lat:35.88, tier:1, dx: 12 },
+  ];
+
+  const pts = CITIES.map(c => ({ ...c, pt: proj(c.lon, c.lat) }));
+  const routeD = _pdfCatmull(CITIES.map(c => [c.lon, c.lat]), proj);
+  const landD  = _pdfPoly(LAND, proj);
+  const saharaD = _pdfPoly(SAHARA, proj);
+
+  return (
+    <Svg viewBox={`0 0 ${VW} ${VH}`} width={PAGE_W} height={svgH}>
+      <Rect x={0} y={0} width={VW} height={VH} fill="#BDD5E0" />
+      <Path d={landD}   fill="#D8CBAA" stroke="#B5A48A" strokeWidth={0.9} />
+      <Path d={saharaD} fill="#C8A96A" fillOpacity={0.18} />
+      {/* Route depth shadow */}
+      <Path d={routeD} fill="none" stroke="#1F3D3A" strokeWidth={3.5} opacity={0.08} />
+      {/* Main route */}
+      <Path d={routeD} fill="none" stroke="#1B3D39" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+      {/* City dots */}
+      {pts.map((c, i) => {
+        const [cx, cy] = c.pt;
+        const r = c.tier === 1 ? 8 : 5;
+        return <Circle key={`d${i}`} cx={cx} cy={cy} r={r}
+          fill={c.tier === 1 ? '#F2E4CB' : '#C8D9D5'}
+          stroke={c.tier === 1 ? '#C9A96E' : '#2A5248'}
+          strokeWidth={c.tier === 1 ? 2 : 1.5}
+        />;
+      })}
+      {/* Labels — rendered after dots so they appear on top */}
+      {pts.map((c, i) => {
+        const [cx, cy] = c.pt;
+        const r = c.tier === 1 ? 8 : 5;
+        const tx = c.dx > 0 ? cx + r + 6 : cx - r - 6;
+        const anchor = c.dx > 0 ? 'start' : 'end';
+        const fs = c.tier === 1 ? 11 : 9.5;
+        return <Text key={`l${i}`} x={tx} y={cy + 4}
+          textAnchor={anchor} fontFamily="Helvetica-Bold" fontSize={fs} fill="#1C1A16">
+          {c.name}
+        </Text>;
+      })}
+    </Svg>
+  );
+}
+
+function PhilippinesRouteSvgMap() {
+  const VW = 660, VH = 800;
+  const X0 = 117.8, X1 = 123.0, Y0 = 9.0, Y1 = 15.5;
+  const proj = (ln, lt) => _pdfProj(ln, lt, X0, X1, Y0, Y1, VW, VH);
+  // Scale to fit: cap height at 650pt, derive width to maintain aspect
+  const svgH = 650;
+  const svgW = Math.round(svgH * VW / VH);     // ≈ 537pt
+
+  const ISLANDS = [
+    { coords: [[120.0,15.4],[120.5,15.5],[121.2,15.3],[122.0,14.8],[122.5,14.2],[122.0,13.5],[121.2,13.0],[120.5,13.3],[120.0,13.8],[119.8,14.3],[120.0,15.4]], op: 1 },
+    { coords: [[119.2,11.4],[119.5,11.45],[119.75,11.1],[119.6,10.6],[119.3,10.0],[119.0,9.4],[118.7,9.0],[118.3,9.0],[118.5,9.5],[118.8,10.2],[119.0,10.8],[119.2,11.4]], op: 1 },
+    { coords: [[119.7,12.35],[120.3,12.3],[120.75,12.1],[120.85,11.8],[120.5,11.6],[120.0,11.7],[119.7,11.9],[119.7,12.35]], op: 0.95 },
+    { coords: [[121.2,12.5],[122.4,11.8],[122.7,11.1],[122.2,10.5],[121.5,10.7],[121.0,11.5],[121.2,12.5]], op: 0.92 },
+    { coords: [[120.7,13.4],[121.5,13.0],[121.5,12.4],[121.0,12.2],[120.3,12.6],[120.3,13.1],[120.7,13.4]], op: 0.95 },
+  ];
+  const CITIES = [
+    { name:'Manila',      lon:120.97, lat:14.60, tier:1, dx: 13 },
+    { name:'San Vicente', lon:119.49, lat:10.53, tier:2, dx: 13 },
+    { name:'El Nido',     lon:119.41, lat:11.17, tier:1, dx:-12 },
+    { name:'Coron',       lon:120.20, lat:11.99, tier:2, dx: 13 },
+    { name:'Boracay',     lon:121.93, lat:11.96, tier:1, dx:-12 },
+  ];
+  const ROUTE_LONLAT = [...CITIES.map(c => [c.lon, c.lat]), [120.97, 14.60]];
+
+  const pts    = CITIES.map(c => ({ ...c, pt: proj(c.lon, c.lat) }));
+  const routeD = _pdfCatmull(ROUTE_LONLAT, proj);
+
+  return (
+    <Svg viewBox={`0 0 ${VW} ${VH}`} width={svgW} height={svgH}>
+      <Rect x={0} y={0} width={VW} height={VH} fill="#C4DAE8" />
+      {ISLANDS.map((isl, i) => (
+        <Path key={i} d={_pdfPoly(isl.coords, proj)}
+          fill="#DDD4BE" stroke="#B0A48A" strokeWidth={0.8} fillOpacity={isl.op} />
+      ))}
+      <Path d={routeD} fill="none" stroke="#1F3D3A" strokeWidth={3} opacity={0.08} />
+      <Path d={routeD} fill="none" stroke="#1B3D39" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+      {pts.map((c, i) => (
+        <Circle key={`d${i}`} cx={c.pt[0]} cy={c.pt[1]}
+          r={c.tier === 1 ? 8 : 5}
+          fill={c.tier === 1 ? '#F2E4CB' : '#C8D9D5'}
+          stroke={c.tier === 1 ? '#C9A96E' : '#2A5248'}
+          strokeWidth={c.tier === 1 ? 2 : 1.5}
+        />
+      ))}
+      {pts.map((c, i) => {
+        const [cx, cy] = c.pt;
+        const r = c.tier === 1 ? 8 : 5;
+        const tx = c.dx > 0 ? cx + r + 6 : cx - r - 6;
+        return <Text key={`l${i}`} x={tx} y={cy + 4}
+          textAnchor={c.dx > 0 ? 'start' : 'end'}
+          fontFamily="Helvetica-Bold" fontSize={c.tier === 1 ? 11 : 9.5} fill="#1C1A16">
+          {c.name}
+        </Text>;
+      })}
+    </Svg>
+  );
+}
+
+// Lookup: itinerary ID → PDF SVG map component + natural dimensions
+const PDF_ROUTE_MAPS = {
+  'morocco-motorcycle-expedition': { Component: MoroccoRouteSvgMap, svgW: PAGE_W,  svgH: Math.round(PAGE_W * 720 / 800) },
+  'philippines-island-journey':    { Component: PhilippinesRouteSvgMap, svgW: Math.round(650 * 660 / 800), svgH: 650 },
+};
 
 /** Thin running header shared by all inner pages */
 function RunHeader({ country, title }) {
@@ -862,7 +1028,7 @@ function DayPage({ day, index, itinerary }) {
         {highlights.length > 0 ? (
           <View style={s.dayBullets}>
             {highlights.map((h, i) => (
-              <View key={i} style={s.dayBulletRow}>
+              <View key={i} wrap={false} style={s.dayBulletRow}>
                 <View style={s.dayBulletDot} />
                 <Text style={s.dayBulletText}>{h}</Text>
               </View>
@@ -872,7 +1038,7 @@ function DayPage({ day, index, itinerary }) {
 
         {/* Insider Tip */}
         {tip ? (
-          <View style={s.tipBox}>
+          <View wrap={false} style={s.tipBox}>
             <Text style={s.tipLabel}>INSIDER TIP</Text>
             <Text style={s.tipText}>{tip}</Text>
           </View>
@@ -980,6 +1146,92 @@ function DestinationMapPage({ itinerary }) {
   );
 }
 
+// ── Destination SVG Map page (PDF-native, no external asset required) ─────────
+//
+// Used for itineraries in PDF_ROUTE_MAPS that do not have a static PNG.
+// Renders the route map using @react-pdf/renderer SVG primitives.
+
+function DestinationSvgMapPage({ itinerary }) {
+  const { title, country, mapImage, days = [], duration } = itinerary;
+  const entry = PDF_ROUTE_MAPS[itinerary.id];
+  // Skip if a PNG map exists (DestinationMapPage handles that case)
+  // or if no SVG map is defined
+  if (mapImage || !entry) return null;
+
+  const { Component, svgW, svgH } = entry;
+
+  // Build deduplicated stops
+  const stops = [];
+  const seen = new Set();
+  for (const d of days) {
+    const city = (d.route || d.title || '').split(/[·–\-]/)[0].trim();
+    if (city && !seen.has(city)) { seen.add(city); stops.push(city); }
+  }
+  const displayStops = stops.slice(0, 10);
+  const hasMore = stops.length > 10;
+
+  return (
+    <Page size="A4" style={{ backgroundColor: C.stone }}>
+      <RunHeader country={country} title={title} />
+
+      {/* Slim two-column editorial header */}
+      <View style={{
+        paddingHorizontal: 48, paddingTop: 16, paddingBottom: 14,
+        flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between',
+        borderBottomWidth: 1, borderBottomColor: C.border,
+      }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: 2.5, color: C.teal, marginBottom: 7 }}>
+            ROUTE MAP
+          </Text>
+          <Text style={{ fontFamily: 'Times-Bold', fontSize: 26, color: C.charcoal, lineHeight: 1.1 }}>
+            {title}
+          </Text>
+        </View>
+        {duration ? (
+          <View style={{ alignItems: 'flex-end', paddingBottom: 3 }}>
+            <Text style={{ fontFamily: 'Helvetica', fontSize: 8.5, color: C.muted, marginBottom: 6 }}>
+              {duration}
+            </Text>
+            <View style={{ width: 30, height: 1.5, backgroundColor: C.gold }} />
+          </View>
+        ) : null}
+      </View>
+
+      {/* SVG map — centered horizontally */}
+      <View style={{ alignItems: 'center', backgroundColor: C.stone }}>
+        <Component />
+      </View>
+
+      {/* Compact stops strip */}
+      {displayStops.length > 0 && (
+        <View style={{
+          paddingHorizontal: 48, paddingTop: 10, paddingBottom: 10,
+          borderTopWidth: 0.5, borderTopColor: C.border,
+          flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap',
+        }}>
+          {displayStops.map((stop, i) => (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ width: 3.5, height: 3.5, borderRadius: 2, backgroundColor: C.gold, marginRight: 5 }} />
+              <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: C.charcoal, marginRight: 3 }}>{stop}</Text>
+              {(i < displayStops.length - 1 || hasMore) && (
+                <Text style={{ fontFamily: 'Helvetica', fontSize: 8.5, color: C.border, marginRight: 6 }}>›</Text>
+              )}
+            </View>
+          ))}
+          {hasMore && (
+            <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: C.muted, fontStyle: 'italic' }}>
+              +{stops.length - 10} more
+            </Text>
+          )}
+        </View>
+      )}
+
+      <Text style={s.pageNum} render={({ pageNumber }) => String(pageNumber)} fixed />
+    </Page>
+  );
+}
+
 // ── Transport page ─────────────────────────────────────────────────────────────
 
 function TransportPage({ itinerary }) {
@@ -1003,7 +1255,7 @@ function TransportPage({ itinerary }) {
 
         {/* Routes */}
         {transport.routes.map((route, i) => (
-          <View key={i} style={i === transport.routes.length - 1 ? s.transportRowLast : s.transportRow}>
+          <View key={i} wrap={false} style={i === transport.routes.length - 1 ? s.transportRowLast : s.transportRow}>
             <View style={[s.transportModeDot, { backgroundColor: modeColor(route.mode) }]} />
             <View style={{ flex: 1 }}>
               <Text style={s.transportSegment}>{route.segment}</Text>
@@ -1095,8 +1347,11 @@ export default function ItineraryPDF({ itinerary }) {
       {/* Page 2 – Expedition Route + Highlights */}
       <RouteMapPage itinerary={itinerary} />
 
-      {/* Page 3 (optional) – Destination route map image */}
-      {itinerary.mapImage && <DestinationMapPage itinerary={itinerary} />}
+      {/* Page 3 (optional) – Destination route map: PNG asset or PDF-native SVG */}
+      {itinerary.mapImage
+        ? <DestinationMapPage itinerary={itinerary} />
+        : <DestinationSvgMapPage itinerary={itinerary} />
+      }
 
       {/* Pages 3/4…N – Day by day */}
       {days.map((day, i) => (
