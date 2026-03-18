@@ -794,32 +794,46 @@ const api = useApi();
             )}
 
             {/* Journey Snapshot / Route Overview */}
-            {routeOverview && (
-              <section style={{ marginBottom: '60px' }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
-                  <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', margin: 0 }}>
-                    Journey Snapshot
-                  </h2>
-                  {nights && (
-                    <span style={{
-                      fontSize: '15px', fontWeight: '600',
-                      color: '#1B6B65',
-                      letterSpacing: '0.3px',
-                    }}>
-                      {duration.replace(/\bdays?\b/i, 'Days')} &bull; {nights} Nights
-                    </span>
-                  )}
-                </div>
-                <div style={{ background: '#EFF6F5', borderRadius: '8px', padding: '24px 28px', display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#1B6B65', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Route size={16} color="white" />
+            {routeOverview && (() => {
+              const isLocked = isPremium && !hasAccess;
+              // Strip "(N nights)" / "(N night)" / generic parentheticals for locked preview
+              const simplifiedRoute = routeOverview
+                .split('→')
+                .map(s => s.replace(/\s*\([^)]*\)\s*/g, '').trim())
+                .filter(Boolean)
+                .join(' → ');
+              return (
+                <section style={{ marginBottom: '60px' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                    <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', margin: 0 }}>
+                      Journey Snapshot
+                    </h2>
+                    {nights && !isLocked && (
+                      <span style={{
+                        fontSize: '15px', fontWeight: '600',
+                        color: '#1B6B65',
+                        letterSpacing: '0.3px',
+                      }}>
+                        {duration.replace(/\bdays?\b/i, 'Days')} &bull; {nights} Nights
+                      </span>
+                    )}
                   </div>
-                  <p style={{ fontSize: '15px', color: '#2C5F5A', lineHeight: '1.7', fontWeight: '500' }}>
-                    {routeOverview}
-                  </p>
-                </div>
-              </section>
-            )}
+                  <div style={{ background: '#EFF6F5', borderRadius: '8px', padding: '24px 28px', display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#1B6B65', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Route size={16} color="white" />
+                    </div>
+                    <p style={{ fontSize: '15px', color: '#2C5F5A', lineHeight: '1.7', fontWeight: '500' }}>
+                      {isLocked ? simplifiedRoute : routeOverview}
+                    </p>
+                  </div>
+                  {isLocked && (
+                    <p style={{ fontSize: '13px', color: '#6B6156', marginTop: '12px', fontStyle: 'italic' }}>
+                      Detailed route breakdown and nights per location are available after unlock.
+                    </p>
+                  )}
+                </section>
+              );
+            })()}
 
             {/* Transport Between Cities */}
             {transport && (hasAccess || !isPremium) && (
