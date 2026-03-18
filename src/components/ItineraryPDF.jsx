@@ -293,6 +293,8 @@ const s = StyleSheet.create({
   // ── Transport page ─────────────────────────────────────────────────────────
   transportPage: {
     backgroundColor: C.white,
+    paddingTop: 36,
+    paddingBottom: 28,
   },
   transportBody: {
     paddingHorizontal: 48,
@@ -381,6 +383,8 @@ const s = StyleSheet.create({
   // ── Day pages ──────────────────────────────────────────────────────────────
   dayPage: {
     backgroundColor: C.white,
+    paddingTop: 36,
+    paddingBottom: 28,
   },
   dayImg: {
     width: '100%',
@@ -999,7 +1003,7 @@ function DayPage({ day, index, itinerary }) {
     <Page size="A4" style={s.dayPage}>
       <RunHeader country={country} title={itinTitle} />
 
-      {/* Top banner image(s) */}
+      {/* Top banner image(s) — only rendered when images exist */}
       {resolvedImgs.length === 2 ? (
         <View style={{ flexDirection: 'row', width: '100%', height: 205, breakInside: 'avoid' }}>
           <Image src={resolvedImgs[0]} style={{ width: '50%', height: 205, objectFit: 'cover', objectPosition: 'center' }} />
@@ -1007,11 +1011,7 @@ function DayPage({ day, index, itinerary }) {
         </View>
       ) : resolvedImgs.length === 1 ? (
         <Image src={resolvedImgs[0]} style={s.dayImg} />
-      ) : (
-        <View style={s.dayImgPlaceholder}>
-          <Text style={s.dayPlaceholderText}>{country.toUpperCase()}</Text>
-        </View>
-      )}
+      ) : null}
 
       <View style={s.dayBody}>
         {/* DAY N label */}

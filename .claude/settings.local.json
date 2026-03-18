@@ -73,7 +73,12 @@
       "Read(//Users/cristianoxavier/Documents/Projects/HiddenAtlas/content/itineraries/bali-island-journey/day-images/**)",
       "Bash(grep -v \"^total\\\\|^\\\\.\\\\.$\\\\|^\\\\.$\")",
       "Bash(pip3 install:*)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(ls -lh content/itineraries/*/ *-hiddenatlas.pdf)",
+      "Bash(ls -lh content/itineraries/morocco-motorcycle-expedition/*-hiddenatlas.pdf content/itineraries/japan-grand-cultural-journey/*-hiddenatlas.pdf content/itineraries/philippines-island-journey/*-hiddenatlas.pdf)",
+      "Bash(for slug:*)",
+      "Bash(ls -lh content/itineraries/*/*.pdf)",
+      "Bash(sort -k2)"
     ]
   }
 }
