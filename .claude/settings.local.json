@@ -78,7 +78,8 @@
       "Bash(ls -lh content/itineraries/morocco-motorcycle-expedition/*-hiddenatlas.pdf content/itineraries/japan-grand-cultural-journey/*-hiddenatlas.pdf content/itineraries/philippines-island-journey/*-hiddenatlas.pdf)",
       "Bash(for slug:*)",
       "Bash(ls -lh content/itineraries/*/*.pdf)",
-      "Bash(sort -k2)"
+      "Bash(sort -k2)",
+      "Bash(ls:*)"
     ]
   }
 }

@@ -1271,6 +1271,71 @@ function TransportPage({ itinerary }) {
   );
 }
 
+// ── Closing editorial page ─────────────────────────────────────────────────────
+//
+// Renders "Why This Journey Is Special" and "Journey Snapshot" sections.
+// Only shown when the itinerary has a whySpecial or routeOverview field.
+
+function ClosingPage({ itinerary }) {
+  const { title, country, whySpecial, routeOverview } = itinerary;
+  if (!whySpecial && !routeOverview) return null;
+
+  return (
+    <Page size="A4" style={{ backgroundColor: C.stone }}>
+      <RunHeader country={country} title={title} />
+
+      <View style={{ paddingHorizontal: 48, paddingTop: 36, paddingBottom: 40 }}>
+
+        {whySpecial ? (
+          <View style={{ marginBottom: routeOverview ? 38 : 0 }}>
+            {/* Eyebrow + rule */}
+            <Text style={{
+              fontFamily: 'Helvetica-Bold', fontSize: 7.5,
+              letterSpacing: 2.5, color: C.teal, marginBottom: 14,
+            }}>
+              WHY THIS JOURNEY IS SPECIAL
+            </Text>
+            <View style={{ width: 32, height: 1.5, backgroundColor: C.gold, marginBottom: 22 }} />
+
+            {/* Editorial body — serif for magazine feel */}
+            <Text style={{
+              fontFamily: 'Times-Roman', fontSize: 12.5,
+              color: C.charcoal, lineHeight: 1.88,
+              maxWidth: 460,
+            }}>
+              {whySpecial}
+            </Text>
+          </View>
+        ) : null}
+
+        {routeOverview ? (
+          <View style={{
+            borderTopWidth: whySpecial ? 1 : 0,
+            borderTopColor: C.border,
+            paddingTop: whySpecial ? 30 : 0,
+          }}>
+            <Text style={{
+              fontFamily: 'Helvetica-Bold', fontSize: 7.5,
+              letterSpacing: 2.5, color: C.teal, marginBottom: 14,
+            }}>
+              JOURNEY SNAPSHOT
+            </Text>
+            <Text style={{
+              fontFamily: 'Helvetica', fontSize: 10.5,
+              color: C.muted, lineHeight: 1.75,
+            }}>
+              {routeOverview}
+            </Text>
+          </View>
+        ) : null}
+
+      </View>
+
+      <Text style={s.pageNum} render={({ pageNumber }) => String(pageNumber)} fixed />
+    </Page>
+  );
+}
+
 function CTAPage({ itinerary }) {
   const { title, country, isPremium, price, currency } = itinerary;
 
@@ -1355,8 +1420,11 @@ export default function ItineraryPDF({ itinerary }) {
         <DayPage key={i} day={day} index={i} itinerary={itinerary} />
       ))}
 
-      {/* Transport Between Cities (optional) – after route, before CTA */}
+      {/* Transport Between Cities (optional) – after route, before closing */}
       {itinerary.transport && <TransportPage itinerary={itinerary} />}
+
+      {/* Closing editorial page – Why This Journey Is Special + Journey Snapshot */}
+      <ClosingPage itinerary={itinerary} />
 
       {/* Final page – CTA */}
       <CTAPage itinerary={itinerary} />
