@@ -59,8 +59,8 @@ const T = {
 // Destinations derived from itineraries — see itineraries.js
 
 /* ─── Derived from itineraries data ─── */
-const freeJourneys = itineraries.filter(it => !it.isPremium);
-const premiumJourneys = itineraries.filter(it => it.isPremium);
+const freeJourneys = itineraries.filter(it => !it.isPremium && !it.parentId);
+const premiumJourneys = itineraries.filter(it => it.isPremium && !it.parentId);
 
 /* ─── Philippines itinerary preview ─── */
 const philippinesTimeline = [
@@ -271,7 +271,7 @@ export default function HomePage() {
 
           {/* 3-column destination grid — all 8 journeys */}
           <div className="dest-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-            {itineraries.map((it, i) => (
+            {itineraries.filter(it => !it.parentId).map((it, i) => (
               <Reveal key={it.id} delay={i * 0.06} style={{ height: '100%' }}>
                 <DestinationCard it={it} />
               </Reveal>

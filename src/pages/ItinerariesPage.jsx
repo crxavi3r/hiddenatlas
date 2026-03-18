@@ -14,8 +14,8 @@ export default function ItinerariesPage() {
     return it.title.toLowerCase().includes(q) || it.country.toLowerCase().includes(q);
   };
 
-  const freeJourneys = itineraries.filter(it => !it.isPremium && matchesSearch(it));
-  const premiumJourneys = itineraries.filter(it => it.isPremium && matchesSearch(it));
+  const freeJourneys = itineraries.filter(it => !it.isPremium && !it.parentId && matchesSearch(it));
+  const premiumJourneys = itineraries.filter(it => it.isPremium && !it.parentId && matchesSearch(it));
 
   return (
     <div style={{ background: '#FAFAF8', paddingTop: '72px' }}>

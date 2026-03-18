@@ -7,7 +7,8 @@ const audienceIcon = { 'Couples': '♥', 'Families': '⌂', 'Friend Groups': '�
 
 export default function ItineraryCard({ itinerary, variant = 'default', isPurchased = false }) {
   const [hovered, setHovered] = useState(false);
-  const { id, title, subtitle, country, duration, groupSize, price, isPremium, tag, image, bestFor } = itinerary;
+  const { id, title, subtitle, country, duration, durationRange, groupSize, price, isPremium, tag, image, bestFor } = itinerary;
+  const displayDuration = durationRange || duration;
 
   if (variant === 'featured') {
     return (
@@ -147,7 +148,7 @@ export default function ItineraryCard({ itinerary, variant = 'default', isPurcha
             <div style={{ display: 'flex', gap: '14px', marginBottom: '18px' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12.5px', color: '#6B6156' }}>
                 <Clock size={12} strokeWidth={2} />
-                {duration}
+                {displayDuration}
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12.5px', color: '#6B6156' }}>
                 <Users size={12} strokeWidth={2} />
@@ -234,7 +235,7 @@ export default function ItineraryCard({ itinerary, variant = 'default', isPurcha
           <p style={{ fontSize: '13px', color: '#8C8070', marginBottom: '12px' }}>{subtitle}</p>
           <div style={{ display: 'flex', gap: '12px' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#6B6156' }}>
-              <Clock size={12} />{duration}
+              <Clock size={12} />{displayDuration}
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#6B6156' }}>
               <Users size={12} />{groupSize}
