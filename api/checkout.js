@@ -1,6 +1,7 @@
 import Stripe from 'stripe';
 import pg from 'pg';
 import { verifyAuth } from './_lib/verifyAuth.js';
+import { getVariantPriceId, getUnlockableSlugs } from './_lib/itineraryVariants.js';
 
 const { Pool } = pg;
 
@@ -57,7 +58,7 @@ async function handleSession(req, res, body) {
   if (!process.env.CLERK_SECRET_KEY || !process.env.DATABASE_URL) {
     return res.status(500).json({ error: 'Server misconfigured' });
   }
-  if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_PRICE_ID) {
+  if (!process.env.STRIPE_SECRET_KEY) {
     return res.status(500).json({ error: 'Stripe not configured' });
   }
 
@@ -68,8 +69,15 @@ async function handleSession(req, res, body) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { slug } = body;
+  const { slug, variant = 'premium' } = body;
   if (!slug) return res.status(400).json({ error: 'slug is required' });
+
+  // Resolve the correct Stripe price ID for this variant tier
+  const priceId = getVariantPriceId(variant);
+  if (!priceId) {
+    console.error('[checkout/session] no price configured for variant:', variant);
+    return res.status(500).json({ error: `Stripe price not configured for variant: ${variant}` });
+  }
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   let userId, userEmail;
@@ -91,39 +99,22 @@ async function handleSession(req, res, body) {
   const origin = req.headers.origin || 'http://localhost:3000';
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-  // ── Diagnostics: inspect the Price object before creating the session ──────
-  // This does NOT change checkout behavior — read-only fetch for logging only.
   try {
-    const priceId = process.env.STRIPE_PRICE_ID;
-    console.log('[checkout/session] STRIPE_PRICE_ID present:', !!priceId, '| value:', priceId);
-    if (priceId) {
-      const price = await stripe.prices.retrieve(priceId);
-      console.log('[checkout/session] price currency:', price.currency, '| unit_amount:', price.unit_amount, '| active:', price.active);
-    }
-  } catch (diagErr) {
-    console.warn('[checkout/session] price diagnostics failed (non-fatal):', diagErr.message);
-  }
-
-  try {
-    const sessionParams = {
+    const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
+      line_items: [{ price: priceId, quantity: 1 }],
       customer_email: userEmail,
       success_url: `${origin}/itineraries/${slug}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${origin}/itineraries/${slug}`,
       metadata: {
         itinerary_slug: slug,
+        variant:        variant,
         user_id:        userId,
         clerk_id:       clerkId,
       },
-    };
+    });
 
-    console.log('[checkout/session] creating session — slug:', slug);
-
-    const session = await stripe.checkout.sessions.create(sessionParams);
-
-    console.log('[checkout/session] session created — id:', session.id);
-
+    console.log('[checkout/session] session created — slug:', slug, '| variant:', variant, '| id:', session.id);
     return res.status(200).json({ url: session.url });
   } catch (err) {
     console.error('[checkout/session] Stripe error:', err);
@@ -174,28 +165,46 @@ async function handleVerify(req, res, body) {
       return res.status(403).json({ error: 'Session does not belong to this user' });
     }
 
-    await pool.query(
-      `INSERT INTO "Itinerary" (id, slug, title, description, price, "coverImage", "isPublished", "createdAt")
-       VALUES (gen_random_uuid(), $1, $1, '', $2, '', true, NOW())
-       ON CONFLICT (slug) DO NOTHING`,
-      [slug, session.amount_total / 100]
-    );
+    // Resolve all slugs to unlock (purchased + lower tiers if applicable)
+    const unlockableSlugs = getUnlockableSlugs(slug);
+    console.log('[checkout/verify] unlocking slugs:', unlockableSlugs, '— userId:', userId);
 
-    const { rows: itineraries } = await pool.query(
-      `SELECT id, "pdfUrl" FROM "Itinerary" WHERE slug = $1`,
-      [slug]
-    );
-    const itinerary = itineraries[0];
+    let primaryPdfUrl = null;
 
-    const { rowCount } = await pool.query(
-      `INSERT INTO "Purchase" (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId", amount, status, "purchasedAt", "createdAt")
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'paid', NOW(), NOW())
-       ON CONFLICT ("stripeSessionId") DO NOTHING`,
-      [userId, itinerary.id, sessionId, session.payment_intent, session.amount_total / 100]
-    );
-    console.log('[checkout/verify] purchase', rowCount > 0 ? 'created' : 'already existed', '— userId:', userId, '| slug:', slug, '| sessionId:', sessionId);
+    for (const [idx, unlockSlug] of unlockableSlugs.entries()) {
+      await pool.query(
+        `INSERT INTO "Itinerary" (id, slug, title, description, price, "coverImage", "isPublished", "createdAt")
+         VALUES (gen_random_uuid(), $1, $1, '', $2, '', true, NOW())
+         ON CONFLICT (slug) DO NOTHING`,
+        [unlockSlug, session.amount_total / 100]
+      );
 
-    return res.status(200).json({ hasAccess: true, pdfUrl: itinerary.pdfUrl ?? null });
+      const { rows: itinRows } = await pool.query(
+        `SELECT id, "pdfUrl" FROM "Itinerary" WHERE slug = $1`,
+        [unlockSlug]
+      );
+      const itin = itinRows[0];
+      if (!itin) continue;
+
+      // Purchased slug uses the real sessionId; unlocked siblings use a derived key
+      const stripeKey = idx === 0 ? sessionId : `${sessionId}__unlock_${idx}`;
+
+      const { rowCount } = await pool.query(
+        `INSERT INTO "Purchase" (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId", amount, status, "purchasedAt", "createdAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'paid', NOW(), NOW())
+         ON CONFLICT ("stripeSessionId") DO NOTHING`,
+        [userId, itin.id, stripeKey, session.payment_intent, session.amount_total / 100]
+      );
+
+      if (idx === 0) {
+        primaryPdfUrl = itin.pdfUrl ?? null;
+        console.log('[checkout/verify] purchase', rowCount > 0 ? 'created' : 'already existed', '— slug:', unlockSlug, '| sessionId:', sessionId);
+      } else {
+        console.log('[checkout/verify] unlock', rowCount > 0 ? 'created' : 'already existed', '— slug:', unlockSlug);
+      }
+    }
+
+    return res.status(200).json({ hasAccess: true, pdfUrl: primaryPdfUrl });
   } catch (err) {
     console.error('[checkout/verify] DB error:', err.message);
     return res.status(500).json({ error: 'Verification failed' });
@@ -439,38 +448,43 @@ async function handleWebhook(req, res, rawBody) {
     return res.status(200).json({ received: true });
   }
 
+  // Resolve all slugs to unlock (purchased + lower tiers if applicable)
+  const unlockableSlugs = getUnlockableSlugs(slug);
+  console.log('[checkout/webhook] unlocking slugs:', unlockableSlugs, '— userId:', userId);
+
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    // Idempotency: skip if this Stripe session was already processed
-    const { rows: existing } = await pool.query(
-      `SELECT id FROM "Purchase" WHERE "stripeSessionId" = $1`,
-      [session.id]
-    );
-    if (existing.length) {
-      console.log('[checkout/webhook] purchase already exists for session:', session.id, '— skipping');
-      return res.status(200).json({ received: true });
+    for (const [idx, unlockSlug] of unlockableSlugs.entries()) {
+      await pool.query(
+        `INSERT INTO "Itinerary" (id, slug, title, description, price, "coverImage", "isPublished", "createdAt")
+         VALUES (gen_random_uuid(), $1, $1, '', $2, '', true, NOW())
+         ON CONFLICT (slug) DO NOTHING`,
+        [unlockSlug, session.amount_total / 100]
+      );
+
+      const { rows: itinRows } = await pool.query(
+        `SELECT id FROM "Itinerary" WHERE slug = $1`,
+        [unlockSlug]
+      );
+      const itin = itinRows[0];
+      if (!itin) continue;
+
+      // Purchased slug uses the real sessionId; unlocked siblings use a derived key
+      const stripeKey = idx === 0 ? session.id : `${session.id}__unlock_${idx}`;
+
+      const { rowCount } = await pool.query(
+        `INSERT INTO "Purchase" (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId", amount, status, "purchasedAt", "createdAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'paid', NOW(), NOW())
+         ON CONFLICT ("stripeSessionId") DO NOTHING`,
+        [userId, itin.id, stripeKey, session.payment_intent, session.amount_total / 100]
+      );
+
+      if (idx === 0) {
+        console.log('[checkout/webhook] purchase', rowCount > 0 ? 'created' : 'already existed', '— slug:', unlockSlug, '| sessionId:', session.id);
+      } else {
+        console.log('[checkout/webhook] unlock', rowCount > 0 ? 'created' : 'already existed', '— slug:', unlockSlug);
+      }
     }
-
-    await pool.query(
-      `INSERT INTO "Itinerary" (id, slug, title, description, price, "coverImage", "isPublished", "createdAt")
-       VALUES (gen_random_uuid(), $1, $1, '', $2, '', true, NOW())
-       ON CONFLICT (slug) DO NOTHING`,
-      [slug, session.amount_total / 100]
-    );
-
-    const { rows: itineraries } = await pool.query(
-      `SELECT id FROM "Itinerary" WHERE slug = $1`,
-      [slug]
-    );
-
-    await pool.query(
-      `INSERT INTO "Purchase" (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId", amount, status, "purchasedAt", "createdAt")
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'paid', NOW(), NOW())
-       ON CONFLICT ("stripeSessionId") DO NOTHING`,
-      [userId, itineraries[0].id, session.id, session.payment_intent, session.amount_total / 100]
-    );
-
-    console.log('[checkout/webhook] purchase created — userId:', userId, '| slug:', slug, '| sessionId:', session.id);
 
     // ── Email hook point ─────────────────────────────────────────────────────
     // Stripe receipt is already sent automatically via the Dashboard.

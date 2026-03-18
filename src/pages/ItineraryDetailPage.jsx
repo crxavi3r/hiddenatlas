@@ -426,6 +426,7 @@ const api = useApi();
     try {
       const res = await api.post('/api/checkout?action=session', {
         slug:       itinerary.id,
+        variant:    itinerary.variant || 'premium',
         amount:     itinerary.price,
         title:      itinerary.title,
         coverImage: itinerary.coverImage || itinerary.image,
@@ -657,11 +658,18 @@ const api = useApi();
                       {durationDescriptions[child.durationOption] || child.shortDescription}
                     </p>
                     <div style={{
-                      display: 'flex', alignItems: 'center', gap: '6px',
-                      color: isComplete ? '#C9A96E' : '#1B6B65', fontSize: '13px', fontWeight: '600',
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid #F4F1EC',
                     }}>
-                      View itinerary <ArrowRight size={14} />
+                      <span style={{ fontSize: '18px', fontWeight: '700', color: '#1C1A16' }}>
+                        €{child.price}
+                      </span>
+                      <span style={{
+                        display: 'flex', alignItems: 'center', gap: '6px',
+                        color: isComplete ? '#C9A96E' : '#1B6B65', fontSize: '13px', fontWeight: '600',
+                      }}>
+                        View itinerary <ArrowRight size={14} />
+                      </span>
                     </div>
                   </div>
                 </Link>

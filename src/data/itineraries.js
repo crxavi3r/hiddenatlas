@@ -1877,6 +1877,7 @@ export const itineraries = [
   {
     id: "california-american-west",
     isParent: true,
+    availableVariants: ["premium", "essential", "short"],
     durationRange: "8–16 days",
     childItineraries: [
       "california-american-west-16-days",
@@ -2141,6 +2142,7 @@ export const itineraries = [
   {
     id: "california-american-west-16-days",
     parentId: "california-american-west",
+    variant: "premium",
     durationOption: "The Complete American West",
     title: "The Complete American West",
     subtitle: "16 Day Road Journey",
@@ -2396,6 +2398,7 @@ export const itineraries = [
   {
     id: "california-american-west-12-days",
     parentId: "california-american-west",
+    variant: "essential",
     durationOption: "The Essential American West",
     title: "The Essential American West",
     subtitle: "12 Day Road Journey",
@@ -2406,7 +2409,7 @@ export const itineraries = [
     duration: "12 days",
     nights: "11",
     groupSize: "2–4 people",
-    price: 29,
+    price: 19,
     isPremium: true,
     tag: "Premium Journey",
     category: "Road Journey",
@@ -2594,6 +2597,7 @@ export const itineraries = [
   {
     id: "california-american-west-8-days",
     parentId: "california-american-west",
+    variant: "short",
     durationOption: "The California Coast",
     title: "The California Coast",
     subtitle: "8 Day Coastal Road Journey",
@@ -2604,7 +2608,7 @@ export const itineraries = [
     duration: "8 days",
     nights: "7",
     groupSize: "2–4 people",
-    price: 29,
+    price: 14,
     isPremium: true,
     tag: "Premium Journey",
     category: "Road Journey",
