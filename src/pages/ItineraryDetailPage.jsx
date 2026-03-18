@@ -15,11 +15,13 @@ import { useTrack } from '../hooks/useTrack';
 import JapanRouteMap from '../components/JapanRouteMap';
 import MoroccoRouteMap from '../components/MoroccoRouteMap';
 import PhilippinesRouteMap from '../components/PhilippinesRouteMap';
+import AmericanWestRouteMap from '../components/AmericanWestRouteMap';
 
 const ROUTE_MAP_COMPONENTS = {
   'japan-grand-cultural-journey': JapanRouteMap,
   'morocco-motorcycle-expedition': MoroccoRouteMap,
   'philippines-island-journey': PhilippinesRouteMap,
+  'california-american-west': AmericanWestRouteMap,
 };
 
 // ─────────────────────────────────────────────────────────────
