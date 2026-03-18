@@ -575,9 +575,9 @@ const api = useApi();
       .map(cid => itineraries.find(it => it.id === cid))
       .filter(Boolean);
     const durationDescriptions = {
-      '16 days — Full Journey': 'Every landmark of the American West: Napa, Yosemite, Las Vegas, Antelope Canyon, the Grand Canyon, Route 66, Los Angeles and San Diego.',
-      '12 days — Balanced Route': 'The essential route without compromise. Yosemite, Las Vegas, the Grand Canyon and the California coast in the right sequence.',
-      '8 days — Coastal Experience': 'San Francisco to San Diego along the California coast. Big Sur, Santa Barbara, Los Angeles, La Jolla.',
+      'The Complete American West': 'The full American West experience, across city, wilderness, desert and coast.',
+      'The Essential American West': 'The defining landscapes of the American West, in their most efficient sequence.',
+      'The California Coast': 'A coastal journey shaped by light, ocean and open road.',
     };
     return (
       <div style={{ background: '#FAFAF8', paddingTop: '72px' }}>
@@ -617,40 +617,56 @@ const api = useApi();
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
-            {children.map((child, i) => (
-              <Link key={child.id} to={`/itineraries/${child.id}`} style={{ textDecoration: 'none' }}>
-                <div style={{
-                  background: 'white', borderRadius: '10px', padding: '32px 28px',
-                  border: i === 0 ? '2px solid #C9A96E' : '1px solid #E8E3DA',
-                  boxShadow: '0 2px 16px rgba(28,26,22,0.06)',
-                  transition: 'box-shadow 0.25s, transform 0.25s',
-                  position: 'relative',
-                }}>
-                  {i === 0 && (
-                    <span style={{
-                      position: 'absolute', top: '-12px', left: '24px',
-                      background: '#C9A96E', color: 'white', fontSize: '10px', fontWeight: '700',
-                      letterSpacing: '1px', textTransform: 'uppercase', padding: '3px 10px', borderRadius: '3px',
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', alignItems: 'stretch' }}>
+            {children.map((child, i) => {
+              const isComplete = i === 0;
+              return (
+                <Link key={child.id} to={`/itineraries/${child.id}`}
+                  style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{
+                    flex: 1, display: 'flex', flexDirection: 'column',
+                    background: 'white', borderRadius: '10px', padding: '32px 28px',
+                    border: isComplete ? '2px solid #C9A96E' : '1px solid #E8E3DA',
+                    boxShadow: isComplete ? '0 4px 24px rgba(201,169,110,0.15)' : '0 2px 16px rgba(28,26,22,0.06)',
+                    position: 'relative',
+                  }}>
+                    {isComplete && (
+                      <span style={{
+                        position: 'absolute', top: '-12px', left: '24px',
+                        background: '#C9A96E', color: 'white', fontSize: '10px', fontWeight: '700',
+                        letterSpacing: '1.2px', textTransform: 'uppercase', padding: '3px 10px', borderRadius: '3px',
+                      }}>
+                        Original Route
+                      </span>
+                    )}
+                    <p style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '1.8px', textTransform: 'uppercase', color: '#1B6B65', marginBottom: '10px' }}>
+                      {child.duration}
+                    </p>
+                    <h3 style={{
+                      fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600',
+                      color: '#1C1A16', marginBottom: '14px', lineHeight: '1.3',
+                      display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                      minHeight: '58px',
                     }}>
-                      Recommended
-                    </span>
-                  )}
-                  <p style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#1B6B65', marginBottom: '12px' }}>
-                    {child.durationOption}
-                  </p>
-                  <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600', color: '#1C1A16', marginBottom: '12px' }}>
-                    {child.subtitle}
-                  </h3>
-                  <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.65', marginBottom: '24px' }}>
-                    {durationDescriptions[child.durationOption] || child.shortDescription}
-                  </p>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#1B6B65', fontSize: '13px', fontWeight: '600' }}>
-                    View itinerary <ArrowRight size={14} />
+                      {child.durationOption}
+                    </h3>
+                    <p style={{
+                      fontSize: '14px', color: '#6B6156', lineHeight: '1.65', marginBottom: '28px', flex: 1,
+                      display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                    }}>
+                      {durationDescriptions[child.durationOption] || child.shortDescription}
+                    </p>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                      color: isComplete ? '#C9A96E' : '#1B6B65', fontSize: '13px', fontWeight: '600',
+                      marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid #F4F1EC',
+                    }}>
+                      View itinerary <ArrowRight size={14} />
+                    </div>
                   </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -727,13 +743,13 @@ const api = useApi();
               if (!siblings?.length) return null;
               return (
                 <section style={{ marginBottom: '48px', paddingBottom: '36px', borderBottom: '1px solid #E8E3DA' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '1.8px', textTransform: 'uppercase', color: '#9C9488' }}>
-                      Duration
+                      Also available in
                     </span>
                     {parent && (
                       <Link to={`/itineraries/${parent.id}`} style={{ fontSize: '12px', color: '#C9A96E', textDecoration: 'none', fontWeight: '500' }}>
-                        All versions ›
+                        Compare all versions ›
                       </Link>
                     )}
                   </div>
