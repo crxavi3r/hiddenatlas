@@ -564,11 +564,16 @@ const api = useApi();
 
   const hasAccess = accessState === 'unlocked';
 
-  const galleryImages  = getGalleryImages(itinerary.id);
-  const researchImages = getResearchImages(itinerary.id);
+  // For variant itineraries (e.g. california-american-west-12-days), assets live
+  // in the parent's content folder. Non-variant itineraries use their own id.
+  const assetSlug    = itinerary.parentId || itinerary.id;
+  const assetVariant = itinerary.variant; // 'premium'|'essential'|'short'|undefined
+
+  const galleryImages  = getGalleryImages(assetSlug, assetVariant);
+  const researchImages = getResearchImages(assetSlug, assetVariant);
   // Local cover takes priority over the Unsplash-based coverImage fallback.
-  const localCover = getCoverImage(itinerary.id);
-  const mapImage   = getMapImage(itinerary.id);
+  const localCover = getCoverImage(assetSlug);
+  const mapImage   = getMapImage(assetSlug, assetVariant);
 
   // ── Parent chooser page ───────────────────────────────────────────────────
   if (itinerary.isParent && itinerary.childItineraries) {
@@ -893,7 +898,7 @@ const api = useApi();
                   const isLocked = isPremium && !hasAccess && i >= 2;
                   // Load day image from day-images/dayN/ subfolder only.
                   // No external URLs. Returns null if folder is empty.
-                  const resolvedImg = getDayImage(itinerary.id, day.day);
+                  const resolvedImg = getDayImage(assetSlug, day.day, assetVariant);
                   return (
                     <DayEntry
                       key={i}
