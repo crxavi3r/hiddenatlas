@@ -627,6 +627,9 @@ const api = useApi();
             <p style={{ fontSize: '16px', color: '#6B6156', maxWidth: '520px', margin: '0 auto', lineHeight: '1.7' }}>
               {shortDescription || description}
             </p>
+            <p style={{ fontSize: '13px', color: '#9B8E7E', marginTop: '16px', letterSpacing: '0.2px' }}>
+              Choose your version — upgrade anytime
+            </p>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', alignItems: 'stretch' }}>
@@ -641,7 +644,7 @@ const api = useApi();
               if (included.length === children.length && children.length > 1) {
                 valueText = 'Unlocks all journey versions';
               } else if (included.length > 1) {
-                valueText = `Includes ${getVersionLabel(children[children.length - 1].durationOption)} version`;
+                valueText = 'Shorter version of the full journey';
               }
               return (
                 <Link key={child.id} to={`/itineraries/${child.id}`}
@@ -654,13 +657,22 @@ const api = useApi();
                     position: 'relative',
                   }}>
                     {isComplete && (
-                      <span style={{
-                        position: 'absolute', top: '-12px', left: '24px',
-                        background: '#C9A96E', color: 'white', fontSize: '10px', fontWeight: '700',
-                        letterSpacing: '1.2px', textTransform: 'uppercase', padding: '3px 10px', borderRadius: '3px',
-                      }}>
-                        Original Route
-                      </span>
+                      <>
+                        <span style={{
+                          position: 'absolute', top: '-12px', left: '24px',
+                          background: '#C9A96E', color: 'white', fontSize: '10px', fontWeight: '700',
+                          letterSpacing: '1.2px', textTransform: 'uppercase', padding: '3px 10px', borderRadius: '3px',
+                        }}>
+                          Original Route
+                        </span>
+                        <span style={{
+                          position: 'absolute', top: '-12px', right: '24px',
+                          background: '#1B6B65', color: 'white', fontSize: '10px', fontWeight: '700',
+                          letterSpacing: '1.2px', textTransform: 'uppercase', padding: '3px 10px', borderRadius: '3px',
+                        }}>
+                          Most popular
+                        </span>
+                      </>
                     )}
                     <p style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '1.8px', textTransform: 'uppercase', color: '#1B6B65', marginBottom: '10px' }}>
                       {child.duration}
@@ -693,8 +705,12 @@ const api = useApi();
                     {/* Value line — hierarchy reinforcement, reserved height for alignment */}
                     <div style={{ minHeight: '20px', marginBottom: '4px' }}>
                       {valueText && (
-                        <span style={{ fontSize: '12px', color: '#9B8E7E', lineHeight: '1.5' }}>
-                          {valueText}
+                        <span style={{
+                          fontSize: '12px', lineHeight: '1.5',
+                          color: isComplete ? '#1B6B65' : '#9B8E7E',
+                          fontWeight: isComplete ? '600' : '400',
+                        }}>
+                          {isComplete ? '✓ ' : ''}{valueText}
                         </span>
                       )}
                     </div>
