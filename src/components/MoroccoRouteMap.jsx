@@ -129,9 +129,9 @@ export default function MoroccoRouteMap({ onDaySelect, isUnlocked = true }) {
   const handleStopInteract = useCallback((city, stopIdx) => {
     setActiveStop(stopIdx);
     setAnimating(false);
-    if (isMobile) {
+    if (isMobile && isUnlocked) {
       setBottomCard(prev => prev?.id === city.id ? null : city);
-    } else if (isUnlocked && onDaySelect && city.dayStart) {
+    } else if (!isMobile && isUnlocked && onDaySelect && city.dayStart) {
       onDaySelect(city.dayStart);
     }
   }, [isMobile, onDaySelect, isUnlocked]);
@@ -278,15 +278,17 @@ export default function MoroccoRouteMap({ onDaySelect, isUnlocked = true }) {
         })}
 
         {/* Legend */}
-        <g transform="translate(12, 468)">
-          <rect x="-4" y="-8" width="148" height="72" rx="4"
-            fill="#F5F0E8" fillOpacity="0.90" stroke="#C0B8A8" strokeWidth="0.6" />
-          <circle cx="12" cy="8"  r="6"   fill="#F2E4CB" stroke="#C9A96E" strokeWidth="1.8" />
-          <text x="24" y="8"  dominantBaseline="middle" fontSize="7.5" fontFamily="Helvetica, sans-serif" fill="#3C3830">Major city</text>
-          <circle cx="12" cy="28" r="4.5" fill="#C8D9D5" stroke="#2A5248" strokeWidth="1.5" />
-          <text x="24" y="28" dominantBaseline="middle" fontSize="7.5" fontFamily="Helvetica, sans-serif" fill="#3C3830">Route stop</text>
-          <text x="4"  y="52" fontSize="6.5" fontFamily="Helvetica, sans-serif" fill="#9A9080" fontStyle="italic">Large = primary stop</text>
-        </g>
+        {isUnlocked && (
+          <g transform="translate(12, 468)">
+            <rect x="-4" y="-8" width="148" height="72" rx="4"
+              fill="#F5F0E8" fillOpacity="0.90" stroke="#C0B8A8" strokeWidth="0.6" />
+            <circle cx="12" cy="8"  r="6"   fill="#F2E4CB" stroke="#C9A96E" strokeWidth="1.8" />
+            <text x="24" y="8"  dominantBaseline="middle" fontSize="7.5" fontFamily="Helvetica, sans-serif" fill="#3C3830">Major city</text>
+            <circle cx="12" cy="28" r="4.5" fill="#C8D9D5" stroke="#2A5248" strokeWidth="1.5" />
+            <text x="24" y="28" dominantBaseline="middle" fontSize="7.5" fontFamily="Helvetica, sans-serif" fill="#3C3830">Route stop</text>
+            <text x="4"  y="52" fontSize="6.5" fontFamily="Helvetica, sans-serif" fill="#9A9080" fontStyle="italic">Large = primary stop</text>
+          </g>
+        )}
       </svg>
 
       {/* ── Desktop tooltip ───────────────────────────────────────────────── */}
@@ -334,14 +336,11 @@ export default function MoroccoRouteMap({ onDaySelect, isUnlocked = true }) {
           <span style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '1px', color: '#7C7060', textTransform: 'uppercase' }}>
             Journey Progress
           </span>
-          <span style={{ fontSize: '12px', color: '#1B6B65', fontWeight: '600' }}>
-            {isUnlocked || PREVIEW_LABELED.has(CITIES[activeStop].id)
-              ? isUnlocked
-                ? `${CITIES[activeStop].name} · Days ${CITIES[activeStop].days}`
-                : CITIES[activeStop].name
-              : '· · ·'
-            }
-          </span>
+          {isUnlocked && (
+            <span style={{ fontSize: '12px', color: '#1B6B65', fontWeight: '600' }}>
+              {`${CITIES[activeStop].name} · Days ${CITIES[activeStop].days}`}
+            </span>
+          )}
         </div>
         <div>
           <input
@@ -359,18 +358,51 @@ export default function MoroccoRouteMap({ onDaySelect, isUnlocked = true }) {
             {isUnlocked ? 'Day 1 · Chefchaouen' : 'Chefchaouen'}
           </span>
           <span style={{ fontSize: '10px', color: '#9A9080' }}>
-            {isUnlocked ? 'Day 8 · Tangier Med' : `${CITIES.length} stops`}
+            {isUnlocked ? 'Day 8 · Tangier Med' : 'Tangier Med'}
           </span>
         </div>
-        {!isUnlocked && (
-          <p style={{ marginTop: '14px', marginBottom: '0', textAlign: 'center', fontSize: '12px', color: '#8C8070', fontStyle: 'italic', letterSpacing: '0.2px', lineHeight: '1.5' }}>
-            Full route and day-by-day flow available inside
+      </div>
+
+      {/* ── Stop preview card ─────────────────────────────────────────────── */}
+      <div key={CITIES[activeStop].id} style={{
+        marginTop: '16px', background: 'white', borderRadius: '8px',
+        padding: '16px 20px', border: '1px solid #E8E3DA',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        flexWrap: 'wrap', gap: '12px',
+        animation: 'morocco-card 0.3s ease forwards',
+      }}>
+        <div>
+          {isUnlocked && (
+            <p style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '1.5px',
+              textTransform: 'uppercase', color: '#C9A96E', marginBottom: '3px' }}>
+              Days {CITIES[activeStop].days}
+            </p>
+          )}
+          <p style={{ fontSize: '15px', fontWeight: '600', color: '#1C1A16' }}>
+            {CITIES[activeStop].name}
           </p>
+          {(isUnlocked || PREVIEW_LABELED.has(CITIES[activeStop].id)) && (
+            <p style={{ fontSize: '12px', color: '#6B6156', marginTop: '3px', lineHeight: '1.5' }}>
+              {CITIES[activeStop].desc}
+            </p>
+          )}
+        </div>
+        {isUnlocked && CITIES[activeStop].dayStart && (
+          <button
+            onClick={() => onDaySelect && onDaySelect(CITIES[activeStop].dayStart)}
+            style={{
+              background: '#1B6B65', color: 'white', border: 'none',
+              borderRadius: '4px', padding: '8px 16px', fontSize: '12px', fontWeight: '600',
+              cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            Jump to Day {CITIES[activeStop].dayStart}
+          </button>
         )}
       </div>
 
       {/* ── Mobile bottom card ────────────────────────────────────────────── */}
-      {isMobile && bottomCard && (
+      {isMobile && bottomCard && isUnlocked && (
         <div onClick={() => setBottomCard(null)}
           style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(28,26,22,0.2)' }}>
           <div onClick={e => e.stopPropagation()}
@@ -401,6 +433,10 @@ export default function MoroccoRouteMap({ onDaySelect, isUnlocked = true }) {
         input[type='range']::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #1B6B65; border: 2px solid white; box-shadow: 0 1px 4px rgba(28,26,22,0.20); cursor: pointer; }
         input[type='range']::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #1B6B65; border: 2px solid white; box-shadow: 0 1px 4px rgba(28,26,22,0.20); cursor: pointer; }
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes morocco-card {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
       `}</style>
     </div>
   );
