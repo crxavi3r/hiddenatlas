@@ -21,6 +21,21 @@ function getRawBody(req) {
   });
 }
 
+// ── Discount helpers ──────────────────────────────────────────────────────────
+// Extracts discount data from a Stripe CheckoutSession.
+// grossAmount  = amount_subtotal / 100 (full price before any discount)
+// discountAmount = amount_discount / 100 (0 if no coupon)
+// couponCode   = coupon name/id (only populated when total_details.breakdown is expanded)
+// stripeCouponId = coupon.id from Stripe (same)
+function extractDiscount(session) {
+  const grossAmount    = (session.amount_subtotal ?? session.amount_total) / 100;
+  const discountAmount = (session.total_details?.amount_discount ?? 0) / 100;
+  const first          = session.total_details?.breakdown?.discounts?.[0];
+  const couponCode     = first?.discount?.coupon?.name || first?.discount?.coupon?.id || null;
+  const stripeCouponId = first?.discount?.coupon?.id ?? null;
+  return { grossAmount, discountAmount, couponCode, stripeCouponId };
+}
+
 // POST /api/checkout?action=session  — create Stripe checkout session
 // POST /api/checkout?action=verify   — verify completed payment
 // POST /api/checkout                 — webhook (detected by stripe-signature header)
@@ -103,6 +118,7 @@ async function handleSession(req, res, body) {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [{ price: priceId, quantity: 1 }],
+      allow_promotion_codes: true,
       customer_email: userEmail,
       success_url: `${origin}/itineraries/${slug}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${origin}/itineraries/${slug}`,
@@ -141,7 +157,9 @@ async function handleVerify(req, res, body) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
   let session;
   try {
-    session = await stripe.checkout.sessions.retrieve(sessionId);
+    session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ['total_details.breakdown'],
+    });
   } catch {
     return res.status(400).json({ error: 'Invalid session' });
   }
@@ -169,6 +187,7 @@ async function handleVerify(req, res, body) {
     const unlockableSlugs = getUnlockableSlugs(slug);
     console.log('[checkout/verify] unlocking slugs:', unlockableSlugs, '— userId:', userId);
 
+    const { grossAmount, discountAmount, couponCode, stripeCouponId } = extractDiscount(session);
     let primaryPdfUrl = null;
 
     for (const [idx, unlockSlug] of unlockableSlugs.entries()) {
@@ -190,10 +209,14 @@ async function handleVerify(req, res, body) {
       const stripeKey = idx === 0 ? sessionId : `${sessionId}__unlock_${idx}`;
 
       const { rowCount } = await pool.query(
-        `INSERT INTO "Purchase" (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId", amount, status, "purchasedAt", "createdAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'paid', NOW(), NOW())
+        `INSERT INTO "Purchase"
+           (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId",
+            amount, "grossAmount", "discountAmount", "couponCode", "stripeCouponId",
+            status, "purchasedAt", "createdAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, 'paid', NOW(), NOW())
          ON CONFLICT ("stripeSessionId") DO NOTHING`,
-        [userId, itin.id, stripeKey, session.payment_intent, session.amount_total / 100]
+        [userId, itin.id, stripeKey, session.payment_intent,
+         session.amount_total / 100, grossAmount, discountAmount, couponCode, stripeCouponId]
       );
 
       if (idx === 0) {
@@ -326,6 +349,7 @@ async function handleCustomSession(req, res, body) {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [{ price: priceId, quantity: 1 }],
+      allow_promotion_codes: true,
       customer_email: fd.email?.trim().toLowerCase() || undefined,
       success_url: `${origin}/custom?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${origin}/custom`,
@@ -454,6 +478,10 @@ async function handleWebhook(req, res, rawBody) {
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
+    const { grossAmount, discountAmount } = extractDiscount(session);
+    // Coupon code/id not available from webhook without extra API call — stored as null;
+    // handleVerify (called client-side on success) persists the full coupon details.
+
     for (const [idx, unlockSlug] of unlockableSlugs.entries()) {
       await pool.query(
         `INSERT INTO "Itinerary" (id, slug, title, description, price, "coverImage", "isPublished", "createdAt")
@@ -473,10 +501,14 @@ async function handleWebhook(req, res, rawBody) {
       const stripeKey = idx === 0 ? session.id : `${session.id}__unlock_${idx}`;
 
       const { rowCount } = await pool.query(
-        `INSERT INTO "Purchase" (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId", amount, status, "purchasedAt", "createdAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'paid', NOW(), NOW())
+        `INSERT INTO "Purchase"
+           (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId",
+            amount, "grossAmount", "discountAmount",
+            status, "purchasedAt", "createdAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, 'paid', NOW(), NOW())
          ON CONFLICT ("stripeSessionId") DO NOTHING`,
-        [userId, itin.id, stripeKey, session.payment_intent, session.amount_total / 100]
+        [userId, itin.id, stripeKey, session.payment_intent,
+         session.amount_total / 100, grossAmount, discountAmount]
       );
 
       if (idx === 0) {

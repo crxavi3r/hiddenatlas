@@ -154,7 +154,13 @@ async function getDashboardKPIs(pool, cutoff) {
     pool.query(`SELECT COUNT(*) AS n FROM "User" WHERE "createdAt" >= $1`, [cutoff]),
     pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= $1`, [cutoff]),
     pool.query(`SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1`, [cutoff]),
-    pool.query(`SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS revenue FROM "Purchase" WHERE "purchasedAt" >= $1`, [cutoff]),
+    pool.query(`
+      SELECT COUNT(*) AS n,
+        COALESCE(SUM(amount),0) AS revenue,
+        COALESCE(SUM(COALESCE("grossAmount", amount)),0) AS gross_revenue,
+        COALESCE(SUM("discountAmount"),0) AS total_discount
+      FROM "Purchase" WHERE "purchasedAt" >= $1
+    `, [cutoff]),
   ]);
   const v = parseInt(visitors.rows[0].n, 10) || 0;
   const s = parseInt(sales.rows[0].n, 10) || 0;
@@ -166,6 +172,8 @@ async function getDashboardKPIs(pool, cutoff) {
     downloads:      parseInt(downloads.rows[0].n, 10) || 0,
     sales:          s,
     revenue:        parseFloat(sales.rows[0].revenue) || 0,
+    grossRevenue:   parseFloat(sales.rows[0].gross_revenue) || 0,
+    totalDiscount:  parseFloat(sales.rows[0].total_discount) || 0,
     conversionRate: v > 0 ? +((s / v) * 100).toFixed(1) : 0,
   };
 }
@@ -189,8 +197,9 @@ async function getChartData(pool, cutoff) {
     ),
     sl AS (
       SELECT DATE("purchasedAt") AS day,
-        COUNT(*)                       AS sales,
-        COALESCE(SUM(amount),0)        AS revenue
+        COUNT(*)                                              AS sales,
+        COALESCE(SUM(amount),0)                              AS revenue,
+        COALESCE(SUM("discountAmount"),0)                    AS discount
       FROM "Purchase" WHERE "purchasedAt" >= $1
       GROUP BY DATE("purchasedAt")
     ),
@@ -206,6 +215,7 @@ async function getChartData(pool, cutoff) {
       COALESCE(ev.itinerary_views,0)::int AS itinerary_views,
       COALESCE(sl.sales,0)::int           AS sales,
       COALESCE(sl.revenue,0)::float       AS revenue,
+      COALESCE(sl.discount,0)::float      AS discount,
       COALESCE(dl.downloads,0)::int       AS downloads
     FROM d
     LEFT JOIN ev ON ev.day = d.day
@@ -418,7 +428,8 @@ async function getUserDetail(pool, id) {
 // ── Sales ─────────────────────────────────────────────────────────────────────
 async function getSales(pool, cutoff, offset) {
   const { rows: sales } = await pool.query(`
-    SELECT p."purchasedAt", u.email, u.name, i.title AS itinerary, i.slug, p.amount, p.status
+    SELECT p."purchasedAt", u.email, u.name, i.title AS itinerary, i.slug,
+           p.amount, p."grossAmount", p."discountAmount", p."couponCode", p.status
     FROM "Purchase" p
     JOIN "User" u ON u.id=p."userId"
     JOIN "Itinerary" i ON i.id=p."itineraryId"
@@ -427,21 +438,28 @@ async function getSales(pool, cutoff, offset) {
     LIMIT 50 OFFSET $2
   `, [cutoff, offset]);
 
-  const { rows: [{ total, revenue }] } = await pool.query(`
-    SELECT COUNT(*) AS total, COALESCE(SUM(amount),0) AS revenue
+  const { rows: [{ total, revenue, total_discount }] } = await pool.query(`
+    SELECT COUNT(*) AS total,
+           COALESCE(SUM(amount),0) AS revenue,
+           COALESCE(SUM("discountAmount"),0) AS total_discount
     FROM "Purchase" WHERE "purchasedAt" >= $1
   `, [cutoff]);
 
-  const { rows: [allTime] } = await pool.query(
-    `SELECT COUNT(*) AS total, COALESCE(SUM(amount),0) AS revenue FROM "Purchase"`
-  );
+  const { rows: [allTime] } = await pool.query(`
+    SELECT COUNT(*) AS total,
+           COALESCE(SUM(amount),0) AS revenue,
+           COALESCE(SUM("discountAmount"),0) AS total_discount
+    FROM "Purchase"
+  `);
 
   return {
     sales,
-    total:          parseInt(total, 10),
-    revenue:        parseFloat(revenue),
-    allTimeRevenue: parseFloat(allTime.revenue),
-    avgOrderValue:  total > 0 ? +(parseFloat(revenue) / parseInt(total,10)).toFixed(2) : 0,
+    total:             parseInt(total, 10),
+    revenue:           parseFloat(revenue),
+    totalDiscount:     parseFloat(total_discount),
+    allTimeRevenue:    parseFloat(allTime.revenue),
+    allTimeDiscount:   parseFloat(allTime.total_discount),
+    avgOrderValue:     total > 0 ? +(parseFloat(revenue) / parseInt(total,10)).toFixed(2) : 0,
   };
 }
 

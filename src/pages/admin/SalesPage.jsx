@@ -88,9 +88,10 @@ export default function SalesPage() {
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '20px' }}>
         {[
-          { icon: DollarSign,  label: 'Revenue',       value: fmtEur(data?.revenue) },
+          { icon: DollarSign,  label: 'Net Revenue',    value: fmtEur(data?.revenue) },
           { icon: ShoppingBag, label: 'Sales',          value: data?.total ?? '—' },
           { icon: TrendingUp,  label: 'Avg order value',value: fmtEur(data?.avgOrderValue) },
+          { icon: DollarSign,  label: 'Discounts given',value: data?.totalDiscount ? `-${fmtEur(data.totalDiscount)}` : '€0.00' },
         ].map(k => (
           <div key={k.label} style={{ ...card, padding: '18px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -119,10 +120,22 @@ export default function SalesPage() {
                     <p style={{ fontWeight: '600', color: '#1C1A16', fontSize: '13px' }}>{s.name || '—'}</p>
                     <p style={{ color: '#8C8070', fontSize: '12px', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.email}</p>
                   </div>
-                  <p style={{ fontWeight: '700', color: '#1B6B65', fontSize: '15px', flexShrink: 0, marginLeft: '10px' }}>{fmtEur(s.amount)}</p>
+                  <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '10px' }}>
+                    <p style={{ fontWeight: '700', color: '#1B6B65', fontSize: '15px' }}>{fmtEur(s.amount)}</p>
+                    {s.discountAmount > 0 && (
+                      <p style={{ fontSize: '11px', color: '#C0504D' }}>-{fmtEur(s.discountAmount)}</p>
+                    )}
+                  </div>
                 </div>
                 <p style={{ fontSize: '12px', color: '#4A433A', marginBottom: '4px' }}>{s.itinerary}</p>
-                <p style={{ fontSize: '11px', color: '#B5AA99' }}>{fmtDate(s.purchasedAt)}</p>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <p style={{ fontSize: '11px', color: '#B5AA99' }}>{fmtDate(s.purchasedAt)}</p>
+                  {s.couponCode && (
+                    <span style={{ background: '#FFF8EC', color: '#9B6A1A', padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: '600' }}>
+                      {s.couponCode}
+                    </span>
+                  )}
+                </div>
               </div>
             ))}
             {!loading && !data?.sales?.length && (
@@ -134,7 +147,7 @@ export default function SalesPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
               <thead>
                 <tr style={{ background: '#FAFAF8' }}>
-                  {['Date', 'Customer', 'Itinerary', 'Amount', 'Status'].map(h => (
+                  {['Date', 'Customer', 'Itinerary', 'Gross', 'Discount', 'Net', 'Coupon', 'Status'].map(h => (
                     <th key={h} style={{ padding: '10px 14px', textAlign: 'left', color: '#8C8070', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.4px', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
@@ -143,7 +156,7 @@ export default function SalesPage() {
                 {loading
                   ? [...Array(8)].map((_, i) => (
                       <tr key={i} style={{ borderTop: '1px solid #F4F1EC' }}>
-                        {[...Array(5)].map((_, j) => (
+                        {[...Array(8)].map((_, j) => (
                           <td key={j} style={{ padding: '12px 14px' }}>
                             <div style={{ height: '12px', background: '#F4F1EC', borderRadius: '4px', width: j === 2 ? '140px' : '80px' }} />
                           </td>
@@ -158,7 +171,18 @@ export default function SalesPage() {
                           <p style={{ color: '#8C8070', fontSize: '11.5px' }}>{s.email}</p>
                         </td>
                         <td style={{ padding: '10px 14px', color: '#4A433A', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.itinerary}</td>
+                        <td style={{ padding: '10px 14px', color: '#8C8070', whiteSpace: 'nowrap' }}>{s.grossAmount != null ? fmtEur(s.grossAmount) : fmtEur(s.amount)}</td>
+                        <td style={{ padding: '10px 14px', color: s.discountAmount > 0 ? '#C0504D' : '#B5AA99', whiteSpace: 'nowrap' }}>
+                          {s.discountAmount > 0 ? `-${fmtEur(s.discountAmount)}` : '—'}
+                        </td>
                         <td style={{ padding: '10px 14px', fontWeight: '700', color: '#1B6B65', whiteSpace: 'nowrap' }}>{fmtEur(s.amount)}</td>
+                        <td style={{ padding: '10px 14px', color: '#4A433A', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                          {s.couponCode ? (
+                            <span style={{ background: '#FFF8EC', color: '#9B6A1A', padding: '2px 7px', borderRadius: '4px', fontSize: '11px', fontWeight: '600' }}>
+                              {s.couponCode}
+                            </span>
+                          ) : '—'}
+                        </td>
                         <td style={{ padding: '10px 14px' }}>
                           <span style={{ fontSize: '11px', fontWeight: '600', color: s.status === 'paid' ? '#1B6B65' : '#8C8070', background: s.status === 'paid' ? '#EFF6F5' : '#F4F1EC', padding: '2px 8px', borderRadius: '10px' }}>
                             {s.status}
@@ -168,7 +192,7 @@ export default function SalesPage() {
                     ))
                 }
                 {!loading && !data?.sales?.length && (
-                  <tr><td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: '#B5AA99' }}>No sales in this period</td></tr>
+                  <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#B5AA99' }}>No sales in this period</td></tr>
                 )}
               </tbody>
             </table>
