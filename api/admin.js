@@ -148,20 +148,25 @@ export default async function handler(req, res) {
 
 // ── Dashboard KPIs ────────────────────────────────────────────────────────────
 async function getDashboardKPIs(pool, cutoff) {
+  // ── Core query: uses only legacy columns — always safe ───────────────────
   const [visitors, pageViews, newUsers, itinViews, downloads, sales] = await Promise.all([
     pool.query(`SELECT COUNT(DISTINCT COALESCE("userId", "sessionId")) AS n FROM "Event" WHERE "eventType"='PAGE_VIEW' AND "createdAt" >= $1`, [cutoff]),
     pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='PAGE_VIEW' AND "createdAt" >= $1`, [cutoff]),
     pool.query(`SELECT COUNT(*) AS n FROM "User" WHERE "createdAt" >= $1`, [cutoff]),
     pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= $1`, [cutoff]),
     pool.query(`SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1`, [cutoff]),
-    pool.query(`
-      SELECT COUNT(*) AS n,
-        COALESCE(SUM(amount),0) AS revenue,
-        COALESCE(SUM(COALESCE("grossAmount", amount)),0) AS gross_revenue,
-        COALESCE(SUM("discountAmount"),0) AS total_discount
-      FROM "Purchase" WHERE "purchasedAt" >= $1
-    `, [cutoff]),
+    // Revenue uses only `amount` — exists on every purchase row, old and new
+    pool.query(`SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS revenue FROM "Purchase" WHERE "purchasedAt" >= $1`, [cutoff]),
   ]);
+
+  // ── Discount breakdown: uses new columns — fails gracefully if not migrated yet ──
+  const discountRow = await pool.query(`
+    SELECT
+      COALESCE(SUM(COALESCE("grossAmount", amount)),0)    AS gross_revenue,
+      COALESCE(SUM(COALESCE("discountAmount", 0)),0)      AS total_discount
+    FROM "Purchase" WHERE "purchasedAt" >= $1
+  `, [cutoff]).then(r => r.rows[0]).catch(() => ({ gross_revenue: 0, total_discount: 0 }));
+
   const v = parseInt(visitors.rows[0].n, 10) || 0;
   const s = parseInt(sales.rows[0].n, 10) || 0;
   return {
@@ -172,8 +177,8 @@ async function getDashboardKPIs(pool, cutoff) {
     downloads:      parseInt(downloads.rows[0].n, 10) || 0,
     sales:          s,
     revenue:        parseFloat(sales.rows[0].revenue) || 0,
-    grossRevenue:   parseFloat(sales.rows[0].gross_revenue) || 0,
-    totalDiscount:  parseFloat(sales.rows[0].total_discount) || 0,
+    grossRevenue:   parseFloat(discountRow.gross_revenue) || 0,
+    totalDiscount:  parseFloat(discountRow.total_discount) || 0,
     conversionRate: v > 0 ? +((s / v) * 100).toFixed(1) : 0,
   };
 }
@@ -196,10 +201,10 @@ async function getChartData(pool, cutoff) {
       GROUP BY DATE("createdAt")
     ),
     sl AS (
+      -- Uses only legacy `amount` column — always safe regardless of migration state
       SELECT DATE("purchasedAt") AS day,
-        COUNT(*)                                              AS sales,
-        COALESCE(SUM(amount),0)                              AS revenue,
-        COALESCE(SUM("discountAmount"),0)                    AS discount
+        COUNT(*)               AS sales,
+        COALESCE(SUM(amount),0) AS revenue
       FROM "Purchase" WHERE "purchasedAt" >= $1
       GROUP BY DATE("purchasedAt")
     ),
@@ -215,7 +220,6 @@ async function getChartData(pool, cutoff) {
       COALESCE(ev.itinerary_views,0)::int AS itinerary_views,
       COALESCE(sl.sales,0)::int           AS sales,
       COALESCE(sl.revenue,0)::float       AS revenue,
-      COALESCE(sl.discount,0)::float      AS discount,
       COALESCE(dl.downloads,0)::int       AS downloads
     FROM d
     LEFT JOIN ev ON ev.day = d.day
@@ -427,39 +431,69 @@ async function getUserDetail(pool, id) {
 
 // ── Sales ─────────────────────────────────────────────────────────────────────
 async function getSales(pool, cutoff, offset) {
-  const { rows: sales } = await pool.query(`
-    SELECT p."purchasedAt", u.email, u.name, i.title AS itinerary, i.slug,
-           p.amount, p."grossAmount", p."discountAmount", p."couponCode", p.status
-    FROM "Purchase" p
-    JOIN "User" u ON u.id=p."userId"
-    JOIN "Itinerary" i ON i.id=p."itineraryId"
-    WHERE p."purchasedAt" >= $1
-    ORDER BY p."purchasedAt" DESC
-    LIMIT 50 OFFSET $2
-  `, [cutoff, offset]);
+  // ── Sales rows ────────────────────────────────────────────────────────────
+  // Try with discount columns; fall back to legacy-only if migration not yet applied.
+  let sales;
+  try {
+    const { rows } = await pool.query(`
+      SELECT p."purchasedAt", u.email, u.name, i.title AS itinerary, i.slug,
+             p.amount,
+             COALESCE(p."grossAmount", p.amount)  AS "grossAmount",
+             COALESCE(p."discountAmount", 0)       AS "discountAmount",
+             p."couponCode",
+             p.status
+      FROM "Purchase" p
+      JOIN "User" u ON u.id=p."userId"
+      JOIN "Itinerary" i ON i.id=p."itineraryId"
+      WHERE p."purchasedAt" >= $1
+      ORDER BY p."purchasedAt" DESC
+      LIMIT 50 OFFSET $2
+    `, [cutoff, offset]);
+    sales = rows;
+  } catch (err) {
+    if (!err.message.toLowerCase().includes('column')) throw err;
+    // Discount columns not yet added — serve legacy data with safe defaults
+    const { rows } = await pool.query(`
+      SELECT p."purchasedAt", u.email, u.name, i.title AS itinerary, i.slug,
+             p.amount, p.amount AS "grossAmount", 0 AS "discountAmount",
+             NULL::text AS "couponCode", p.status
+      FROM "Purchase" p
+      JOIN "User" u ON u.id=p."userId"
+      JOIN "Itinerary" i ON i.id=p."itineraryId"
+      WHERE p."purchasedAt" >= $1
+      ORDER BY p."purchasedAt" DESC
+      LIMIT 50 OFFSET $2
+    `, [cutoff, offset]);
+    sales = rows;
+  }
 
-  const { rows: [{ total, revenue, total_discount }] } = await pool.query(`
-    SELECT COUNT(*) AS total,
-           COALESCE(SUM(amount),0) AS revenue,
-           COALESCE(SUM("discountAmount"),0) AS total_discount
+  // ── Totals (revenue always uses `amount` — safe on all rows) ─────────────
+  const { rows: [{ total, revenue }] } = await pool.query(`
+    SELECT COUNT(*) AS total, COALESCE(SUM(amount),0) AS revenue
     FROM "Purchase" WHERE "purchasedAt" >= $1
   `, [cutoff]);
 
-  const { rows: [allTime] } = await pool.query(`
-    SELECT COUNT(*) AS total,
-           COALESCE(SUM(amount),0) AS revenue,
-           COALESCE(SUM("discountAmount"),0) AS total_discount
-    FROM "Purchase"
-  `);
+  // Discount totals — fail gracefully if columns not yet present
+  const discountTotals = await pool.query(`
+    SELECT COALESCE(SUM(COALESCE("discountAmount", 0)),0) AS total_discount
+    FROM "Purchase" WHERE "purchasedAt" >= $1
+  `, [cutoff]).then(r => r.rows[0]).catch(() => ({ total_discount: 0 }));
+
+  const { rows: [allTime] } = await pool.query(
+    `SELECT COUNT(*) AS total, COALESCE(SUM(amount),0) AS revenue FROM "Purchase"`
+  );
+  const allTimeDiscount = await pool.query(
+    `SELECT COALESCE(SUM(COALESCE("discountAmount", 0)),0) AS total_discount FROM "Purchase"`
+  ).then(r => parseFloat(r.rows[0].total_discount) || 0).catch(() => 0);
 
   return {
     sales,
-    total:             parseInt(total, 10),
-    revenue:           parseFloat(revenue),
-    totalDiscount:     parseFloat(total_discount),
-    allTimeRevenue:    parseFloat(allTime.revenue),
-    allTimeDiscount:   parseFloat(allTime.total_discount),
-    avgOrderValue:     total > 0 ? +(parseFloat(revenue) / parseInt(total,10)).toFixed(2) : 0,
+    total:           parseInt(total, 10),
+    revenue:         parseFloat(revenue),
+    totalDiscount:   parseFloat(discountTotals.total_discount) || 0,
+    allTimeRevenue:  parseFloat(allTime.revenue),
+    allTimeDiscount,
+    avgOrderValue:   total > 0 ? +(parseFloat(revenue) / parseInt(total,10)).toFixed(2) : 0,
   };
 }
 

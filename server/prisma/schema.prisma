@@ -113,10 +113,14 @@ model Purchase {
   itineraryId           String
   stripeSessionId       String?  @unique
   stripePaymentIntentId String?
-  amount                Float    // net amount charged (after discount)
+  amount                Float    // net amount charged (after discount) — kept for backward compat
   grossAmount           Float?   // full price before discount
-  discountAmount        Float    @default(0)
+  netAmount             Float?   // explicit net (same as amount; useful for COALESCE in queries)
+  discountAmount        Float?   @default(0)
   couponCode            String?
+  discountType          String?  // 'percent' | 'fixed'
+  discountValue         Float?   // e.g. 20 for 20% off, or 10 for €10 off
+  stripePromotionCodeId String?
   stripeCouponId        String?
   status                String   @default("paid")
   purchasedAt           DateTime @default(now())

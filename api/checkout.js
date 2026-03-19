@@ -208,15 +208,16 @@ async function handleVerify(req, res, body) {
       // Purchased slug uses the real sessionId; unlocked siblings use a derived key
       const stripeKey = idx === 0 ? sessionId : `${sessionId}__unlock_${idx}`;
 
+      const netAmount = session.amount_total / 100;
       const { rowCount } = await pool.query(
         `INSERT INTO "Purchase"
            (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId",
-            amount, "grossAmount", "discountAmount", "couponCode", "stripeCouponId",
+            amount, "grossAmount", "netAmount", "discountAmount", "couponCode", "stripeCouponId",
             status, "purchasedAt", "createdAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, 'paid', NOW(), NOW())
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'paid', NOW(), NOW())
          ON CONFLICT ("stripeSessionId") DO NOTHING`,
         [userId, itin.id, stripeKey, session.payment_intent,
-         session.amount_total / 100, grossAmount, discountAmount, couponCode, stripeCouponId]
+         netAmount, grossAmount, netAmount, discountAmount, couponCode, stripeCouponId]
       );
 
       if (idx === 0) {
@@ -500,15 +501,16 @@ async function handleWebhook(req, res, rawBody) {
       // Purchased slug uses the real sessionId; unlocked siblings use a derived key
       const stripeKey = idx === 0 ? session.id : `${session.id}__unlock_${idx}`;
 
+      const netAmount = session.amount_total / 100;
       const { rowCount } = await pool.query(
         `INSERT INTO "Purchase"
            (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId",
-            amount, "grossAmount", "discountAmount",
+            amount, "grossAmount", "netAmount", "discountAmount",
             status, "purchasedAt", "createdAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, 'paid', NOW(), NOW())
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, 'paid', NOW(), NOW())
          ON CONFLICT ("stripeSessionId") DO NOTHING`,
         [userId, itin.id, stripeKey, session.payment_intent,
-         session.amount_total / 100, grossAmount, discountAmount]
+         netAmount, grossAmount, netAmount, discountAmount]
       );
 
       if (idx === 0) {
