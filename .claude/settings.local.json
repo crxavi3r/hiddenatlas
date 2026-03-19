@@ -79,7 +79,11 @@
       "Bash(for slug:*)",
       "Bash(ls -lh content/itineraries/*/*.pdf)",
       "Bash(sort -k2)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(/dev/null echo:*)",
+      "Bash(sort echo:*)",
+      "Bash(npx:*)",
+      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas -name *webhook* -o -name *stripe*)"
     ]
   }
 }

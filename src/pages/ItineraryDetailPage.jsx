@@ -585,6 +585,12 @@ const api = useApi();
       'The Essential American West': 'The defining landscapes of the American West, in their most efficient sequence.',
       'The California Coast': 'A coastal journey shaped by light, ocean and open road.',
     };
+    // Extract the distinguishing word from a durationOption title.
+    // "The Complete American West" → "Complete", "The California Coast" → "Coast".
+    const getVersionLabel = opt => {
+      const m = opt.match(/\b(Complete|Essential|Coast|Short|Classic|Full)\b/i);
+      return m ? m[1] : opt.split(' ').pop();
+    };
     return (
       <div style={{ background: '#FAFAF8', paddingTop: '72px' }}>
         {/* Hero */}
@@ -626,6 +632,10 @@ const api = useApi();
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', alignItems: 'stretch' }}>
             {children.map((child, i) => {
               const isComplete = i === 0;
+              // Versions included with this purchase (this tier + all lower tiers).
+              // Only shown when more than one version is included.
+              const included = children.slice(i).map(c => getVersionLabel(c.durationOption));
+              const bundleText = included.length > 1 ? included.join(' · ') : null;
               return (
                 <Link key={child.id} to={`/itineraries/${child.id}`}
                   style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column' }}>
@@ -650,12 +660,23 @@ const api = useApi();
                     </p>
                     <h3 style={{
                       fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600',
-                      color: '#1C1A16', marginBottom: '14px', lineHeight: '1.3',
+                      color: '#1C1A16', marginBottom: '10px', lineHeight: '1.3',
                       display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
                       minHeight: '58px',
                     }}>
                       {child.durationOption}
                     </h3>
+                    {/* Bundle microcopy — fixed height on all cards to preserve alignment */}
+                    <div style={{ minHeight: '22px', marginBottom: '16px' }}>
+                      {bundleText && (
+                        <span style={{
+                          fontSize: '10px', fontWeight: '700', letterSpacing: '1.5px',
+                          textTransform: 'uppercase', color: '#9B8E7E',
+                        }}>
+                          {bundleText}
+                        </span>
+                      )}
+                    </div>
                     <p style={{
                       fontSize: '14px', color: '#6B6156', lineHeight: '1.65', marginBottom: '28px', flex: 1,
                       display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
