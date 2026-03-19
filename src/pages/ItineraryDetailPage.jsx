@@ -632,10 +632,17 @@ const api = useApi();
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', alignItems: 'stretch' }}>
             {children.map((child, i) => {
               const isComplete = i === 0;
-              // Versions included with this purchase (this tier + all lower tiers).
-              // Only shown when more than one version is included.
+              // All versions included with this purchase (this tier + all lower tiers).
               const included = children.slice(i).map(c => getVersionLabel(c.durationOption));
-              const bundleText = included.length > 1 ? included.join(' · ') : null;
+              // Sub-label always shown — single-version cards show just their own name.
+              const bundleText = included.join(' · ');
+              // Value line: communicates the unlock hierarchy.
+              let valueText = null;
+              if (included.length === children.length && children.length > 1) {
+                valueText = 'Unlocks all journey versions';
+              } else if (included.length > 1) {
+                valueText = `Includes ${getVersionLabel(children[children.length - 1].durationOption)} version`;
+              }
               return (
                 <Link key={child.id} to={`/itineraries/${child.id}`}
                   style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column' }}>
@@ -678,17 +685,30 @@ const api = useApi();
                       )}
                     </div>
                     <p style={{
-                      fontSize: '14px', color: '#6B6156', lineHeight: '1.65', marginBottom: '28px', flex: 1,
+                      fontSize: '14px', color: '#6B6156', lineHeight: '1.65', marginBottom: '12px', flex: 1,
                       display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
                     }}>
                       {durationDescriptions[child.durationOption] || child.shortDescription}
                     </p>
+                    {/* Value line — hierarchy reinforcement, reserved height for alignment */}
+                    <div style={{ minHeight: '20px', marginBottom: '4px' }}>
+                      {valueText && (
+                        <span style={{ fontSize: '12px', color: '#9B8E7E', lineHeight: '1.5' }}>
+                          {valueText}
+                        </span>
+                      )}
+                    </div>
                     <div style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid #F4F1EC',
                     }}>
                       <span style={{ fontSize: '18px', fontWeight: '700', color: '#1C1A16' }}>
                         €{child.price}
+                        {isComplete && (
+                          <span style={{ fontSize: '12px', fontWeight: '500', color: '#9B8E7E', marginLeft: '8px' }}>
+                            · Best value
+                          </span>
+                        )}
                       </span>
                       <span style={{
                         display: 'flex', alignItems: 'center', gap: '6px',
