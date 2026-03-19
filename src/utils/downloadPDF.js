@@ -8,18 +8,26 @@ export async function downloadItineraryPDF(itinerary) {
     import('../lib/itineraryImages'),
   ]);
 
-  // Local cover takes priority over the Unsplash-based coverImage.
-  const localCover = getCoverImage(itinerary.id);
+  // For variant itineraries (e.g. california-american-west-12-days), assets live
+  // in the parent's content folder. Non-variant itineraries use their own id.
+  const assetSlug    = itinerary.parentId || itinerary.id;
+  const assetVariant = itinerary.variant; // 'premium'|'essential'|'short'|undefined
 
-  // Resolve day images from per-day subfolders: day-images/dayN/
-  // Up to 2 images per day. Returns empty array if the folder is empty.
+  // Local cover takes priority over the Unsplash-based coverImage.
+  const localCover = getCoverImage(assetSlug);
+
+  // Resolve day images using the same variant logic as the web renderer:
+  //   complete  → root day image only
+  //   essential → essential/ override → root fallback
+  //   short     → short/ override → root fallback
+  // Returns empty array if no image is found; DayPage collapses the image area.
   const resolvedItinerary = {
     ...itinerary,
     coverImage: localCover || itinerary.coverImage,
-    mapImage: getMapImage(itinerary.id),
+    mapImage: getMapImage(assetSlug, assetVariant),
     days: (itinerary.days || []).map(day => ({
       ...day,
-      imgs: getDayImages(itinerary.id, day.day),
+      imgs: getDayImages(assetSlug, day.day, assetVariant),
     })),
   };
 

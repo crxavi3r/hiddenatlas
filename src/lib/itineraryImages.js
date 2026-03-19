@@ -6,9 +6,15 @@
 //   essential → {folder}/essential/ override if it exists, else falls back to root
 //   short     → {folder}/short/ override if it exists, else falls back to root
 //
-// Research is an intentional exception: essential and short do NOT fall back to
-// root research. If no variant-specific research folder exists the caller receives
-// an empty array and should hide the section entirely.
+// Research variant resolution (same override → fallback pattern as gallery/day images):
+//   complete  → root research/ only
+//   essential → research/essential/ images if present
+//             → research/essential/_hide marker if present → hide section (empty array)
+//             → otherwise fallback to root research/
+//   short     → same pattern for research/short/
+//
+// To explicitly hide research for a variant: place a file named `_hide` inside
+// research/essential/ or research/short/ (no images needed alongside it).
 //
 // Maps are always variant-specific (map/complete/, map/essential/, map/short/).
 // Itineraries without variant subfolders fall back to the legacy root map/ folder.
@@ -50,6 +56,17 @@ const researchEssentialModules = import.meta.glob(
 );
 const researchShortModules = import.meta.glob(
   '../../content/itineraries/*/research/short/*.{jpg,jpeg,png,webp}',
+  { eager: true }
+);
+// Marker files: place a file named `_hide` in research/essential/ or research/short/
+// to explicitly suppress research for that variant (folder exists but should show nothing).
+// Without this marker, an empty variant folder falls back to root research.
+const researchEssentialHideMarkers = import.meta.glob(
+  '../../content/itineraries/*/research/essential/_hide',
+  { eager: true }
+);
+const researchShortHideMarkers = import.meta.glob(
+  '../../content/itineraries/*/research/short/_hide',
   { eager: true }
 );
 
@@ -159,12 +176,13 @@ export function getGalleryImages(slug, variant) {
 /**
  * Returns research images for the given asset slug and variant.
  *
- * Unlike gallery, essential and short do NOT fall back to root research.
- * An empty array signals that the research section should be hidden.
- *
  * complete  → root research/ only
- * essential → research/essential/ only (empty if no override exists)
- * short     → research/short/ only    (empty if no override exists)
+ * essential → research/essential/ images if present
+ *           → research/essential/_hide present → [] (hide section)
+ *           → no variant folder → fallback to root research/
+ * short     → same pattern for research/short/
+ *
+ * An empty array always signals that the research section should be hidden.
  *
  * @param {string}  slug
  * @param {string} [variant]
@@ -173,11 +191,27 @@ export function getResearchImages(slug, variant) {
   const v = normalizeVariant(variant);
 
   if (v === 'essential') {
-    return toImageList(researchEssentialModules, slug, 'research/essential');
+    const overrides = toImageList(researchEssentialModules, slug, 'research/essential');
+    if (overrides.length) return overrides;
+
+    // Folder exists but intentionally empty → hide
+    const hideMarker = Object.keys(researchEssentialHideMarkers)
+      .some(path => path.includes(`/itineraries/${slug}/research/essential/_hide`));
+    if (hideMarker) return [];
+
+    // No variant folder at all → fallback to root
+    return toImageList(researchRootModules, slug, 'research');
   }
 
   if (v === 'short') {
-    return toImageList(researchShortModules, slug, 'research/short');
+    const overrides = toImageList(researchShortModules, slug, 'research/short');
+    if (overrides.length) return overrides;
+
+    const hideMarker = Object.keys(researchShortHideMarkers)
+      .some(path => path.includes(`/itineraries/${slug}/research/short/_hide`));
+    if (hideMarker) return [];
+
+    return toImageList(researchRootModules, slug, 'research');
   }
 
   // complete: root only
