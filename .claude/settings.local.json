@@ -83,7 +83,8 @@
       "Bash(/dev/null echo:*)",
       "Bash(sort echo:*)",
       "Bash(npx:*)",
-      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas -name *webhook* -o -name *stripe*)"
+      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas -name *webhook* -o -name *stripe*)",
+      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas -type f \\\\\\(-name *.prisma -o -name *.sql \\\\\\))"
     ]
   }
 }
