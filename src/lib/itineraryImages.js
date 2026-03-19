@@ -31,31 +31,35 @@
 //   const cover    = getCoverImage(slug);
 //   const map      = getMapImage(slug, variant);
 
+// NOTE: Vite's import.meta.glob uses fast-glob with case-sensitive matching by default,
+// even on macOS. Both lowercase and uppercase extension variants are listed explicitly
+// so files like IMG_5444.JPG are discovered correctly on all platforms.
+
 // ── Gallery ──────────────────────────────────────────────────────────────────
 const galleryRootModules = import.meta.glob(
-  '../../content/itineraries/*/gallery/*.{jpg,jpeg,png,webp}',
+  '../../content/itineraries/*/gallery/*.{jpg,jpeg,png,webp,JPG,JPEG,PNG,WEBP}',
   { eager: true }
 );
 const galleryEssentialModules = import.meta.glob(
-  '../../content/itineraries/*/gallery/essential/*.{jpg,jpeg,png,webp}',
+  '../../content/itineraries/*/gallery/essential/*.{jpg,jpeg,png,webp,JPG,JPEG,PNG,WEBP}',
   { eager: true }
 );
 const galleryShortModules = import.meta.glob(
-  '../../content/itineraries/*/gallery/short/*.{jpg,jpeg,png,webp}',
+  '../../content/itineraries/*/gallery/short/*.{jpg,jpeg,png,webp,JPG,JPEG,PNG,WEBP}',
   { eager: true }
 );
 
 // ── Research images ───────────────────────────────────────────────────────────
 const researchRootModules = import.meta.glob(
-  '../../content/itineraries/*/research/*.{jpg,jpeg,png,webp}',
+  '../../content/itineraries/*/research/*.{jpg,jpeg,png,webp,JPG,JPEG,PNG,WEBP}',
   { eager: true }
 );
 const researchEssentialModules = import.meta.glob(
-  '../../content/itineraries/*/research/essential/*.{jpg,jpeg,png,webp}',
+  '../../content/itineraries/*/research/essential/*.{jpg,jpeg,png,webp,JPG,JPEG,PNG,WEBP}',
   { eager: true }
 );
 const researchShortModules = import.meta.glob(
-  '../../content/itineraries/*/research/short/*.{jpg,jpeg,png,webp}',
+  '../../content/itineraries/*/research/short/*.{jpg,jpeg,png,webp,JPG,JPEG,PNG,WEBP}',
   { eager: true }
 );
 // Marker files: place a file named `_hide` in research/essential/ or research/short/
@@ -72,34 +76,34 @@ const researchShortHideMarkers = import.meta.glob(
 
 // ── Day images ────────────────────────────────────────────────────────────────
 const dayRootModules = import.meta.glob(
-  '../../content/itineraries/*/day-images/day*/*.{jpg,jpeg,png,webp}',
+  '../../content/itineraries/*/day-images/day*/*.{jpg,jpeg,png,webp,JPG,JPEG,PNG,WEBP}',
   { eager: true }
 );
 const dayEssentialModules = import.meta.glob(
-  '../../content/itineraries/*/day-images/day*/essential/*.{jpg,jpeg,png,webp}',
+  '../../content/itineraries/*/day-images/day*/essential/*.{jpg,jpeg,png,webp,JPG,JPEG,PNG,WEBP}',
   { eager: true }
 );
 const dayShortModules = import.meta.glob(
-  '../../content/itineraries/*/day-images/day*/short/*.{jpg,jpeg,png,webp}',
+  '../../content/itineraries/*/day-images/day*/short/*.{jpg,jpeg,png,webp,JPG,JPEG,PNG,WEBP}',
   { eager: true }
 );
 
 // ── Maps ──────────────────────────────────────────────────────────────────────
 // Root-level map/ (legacy, for itineraries without variant subfolders)
 const mapRootModules = import.meta.glob(
-  '../../content/itineraries/*/map/*.{jpg,jpeg,png,webp,svg}',
+  '../../content/itineraries/*/map/*.{jpg,jpeg,png,webp,svg,JPG,JPEG,PNG,WEBP,SVG}',
   { eager: true }
 );
 const mapCompleteModules = import.meta.glob(
-  '../../content/itineraries/*/map/complete/*.{jpg,jpeg,png,webp,svg}',
+  '../../content/itineraries/*/map/complete/*.{jpg,jpeg,png,webp,svg,JPG,JPEG,PNG,WEBP,SVG}',
   { eager: true }
 );
 const mapEssentialModules = import.meta.glob(
-  '../../content/itineraries/*/map/essential/*.{jpg,jpeg,png,webp,svg}',
+  '../../content/itineraries/*/map/essential/*.{jpg,jpeg,png,webp,svg,JPG,JPEG,PNG,WEBP,SVG}',
   { eager: true }
 );
 const mapShortModules = import.meta.glob(
-  '../../content/itineraries/*/map/short/*.{jpg,jpeg,png,webp,svg}',
+  '../../content/itineraries/*/map/short/*.{jpg,jpeg,png,webp,svg,JPG,JPEG,PNG,WEBP,SVG}',
   { eager: true }
 );
 
