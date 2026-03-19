@@ -164,7 +164,9 @@ async function handleVerify(req, res, body) {
     return res.status(400).json({ error: 'Invalid session' });
   }
 
-  if (session.payment_status !== 'paid') {
+  // 'no_payment_required' = 100% coupon; treat as paid
+  const sessionPaid = session.payment_status === 'paid' || session.payment_status === 'no_payment_required';
+  if (!sessionPaid) {
     return res.status(400).json({ error: 'Payment not completed', hasAccess: false });
   }
 
@@ -439,8 +441,10 @@ async function handleWebhook(req, res, rawBody) {
   const session = event.data.object;
   console.log('[checkout/webhook] session.id:', session.id, '| payment_status:', session.payment_status, '| customer_email:', session.customer_email);
 
-  if (session.payment_status !== 'paid') {
-    console.log('[checkout/webhook] payment not paid — skipping');
+  // 'no_payment_required' = 100% coupon; treat as completed
+  const sessionPaid = session.payment_status === 'paid' || session.payment_status === 'no_payment_required';
+  if (!sessionPaid) {
+    console.log('[checkout/webhook] payment not completed (status:', session.payment_status, ') — skipping');
     return res.status(200).json({ received: true });
   }
 
