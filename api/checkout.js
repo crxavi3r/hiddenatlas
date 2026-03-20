@@ -2,6 +2,7 @@ import Stripe from 'stripe';
 import pg from 'pg';
 import { verifyAuth } from './_lib/verifyAuth.js';
 import { getVariantPriceId, getUnlockableSlugs } from './_lib/itineraryVariants.js';
+import { sendPurchaseEmail } from './_lib/sendPurchaseEmail.js';
 
 const { Pool } = pg;
 
@@ -84,7 +85,7 @@ async function handleSession(req, res, body) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { slug, variant = 'premium' } = body;
+  const { slug, variant = 'premium', title = '' } = body;
   if (!slug) return res.status(400).json({ error: 'slug is required' });
 
   // Resolve the correct Stripe price ID for this variant tier
@@ -123,10 +124,11 @@ async function handleSession(req, res, body) {
       success_url: `${origin}/itineraries/${slug}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${origin}/itineraries/${slug}`,
       metadata: {
-        itinerary_slug: slug,
-        variant:        variant,
-        user_id:        userId,
-        clerk_id:       clerkId,
+        itinerary_slug:  slug,
+        itinerary_title: (title || '').slice(0, 500),
+        variant:         variant,
+        user_id:         userId,
+        clerk_id:        clerkId,
       },
     });
 
@@ -546,14 +548,15 @@ async function handleWebhook(req, res, rawBody) {
       }
     }
 
-    // ── Email hook point ─────────────────────────────────────────────────────
-    // Stripe receipt is already sent automatically via the Dashboard.
-    // When a HiddenAtlas confirmation email is needed, call it here:
-    // await sendPurchaseConfirmationEmail({
-    //   email:  session.customer_email,
-    //   slug,
-    //   amount: session.amount_total / 100,
-    // });
+    // ── Purchase confirmation email ───────────────────────────────────────────
+    await sendPurchaseEmail({
+      to:             session.customer_email,
+      itineraryTitle: session.metadata?.itinerary_title || '',
+      slug,
+      netAmount:      session.amount_total / 100,
+      grossAmount,
+      discountAmount,
+    });
     // ─────────────────────────────────────────────────────────────────────────
 
   } catch (err) {
