@@ -555,6 +555,8 @@ export default function MyTrips() {
   const [purchases, setPurchases] = useState([]);
   const [customRequests, setCustomRequests] = useState([]);
   const [status, setStatus] = useState('loading');
+  // DEBUG — temporary, remove after root cause found
+  const [debugInfo, setDebugInfo] = useState(null);
 
   async function handleDeleteTrip(tripId) {
     const res = await api.del(`/api/trips?id=${tripId}`);
@@ -579,8 +581,23 @@ export default function MyTrips() {
         })
         .catch(err => { console.error('[MyTrips] /api/trips error:', err.message); return []; }),
       api.get('/api/my-trips')
-        .then(r => r.ok ? r.json() : [])
-        .catch(() => []),
+        .then(async r => {
+          const httpStatus = r.status;
+          const json = await r.json().catch(() => []);
+          const arr = Array.isArray(json) ? json : [];
+          // DEBUG — capture raw response for on-screen panel
+          setDebugInfo({
+            httpStatus,
+            rawCount: arr.length,
+            slugs: arr.map(p => p.slug),
+            statuses: arr.map(p => p.status),
+            purchaseIds: arr.map(p => p.purchaseId),
+            titles: arr.map(p => p.title),
+          });
+          console.log('[MyTrips] /api/my-trips raw response:', { httpStatus, arr });
+          return arr;
+        })
+        .catch(err => { console.error('[MyTrips] /api/my-trips fetch error:', err); setDebugInfo({ fetchError: String(err) }); return []; }),
       api.get('/api/custom-requests')
         .then(r => r.ok ? r.json() : [])
         .catch(() => []),
@@ -618,6 +635,27 @@ export default function MyTrips() {
           })()}
         </div>
       </section>
+
+      {/* DEBUG PANEL — remove after root cause confirmed */}
+      {debugInfo && (
+        <div style={{
+          background: '#1C1A16', color: '#C9A96E', fontFamily: 'monospace',
+          fontSize: '12px', padding: '16px 24px', lineHeight: '1.7',
+          borderBottom: '2px solid #C9A96E',
+        }}>
+          <strong style={{ color: 'white' }}>[DEBUG] /api/my-trips raw response</strong><br />
+          HTTP status: {debugInfo.httpStatus ?? 'n/a'}<br />
+          Items returned: <strong style={{ color: debugInfo.rawCount > 0 ? '#4ADE80' : '#F87171' }}>{debugInfo.rawCount ?? 'n/a'}</strong><br />
+          Slugs: {debugInfo.slugs?.join(', ') || '(none)'}<br />
+          Statuses: {debugInfo.statuses?.join(', ') || '(none)'}<br />
+          Titles: {debugInfo.titles?.join(' | ') || '(none)'}<br />
+          Purchase IDs: {debugInfo.purchaseIds?.join(', ') || '(none)'}<br />
+          {debugInfo.fetchError && <span style={{ color: '#F87171' }}>Fetch error: {debugInfo.fetchError}</span>}
+          <br />
+          <strong style={{ color: 'white' }}>Rendered purchases state: {purchases.length}</strong>
+          {' '}({purchases.map(p => p.slug).join(', ') || 'none'})
+        </div>
+      )}
 
       {/* Content */}
       <section style={{ padding: 'clamp(40px, 6vw, 72px) 24px' }}>
