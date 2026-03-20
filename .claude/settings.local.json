@@ -86,7 +86,12 @@
       "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas -name *webhook* -o -name *stripe*)",
       "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas -type f \\\\\\(-name *.prisma -o -name *.sql \\\\\\))",
       "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas/api -type f -name *.js -o -name *.ts)",
-      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas/server -type f -name *.js -o -name *.ts)"
+      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas/server -type f -name *.js -o -name *.ts)",
+      "Bash(# Write the file to a temp .mjs and check it\ncp /Users/cristianoxavier/Documents/Projects/HiddenAtlas/api/admin.js /tmp/admin_test.mjs\nnode --check /tmp/admin_test.mjs 2>&1)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(xxd)",
+      "Bash(md5 api/admin.js)",
+      "Bash(md5 /tmp/admin_exact.js)"
     ]
   }
 }
