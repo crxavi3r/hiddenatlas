@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Download, Calendar, BookOpen, MapPin, Clock, Trash2, Sparkles } from 'lucide-react';
+import { ArrowRight, Calendar, BookOpen, MapPin, Clock, Trash2, Sparkles } from 'lucide-react';
 import { useUser } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
 import { getTripSource } from '../lib/tripSource';
@@ -359,46 +359,18 @@ function PurchasedTripCard({ trip }) {
           <Calendar size={12} strokeWidth={2} />
           Purchased {formatDate(trip.purchasedAt)}
         </div>
-        <div style={{ display: 'flex', gap: '10px', marginTop: 'auto', flexWrap: 'wrap' }}>
-          <Link
-            to={`/itineraries/${trip.slug}`}
-            style={{
-              flex: 1, minWidth: '120px',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-              padding: '11px 16px', background: '#1B6B65', color: 'white',
-              borderRadius: '4px', fontSize: '12.5px', fontWeight: '600',
-              letterSpacing: '0.4px', textTransform: 'uppercase', textDecoration: 'none',
-            }}
-          >
-            <BookOpen size={13} /> View Itinerary
-          </Link>
-          {trip.pdfUrl ? (
-            <a
-              href={trip.pdfUrl} target="_blank" rel="noopener noreferrer"
-              style={{
-                flex: 1, minWidth: '120px',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                padding: '11px 16px', background: 'transparent', color: '#1C1A16',
-                border: '1px solid #D4CCBF', borderRadius: '4px',
-                fontSize: '12.5px', fontWeight: '600',
-                letterSpacing: '0.4px', textTransform: 'uppercase', textDecoration: 'none',
-              }}
-            >
-              <Download size={13} /> Download PDF
-            </a>
-          ) : (
-            <span style={{
-              flex: 1, minWidth: '120px',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-              padding: '11px 16px', background: '#F4F1EC', color: '#B5AA99',
-              border: '1px solid #E8E3DA', borderRadius: '4px',
-              fontSize: '12.5px', fontWeight: '600',
-              letterSpacing: '0.4px', textTransform: 'uppercase', cursor: 'not-allowed',
-            }}>
-              <Download size={13} /> PDF Soon
-            </span>
-          )}
-        </div>
+        <Link
+          to={`/itineraries/${trip.slug}`}
+          style={{
+            marginTop: 'auto',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+            padding: '11px 16px', background: '#1B6B65', color: 'white',
+            borderRadius: '4px', fontSize: '12.5px', fontWeight: '600',
+            letterSpacing: '0.4px', textTransform: 'uppercase', textDecoration: 'none',
+          }}
+        >
+          <BookOpen size={13} /> View Itinerary
+        </Link>
       </div>
     </div>
   );
@@ -540,23 +512,11 @@ export default function MyTrips() {
   const { isLoaded, isSignedIn, user } = useUser();
   const api = useApi();
 
-  // [DEBUG]
-  const mountCount = useRef(0);
-  useEffect(() => {
-    mountCount.current += 1;
-    console.log(`[MyTrips] mounted (mount #${mountCount.current}) — isLoaded:${isLoaded} isSignedIn:${isSignedIn}`);
-    return () => console.log('[MyTrips] unmounted');
-  }, []);
-  useEffect(() => {
-    console.log('[MyTrips] auth state —', { isLoaded, isSignedIn, userId: user?.id ?? null });
-  }, [isLoaded, isSignedIn, user]);
 
   const [aiTrips, setAiTrips] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [customRequests, setCustomRequests] = useState([]);
   const [status, setStatus] = useState('loading');
-  // DEBUG — temporary, remove after root cause found
-  const [debugInfo, setDebugInfo] = useState(null);
 
   async function handleDeleteTrip(tripId) {
     const res = await api.del(`/api/trips?id=${tripId}`);
@@ -582,22 +542,10 @@ export default function MyTrips() {
         .catch(err => { console.error('[MyTrips] /api/trips error:', err.message); return []; }),
       api.get('/api/my-trips')
         .then(async r => {
-          const httpStatus = r.status;
           const json = await r.json().catch(() => []);
-          const arr = Array.isArray(json) ? json : [];
-          // DEBUG — capture raw response for on-screen panel
-          setDebugInfo({
-            httpStatus,
-            rawCount: arr.length,
-            slugs: arr.map(p => p.slug),
-            statuses: arr.map(p => p.status),
-            purchaseIds: arr.map(p => p.purchaseId),
-            titles: arr.map(p => p.title),
-          });
-          console.log('[MyTrips] /api/my-trips raw response:', { httpStatus, arr });
-          return arr;
+          return Array.isArray(json) ? json : [];
         })
-        .catch(err => { console.error('[MyTrips] /api/my-trips fetch error:', err); setDebugInfo({ fetchError: String(err) }); return []; }),
+        .catch(err => { console.error('[MyTrips] /api/my-trips fetch error:', err); return []; }),
       api.get('/api/custom-requests')
         .then(r => r.ok ? r.json() : [])
         .catch(() => []),
@@ -609,7 +557,9 @@ export default function MyTrips() {
     });
   }, [isLoaded, isSignedIn]);
 
-  const totalCount = aiTrips.length + purchases.length + customRequests.length;
+  const purchasedSlugs = new Set(purchases.map(p => p.slug).filter(Boolean));
+  const savedTrips = aiTrips.filter(t => !t.itinerarySlug || !purchasedSlugs.has(t.itinerarySlug));
+  const totalCount = savedTrips.length + purchases.length + customRequests.length;
 
   return (
     <div style={{ background: '#FAFAF8', paddingTop: '72px', minHeight: '100vh' }}>
@@ -635,27 +585,6 @@ export default function MyTrips() {
           })()}
         </div>
       </section>
-
-      {/* DEBUG PANEL — remove after root cause confirmed */}
-      {debugInfo && (
-        <div style={{
-          background: '#1C1A16', color: '#C9A96E', fontFamily: 'monospace',
-          fontSize: '12px', padding: '16px 24px', lineHeight: '1.7',
-          borderBottom: '2px solid #C9A96E',
-        }}>
-          <strong style={{ color: 'white' }}>[DEBUG] /api/my-trips raw response</strong><br />
-          HTTP status: {debugInfo.httpStatus ?? 'n/a'}<br />
-          Items returned: <strong style={{ color: debugInfo.rawCount > 0 ? '#4ADE80' : '#F87171' }}>{debugInfo.rawCount ?? 'n/a'}</strong><br />
-          Slugs: {debugInfo.slugs?.join(', ') || '(none)'}<br />
-          Statuses: {debugInfo.statuses?.join(', ') || '(none)'}<br />
-          Titles: {debugInfo.titles?.join(' | ') || '(none)'}<br />
-          Purchase IDs: {debugInfo.purchaseIds?.join(', ') || '(none)'}<br />
-          {debugInfo.fetchError && <span style={{ color: '#F87171' }}>Fetch error: {debugInfo.fetchError}</span>}
-          <br />
-          <strong style={{ color: 'white' }}>Rendered purchases state: {purchases.length}</strong>
-          {' '}({purchases.map(p => p.slug).join(', ') || 'none'})
-        </div>
-      )}
 
       {/* Content */}
       <section style={{ padding: 'clamp(40px, 6vw, 72px) 24px' }}>
@@ -712,16 +641,16 @@ export default function MyTrips() {
               )}
 
               {/* AI Trips section */}
-              {aiTrips.length > 0 && (
+              {savedTrips.length > 0 && (
                 <div style={{ marginBottom: '60px' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '24px' }}>
                     <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600', color: '#1C1A16' }}>
                       Saved Trips
                     </h2>
-                    <span style={{ fontSize: '13px', color: '#9C9488' }}>{aiTrips.length}</span>
+                    <span style={{ fontSize: '13px', color: '#9C9488' }}>{savedTrips.length}</span>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '28px' }}>
-                    {aiTrips.map(trip => <AiTripCard key={trip.id} trip={trip} onDelete={handleDeleteTrip} />)}
+                    {savedTrips.map(trip => <AiTripCard key={trip.id} trip={trip} onDelete={handleDeleteTrip} />)}
                   </div>
                 </div>
               )}
