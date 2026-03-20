@@ -44,6 +44,20 @@ async function verifyAdmin(authHeader, pool) {
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
+  // Top-level safety net: guarantee JSON is always returned.
+  // The pool.on('error') below handles unhandled pool events, but any remaining
+  // synchronous throw (e.g. import-time issues on cold start) hits this catch.
+  try {
+    return await _handler(req, res);
+  } catch (err) {
+    console.error('[api/admin] TOP-LEVEL UNHANDLED:', err.message, err.stack);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error', detail: err.message });
+    }
+  }
+}
+
+async function _handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'PATCH') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -54,7 +68,15 @@ export default async function handler(req, res) {
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     connectionTimeoutMillis: 8000,
-    idleTimeoutMillis: 10000,
+    idleTimeoutMillis: 5000,
+    max: 3,
+  });
+  // Prevent unhandled 'error' event crashes. pg emits 'error' on the Pool when
+  // an idle client is dropped by the server (Neon aggressively closes idle
+  // connections in serverless). Without this listener, Node.js throws an
+  // uncaught exception → Vercel FUNCTION_INVOCATION_FAILED.
+  pool.on('error', (err) => {
+    console.error('[api/admin] idle pool client error (non-fatal):', err.message);
   });
 
   try {
