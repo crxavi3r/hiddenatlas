@@ -245,7 +245,7 @@ async function getChartData(pool, cutoff) {
       GROUP BY DATE("createdAt")
     ),
     sl AS (
-      -- Uses only legacy `amount` column — always safe regardless of migration state
+      -- Uses only legacy amount column - always safe regardless of migration state
       SELECT DATE("purchasedAt") AS day,
         COUNT(*)               AS sales,
         COALESCE(SUM(amount),0) AS revenue
