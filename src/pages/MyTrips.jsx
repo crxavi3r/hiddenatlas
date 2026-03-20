@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Calendar, BookOpen, MapPin, Clock, Trash2, Sparkles } from 'lucide-react';
 import { useUser } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
@@ -378,17 +378,29 @@ function PurchasedTripCard({ trip }) {
 
 // ── Custom Request card ──────────────────────────────────────────────────────
 const REQUEST_STATUS = {
-  open:        { label: 'Request received',     color: '#1B6B65', bg: '#EFF6F5' },
+  open:        { label: 'Request received',      color: '#1B6B65', bg: '#EFF6F5' },
   in_progress: { label: 'Planning your journey', color: '#A07830', bg: '#FBF6EE' },
-  closed:      { label: 'Itinerary ready',       color: '#1B6B65', bg: '#EFF6F5' },
+  closed:      { label: 'Itinerary ready',        color: '#1B6B65', bg: '#EFF6F5' },
 };
 
 function CustomRequestCard({ request }) {
   const [hovered, setHovered] = useState(false);
   const meta = REQUEST_STATUS[request.status] ?? REQUEST_STATUS.open;
 
-  // If a trip has been linked, the card links to that trip
-  const hasTripLink = !!request.tripId;
+  // Priority order for CTA/link:
+  //   'itinerary' — paid custom itinerary is done → link to /itineraries/:slug
+  //   'processing' — paid custom itinerary is still being prepared → status pill
+  //   'trip'       — legacy AI trip link via tripId
+  //   'status'     — no link, show workflow status pill
+  const linkedStatus = request.linkedItineraryStatus;
+  const linkedSlug   = request.linkedItinerarySlug;
+
+  let ctaMode = 'status';
+  if (linkedStatus === 'done' && linkedSlug)  ctaMode = 'itinerary';
+  else if (linkedStatus === 'processing')     ctaMode = 'processing';
+  else if (request.tripId)                   ctaMode = 'trip';
+
+  const isClickable = ctaMode === 'itinerary' || ctaMode === 'trip';
 
   const content = (
     <div
@@ -399,7 +411,7 @@ function CustomRequestCard({ request }) {
         transform: hovered ? 'translateY(-4px)' : 'translateY(0)',
         transition: 'box-shadow 0.3s ease, transform 0.3s ease',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        cursor: hasTripLink ? 'pointer' : 'default',
+        cursor: isClickable ? 'pointer' : 'default',
         textDecoration: 'none',
       }}
     >
@@ -452,8 +464,8 @@ function CustomRequestCard({ request }) {
           Submitted {formatDate(request.createdAt)}
         </div>
 
-        {/* CTA */}
-        {hasTripLink ? (
+        {/* CTA — one of four modes */}
+        {(ctaMode === 'itinerary' || ctaMode === 'trip') && (
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: '6px',
             padding: '11px 16px', background: '#1B6B65', color: 'white',
@@ -463,15 +475,27 @@ function CustomRequestCard({ request }) {
           }}>
             <BookOpen size={13} /> View Itinerary
           </div>
-        ) : (
+        )}
+        {ctaMode === 'processing' && (
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            padding: '11px 16px',
+            background: '#FBF6EE', color: '#A07830',
+            border: '1px solid rgba(160,120,48,0.15)',
+            borderRadius: '4px', fontSize: '12px', fontWeight: '600',
+            letterSpacing: '0.4px', justifyContent: 'center',
+          }}>
+            Processing your request
+          </div>
+        )}
+        {ctaMode === 'status' && (
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: '6px',
             padding: '11px 16px',
             background: meta.bg, color: meta.color,
             border: `1px solid ${meta.color}22`,
             borderRadius: '4px', fontSize: '12px', fontWeight: '600',
-            letterSpacing: '0.4px',
-            justifyContent: 'center',
+            letterSpacing: '0.4px', justifyContent: 'center',
           }}>
             {meta.label}
           </div>
@@ -480,7 +504,20 @@ function CustomRequestCard({ request }) {
     </div>
   );
 
-  if (hasTripLink) {
+  if (ctaMode === 'itinerary') {
+    return (
+      <Link
+        to={`/itineraries/${linkedSlug}`}
+        style={{ textDecoration: 'none' }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  if (ctaMode === 'trip') {
     return (
       <Link
         to={`/my-trips/${request.tripId}`}
@@ -511,12 +548,44 @@ function resolveFirstName(user) {
 export default function MyTrips() {
   const { isLoaded, isSignedIn, user } = useUser();
   const api = useApi();
-
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [aiTrips, setAiTrips] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [customRequests, setCustomRequests] = useState([]);
   const [status, setStatus] = useState('loading');
+
+  // Success banner — shown after returning from custom planning checkout
+  const [showSuccess, setShowSuccess] = useState(searchParams.get('success') === 'true');
+
+  // Incremented after custom-verify completes so the data fetch re-runs
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // On mount: strip ?success and ?session_id from URL (idempotent on refresh),
+  // then call custom-verify if session_id is present so Itinerary + Purchase are created.
+  useEffect(() => {
+    const sessionId  = searchParams.get('session_id');
+    const hasSuccess = searchParams.get('success') === 'true';
+
+    if (hasSuccess || sessionId) {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.delete('success');
+        next.delete('session_id');
+        return next;
+      }, { replace: true });
+    }
+
+    if (sessionId) {
+      fetch('/api/checkout?action=custom-verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      })
+        .catch(() => null)
+        .finally(() => setRefreshKey(k => k + 1));
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleDeleteTrip(tripId) {
     const res = await api.del(`/api/trips?id=${tripId}`);
@@ -555,7 +624,7 @@ export default function MyTrips() {
       setCustomRequests(requests);
       setStatus('ok');
     });
-  }, [isLoaded, isSignedIn]);
+  }, [isLoaded, isSignedIn, refreshKey]);
 
   const purchasedSlugs = new Set(purchases.map(p => p.slug).filter(Boolean));
   const savedTrips = aiTrips.filter(t => !t.itinerarySlug || !purchasedSlugs.has(t.itinerarySlug));
@@ -585,6 +654,38 @@ export default function MyTrips() {
           })()}
         </div>
       </section>
+
+      {/* Success banner — shown after returning from custom planning checkout */}
+      {showSuccess && (
+        <div style={{ background: '#EFF6F5', borderBottom: '1px solid #C0DDD9' }}>
+          <div style={{
+            maxWidth: '1100px', margin: '0 auto',
+            padding: '16px 24px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '18px', lineHeight: 1 }}>✅</span>
+              <p style={{ fontSize: '14px', color: '#1B6B65', fontWeight: '500', lineHeight: '1.5' }}>
+                Your itinerary request has been received. We're preparing your journey.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowSuccess(false)}
+              aria-label="Dismiss"
+              style={{
+                background: 'transparent', border: 'none',
+                color: '#1B6B65', cursor: 'pointer',
+                fontSize: '18px', lineHeight: 1, flexShrink: 0,
+                opacity: 0.65, padding: '4px',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '0.65'; }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <section style={{ padding: 'clamp(40px, 6vw, 72px) 24px' }}>

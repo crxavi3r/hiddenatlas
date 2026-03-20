@@ -38,11 +38,14 @@ export default async function handler(req, res) {
         cr.status,
         cr."createdAt",
         cr."tripId",
-        t.title       AS "tripTitle",
-        t.destination AS "tripDestination",
-        t."itinerarySlug"
+        t.title           AS "tripTitle",
+        t.destination     AS "tripDestination",
+        t."itinerarySlug" AS "tripItinerarySlug",
+        itin.status       AS "linkedItineraryStatus",
+        itin.slug         AS "linkedItinerarySlug"
       FROM "CustomRequest" cr
-      LEFT JOIN "Trip" t ON t.id = cr."tripId"
+      LEFT JOIN "Trip" t       ON t.id    = cr."tripId"
+      LEFT JOIN "Itinerary" itin ON itin.id = cr."itineraryId"
       WHERE cr."userId" = $1
       ORDER BY cr."createdAt" DESC
     `, [userId]);

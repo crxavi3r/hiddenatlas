@@ -55,6 +55,7 @@ export default async function handler(req, res) {
        JOIN "Itinerary" i ON i.id = p."itineraryId"
        WHERE p."userId" = $1
          AND (p.status IS NULL OR p.status NOT IN ('refunded', 'cancelled', 'chargebacked'))
+         AND (i.type IS DISTINCT FROM 'custom')
        ORDER BY p."purchasedAt" DESC`,
       [userId]
     );

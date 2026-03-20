@@ -367,7 +367,7 @@ async function handleCustomSession(req, res, body) {
       line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
       customer_email: fd.email?.trim().toLowerCase() || undefined,
-      success_url: `${origin}/custom?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${origin}/my-trips?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${origin}/custom`,
       metadata: {
         type:              'custom_planning',
@@ -383,9 +383,92 @@ async function handleCustomSession(req, res, body) {
   }
 }
 
+// ── Shared helper: process a completed custom planning payment ────────────────
+// Idempotent: safe to call from both handleCustomVerify and handleWebhook.
+// Creates Itinerary (type='custom', status='processing', isPrivate=true),
+// links CustomRequest.itineraryId, and creates a Purchase row.
+// Handles 0€ checkout: payment_intent may be null, amount may be 0.
+async function processCustomPayment(pool, session, requestId) {
+  const amount = (session.amount_total ?? 0) / 100;
+
+  // 1. Look up CustomRequest
+  const { rows: crRows } = await pool.query(
+    `SELECT id, "userId", destination, "itineraryId" FROM "CustomRequest" WHERE id = $1`,
+    [requestId]
+  );
+  const cr = crRows[0];
+  if (!cr) {
+    console.warn('[processCustomPayment] CustomRequest not found — id:', requestId);
+    return null;
+  }
+
+  // 2. Idempotency — already processed
+  if (cr.itineraryId) {
+    console.log('[processCustomPayment] already linked — requestId:', requestId, '| itineraryId:', cr.itineraryId);
+    return cr.itineraryId;
+  }
+
+  // 3. Create Itinerary (ON CONFLICT handles duplicate webhook/verify calls)
+  const slug  = `custom-${requestId}`;
+  const title = cr.destination?.trim() || 'Custom Trip';
+  await pool.query(
+    `INSERT INTO "Itinerary"
+       (id, slug, title, description, price, "coverImage",
+        type, status, "userId", "isPrivate", "isPublished", "createdAt")
+     VALUES
+       (gen_random_uuid(), $1, $2, '', $3, '',
+        'custom', 'processing', $4, true, false, NOW())
+     ON CONFLICT (slug) DO NOTHING`,
+    [slug, title, amount, cr.userId ?? null]
+  );
+
+  const { rows: itinRows } = await pool.query(
+    `SELECT id FROM "Itinerary" WHERE slug = $1`, [slug]
+  );
+  const itinId = itinRows[0]?.id;
+  if (!itinId) {
+    console.error('[processCustomPayment] itinerary row missing after insert — slug:', slug);
+    return null;
+  }
+
+  // 4. Link CustomRequest → Itinerary (AND guard = idempotent)
+  await pool.query(
+    `UPDATE "CustomRequest" SET "itineraryId" = $1 WHERE id = $2 AND "itineraryId" IS NULL`,
+    [itinId, requestId]
+  );
+
+  // 5. Create Purchase (only when userId is known; ON CONFLICT = idempotent)
+  if (cr.userId) {
+    const { grossAmount, discountAmount, couponCode, stripeCouponId } = extractDiscount(session);
+    const netAmount = amount;
+    try {
+      await pool.query(
+        `INSERT INTO "Purchase"
+           (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId",
+            amount, "grossAmount", "netAmount", "discountAmount", "couponCode", "stripeCouponId",
+            status, "purchasedAt", "createdAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'paid', NOW(), NOW())
+         ON CONFLICT ("stripeSessionId") DO NOTHING`,
+        [
+          cr.userId, itinId, session.id, session.payment_intent ?? null,
+          netAmount, grossAmount, netAmount, discountAmount, couponCode, stripeCouponId,
+        ]
+      );
+    } catch (err) {
+      if (err.code !== '23505') throw err; // ignore unique_violation, re-throw others
+    }
+  } else {
+    console.warn('[processCustomPayment] no userId on CustomRequest — Purchase skipped — id:', requestId);
+  }
+
+  console.log('[processCustomPayment] done — requestId:', requestId, '| itinId:', itinId, '| slug:', slug);
+  return itinId;
+}
+
 // ── POST /api/checkout?action=custom-verify ───────────────────────────────────
-// Called client-side after Stripe redirects back on success.
-// Confirms payment and updates CustomRequest status to 'paid'.
+// Called client-side after Stripe redirects to /my-trips?session_id=...
+// No auth required — Stripe session ID is the credential.
+// Creates Itinerary + links CustomRequest + creates Purchase. Idempotent.
 async function handleCustomVerify(req, res, body) {
   if (!process.env.STRIPE_SECRET_KEY || !process.env.DATABASE_URL) {
     return res.status(500).json({ error: 'Server misconfigured' });
@@ -397,12 +480,17 @@ async function handleCustomVerify(req, res, body) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
   let session;
   try {
-    session = await stripe.checkout.sessions.retrieve(sessionId);
+    session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ['total_details.breakdown'],
+    });
   } catch {
     return res.status(400).json({ error: 'Invalid session', success: false });
   }
 
-  if (session.payment_status !== 'paid') {
+  const sessionPaid =
+    session.payment_status === 'paid' ||
+    session.payment_status === 'no_payment_required';
+  if (!sessionPaid) {
     return res.status(400).json({ error: 'Payment not completed', success: false });
   }
 
@@ -413,15 +501,11 @@ async function handleCustomVerify(req, res, body) {
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    // Update paymentStatus to 'paid' — idempotent
-    await pool.query(
-      `UPDATE "CustomRequest" SET "paymentStatus"='paid', "paidAt"=NOW(), "stripeSessionId"=$1 WHERE id=$2`,
-      [sessionId, requestId]
-    );
-    console.log('[checkout/custom-verify] CustomRequest marked paid — id:', requestId);
-    return res.status(200).json({ success: true });
+    const itinId = await processCustomPayment(pool, session, requestId);
+    console.log('[checkout/custom-verify] done — requestId:', requestId, '| itinId:', itinId);
+    return res.status(200).json({ success: true, itineraryId: itinId });
   } catch (err) {
-    console.error('[checkout/custom-verify] DB error:', err.message);
+    console.error('[checkout/custom-verify] error:', err.message);
     return res.status(500).json({ error: 'Verification failed', success: false });
   } finally {
     await pool.end();
@@ -468,11 +552,8 @@ async function handleWebhook(req, res, rawBody) {
     if (requestId) {
       const wpPool = new Pool({ connectionString: process.env.DATABASE_URL });
       try {
-        await wpPool.query(
-          `UPDATE "CustomRequest" SET "paymentStatus"='paid', "paidAt"=NOW(), "stripeSessionId"=$1 WHERE id=$2`,
-          [session.id, requestId]
-        );
-        console.log('[checkout/webhook] CustomRequest marked paid — id:', requestId);
+        await processCustomPayment(wpPool, session, requestId);
+        console.log('[checkout/webhook] custom_planning processed — requestId:', requestId);
       } catch (err) {
         console.error('[checkout/webhook] custom_planning DB error:', err.message);
       } finally {
