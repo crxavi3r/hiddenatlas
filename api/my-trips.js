@@ -30,7 +30,7 @@ export default async function handler(req, res) {
          i.slug,
          i.title,
          i.description     AS excerpt,
-         i."coverImage",
+         COALESCE(NULLIF(i."coverImage",''), i.content->'hero'->>'coverImage', '') AS "coverImage",
          i."pdfUrl"
        FROM "Purchase" p
        JOIN "Itinerary" i ON i.id = p."itineraryId"

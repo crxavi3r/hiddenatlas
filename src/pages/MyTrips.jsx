@@ -298,6 +298,11 @@ function AiTripCard({ trip, onDelete }) {
 // ── Purchased Itinerary card ────────────────────────────────────────────────
 function PurchasedTripCard({ trip }) {
   const [hovered, setHovered] = useState(false);
+
+  // Resolve cover image: DB value → local data file fallback (handles null/empty DB column)
+  const localIt = itineraries.find(it => it.id === trip.slug);
+  const resolvedImage = trip.coverImage || localIt?.coverImage || localIt?.image || '';
+
   return (
     <div
       onMouseEnter={() => setHovered(true)}
@@ -313,13 +318,17 @@ function PurchasedTripCard({ trip }) {
     >
       <div style={{ position: 'relative', height: '200px', overflow: 'hidden', flexShrink: 0 }}>
         <img
-          src={trip.coverImage} alt={trip.title}
+          src={resolvedImage} alt={trip.title}
           style={{
             width: '100%', height: '100%', objectFit: 'cover',
             transform: hovered ? 'scale(1.05)' : 'scale(1)',
             transition: 'transform 0.5s ease',
           }}
-          onError={e => { e.currentTarget.onerror = null; }}
+          onError={e => {
+            e.currentTarget.onerror = null;
+            const fallback = localIt?.image || localIt?.coverImage || '';
+            if (fallback && e.currentTarget.src !== fallback) e.currentTarget.src = fallback;
+          }}
         />
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(28,26,22,0.5) 0%, transparent 55%)' }} />
         <div style={{
