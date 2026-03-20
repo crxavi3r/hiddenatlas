@@ -51,12 +51,16 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server misconfigured' });
   }
 
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    connectionTimeoutMillis: 8000,
+    idleTimeoutMillis: 10000,
+  });
 
   try {
     await verifyAdmin(req.headers.authorization, pool);
   } catch (err) {
-    await pool.end();
+    try { await pool.end(); } catch {}
     return res.status(err.status ?? 401).json({ error: err.message });
   }
 
@@ -137,12 +141,28 @@ export default async function handler(req, res) {
     if (action === 'downloads') return res.status(200).json(await getDownloads(pool, cutoff, offset));
     if (action === 'custom-requests') return res.status(200).json(await getCustomRequests(pool, status, offset, req.query.all === 'true'));
 
+    // ── One-time backfill: populate null new columns from legacy `amount` ─────
+    if (action === 'backfill-purchases') {
+      const { rowCount } = await pool.query(`
+        UPDATE "Purchase"
+        SET
+          "grossAmount"    = COALESCE("grossAmount",    amount),
+          "netAmount"      = COALESCE("netAmount",      amount),
+          "discountAmount" = COALESCE("discountAmount", 0)
+        WHERE
+          "grossAmount" IS NULL
+          OR "netAmount" IS NULL
+          OR "discountAmount" IS NULL
+      `);
+      return res.status(200).json({ ok: true, rowsUpdated: rowCount });
+    }
+
     return res.status(400).json({ error: 'Unknown action' });
   } catch (err) {
     console.error(`[api/admin] action=${action} error: ${err.message}`, err.stack);
     return res.status(500).json({ error: 'Database error', detail: err.message });
   } finally {
-    await pool.end();
+    try { await pool.end(); } catch {}
   }
 }
 
@@ -155,17 +175,18 @@ async function getDashboardKPIs(pool, cutoff) {
     pool.query(`SELECT COUNT(*) AS n FROM "User" WHERE "createdAt" >= $1`, [cutoff]),
     pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= $1`, [cutoff]),
     pool.query(`SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1`, [cutoff]),
-    // Revenue uses only `amount` — exists on every purchase row, old and new
-    pool.query(`SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS revenue FROM "Purchase" WHERE "purchasedAt" >= $1`, [cutoff]),
+    // Revenue: COALESCE(netAmount, amount, 0) handles legacy rows (netAmount NULL) and new rows
+    pool.query(`SELECT COUNT(*) AS n, COALESCE(SUM(COALESCE("netAmount", amount, 0)),0) AS revenue FROM "Purchase" WHERE "purchasedAt" >= $1`, [cutoff]),
   ]);
 
   // ── Discount breakdown: uses new columns — fails gracefully if not migrated yet ──
   const discountRow = await pool.query(`
     SELECT
-      COALESCE(SUM(COALESCE("grossAmount", amount)),0)    AS gross_revenue,
-      COALESCE(SUM(COALESCE("discountAmount", 0)),0)      AS total_discount
+      COALESCE(SUM(COALESCE("grossAmount", amount, 0)),0)    AS gross_revenue,
+      COALESCE(SUM(COALESCE("netAmount",   amount, 0)),0)    AS net_revenue,
+      COALESCE(SUM(COALESCE("discountAmount", 0)),0)         AS total_discount
     FROM "Purchase" WHERE "purchasedAt" >= $1
-  `, [cutoff]).then(r => r.rows[0]).catch(() => ({ gross_revenue: 0, total_discount: 0 }));
+  `, [cutoff]).then(r => r.rows[0]).catch(() => ({ gross_revenue: 0, net_revenue: 0, total_discount: 0 }));
 
   const v = parseInt(visitors.rows[0].n, 10) || 0;
   const s = parseInt(sales.rows[0].n, 10) || 0;
@@ -178,6 +199,7 @@ async function getDashboardKPIs(pool, cutoff) {
     sales:          s,
     revenue:        parseFloat(sales.rows[0].revenue) || 0,
     grossRevenue:   parseFloat(discountRow.gross_revenue) || 0,
+    netRevenue:     parseFloat(discountRow.net_revenue) || 0,
     totalDiscount:  parseFloat(discountRow.total_discount) || 0,
     conversionRate: v > 0 ? +((s / v) * 100).toFixed(1) : 0,
   };
@@ -269,7 +291,9 @@ async function getTopItineraries(pool, cutoff) {
       GROUP BY t."itinerarySlug"
     ) d ON d."itinerarySlug" = i.slug
     LEFT JOIN (
-      SELECT "itineraryId", COUNT(*) AS sales, SUM(amount) AS revenue
+      SELECT "itineraryId",
+        COUNT(*) AS sales,
+        COALESCE(SUM(COALESCE("netAmount", amount, 0)),0) AS revenue
       FROM "Purchase" WHERE "purchasedAt" >= $1
       GROUP BY "itineraryId"
     ) s ON s."itineraryId" = i.id
@@ -315,10 +339,12 @@ async function getRecentActivity(pool, cutoff) {
       WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1
       ORDER BY ts DESC LIMIT 15
     ) UNION ALL (
-      SELECT 'purchase' AS type, u.email, u.name, NULL::text AS country, i.title AS detail, p."purchasedAt" AS ts
+      SELECT 'purchase' AS type, u.email, u.name, NULL::text AS country,
+        COALESCE(i.title, p."itineraryId") AS detail,
+        p."purchasedAt" AS ts
       FROM "Purchase" p
       JOIN "User" u ON u.id=p."userId"
-      JOIN "Itinerary" i ON i.id=p."itineraryId"
+      LEFT JOIN "Itinerary" i ON i.id=p."itineraryId"
       WHERE p."purchasedAt" >= $1
       ORDER BY ts DESC LIMIT 15
     ) UNION ALL (
@@ -350,7 +376,10 @@ async function getUsersList(pool, q, offset) {
       GROUP BY "userId"
     ) dl ON dl."userId" = u.id
     LEFT JOIN (
-      SELECT "userId", COUNT(*) AS purchases, SUM(amount) AS revenue, MAX("purchasedAt") AS last_purchase
+      SELECT "userId",
+        COUNT(*) AS purchases,
+        COALESCE(SUM(COALESCE("netAmount", amount, 0)),0) AS revenue,
+        MAX("purchasedAt") AS last_purchase
       FROM "Purchase"
       GROUP BY "userId"
     ) pu ON pu."userId" = u.id
@@ -375,7 +404,9 @@ async function getUserDetail(pool, id) {
         COALESCE(pu.revenue, 0)   AS revenue
       FROM "User" u
       LEFT JOIN (
-        SELECT "userId", COUNT(*) AS purchases, SUM(amount) AS revenue
+        SELECT "userId",
+          COUNT(*) AS purchases,
+          COALESCE(SUM(COALESCE("netAmount", amount, 0)),0) AS revenue
         FROM "Purchase" GROUP BY "userId"
       ) pu ON pu."userId" = u.id
       LEFT JOIN (
@@ -467,9 +498,10 @@ async function getSales(pool, cutoff, offset) {
     sales = rows;
   }
 
-  // ── Totals (revenue always uses `amount` — safe on all rows) ─────────────
+  // ── Totals: COALESCE(netAmount, amount, 0) handles legacy rows ────────────
   const { rows: [{ total, revenue }] } = await pool.query(`
-    SELECT COUNT(*) AS total, COALESCE(SUM(amount),0) AS revenue
+    SELECT COUNT(*) AS total,
+      COALESCE(SUM(COALESCE("netAmount", amount, 0)),0) AS revenue
     FROM "Purchase" WHERE "purchasedAt" >= $1
   `, [cutoff]);
 
@@ -480,7 +512,7 @@ async function getSales(pool, cutoff, offset) {
   `, [cutoff]).then(r => r.rows[0]).catch(() => ({ total_discount: 0 }));
 
   const { rows: [allTime] } = await pool.query(
-    `SELECT COUNT(*) AS total, COALESCE(SUM(amount),0) AS revenue FROM "Purchase"`
+    `SELECT COUNT(*) AS total, COALESCE(SUM(COALESCE("netAmount", amount, 0)),0) AS revenue FROM "Purchase"`
   );
   const allTimeDiscount = await pool.query(
     `SELECT COALESCE(SUM(COALESCE("discountAmount", 0)),0) AS total_discount FROM "Purchase"`
