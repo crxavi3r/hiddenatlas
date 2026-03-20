@@ -211,16 +211,27 @@ async function handleVerify(req, res, body) {
       const stripeKey = idx === 0 ? sessionId : `${sessionId}__unlock_${idx}`;
 
       const netAmount = session.amount_total / 100;
-      const { rowCount } = await pool.query(
-        `INSERT INTO "Purchase"
-           (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId",
-            amount, "grossAmount", "netAmount", "discountAmount", "couponCode", "stripeCouponId",
-            status, "purchasedAt", "createdAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'paid', NOW(), NOW())
-         ON CONFLICT ("stripeSessionId") DO NOTHING`,
-        [userId, itin.id, stripeKey, session.payment_intent,
-         netAmount, grossAmount, netAmount, discountAmount, couponCode, stripeCouponId]
-      );
+      let rowCount = 0;
+      try {
+        const result = await pool.query(
+          `INSERT INTO "Purchase"
+             (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId",
+              amount, "grossAmount", "netAmount", "discountAmount", "couponCode", "stripeCouponId",
+              status, "purchasedAt", "createdAt")
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'paid', NOW(), NOW())
+           ON CONFLICT ("stripeSessionId") DO NOTHING`,
+          [userId, itin.id, stripeKey, session.payment_intent,
+           netAmount, grossAmount, netAmount, discountAmount, couponCode, stripeCouponId]
+        );
+        rowCount = result.rowCount;
+      } catch (insertErr) {
+        // 23505 = unique_violation: (userId, itineraryId) already exists — treat as DO NOTHING
+        if (insertErr.code === '23505') {
+          console.log('[checkout/verify] purchase already exists (userId+itineraryId) — slug:', unlockSlug);
+        } else {
+          throw insertErr;
+        }
+      }
 
       if (idx === 0) {
         primaryPdfUrl = itin.pdfUrl ?? null;
@@ -506,16 +517,27 @@ async function handleWebhook(req, res, rawBody) {
       const stripeKey = idx === 0 ? session.id : `${session.id}__unlock_${idx}`;
 
       const netAmount = session.amount_total / 100;
-      const { rowCount } = await pool.query(
-        `INSERT INTO "Purchase"
-           (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId",
-            amount, "grossAmount", "netAmount", "discountAmount",
-            status, "purchasedAt", "createdAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, 'paid', NOW(), NOW())
-         ON CONFLICT ("stripeSessionId") DO NOTHING`,
-        [userId, itin.id, stripeKey, session.payment_intent,
-         netAmount, grossAmount, netAmount, discountAmount]
-      );
+      let rowCount = 0;
+      try {
+        const result = await pool.query(
+          `INSERT INTO "Purchase"
+             (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId",
+              amount, "grossAmount", "netAmount", "discountAmount",
+              status, "purchasedAt", "createdAt")
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, 'paid', NOW(), NOW())
+           ON CONFLICT ("stripeSessionId") DO NOTHING`,
+          [userId, itin.id, stripeKey, session.payment_intent,
+           netAmount, grossAmount, netAmount, discountAmount]
+        );
+        rowCount = result.rowCount;
+      } catch (insertErr) {
+        // 23505 = unique_violation: (userId, itineraryId) already exists — treat as DO NOTHING
+        if (insertErr.code === '23505') {
+          console.log('[checkout/webhook] purchase already exists (userId+itineraryId) — slug:', unlockSlug);
+        } else {
+          throw insertErr;
+        }
+      }
 
       if (idx === 0) {
         console.log('[checkout/webhook] purchase', rowCount > 0 ? 'created' : 'already existed', '— slug:', unlockSlug, '| sessionId:', session.id);

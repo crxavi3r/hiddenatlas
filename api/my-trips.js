@@ -27,20 +27,24 @@ export default async function handler(req, res) {
       `SELECT
          p.id              AS "purchaseId",
          p."purchasedAt",
+         p.status,
          i.slug,
-         i.title,
-         i.description     AS excerpt,
-         COALESCE(NULLIF(i."coverImage",''), i.content->'hero'->>'coverImage', '') AS "coverImage",
+         -- Fall back to content JSON hero title when the DB column is a raw stub (title = slug)
+         COALESCE(NULLIF(i.title, i.slug), i.content->'hero'->>'title', i.slug)                    AS title,
+         -- Fall back to content JSON short description when description is empty
+         COALESCE(NULLIF(i.description,''), i.content->'summary'->>'shortDescription', '')          AS excerpt,
+         COALESCE(NULLIF(i."coverImage",''), i.content->'hero'->>'coverImage', '')                  AS "coverImage",
          i."pdfUrl"
        FROM "Purchase" p
        JOIN "Itinerary" i ON i.id = p."itineraryId"
        JOIN "User"      u ON u.id = p."userId"
        WHERE u."clerkId" = $1
-         AND p.status = 'paid'
+         AND (p.status IS NULL OR p.status NOT IN ('refunded', 'cancelled', 'chargebacked'))
        ORDER BY p."purchasedAt" DESC`,
       [clerkId]
     );
-    console.log('[my-trips] clerkId:', clerkId, '| purchases returned:', rows.length);
+    console.log('[my-trips] clerkId:', clerkId, '| purchases returned:', rows.length,
+      '| statuses:', rows.map(r => r.status));
     return res.status(200).json(rows);
   } catch (err) {
     console.error('[my-trips] DB error:', err.message);

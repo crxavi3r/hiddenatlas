@@ -299,8 +299,14 @@ function AiTripCard({ trip, onDelete }) {
 function PurchasedTripCard({ trip }) {
   const [hovered, setHovered] = useState(false);
 
-  // Resolve cover image: DB value → local data file fallback (handles null/empty DB column)
+  // Resolve all presentation fields: DB value (if proper) → local data file fallback.
+  // Itinerary rows created as checkout stubs have title=slug and empty description/coverImage.
   const localIt = itineraries.find(it => it.id === trip.slug);
+  const isStubTitle  = !trip.title || trip.title === trip.slug;
+  const resolvedTitle   = isStubTitle ? (localIt?.title || trip.slug) : trip.title;
+  const resolvedExcerpt = trip.excerpt?.trim()
+    ? trip.excerpt
+    : (localIt?.shortDescription || localIt?.description || '');
   const resolvedImage = trip.coverImage || localIt?.coverImage || localIt?.image || '';
 
   return (
@@ -318,7 +324,7 @@ function PurchasedTripCard({ trip }) {
     >
       <div style={{ position: 'relative', height: '200px', overflow: 'hidden', flexShrink: 0 }}>
         <img
-          src={resolvedImage} alt={trip.title}
+          src={resolvedImage} alt={resolvedTitle}
           style={{
             width: '100%', height: '100%', objectFit: 'cover',
             transform: hovered ? 'scale(1.05)' : 'scale(1)',
@@ -342,11 +348,11 @@ function PurchasedTripCard({ trip }) {
       </div>
       <div style={{ padding: '22px 22px 20px', display: 'flex', flexDirection: 'column', flex: 1 }}>
         <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '19px', fontWeight: '600', color: '#1C1A16', lineHeight: '1.3', marginBottom: '8px' }}>
-          {trip.title}
+          {resolvedTitle}
         </h3>
-        {trip.excerpt && (
+        {resolvedExcerpt && (
           <p style={{ fontSize: '13.5px', color: '#6B6156', lineHeight: '1.6', marginBottom: '16px' }}>
-            {trip.excerpt}
+            {resolvedExcerpt}
           </p>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#9C9488', marginBottom: '20px' }}>
