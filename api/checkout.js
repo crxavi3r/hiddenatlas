@@ -254,9 +254,10 @@ async function handleVerify(req, res, body) {
 
 // ── POST /api/checkout?action=custom-session ─────────────────────────────────
 // Creates a Stripe Checkout Session for a fixed-price custom planning tier.
-// Saves the CustomRequest to DB first so it exists before the user leaves the site.
+// NO DB records are created here — all form data is stored in Stripe metadata
+// and records are only created after confirmed payment (see processCustomPayment).
 async function handleCustomSession(req, res, body) {
-  if (!process.env.STRIPE_SECRET_KEY || !process.env.DATABASE_URL) {
+  if (!process.env.STRIPE_SECRET_KEY) {
     return res.status(500).json({ error: 'Server misconfigured' });
   }
 
@@ -273,9 +274,9 @@ async function handleCustomSession(req, res, body) {
     return res.status(400).json({ error: `Stripe price not configured for tier: ${tierKey}` });
   }
 
-  // Optional auth — look up internal userId if a JWT is present
+  // Optional auth — look up internal userId to embed in metadata
   let internalUserId = null;
-  if (req.headers.authorization?.startsWith('Bearer ')) {
+  if (req.headers.authorization?.startsWith('Bearer ') && process.env.DATABASE_URL) {
     try {
       const clerkId = await verifyAuth(req.headers.authorization);
       const authPool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -290,74 +291,6 @@ async function handleCustomSession(req, res, body) {
     } catch { /* anonymous — continue */ }
   }
 
-  // Save CustomRequest with status='pending_payment' before redirecting to Stripe
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  let requestId = null;
-
-  try {
-    const { rows } = await pool.query(
-      `INSERT INTO "CustomRequest"
-         (id, "fullName", email, destination, dates, "groupSize", notes, status, "createdAt")
-       VALUES
-         (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'open', NOW())
-       RETURNING id`,
-      [
-        fd.name?.trim()        || '',
-        fd.email?.trim().toLowerCase() || '',
-        fd.destination?.trim() || null,
-        fd.dates?.trim()       || null,
-        fd.groupSize ? parseInt(fd.groupSize, 10) : null, // '1-2' → 1, '3-8' → 3, etc.
-        fd.notes?.trim()       || null,
-      ]
-    );
-    requestId = rows[0]?.id ?? null;
-    console.log('[checkout/custom-session] CustomRequest created — id:', requestId, '| tier:', tierKey);
-  } catch (err) {
-    // Fallback: try without status column (migration may be pending)
-    try {
-      const { rows } = await pool.query(
-        `INSERT INTO "CustomRequest" (id, "fullName", email, destination, dates, "groupSize", notes, status, "createdAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'open', NOW())
-         RETURNING id`,
-        [
-          fd.name?.trim()        || '',
-          fd.email?.trim().toLowerCase() || '',
-          fd.destination?.trim() || null,
-          fd.dates?.trim()       || null,
-          fd.groupSize ? parseInt(fd.groupSize, 10) : null,
-          fd.notes?.trim()       || null,
-        ]
-      );
-      requestId = rows[0]?.id ?? null;
-      console.log('[checkout/custom-session] CustomRequest created (fallback) — id:', requestId);
-    } catch (fbErr) {
-      console.error('[checkout/custom-session] DB insert failed:', fbErr.message);
-      await pool.end();
-      return res.status(500).json({ error: 'Failed to save request. Please try again.' });
-    }
-  }
-
-  // Best-effort: save extended fields (phone, duration, groupType, budget, style, userId)
-  if (requestId) {
-    pool.query(
-      `UPDATE "CustomRequest"
-       SET phone=$1, duration=$2, "groupType"=$3, budget=$4, style=$5, "userId"=$6
-       WHERE id=$7`,
-      [
-        fd.phone?.trim()     || null,
-        fd.duration?.trim()  || null,
-        fd.groupType?.trim() || null,
-        fd.budget?.trim()    || null,
-        JSON.stringify(Array.isArray(fd.style) ? fd.style : []),
-        internalUserId,
-        requestId,
-      ]
-    ).catch(err => console.warn('[checkout/custom-session] Extended UPDATE skipped:', err.message));
-  }
-
-  await pool.end();
-
-  // Create Stripe Checkout Session
   const origin = req.headers.origin || 'https://hiddenatlas.travel';
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -370,12 +303,24 @@ async function handleCustomSession(req, res, body) {
       success_url: `${origin}/my-trips?success=true&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${origin}/custom`,
       metadata: {
-        type:              'custom_planning',
-        custom_request_id: requestId ?? '',
-        tier_key:          tierKey,
+        // Stripe metadata limit: 50 keys, 500 chars/value
+        type:         'custom_planning',
+        tier_key:     tierKey,
+        user_id:      internalUserId ?? '',
+        full_name:    (fd.name?.trim()                          || '').slice(0, 500),
+        email:        (fd.email?.trim().toLowerCase()           || '').slice(0, 500),
+        phone:        (fd.phone?.trim()                         || '').slice(0, 500),
+        destination:  (fd.destination?.trim()                   || '').slice(0, 500),
+        dates:        (fd.dates?.trim()                         || '').slice(0, 500),
+        duration:     (fd.duration?.trim()                      || '').slice(0, 100),
+        group_size:   String(fd.groupSize                       || '').slice(0, 100),
+        group_type:   (fd.groupType?.trim()                     || '').slice(0, 500),
+        budget:       (fd.budget?.trim()                        || '').slice(0, 500),
+        travel_style: (Array.isArray(fd.style) ? fd.style : []).join(',').slice(0, 500),
+        notes:        (fd.notes?.trim()                         || '').slice(0, 500),
       },
     });
-    console.log('[checkout/custom-session] Stripe session created — id:', session.id, '| requestId:', requestId);
+    console.log('[checkout/custom-session] session created — id:', session.id, '| tier:', tierKey, '| userId:', internalUserId);
     return res.status(200).json({ url: session.url });
   } catch (err) {
     console.error('[checkout/custom-session] Stripe error:', err.message);
@@ -384,33 +329,44 @@ async function handleCustomSession(req, res, body) {
 }
 
 // ── Shared helper: process a completed custom planning payment ────────────────
-// Idempotent: safe to call from both handleCustomVerify and handleWebhook.
-// Creates Itinerary (type='custom', status='processing', isPrivate=true),
-// links CustomRequest.itineraryId, and creates a Purchase row.
+// Reads ALL data from session.metadata — no pre-existing DB records needed.
+// Idempotent: Purchase.stripeSessionId is the guard (fast-exit if already done).
+// Creates: Itinerary → CustomRequest → Purchase, in that order.
 // Handles 0€ checkout: payment_intent may be null, amount may be 0.
-async function processCustomPayment(pool, session, requestId) {
-  const amount = (session.amount_total ?? 0) / 100;
-
-  // 1. Look up CustomRequest
-  const { rows: crRows } = await pool.query(
-    `SELECT id, "userId", destination, "itineraryId" FROM "CustomRequest" WHERE id = $1`,
-    [requestId]
+async function processCustomPayment(pool, session) {
+  // ── Idempotency: bail out immediately if this session was already processed ─
+  const { rows: existing } = await pool.query(
+    `SELECT id FROM "Purchase" WHERE "stripeSessionId" = $1 LIMIT 1`,
+    [session.id]
   );
-  const cr = crRows[0];
-  if (!cr) {
-    console.warn('[processCustomPayment] CustomRequest not found — id:', requestId);
-    return null;
+  if (existing.length > 0) {
+    console.log('[processCustomPayment] already processed — sessionId:', session.id);
+    return;
   }
 
-  // 2. Idempotency — already processed
-  if (cr.itineraryId) {
-    console.log('[processCustomPayment] already linked — requestId:', requestId, '| itineraryId:', cr.itineraryId);
-    return cr.itineraryId;
-  }
+  // ── Extract form data from metadata ──────────────────────────────────────
+  const meta      = session.metadata || {};
+  const userId    = meta.user_id    || null;
+  const fullName  = meta.full_name  || '';
+  const email     = meta.email      || '';
+  const phone     = meta.phone      || null;
+  const dest      = meta.destination || null;
+  const dates     = meta.dates      || null;
+  const duration  = meta.duration   || null;
+  const groupSize = meta.group_size ? (parseInt(meta.group_size, 10) || null) : null;
+  const groupType = meta.group_type || null;
+  const budget    = meta.budget     || null;
+  const style     = meta.travel_style
+    ? meta.travel_style.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+  const notes     = meta.notes      || null;
+  const amount    = (session.amount_total ?? 0) / 100;
 
-  // 3. Create Itinerary (ON CONFLICT handles duplicate webhook/verify calls)
-  const slug  = `custom-${requestId}`;
-  const title = cr.destination?.trim() || 'Custom Trip';
+  // ── 1. Create Itinerary ──────────────────────────────────────────────────
+  // Slug derived from session.id — deterministic across retries.
+  const slug  = `custom-${session.id.replace(/^cs_(test_|live_)?/, '').slice(0, 40).toLowerCase()}`;
+  const title = dest || 'Custom Trip';
+
   await pool.query(
     `INSERT INTO "Itinerary"
        (id, slug, title, description, price, "coverImage",
@@ -419,7 +375,7 @@ async function processCustomPayment(pool, session, requestId) {
        (gen_random_uuid(), $1, $2, '', $3, '',
         'custom', 'processing', $4, true, false, NOW())
      ON CONFLICT (slug) DO NOTHING`,
-    [slug, title, amount, cr.userId ?? null]
+    [slug, title, amount, userId || null]
   );
 
   const { rows: itinRows } = await pool.query(
@@ -427,18 +383,37 @@ async function processCustomPayment(pool, session, requestId) {
   );
   const itinId = itinRows[0]?.id;
   if (!itinId) {
-    console.error('[processCustomPayment] itinerary row missing after insert — slug:', slug);
-    return null;
+    console.error('[processCustomPayment] itinerary missing after insert — slug:', slug);
+    return;
   }
 
-  // 4. Link CustomRequest → Itinerary (AND guard = idempotent)
-  await pool.query(
-    `UPDATE "CustomRequest" SET "itineraryId" = $1 WHERE id = $2 AND "itineraryId" IS NULL`,
-    [itinId, requestId]
+  // ── 2. Create CustomRequest (linked to Itinerary) ────────────────────────
+  // Check if a prior retry already created it for this itinerary.
+  const { rows: existingCR } = await pool.query(
+    `SELECT id FROM "CustomRequest" WHERE "itineraryId" = $1 LIMIT 1`,
+    [itinId]
   );
+  if (existingCR.length === 0) {
+    await pool.query(
+      `INSERT INTO "CustomRequest"
+         (id, "fullName", email, destination, dates, "groupSize", notes,
+          phone, duration, "groupType", budget, style,
+          status, "userId", "itineraryId", "createdAt")
+       VALUES
+         (gen_random_uuid(), $1, $2, $3, $4, $5, $6,
+          $7, $8, $9, $10, $11,
+          'open', $12, $13, NOW())`,
+      [
+        fullName, email, dest, dates, groupSize, notes,
+        phone, duration, groupType, budget, JSON.stringify(style),
+        userId || null, itinId,
+      ]
+    );
+    console.log('[processCustomPayment] CustomRequest created — sessionId:', session.id);
+  }
 
-  // 5. Create Purchase (only when userId is known; ON CONFLICT = idempotent)
-  if (cr.userId) {
+  // ── 3. Create Purchase ───────────────────────────────────────────────────
+  if (userId) {
     const { grossAmount, discountAmount, couponCode, stripeCouponId } = extractDiscount(session);
     const netAmount = amount;
     try {
@@ -450,19 +425,18 @@ async function processCustomPayment(pool, session, requestId) {
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'paid', NOW(), NOW())
          ON CONFLICT ("stripeSessionId") DO NOTHING`,
         [
-          cr.userId, itinId, session.id, session.payment_intent ?? null,
+          userId, itinId, session.id, session.payment_intent ?? null,
           netAmount, grossAmount, netAmount, discountAmount, couponCode, stripeCouponId,
         ]
       );
     } catch (err) {
-      if (err.code !== '23505') throw err; // ignore unique_violation, re-throw others
+      if (err.code !== '23505') throw err;
     }
   } else {
-    console.warn('[processCustomPayment] no userId on CustomRequest — Purchase skipped — id:', requestId);
+    console.warn('[processCustomPayment] no userId in metadata — Purchase skipped — sessionId:', session.id);
   }
 
-  console.log('[processCustomPayment] done — requestId:', requestId, '| itinId:', itinId, '| slug:', slug);
-  return itinId;
+  console.log('[processCustomPayment] done — sessionId:', session.id, '| itinId:', itinId, '| slug:', slug);
 }
 
 // ── POST /api/checkout?action=custom-verify ───────────────────────────────────
@@ -494,16 +468,15 @@ async function handleCustomVerify(req, res, body) {
     return res.status(400).json({ error: 'Payment not completed', success: false });
   }
 
-  const { custom_request_id: requestId } = session.metadata || {};
-  if (!requestId) {
-    return res.status(400).json({ error: 'Session not linked to a custom request', success: false });
+  if (session.metadata?.type !== 'custom_planning') {
+    return res.status(400).json({ error: 'Not a custom planning session', success: false });
   }
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    const itinId = await processCustomPayment(pool, session, requestId);
-    console.log('[checkout/custom-verify] done — requestId:', requestId, '| itinId:', itinId);
-    return res.status(200).json({ success: true, itineraryId: itinId });
+    await processCustomPayment(pool, session);
+    console.log('[checkout/custom-verify] done — sessionId:', sessionId);
+    return res.status(200).json({ success: true });
   } catch (err) {
     console.error('[checkout/custom-verify] error:', err.message);
     return res.status(500).json({ error: 'Verification failed', success: false });
@@ -547,18 +520,15 @@ async function handleWebhook(req, res, rawBody) {
 
   // ── Route by session type ─────────────────────────────────────────────────
   if (session.metadata?.type === 'custom_planning') {
-    const requestId = session.metadata?.custom_request_id;
-    console.log('[checkout/webhook] custom_planning payment — requestId:', requestId);
-    if (requestId) {
-      const wpPool = new Pool({ connectionString: process.env.DATABASE_URL });
-      try {
-        await processCustomPayment(wpPool, session, requestId);
-        console.log('[checkout/webhook] custom_planning processed — requestId:', requestId);
-      } catch (err) {
-        console.error('[checkout/webhook] custom_planning DB error:', err.message);
-      } finally {
-        await wpPool.end();
-      }
+    console.log('[checkout/webhook] custom_planning payment — sessionId:', session.id);
+    const wpPool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      await processCustomPayment(wpPool, session);
+      console.log('[checkout/webhook] custom_planning processed — sessionId:', session.id);
+    } catch (err) {
+      console.error('[checkout/webhook] custom_planning DB error:', err.message);
+    } finally {
+      await wpPool.end();
     }
     return res.status(200).json({ received: true });
   }
