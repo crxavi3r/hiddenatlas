@@ -66,10 +66,11 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      if (action === 'list')       return res.json(await handleList(pool));
-      if (action === 'get')        return res.json(await handleGet(pool, id));
-      if (action === 'assets')     return res.json(await handleListAssets(pool, id));
-      if (action === 'ai-history') return res.json(await handleAIHistory(pool, id));
+      if (action === 'list')           return res.json(await handleList(pool));
+      if (action === 'get')            return res.json(await handleGet(pool, id));
+      if (action === 'assets')         return res.json(await handleListAssets(pool, id));
+      if (action === 'ai-history')     return res.json(await handleAIHistory(pool, id));
+      if (action === 'linked-request') return res.json(await handleLinkedRequest(pool, id));
       return res.status(400).json({ error: 'Unknown GET action' });
     }
 
@@ -132,7 +133,8 @@ async function handleCreate(pool, body) {
     country = '',
     region = '',
     durationDays = null,
-    accessType = 'free',
+    type = 'free',
+    isPrivate = false,
     price = 0,
     stripePriceId = null,
     coverImage = '',
@@ -142,19 +144,24 @@ async function handleCreate(pool, body) {
 
   if (!slug) throw Object.assign(new Error('slug is required'), { status: 400 });
 
-  const finalContent = mergeEmptyContent(content);
+  const finalContent    = mergeEmptyContent(content);
+  const finalType       = ['free', 'premium', 'custom'].includes(type) ? type : 'free';
+  const finalAccessType = finalType === 'free' ? 'free' : 'paid';
+  const finalPrivate    = finalType === 'custom' ? true : Boolean(isPrivate);
+
   const { rows } = await pool.query(
     `INSERT INTO "Itinerary"
        (title, subtitle, slug, destination, country, region, "durationDays",
         "accessType", price, "stripePriceId", "coverImage", description,
-        status, "isPublished", content, "schemaVersion", "updatedAt")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,1,NOW())
+        type, "isPrivate", status, "isPublished", content, "schemaVersion", "updatedAt")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,1,NOW())
      RETURNING *`,
     [
       title, subtitle, slug, destination, country, region, durationDays,
-      accessType, accessType === 'free' ? 0 : (price || 0), stripePriceId || null,
+      finalAccessType, finalType === 'free' ? 0 : (price || 0), stripePriceId || null,
       coverImage,
       finalContent.summary?.shortDescription || '',
+      finalType, finalPrivate,
       status, status === 'published',
       JSON.stringify(finalContent),
     ]
@@ -169,14 +176,22 @@ async function handleUpdate(pool, id, body) {
   const {
     title, subtitle, slug, destination, country, region, durationDays,
     accessType, price, stripePriceId, coverImage, content, status,
+    type, isPrivate,
   } = body;
 
   const finalContent = mergeEmptyContent(content ?? {});
 
   // Derive mirrored columns
-  const derivedCoverImage = finalContent.hero?.coverImage || coverImage || '';
+  const derivedCoverImage  = finalContent.hero?.coverImage || coverImage || '';
   const derivedDescription = finalContent.summary?.shortDescription || '';
   const derivedIsPublished = status === 'published';
+
+  // type/accessType/isPrivate — null means "leave unchanged"
+  const typeParam       = typeof type === 'string' ? type : null;
+  const isPrivateParam  = typeof isPrivate === 'boolean' ? isPrivate : null;
+  const accessTypeParam = typeParam != null
+    ? (typeParam === 'free' ? 'free' : 'paid')
+    : (accessType ?? null);
 
   const { rows } = await pool.query(
     `UPDATE "Itinerary" SET
@@ -195,6 +210,8 @@ async function handleUpdate(pool, id, body) {
        status          = COALESCE($14, status),
        "isPublished"   = $15,
        content         = $16::jsonb,
+       type            = COALESCE($17, type),
+       "isPrivate"     = COALESCE($18::boolean, "isPrivate"),
        "updatedAt"     = NOW()
      WHERE id = $1
      RETURNING *`,
@@ -207,14 +224,16 @@ async function handleUpdate(pool, id, body) {
       country ?? null,
       region ?? null,
       durationDays ?? null,
-      accessType ?? null,
-      accessType === 'free' ? 0 : (price ?? null),
+      accessTypeParam,
+      accessTypeParam === 'free' ? 0 : (price ?? null),
       stripePriceId ?? null,
       derivedCoverImage,
       derivedDescription,
       status ?? null,
       derivedIsPublished,
       JSON.stringify(finalContent),
+      typeParam,
+      isPrivateParam,
     ]
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
@@ -241,8 +260,8 @@ async function handleDuplicate(pool, id) {
     `INSERT INTO "Itinerary"
        (title, subtitle, slug, destination, country, region, "durationDays",
         "accessType", price, "stripePriceId", "coverImage", description, "pdfUrl",
-        status, "isPublished", content, "schemaVersion", "updatedAt")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'draft',false,$14,$15,NOW())
+        type, "isPrivate", status, "isPublished", content, "schemaVersion", "updatedAt")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'draft',false,$16,$17,NOW())
      RETURNING *`,
     [
       `${base.title} (Copy)`,
@@ -258,6 +277,8 @@ async function handleDuplicate(pool, id) {
       base.coverImage,
       base.description,
       null,
+      base.type ?? 'free',
+      base.isPrivate ?? false,
       JSON.stringify(base.content ?? {}),
       base.schemaVersion ?? 1,
     ]
@@ -315,7 +336,8 @@ async function handleSeed(pool, body) {
     const slug = item.id || item.slug;
     if (!slug) continue;
 
-    const accessType = item.isPremium ? 'paid' : 'free';
+    const type        = item.isPremium ? 'premium' : 'free';
+    const accessType  = type === 'free' ? 'free' : 'paid';
     const durationDays = parseDurationDays(item.duration);
     const destination  = item.region || item.country || '';
 
@@ -325,10 +347,10 @@ async function handleSeed(pool, body) {
       `INSERT INTO "Itinerary"
          (id, title, subtitle, slug, destination, country, region, "durationDays",
           "accessType", price, "stripePriceId", "coverImage", description,
-          status, "isPublished", content, "schemaVersion", "updatedAt")
+          type, "isPrivate", status, "isPublished", content, "schemaVersion", "updatedAt")
        VALUES (
          gen_random_uuid()::text, $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-         'published', $13, $14::jsonb, 1, NOW()
+         $13, false, 'published', $14, $15::jsonb, 1, NOW()
        )
        ON CONFLICT (slug) DO UPDATE SET
          title          = EXCLUDED.title,
@@ -341,6 +363,8 @@ async function handleSeed(pool, body) {
          price          = EXCLUDED.price,
          "coverImage"   = EXCLUDED."coverImage",
          description    = EXCLUDED.description,
+         type           = EXCLUDED.type,
+         "isPrivate"    = EXCLUDED."isPrivate",
          status         = EXCLUDED.status,
          "isPublished"  = EXCLUDED."isPublished",
          content        = EXCLUDED.content,
@@ -350,7 +374,7 @@ async function handleSeed(pool, body) {
         item.title, item.subtitle || '', slug, destination, item.country || '', item.region || '',
         durationDays, accessType, item.price || 0, null,
         item.coverImage || '', item.shortDescription || item.description || '',
-        accessType === 'paid',
+        type, accessType === 'paid',
         JSON.stringify(content),
       ]
     );
@@ -417,6 +441,16 @@ async function handleToggleAsset(pool, id) {
   return { asset: rows[0] };
 }
 
+// ── Linked CustomRequest ──────────────────────────────────────────────────────
+async function handleLinkedRequest(pool, itineraryId) {
+  if (!itineraryId) throw Object.assign(new Error('id is required'), { status: 400 });
+  const { rows } = await pool.query(
+    `SELECT * FROM "CustomRequest" WHERE "itineraryId" = $1 ORDER BY "createdAt" DESC LIMIT 1`,
+    [itineraryId]
+  );
+  return { request: rows[0] ?? null };
+}
+
 // ── AI generation log: list ───────────────────────────────────────────────────
 async function handleAIHistory(pool, itineraryId) {
   const { rows } = await pool.query(
@@ -435,7 +469,7 @@ async function handleAIHistory(pool, itineraryId) {
 // AI output is saved as a draft record — NEVER auto-applied to the itinerary.
 // Wire up ANTHROPIC_API_KEY (or your preferred AI service) to enable live generation.
 async function handleAIGenerate(pool, body, adminEmail) {
-  const { itineraryId, prompt } = body;
+  const { itineraryId, prompt, requestContext } = body;
   if (!prompt?.trim()) throw Object.assign(new Error('prompt is required'), { status: 400 });
 
   let rawOutput = '';
@@ -443,6 +477,29 @@ async function handleAIGenerate(pool, body, adminEmail) {
 
   if (process.env.ANTHROPIC_API_KEY) {
     try {
+      // Build optional context block for custom itineraries
+      let contextBlock = '';
+      if (requestContext && typeof requestContext === 'object') {
+        const styleStr = Array.isArray(requestContext.style)
+          ? requestContext.style.join(', ')
+          : (typeof requestContext.style === 'string'
+              ? (() => { try { return JSON.parse(requestContext.style).join(', '); } catch { return requestContext.style; } })()
+              : '');
+        contextBlock = `
+
+CUSTOM REQUEST CONTEXT — use this as primary grounding for the itinerary:
+- Client: ${requestContext.fullName || 'Not specified'}
+- Destination: ${requestContext.destination || 'Not specified'}
+- Travel dates: ${requestContext.dates || 'Not specified'}
+- Duration: ${requestContext.duration || 'Not specified'}
+- Group size: ${requestContext.groupSize || 'Not specified'}
+- Group type: ${requestContext.groupType || 'Not specified'}
+- Budget: ${requestContext.budget || 'Not specified'}
+- Travel style: ${styleStr || 'Not specified'}
+- Special notes: ${requestContext.notes || 'None'}
+Tailor every section to match this client's specific needs.`;
+      }
+
       const systemPrompt = `You are a professional travel content editor for HiddenAtlas, a premium travel planning service.
 Generate a structured itinerary in valid JSON matching this exact schema:
 {
@@ -454,7 +511,7 @@ Generate a structured itinerary in valid JSON matching this exact schema:
   "pdfConfig": { "showRouteMap": true, "showHotels": true },
   "seo": { "metaTitle": "", "metaDescription": "" }
 }
-Return ONLY valid JSON. No markdown fences. No commentary.`;
+Return ONLY valid JSON. No markdown fences. No commentary.${contextBlock}`;
 
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',

@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import {
   ArrowLeft, Save, Globe, EyeOff, Eye, Plus, Trash2, ChevronDown, ChevronUp,
-  Wand2, Image as ImageIcon, Clock, Check,
+  Wand2, Image as ImageIcon, Clock, Check, User,
 } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
@@ -381,7 +381,8 @@ export default function ItineraryCMSEditorPage() {
   const [saveMsg,    setSaveMsg]    = useState(null); // { ok: bool, text: string }
   const [form,       setForm]       = useState({
     title: '', subtitle: '', slug: '', destination: '', country: '',
-    region: '', durationDays: '', accessType: 'free', price: '', stripePriceId: '',
+    region: '', durationDays: '', type: 'free', isPrivate: false,
+    price: '', stripePriceId: '',
     coverImage: '', status: 'draft', content: { ...EMPTY_CONTENT },
   });
 
@@ -391,10 +392,11 @@ export default function ItineraryCMSEditorPage() {
   const [newAsset,     setNewAsset]     = useState({ assetType: 'gallery', url: '', alt: '', caption: '' });
 
   // AI tab state
-  const [aiPrompt,     setAiPrompt]     = useState('');
-  const [aiGenerating, setAiGenerating] = useState(false);
-  const [aiOutput,     setAiOutput]     = useState(null);
-  const [aiHistory,    setAiHistory]    = useState([]);
+  const [aiPrompt,      setAiPrompt]      = useState('');
+  const [aiGenerating,  setAiGenerating]  = useState(false);
+  const [aiOutput,      setAiOutput]      = useState(null);
+  const [aiHistory,     setAiHistory]     = useState([]);
+  const [linkedRequest, setLinkedRequest] = useState(null);
 
   const savedId = useRef(null); // set after first create
 
@@ -411,11 +413,18 @@ export default function ItineraryCMSEditorPage() {
       if (json.error) throw new Error(json.error);
       const it = json.itinerary;
       const content = mergeContent(it.content ?? {});
+      // Derive canonical type from both `type` and legacy `accessType`
+      const derivedType = it.type === 'custom' ? 'custom'
+        : it.type === 'premium' ? 'premium'
+        : it.type === 'free'    ? 'free'
+        : it.accessType === 'paid' ? 'premium' : 'free';
+
       setForm({
         title: it.title || '', subtitle: it.subtitle || '',
         slug: it.slug || '', destination: it.destination || '',
         country: it.country || '', region: it.region || '',
-        durationDays: it.durationDays ?? '', accessType: it.accessType || 'free',
+        durationDays: it.durationDays ?? '', type: derivedType,
+        isPrivate: it.isPrivate ?? false,
         price: it.price || '', stripePriceId: it.stripePriceId || '',
         coverImage: it.coverImage || '', status: it.status || 'draft',
         content,
@@ -433,10 +442,13 @@ export default function ItineraryCMSEditorPage() {
     loadAssets();
   }, [activeTab, id, isNew]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Load AI history when AI tab opens ────────────────────────────────────────
+  // ── Load AI history + linked request when AI tab opens ───────────────────────
   useEffect(() => {
     if (activeTab !== 'ai') return;
     loadAIHistory();
+    if (form.type === 'custom' && !isNew && (savedId.current || id)) {
+      loadLinkedRequest();
+    }
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadAssets() {
@@ -452,6 +464,19 @@ export default function ItineraryCMSEditorPage() {
       if (!json.error) setAssets(json.assets);
     } catch { /* silent */ }
     finally { setAssetsLoading(false); }
+  }
+
+  async function loadLinkedRequest() {
+    const targetId = savedId.current || id;
+    if (!targetId) return;
+    try {
+      const token = await getToken();
+      const res   = await fetch(`/api/itinerary-cms?action=linked-request&id=${targetId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (!json.error) setLinkedRequest(json.request);
+    } catch { /* silent */ }
   }
 
   async function loadAIHistory() {
@@ -530,6 +555,7 @@ export default function ItineraryCMSEditorPage() {
 
       const payload = {
         ...form,
+        accessType: form.type === 'free' ? 'free' : 'paid',
         durationDays: form.durationDays ? parseInt(form.durationDays, 10) : null,
         price: form.price ? parseFloat(form.price) : 0,
       };
@@ -622,7 +648,11 @@ export default function ItineraryCMSEditorPage() {
       const res      = await fetch('/api/itinerary-cms?action=ai-generate', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itineraryId: targetId || null, prompt: aiPrompt }),
+        body: JSON.stringify({
+          itineraryId: targetId || null,
+          prompt: aiPrompt,
+          requestContext: linkedRequest || null,
+        }),
       });
       const json = await res.json();
       if (json.error) throw new Error(json.error);
@@ -744,6 +774,7 @@ export default function ItineraryCMSEditorPage() {
             prompt={aiPrompt} setPrompt={setAiPrompt}
             generating={aiGenerating} output={aiOutput} history={aiHistory}
             onGenerate={handleAIGenerate} onApply={handleApplyAIDraft}
+            linkedRequest={linkedRequest} itineraryType={form.type}
           />
         )}
       </div>
@@ -803,32 +834,58 @@ function BasicsTab({ form, setForm, onTitleChange }) {
       </div>
 
       <div style={sectionCard}>
-        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>Access & Pricing</p>
+        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>Type & Access</p>
 
-        <Field label="Access type">
-          <div style={{ display: 'flex', gap: '10px' }}>
-            {['free', 'paid'].map(type => (
-              <label key={type} style={{
+        <Field label="Itinerary type">
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            {[
+              { value: 'free',    label: 'Free',    hint: 'No purchase required' },
+              { value: 'premium', label: 'Premium', hint: 'Paid download' },
+              { value: 'custom',  label: 'Custom',  hint: 'Private, linked to a client request' },
+            ].map(({ value, label, hint }) => (
+              <label key={value} style={{
                 display: 'flex', alignItems: 'center', gap: '8px',
                 padding: '10px 18px', borderRadius: '6px', cursor: 'pointer',
-                border: `1px solid ${form.accessType === type ? '#1B6B65' : '#E8E3DA'}`,
-                background: form.accessType === type ? '#EFF6F5' : 'white',
+                border: `1px solid ${form.type === value ? '#1B6B65' : '#E8E3DA'}`,
+                background: form.type === value ? '#EFF6F5' : 'white',
                 fontSize: '13px', fontWeight: '500',
-                color: form.accessType === type ? '#1B6B65' : '#4A433A',
+                color: form.type === value ? '#1B6B65' : '#4A433A',
               }}>
-                <input type="radio" name="accessType" value={type}
-                  checked={form.accessType === type}
-                  onChange={() => setForm(f => ({ ...f, accessType: type, price: type === 'free' ? '' : f.price }))}
+                <input type="radio" name="type" value={value}
+                  checked={form.type === value}
+                  onChange={() => setForm(f => ({
+                    ...f,
+                    type: value,
+                    isPrivate: value === 'custom' ? true : (value === 'free' ? false : f.isPrivate),
+                    price: value === 'free' ? '' : f.price,
+                  }))}
                   style={{ display: 'none' }}
                 />
-                {form.accessType === type && <Check size={13} strokeWidth={3} />}
-                {type.charAt(0).toUpperCase() + type.slice(1)}
+                {form.type === value && <Check size={13} strokeWidth={3} />}
+                <span>
+                  {label}
+                  <span style={{ fontSize: '11px', color: '#B5AA99', display: 'block', fontWeight: '400' }}>{hint}</span>
+                </span>
               </label>
             ))}
           </div>
         </Field>
 
-        {form.accessType === 'paid' && (
+        <Field label="Visibility" hint="Private itineraries are only accessible to users who purchased them.">
+          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: form.type === 'custom' ? 'default' : 'pointer' }}>
+            <input type="checkbox"
+              checked={form.isPrivate}
+              onChange={e => form.type !== 'custom' && set('isPrivate', e.target.checked)}
+              disabled={form.type === 'custom'}
+              style={{ width: '15px', height: '15px', accentColor: '#1B6B65' }}
+            />
+            <span style={{ fontSize: '13.5px', color: form.type === 'custom' ? '#B5AA99' : '#4A433A' }}>
+              Private {form.type === 'custom' ? '(always private for custom itineraries)' : ''}
+            </span>
+          </label>
+        </Field>
+
+        {form.type !== 'free' && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <Field label="Price (€)">
               <input type="number" value={form.price} style={inputStyle}
@@ -1123,11 +1180,76 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
 }
 
 // ── AI Assistant ──────────────────────────────────────────────────────────────
-function AITab({ prompt, setPrompt, generating, output, history, onGenerate, onApply }) {
+function buildPromptFromRequest(req) {
+  if (!req) return '';
+  const lines = [];
+  lines.push(`Build a complete custom itinerary for the following client request:`);
+  lines.push('');
+  if (req.fullName) lines.push(`Client: ${req.fullName}`);
+  if (req.destination) lines.push(`Destination: ${req.destination}`);
+  if (req.durationDays) lines.push(`Duration: ${req.durationDays} days`);
+  if (req.travelDates) lines.push(`Travel dates: ${req.travelDates}`);
+  if (req.groupSize) lines.push(`Group size: ${req.groupSize} people`);
+  if (req.groupType) lines.push(`Group type: ${req.groupType}`);
+  if (req.budget) lines.push(`Budget: ${req.budget}`);
+  if (req.travelStyle) lines.push(`Travel style: ${req.travelStyle}`);
+  if (req.notes) lines.push(`Special requests / notes: ${req.notes}`);
+  lines.push('');
+  lines.push('Generate a full day-by-day itinerary with hero title, short description, highlights, hotel recommendations, and practical notes. Tailor everything to the client\'s preferences above.');
+  return lines.join('\n');
+}
+
+function AITab({ prompt, setPrompt, generating, output, history, onGenerate, onApply, linkedRequest, itineraryType }) {
   const [showHistory, setShowHistory] = useState(false);
+
+  const showRequestContext = itineraryType === 'custom' && linkedRequest;
 
   return (
     <div style={{ maxWidth: '720px' }}>
+
+      {/* Linked request context card */}
+      {showRequestContext && (
+        <div style={{ ...sectionCard, borderLeft: '3px solid #7C5CBA', background: '#FAF8FF', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <User size={15} color="#7C5CBA" />
+              <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16' }}>Client request context</p>
+            </div>
+            <button
+              onClick={() => setPrompt(buildPromptFromRequest(linkedRequest))}
+              style={{ ...btnGhost, fontSize: '12px', color: '#7C5CBA', borderColor: '#D4C8F4' }}
+            >
+              <Wand2 size={12} /> Pre-fill prompt from request
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 20px' }}>
+            {[
+              ['Client',       linkedRequest.fullName],
+              ['Destination',  linkedRequest.destination],
+              ['Duration',     linkedRequest.durationDays ? `${linkedRequest.durationDays} days` : null],
+              ['Travel dates', linkedRequest.travelDates],
+              ['Group size',   linkedRequest.groupSize ? `${linkedRequest.groupSize} people` : null],
+              ['Group type',   linkedRequest.groupType],
+              ['Budget',       linkedRequest.budget],
+              ['Style',        linkedRequest.travelStyle],
+            ].filter(([, v]) => v).map(([label, value]) => (
+              <div key={label}>
+                <p style={{ fontSize: '11px', color: '#9B91C0', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
+                <p style={{ fontSize: '12.5px', color: '#3D3157' }}>{value}</p>
+              </div>
+            ))}
+          </div>
+
+          {linkedRequest.notes && (
+            <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #E8E2F8' }}>
+              <p style={{ fontSize: '11px', color: '#9B91C0', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Notes</p>
+              <p style={{ fontSize: '12.5px', color: '#3D3157', lineHeight: '1.6' }}>{linkedRequest.notes}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={sectionCard}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
           <Wand2 size={16} color="#1B6B65" />

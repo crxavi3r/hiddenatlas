@@ -365,17 +365,63 @@ async function processCustomPayment(pool, session) {
   // ── 1. Create Itinerary ──────────────────────────────────────────────────
   // Slug derived from session.id — deterministic across retries.
   const slug  = `custom-${session.id.replace(/^cs_(test_|live_)?/, '').slice(0, 40).toLowerCase()}`;
-  const title = dest || 'Custom Trip';
+  const title = dest ? `${dest} — Custom Journey` : 'Custom Journey';
+  const subtitle = duration || '';
+  const durationDays = duration ? (parseInt((duration.match(/(\d+)/) || [])[1], 10) || null) : null;
+  const styleStr = style.length > 0 ? style.join(', ') : null;
+
+  // Build a rich initial content document from the request metadata
+  const initialContent = {
+    hero: {
+      title,
+      subtitle,
+      tagline: dest ? `A tailor-made journey to ${dest}` : 'A tailor-made journey',
+      coverImage: '',
+    },
+    summary: {
+      shortDescription: [
+        dest ? `A custom journey to ${dest}` : null,
+        dates ? `in ${dates}` : null,
+        duration ? `for ${duration}` : null,
+      ].filter(Boolean).join(', ') + '.',
+      whySpecial: notes || '',
+      routeOverview: dest || '',
+      highlights: [],
+      included: [],
+    },
+    tripFacts: {
+      groupSize: groupSize ? String(groupSize) : '',
+      difficulty: 'Moderate',
+      bestFor: groupType ? [groupType] : [],
+      category: 'Custom Journey',
+    },
+    days: [],
+    sections: {
+      hotels: [],
+      practicalNotes: [
+        budget    ? `Budget: ${budget}` : null,
+        styleStr  ? `Travel style: ${styleStr}` : null,
+        groupType ? `Group type: ${groupType}` : null,
+        notes     ? `Notes: ${notes}` : null,
+      ].filter(Boolean).join('\n'),
+      faq: [],
+    },
+    pdfConfig: { showRouteMap: true, showHotels: true },
+    seo: { metaTitle: title, metaDescription: '' },
+  };
 
   await pool.query(
     `INSERT INTO "Itinerary"
-       (id, slug, title, description, price, "coverImage",
+       (id, slug, title, subtitle, destination, description, price,
+        "durationDays", "coverImage", content,
         type, status, "userId", "isPrivate", "isPublished", "createdAt")
      VALUES
-       (gen_random_uuid(), $1, $2, '', $3, '',
-        'custom', 'processing', $4, true, false, NOW())
+       (gen_random_uuid(), $1, $2, $3, $4, $5, $6,
+        $7, '', $8::jsonb,
+        'custom', 'processing', $9, true, false, NOW())
      ON CONFLICT (slug) DO NOTHING`,
-    [slug, title, amount, userId || null]
+    [slug, title, subtitle, dest || '', initialContent.summary.shortDescription, amount,
+     durationDays, JSON.stringify(initialContent), userId || null]
   );
 
   const { rows: itinRows } = await pool.query(

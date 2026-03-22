@@ -13,10 +13,25 @@ const STATUS_META = {
   draft:     { label: 'Draft',     color: '#8C8070', bg: '#F4F1EC' },
 };
 
-const ACCESS_META = {
-  free: { label: 'Free', color: '#1B6B65', bg: '#EFF6F5' },
-  paid: { label: 'Paid', color: '#C9A96E', bg: '#FBF8F1' },
+const TYPE_META = {
+  free:    { label: 'Free',    color: '#1B6B65', bg: '#EFF6F5' },
+  premium: { label: 'Premium', color: '#C9A96E', bg: '#FBF8F1' },
+  custom:  { label: 'Custom',  color: '#7C5CBA', bg: '#F3F0FA' },
 };
+
+const VISIBILITY_META = {
+  public:  { label: 'Public',  color: '#8C8070', bg: '#F4F1EC' },
+  private: { label: 'Private', color: '#C0392B', bg: '#FDECEA' },
+};
+
+// Derive canonical type from both `type` and legacy `accessType` fields
+function getItineraryType(it) {
+  if (it.type === 'custom')  return 'custom';
+  if (it.type === 'premium') return 'premium';
+  if (it.type === 'free')    return 'free';
+  // Legacy fallback
+  return it.accessType === 'paid' ? 'premium' : 'free';
+}
 
 function Badge({ meta }) {
   if (!meta) return null;
@@ -75,13 +90,14 @@ export default function ItinerariesCMSPage() {
   const navigate     = useNavigate();
   const isMobile     = useIsMobile();
 
-  const [items,    setItems]    = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [error,    setError]    = useState(null);
-  const [seeding,  setSeeding]  = useState(false);
-  const [seedMsg,  setSeedMsg]  = useState(null);
-  const [toDelete, setToDelete] = useState(null);   // { id, title }
-  const [filter,   setFilter]   = useState('all');  // all | draft | published
+  const [items,      setItems]      = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState(null);
+  const [seeding,    setSeeding]    = useState(false);
+  const [seedMsg,    setSeedMsg]    = useState(null);
+  const [toDelete,   setToDelete]   = useState(null);
+  const [filter,     setFilter]     = useState('all');      // all | draft | published
+  const [typeFilter, setTypeFilter] = useState('all');      // all | free | premium | custom
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -162,14 +178,20 @@ export default function ItinerariesCMSPage() {
     } catch (e) { alert(e.message); setToDelete(null); }
   }
 
-  const filtered = items.filter(it =>
-    filter === 'all' ? true : it.status === filter
-  );
+  const filtered = items.filter(it => {
+    const statusOk = filter     === 'all' ? true : it.status === filter;
+    const typeOk   = typeFilter === 'all' ? true : getItineraryType(it) === typeFilter;
+    return statusOk && typeOk;
+  });
 
   const counts = {
     all:       items.length,
     published: items.filter(i => i.status === 'published').length,
     draft:     items.filter(i => i.status === 'draft').length,
+    free:      items.filter(i => getItineraryType(i) === 'free').length,
+    premium:   items.filter(i => getItineraryType(i) === 'premium').length,
+    custom:    items.filter(i => getItineraryType(i) === 'custom').length,
+    private:   items.filter(i => i.isPrivate).length,
   };
 
   return (
@@ -190,7 +212,11 @@ export default function ItinerariesCMSPage() {
             Itineraries CMS
           </h1>
           <p style={{ fontSize: '12.5px', color: '#8C8070', marginTop: '3px' }}>
-            {counts.all} itineraries · {counts.published} published · {counts.draft} drafts
+            {counts.all} total · {counts.published} published · {counts.draft} drafts
+            {counts.free > 0 && ` · ${counts.free} free`}
+            {counts.premium > 0 && ` · ${counts.premium} premium`}
+            {counts.custom > 0 && ` · ${counts.custom} custom`}
+            {counts.private > 0 && ` · ${counts.private} private`}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -218,18 +244,39 @@ export default function ItinerariesCMSPage() {
         </div>
       )}
 
-      {/* Filter tabs */}
-      <div style={{ display: 'flex', gap: '3px', background: 'white', border: '1px solid #E8E3DA', borderRadius: '6px', padding: '3px', marginBottom: '16px', alignSelf: 'flex-start', width: 'fit-content' }}>
-        {['all', 'published', 'draft'].map(f => (
-          <button key={f} onClick={() => setFilter(f)} style={{
-            padding: '5px 14px', fontSize: '12px', fontWeight: '500', border: 'none', borderRadius: '4px',
-            cursor: 'pointer',
-            background: filter === f ? '#1C1A16' : 'transparent',
-            color: filter === f ? 'white' : '#6B6156',
-          }}>
-            {f.charAt(0).toUpperCase() + f.slice(1)} ({counts[f]})
-          </button>
-        ))}
+      {/* Filter rows */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px', alignItems: 'center' }}>
+        {/* Status filter */}
+        <div style={{ display: 'flex', gap: '3px', background: 'white', border: '1px solid #E8E3DA', borderRadius: '6px', padding: '3px' }}>
+          {['all', 'published', 'draft'].map(f => (
+            <button key={f} onClick={() => setFilter(f)} style={{
+              padding: '5px 14px', fontSize: '12px', fontWeight: '500', border: 'none', borderRadius: '4px',
+              cursor: 'pointer',
+              background: filter === f ? '#1C1A16' : 'transparent',
+              color: filter === f ? 'white' : '#6B6156',
+            }}>
+              {f === 'all' ? `All (${counts.all})` : f === 'published' ? `Published (${counts.published})` : `Draft (${counts.draft})`}
+            </button>
+          ))}
+        </div>
+        {/* Type filter */}
+        <div style={{ display: 'flex', gap: '3px', background: 'white', border: '1px solid #E8E3DA', borderRadius: '6px', padding: '3px' }}>
+          {[
+            { key: 'all',     label: 'All types' },
+            { key: 'free',    label: `Free (${counts.free})` },
+            { key: 'premium', label: `Premium (${counts.premium})` },
+            { key: 'custom',  label: `Custom (${counts.custom})` },
+          ].map(({ key, label }) => (
+            <button key={key} onClick={() => setTypeFilter(key)} style={{
+              padding: '5px 14px', fontSize: '12px', fontWeight: '500', border: 'none', borderRadius: '4px',
+              cursor: 'pointer',
+              background: typeFilter === key ? '#1C1A16' : 'transparent',
+              color: typeFilter === key ? 'white' : '#6B6156',
+            }}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Content */}
@@ -290,9 +337,9 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
             <tr style={{ background: '#FAFAF8' }}>
               <th style={th}>Cover</th>
               <th style={th}>Title / Slug</th>
+              <th style={th}>Type</th>
               <th style={th}>Destination</th>
               <th style={{ ...th, textAlign: 'center' }}>Days</th>
-              <th style={{ ...th, textAlign: 'center' }}>Access</th>
               <th style={{ ...th, textAlign: 'right' }}>Price</th>
               <th style={{ ...th, textAlign: 'center' }}>Status</th>
               <th style={th}>Updated</th>
@@ -300,7 +347,9 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
             </tr>
           </thead>
           <tbody>
-            {items.map(it => (
+            {items.map(it => {
+              const itType = getItineraryType(it);
+              return (
               <tr key={it.id}>
                 <td style={td}>
                   <div style={{
@@ -316,17 +365,20 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
                   <p style={{ fontWeight: '600', color: '#1C1A16', marginBottom: '2px' }}>{it.title}</p>
                   <p style={{ fontSize: '11px', color: '#B5AA99', fontFamily: 'monospace' }}>{it.slug}</p>
                 </td>
+                <td style={{ ...td }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <Badge meta={TYPE_META[itType] ?? TYPE_META.free} />
+                    {it.isPrivate && <Badge meta={VISIBILITY_META.private} />}
+                  </div>
+                </td>
                 <td style={{ ...td, color: '#4A433A' }}>
                   {it.destination || it.country || '—'}
                 </td>
                 <td style={{ ...td, textAlign: 'center', color: '#4A433A' }}>
                   {it.durationDays ?? '—'}
                 </td>
-                <td style={{ ...td, textAlign: 'center' }}>
-                  <Badge meta={ACCESS_META[it.accessType] ?? ACCESS_META.free} />
-                </td>
                 <td style={{ ...td, textAlign: 'right', color: '#4A433A' }}>
-                  {it.accessType === 'free' ? '—' : it.price ? `€${it.price}` : '—'}
+                  {itType === 'free' ? '—' : it.price ? `€${it.price}` : '—'}
                 </td>
                 <td style={{ ...td, textAlign: 'center' }}>
                   <Badge meta={STATUS_META[it.status] ?? STATUS_META.draft} />
@@ -362,7 +414,8 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -392,7 +445,8 @@ function MobileList({ items, onEdit, onPreview, onTogglePublish, onDuplicate, on
               </p>
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 <Badge meta={STATUS_META[it.status] ?? STATUS_META.draft} />
-                <Badge meta={ACCESS_META[it.accessType] ?? ACCESS_META.free} />
+                <Badge meta={TYPE_META[getItineraryType(it)] ?? TYPE_META.free} />
+                {it.isPrivate && <Badge meta={VISIBILITY_META.private} />}
                 {it.destination && (
                   <span style={{ fontSize: '11px', color: '#8C8070' }}>{it.destination}</span>
                 )}
