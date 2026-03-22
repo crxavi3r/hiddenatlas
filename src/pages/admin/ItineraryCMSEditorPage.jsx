@@ -1180,20 +1180,27 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
 }
 
 // ── AI Assistant ──────────────────────────────────────────────────────────────
+function parseStyle(val) {
+  if (!val) return '';
+  if (Array.isArray(val)) return val.join(', ');
+  try { return JSON.parse(val).join(', '); } catch { return String(val); }
+}
+
 function buildPromptFromRequest(req) {
   if (!req) return '';
   const lines = [];
   lines.push(`Build a complete custom itinerary for the following client request:`);
   lines.push('');
-  if (req.fullName) lines.push(`Client: ${req.fullName}`);
+  if (req.fullName)   lines.push(`Client: ${req.fullName}`);
   if (req.destination) lines.push(`Destination: ${req.destination}`);
-  if (req.durationDays) lines.push(`Duration: ${req.durationDays} days`);
-  if (req.travelDates) lines.push(`Travel dates: ${req.travelDates}`);
-  if (req.groupSize) lines.push(`Group size: ${req.groupSize} people`);
-  if (req.groupType) lines.push(`Group type: ${req.groupType}`);
-  if (req.budget) lines.push(`Budget: ${req.budget}`);
-  if (req.travelStyle) lines.push(`Travel style: ${req.travelStyle}`);
-  if (req.notes) lines.push(`Special requests / notes: ${req.notes}`);
+  if (req.duration)   lines.push(`Duration: ${req.duration} days`);
+  if (req.dates)      lines.push(`Travel dates: ${req.dates}`);
+  if (req.groupSize)  lines.push(`Group size: ${req.groupSize} people`);
+  if (req.groupType)  lines.push(`Group type: ${req.groupType}`);
+  if (req.budget)     lines.push(`Budget: ${req.budget}`);
+  const styleStr = parseStyle(req.style);
+  if (styleStr)       lines.push(`Travel style: ${styleStr}`);
+  if (req.notes)      lines.push(`Special requests / notes: ${req.notes}`);
   lines.push('');
   lines.push('Generate a full day-by-day itinerary with hero title, short description, highlights, hotel recommendations, and practical notes. Tailor everything to the client\'s preferences above.');
   return lines.join('\n');
@@ -1227,12 +1234,12 @@ function AITab({ prompt, setPrompt, generating, output, history, onGenerate, onA
             {[
               ['Client',       linkedRequest.fullName],
               ['Destination',  linkedRequest.destination],
-              ['Duration',     linkedRequest.durationDays ? `${linkedRequest.durationDays} days` : null],
-              ['Travel dates', linkedRequest.travelDates],
-              ['Group size',   linkedRequest.groupSize ? `${linkedRequest.groupSize} people` : null],
+              ['Duration',     linkedRequest.duration ? `${linkedRequest.duration} days` : null],
+              ['Travel dates', linkedRequest.dates],
+              ['Group size',   linkedRequest.groupSize != null ? `${linkedRequest.groupSize} people` : null],
               ['Group type',   linkedRequest.groupType],
               ['Budget',       linkedRequest.budget],
-              ['Style',        linkedRequest.travelStyle],
+              ['Style',        parseStyle(linkedRequest.style) || null],
             ].filter(([, v]) => v).map(([label, value]) => (
               <div key={label}>
                 <p style={{ fontSize: '11px', color: '#9B91C0', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</p>
