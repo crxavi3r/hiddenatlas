@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { ChevronDown, ChevronUp, ChevronsUpDown, Check, X, Filter, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Check, X, Filter, ChevronRight, ExternalLink } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ const SECONDARY_COLS = [
 
 const COLUMNS   = [...PRIMARY_COLS, ...SECONDARY_COLS];
 const PAGE_SIZE = 25;
-const COL_SPAN  = PRIMARY_COLS.length + 1; // +1 for expand-toggle column
+const COL_SPAN  = PRIMARY_COLS.length + 2; // +1 expand-toggle, +1 itinerary link
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtDate(ts) {
@@ -537,6 +538,19 @@ export default function CustomRequestsPage() {
               <StatusAction requestId={r.id} current={r.status || 'open'} onUpdated={handleStatusUpdated} token={authToken} />
             )}
             <PaymentBadge isPaid={r.isPaid} />
+            {r.itineraryId && (
+              <Link
+                to={`/admin/itineraries/${r.itineraryId}`}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  fontSize: '11px', fontWeight: '500', color: '#1B6B65',
+                  background: '#EFF6F5', border: '1px solid #A8D5D0',
+                  padding: '3px 9px', borderRadius: '6px', textDecoration: 'none',
+                }}
+              >
+                Edit itinerary <ExternalLink size={10} />
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -610,6 +624,9 @@ export default function CustomRequestsPage() {
                       onOpenFilter={openFilterPopover}
                     />
                   ))}
+                  <th style={{ padding: '9px 10px', background: '#FAFAF8', borderBottom: '1px solid #E8E3DA', whiteSpace: 'nowrap', fontSize: '11px', fontWeight: '600', color: '#8C8070', textAlign: 'left' }}>
+                    Itinerary
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -622,6 +639,7 @@ export default function CustomRequestsPage() {
                         <div style={{ height: '11px', background: '#F4F1EC', borderRadius: '3px', width: j < 3 ? '80%' : '55%' }} />
                       </td>
                     ))}
+                    <td style={TD} />
                   </tr>
                 ))}
 
@@ -700,6 +718,27 @@ export default function CustomRequestsPage() {
                       {/* Payment status */}
                       <td style={TD}>
                         <PaymentBadge isPaid={r.isPaid} />
+                      </td>
+
+                      {/* Itinerary CMS link */}
+                      <td style={{ ...TD, whiteSpace: 'nowrap' }}>
+                        {r.itineraryId ? (
+                          <Link
+                            to={`/admin/itineraries/${r.itineraryId}`}
+                            title="Open itinerary in CMS editor"
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: '4px',
+                              fontSize: '11px', fontWeight: '500', color: '#1B6B65',
+                              background: '#EFF6F5', border: '1px solid #A8D5D0',
+                              padding: '3px 9px', borderRadius: '6px',
+                              textDecoration: 'none',
+                            }}
+                          >
+                            Edit itinerary <ExternalLink size={10} />
+                          </Link>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: '#C4BDB4' }}>—</span>
+                        )}
                       </td>
                     </tr>,
 
