@@ -467,15 +467,21 @@ async function handleLinkedRequest(pool, itineraryId) {
 
 // ── AI generation log: list ───────────────────────────────────────────────────
 async function handleAIHistory(pool, itineraryId) {
-  const { rows } = await pool.query(
-    `SELECT id, prompt, "parsedOutput", "createdBy", "createdAt"
-     FROM "ItineraryAIGeneration"
-     WHERE "itineraryId" = $1 OR ($1 IS NULL AND "itineraryId" IS NULL)
-     ORDER BY "createdAt" DESC
-     LIMIT 20`,
-    [itineraryId || null]
-  );
-  return { generations: rows };
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, prompt, "parsedOutput", "createdBy", "createdAt"
+       FROM "ItineraryAIGeneration"
+       WHERE "itineraryId" = $1 OR ($1 IS NULL AND "itineraryId" IS NULL)
+       ORDER BY "createdAt" DESC
+       LIMIT 20`,
+      [itineraryId || null]
+    );
+    return { generations: rows };
+  } catch (err) {
+    // Table may not exist yet — return empty history rather than crashing
+    if (err.message?.includes('does not exist')) return { generations: [] };
+    throw err;
+  }
 }
 
 // ── AI generate draft ─────────────────────────────────────────────────────────
@@ -560,14 +566,36 @@ Return ONLY valid JSON. No markdown fences. No commentary.${contextBlock}`;
     rawOutput = 'ANTHROPIC_API_KEY not configured. Set it in your environment variables to enable AI generation.';
   }
 
-  const { rows } = await pool.query(
-    `INSERT INTO "ItineraryAIGeneration" ("itineraryId", prompt, "rawOutput", "parsedOutput", "createdBy")
-     VALUES ($1, $2, $3, $4::jsonb, $5)
-     RETURNING *`,
-    [itineraryId || null, prompt, rawOutput, JSON.stringify(parsedOutput), adminEmail]
-  );
+  // Persist to history log — optional, degrades gracefully if table doesn't exist yet
+  let savedGeneration = null;
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO "ItineraryAIGeneration" ("itineraryId", prompt, "rawOutput", "parsedOutput", "createdBy")
+       VALUES ($1, $2, $3, $4::jsonb, $5)
+       RETURNING *`,
+      [itineraryId || null, prompt, rawOutput, JSON.stringify(parsedOutput), adminEmail]
+    );
+    savedGeneration = rows[0];
+  } catch (err) {
+    if (err.message?.includes('does not exist')) {
+      console.warn('[itinerary-cms/ai-generate] ItineraryAIGeneration table missing — history not saved');
+    } else {
+      console.error('[itinerary-cms/ai-generate] failed to save generation log:', err.message);
+    }
+  }
 
-  return { generation: rows[0] };
+  // Return the result regardless of whether it was persisted
+  const generation = savedGeneration ?? {
+    id: null,
+    itineraryId: itineraryId || null,
+    prompt,
+    rawOutput,
+    parsedOutput,
+    createdBy: adminEmail,
+    createdAt: new Date().toISOString(),
+  };
+
+  return { generation };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
