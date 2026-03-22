@@ -95,6 +95,7 @@ export default function ItinerariesCMSPage() {
   const [error,      setError]      = useState(null);
   const [seeding,    setSeeding]    = useState(false);
   const [seedMsg,    setSeedMsg]    = useState(null);
+  const [publishing, setPublishing] = useState(false);
   const [toDelete,   setToDelete]   = useState(null);
   const [filter,     setFilter]     = useState('all');      // all | draft | published
   const [typeFilter, setTypeFilter] = useState('all');      // all | free | premium | custom
@@ -131,6 +132,25 @@ export default function ItinerariesCMSPage() {
       await load();
     } catch (e) { setSeedMsg(`Error: ${e.message}`); }
     finally { setSeeding(false); }
+  }
+
+  async function handleBulkPublish() {
+    const unpublished = items.filter(it => !it.isPublished && it.type !== 'custom' && !it.isPrivate);
+    if (unpublished.length === 0) return alert('All public itineraries are already published.');
+    if (!window.confirm(`Publish ${unpublished.length} unpublished public itinerary${unpublished.length > 1 ? 'ies' : ''}?`)) return;
+    setPublishing(true);
+    try {
+      const token = await getToken();
+      const res   = await fetch('/api/itinerary-cms?action=bulk-publish', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      setSeedMsg(`Published ${json.published} itinerary${json.published !== 1 ? 'ies' : ''}.`);
+      await load();
+    } catch (e) { setSeedMsg(`Error: ${e.message}`); }
+    finally { setPublishing(false); }
   }
 
   async function handleTogglePublish(item) {
@@ -179,19 +199,22 @@ export default function ItinerariesCMSPage() {
   }
 
   const filtered = items.filter(it => {
-    const statusOk = filter     === 'all' ? true : it.status === filter;
+    const statusOk = filter === 'all'       ? true
+                   : filter === 'published' ? it.isPublished
+                   : /* draft */              !it.isPublished;
     const typeOk   = typeFilter === 'all' ? true : getItineraryType(it) === typeFilter;
     return statusOk && typeOk;
   });
 
   const counts = {
-    all:       items.length,
-    published: items.filter(i => i.status === 'published').length,
-    draft:     items.filter(i => i.status === 'draft').length,
-    free:      items.filter(i => getItineraryType(i) === 'free').length,
-    premium:   items.filter(i => getItineraryType(i) === 'premium').length,
-    custom:    items.filter(i => getItineraryType(i) === 'custom').length,
-    private:   items.filter(i => i.isPrivate).length,
+    all:        items.length,
+    published:  items.filter(i => i.isPublished).length,
+    draft:      items.filter(i => !i.isPublished).length,
+    unpublishedPublic: items.filter(i => !i.isPublished && i.type !== 'custom' && !i.isPrivate).length,
+    free:       items.filter(i => getItineraryType(i) === 'free').length,
+    premium:    items.filter(i => getItineraryType(i) === 'premium').length,
+    custom:     items.filter(i => getItineraryType(i) === 'custom').length,
+    private:    items.filter(i => i.isPrivate).length,
   };
 
   return (
@@ -228,6 +251,16 @@ export default function ItinerariesCMSPage() {
             <RefreshCw size={12} />
             {seeding ? 'Seeding…' : 'Seed from static data'}
           </button>
+          {counts.unpublishedPublic > 0 && (
+            <button
+              onClick={handleBulkPublish}
+              disabled={publishing}
+              style={{ ...btnSecondary, display: 'flex', alignItems: 'center', gap: '6px', color: '#1B6B65', borderColor: '#A8D5D0' }}
+            >
+              <Globe size={12} />
+              {publishing ? 'Publishing…' : `Publish all (${counts.unpublishedPublic})`}
+            </button>
+          )}
           <button
             onClick={() => navigate('/admin/itineraries/new')}
             style={{ ...btnPrimary, display: 'flex', alignItems: 'center', gap: '6px' }}

@@ -83,6 +83,7 @@ export default async function handler(req, res) {
       if (action === 'publish')      return res.json(await handleSetStatus(pool, id, 'published'));
       if (action === 'unpublish')    return res.json(await handleSetStatus(pool, id, 'draft'));
       if (action === 'seed')         return res.json(await handleSeed(pool, body));
+      if (action === 'bulk-publish') return res.json(await handleBulkPublish(pool));
       if (action === 'save-asset')   return res.json(await handleSaveAsset(pool, body));
       if (action === 'delete-asset') return res.json(await handleDeleteAsset(pool, id));
       if (action === 'toggle-asset') return res.json(await handleToggleAsset(pool, id));
@@ -350,7 +351,7 @@ async function handleSeed(pool, body) {
           type, "isPrivate", status, "isPublished", content, "schemaVersion", "updatedAt")
        VALUES (
          gen_random_uuid()::text, $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-         $13, false, 'published', $14, $15::jsonb, 1, NOW()
+         $13, false, 'published', true, $14::jsonb, 1, NOW()
        )
        ON CONFLICT (slug) DO UPDATE SET
          title          = EXCLUDED.title,
@@ -374,7 +375,7 @@ async function handleSeed(pool, body) {
         item.title, item.subtitle || '', slug, destination, item.country || '', item.region || '',
         durationDays, accessType, item.price || 0, null,
         item.coverImage || '', item.shortDescription || item.description || '',
-        type, accessType === 'paid',
+        type,
         JSON.stringify(content),
       ]
     );
@@ -383,6 +384,19 @@ async function handleSeed(pool, body) {
   }
 
   return { ok: true, inserted, updated, total: items.length };
+}
+
+// ── Bulk publish — mark all public (non-custom, non-private) itineraries as published ──
+async function handleBulkPublish(pool) {
+  const { rows } = await pool.query(`
+    UPDATE "Itinerary"
+    SET status = 'published', "isPublished" = true, "updatedAt" = NOW()
+    WHERE (type IS NULL OR type != 'custom')
+      AND "isPrivate" = false
+      AND "isPublished" = false
+    RETURNING id, slug, type, "accessType", price
+  `);
+  return { ok: true, published: rows.length, items: rows };
 }
 
 // ── Assets: list ──────────────────────────────────────────────────────────────
