@@ -396,9 +396,8 @@ function CustomRequestCard({ request }) {
   const linkedSlug   = request.linkedItinerarySlug;
 
   let ctaMode = 'status';
-  if (linkedStatus === 'done' && linkedSlug)  ctaMode = 'itinerary';
-  else if (linkedStatus === 'processing')     ctaMode = 'processing';
-  else if (request.tripId)                   ctaMode = 'trip';
+  if ((request.status === 'done' || linkedStatus === 'done') && linkedSlug) ctaMode = 'itinerary';
+  else if (request.tripId) ctaMode = 'trip';
 
   const isClickable = ctaMode === 'itinerary' || ctaMode === 'trip';
 
@@ -473,19 +472,7 @@ function CustomRequestCard({ request }) {
             letterSpacing: '0.4px', textTransform: 'uppercase',
             justifyContent: 'center',
           }}>
-            <BookOpen size={13} /> View Itinerary
-          </div>
-        )}
-        {ctaMode === 'processing' && (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
-            padding: '11px 16px',
-            background: '#FBF6EE', color: '#A07830',
-            border: '1px solid rgba(160,120,48,0.15)',
-            borderRadius: '4px', fontSize: '12px', fontWeight: '600',
-            letterSpacing: '0.4px', justifyContent: 'center',
-          }}>
-            Processing your request
+            <BookOpen size={13} /> View your itinerary
           </div>
         )}
         {ctaMode === 'status' && (
