@@ -34,7 +34,6 @@ const PRIMARY_COLS = [
   { id: 'dates',         label: 'Trip Date',    field: 'dates',         type: 'text',    minW: 88  },
   { id: 'duration',      label: 'Duration',     field: 'duration',      type: 'text',    minW: 64  },
   { id: 'groupSize',     label: 'Pax',          field: 'groupSize',     type: 'number',  minW: 46  },
-  { id: 'budget',        label: 'Budget',       field: 'budget',        type: 'text',    minW: 88  },
   { id: 'status',        label: 'Status',       field: 'status',        type: 'status',  minW: 190 },
   { id: 'paymentStatus', label: 'Payment',      field: 'paymentStatus', type: 'payment', minW: 150 },
 ];
@@ -42,6 +41,7 @@ const PRIMARY_COLS = [
 const SECONDARY_COLS = [
   { id: 'phone',     label: 'Phone',       field: 'phone',     type: 'text'  },
   { id: 'groupType', label: 'Group Type',  field: 'groupType', type: 'text'  },
+  { id: 'budget',    label: 'Budget',      field: 'budget',    type: 'text'  },
   { id: 'style',     label: 'Style',       field: 'style',     type: 'style' },
   { id: 'notes',     label: 'Notes',       field: 'notes',     type: 'text'  },
 ];
@@ -654,7 +654,7 @@ export default function CustomRequestsPage() {
                 {!loading && pageRows.map((r, i) => {
                   const isExpanded   = expandedRows.has(r.id);
                   const rowBg        = i % 2 === 0 ? 'white' : '#FAFAF8';
-                  const hasSecondary = r.phone || r.groupType || styleText(r.style) || r.notes;
+                  const hasSecondary = r.phone || r.groupType || r.budget || styleText(r.style) || r.notes;
 
                   return [
                     <tr key={r.id} style={{ borderTop: '1px solid #F4F1EC', background: rowBg }}>
@@ -701,7 +701,6 @@ export default function CustomRequestsPage() {
                       <td style={{ ...TD, color: '#4A433A', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                         {r.groupSize != null ? r.groupSize : '—'}
                       </td>
-                      <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.budget || '—'}</td>
 
                       {/* Workflow status */}
                       <td style={TD}>
@@ -751,17 +750,24 @@ export default function CustomRequestsPage() {
                             borderBottom: '1px solid #EDE8DF',
                             padding: '14px 16px 14px 44px',
                           }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px 28px' }}>
-                              {r.phone     && <DetailField label="Phone"      value={r.phone} />}
-                              {r.groupType && <DetailField label="Group Type" value={r.groupType} />}
-                              {styleText(r.style) && <DetailField label="Style" value={styleText(r.style)} />}
-                            </div>
-                            {r.notes && (
-                              <div style={{ marginTop: r.phone || r.groupType || styleText(r.style) ? '12px' : 0 }}>
-                                <p style={{ fontSize: '10px', fontWeight: '600', color: '#B5AA99', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '3px' }}>Notes</p>
-                                <p style={{ fontSize: '12.5px', color: '#4A433A', lineHeight: '1.5', maxWidth: '680px' }}>{r.notes}</p>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 40px', maxWidth: '560px' }}>
+                              {/* Left column: group type + budget */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {r.phone     && <DetailField label="Phone"      value={r.phone} />}
+                                {r.groupType && <DetailField label="Group Type" value={r.groupType} />}
+                                {r.budget    && <DetailField label="Budget"     value={r.budget} />}
                               </div>
-                            )}
+                              {/* Right column: style + notes */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {styleText(r.style) && <DetailField label="Style" value={styleText(r.style)} />}
+                                {r.notes && (
+                                  <div>
+                                    <p style={{ fontSize: '10px', fontWeight: '600', color: '#B5AA99', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '3px' }}>Notes</p>
+                                    <p style={{ fontSize: '12.5px', color: '#4A433A', lineHeight: '1.5' }}>{r.notes}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </td>
                       </tr>
