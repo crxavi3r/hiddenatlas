@@ -378,9 +378,9 @@ function PurchasedTripCard({ trip }) {
 
 // ── Custom Request card ──────────────────────────────────────────────────────
 const REQUEST_STATUS = {
-  open:        { label: 'Request received',      color: '#1B6B65', bg: '#EFF6F5' },
-  in_progress: { label: 'Planning your journey', color: '#A07830', bg: '#FBF6EE' },
-  closed:      { label: 'Itinerary ready',        color: '#1B6B65', bg: '#EFF6F5' },
+  open:        { label: 'Request received',        color: '#1B6B65', bg: '#EFF6F5' },
+  in_progress: { label: 'Building your itinerary', color: '#A07830', bg: '#FBF6EE' },
+  done:        { label: 'Ready',                   color: '#166534', bg: '#DCFCE7' },
 };
 
 function CustomRequestCard({ request }) {

@@ -91,7 +91,10 @@
       "Bash(echo \"Exit: $?\")",
       "Bash(xxd)",
       "Bash(md5 api/admin.js)",
-      "Bash(md5 /tmp/admin_exact.js)"
+      "Bash(md5 /tmp/admin_exact.js)",
+      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas -type f -name *admin* -o -name *backoffice* -o -name *back-office*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)"
     ]
   }
 }

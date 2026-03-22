@@ -5,9 +5,9 @@ import { useIsMobile } from '../../hooks/useIsMobile';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STATUS_META = {
-  open:        { label: 'Open',        color: '#1B6B65', bg: '#EFF6F5' },
-  in_progress: { label: 'In Progress', color: '#A07830', bg: '#FBF6EE' },
-  closed:      { label: 'Closed',      color: '#8C8070', bg: '#F4F1EC' },
+  open:        { label: 'Request received',        color: '#1B6B65', bg: '#EFF6F5' },
+  in_progress: { label: 'Building your itinerary', color: '#A07830', bg: '#FBF6EE' },
+  done:        { label: 'Ready',                   color: '#166534', bg: '#DCFCE7' },
 };
 const ALL_STATUSES          = Object.keys(STATUS_META);
 const DEFAULT_STATUS_FILTER = ['open', 'in_progress'];
@@ -19,9 +19,9 @@ const PAYMENT_META = {
 const ALL_PAYMENT_STATUSES = Object.keys(PAYMENT_META);
 
 const NEXT_STATUS = {
-  open:        { value: 'in_progress', label: '→ In Progress' },
-  in_progress: { value: 'closed',      label: '→ Close'       },
-  closed:      { value: 'open',        label: 'Reopen'        },
+  open:        { value: 'in_progress', label: '→ Building'   },
+  in_progress: { value: 'done',        label: '→ Mark Ready' },
+  done:        { value: 'open',        label: 'Reopen'       },
 };
 
 // ── Column definitions ────────────────────────────────────────────────────────
@@ -99,7 +99,7 @@ function matchesFilter(row, col, filterVal) {
   }
   if (col.type === 'payment') {
     if (!filterVal || filterVal.length === 0 || filterVal.length === ALL_PAYMENT_STATUSES.length) return true;
-    return filterVal.includes(row[col.field] || 'unpaid');
+    return filterVal.includes(row.isPaid ? 'paid' : 'unpaid');
   }
   if (!filterVal) return true;
   const search = String(filterVal).toLowerCase().trim();
@@ -374,44 +374,16 @@ function StatusAction({ requestId, current, onUpdated, token }) {
   );
 }
 
-// ── PaymentAction — payment badge + toggle button ─────────────────────────────
-function PaymentAction({ requestId, current, onUpdated, token }) {
-  const [loading, setLoading] = useState(false);
-  const isPaid    = current === 'paid';
-  const nextValue = isPaid ? 'unpaid' : 'paid';
-
-  async function toggle() {
-    setLoading(true);
-    try {
-      await fetch(`/api/admin?action=custom-request-payment`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ id: requestId, paymentStatus: nextValue }),
-      });
-      onUpdated(requestId, nextValue);
-    } catch (err) {
-      console.error('[admin/custom-requests] payment update failed:', err);
-    } finally { setLoading(false); }
-  }
-
-  const m = PAYMENT_META[current] ?? PAYMENT_META.unpaid;
+// ── PaymentBadge — read-only payment status (derived from Purchase table) ─────
+function PaymentBadge({ isPaid }) {
+  const m = isPaid ? PAYMENT_META.paid : PAYMENT_META.unpaid;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
-      <span style={{
-        fontSize: '11px', fontWeight: '600', color: m.color, background: m.bg,
-        padding: '3px 9px', borderRadius: '10px', whiteSpace: 'nowrap',
-      }}>
-        {m.label}
-      </span>
-      <button onClick={toggle} disabled={loading} style={{
-        fontSize: '11px', fontWeight: '500', color: '#4A433A', background: 'white',
-        border: '1px solid #E8E3DA', borderRadius: '6px',
-        padding: '3px 9px', cursor: loading ? 'wait' : 'pointer',
-        whiteSpace: 'nowrap', opacity: loading ? 0.6 : 1,
-      }}>
-        {loading ? '…' : (isPaid ? 'Mark unpaid' : 'Mark paid')}
-      </button>
-    </div>
+    <span style={{
+      fontSize: '11px', fontWeight: '600', color: m.color, background: m.bg,
+      padding: '3px 9px', borderRadius: '10px', whiteSpace: 'nowrap',
+    }}>
+      {m.label}
+    </span>
   );
 }
 
@@ -466,21 +438,6 @@ export default function CustomRequestsPage() {
         }));
       }
       return prev.map(r => r.id === id ? { ...r, status: newStatus } : r);
-    });
-  }
-
-  function handlePaymentUpdated(id, newPaymentStatus) {
-    setAllRows(prev => {
-      const row = prev.find(r => r.id === id);
-      if (row) {
-        const old = row.paymentStatus || 'unpaid';
-        setPaymentCounts(c => ({
-          ...c,
-          [old]:             Math.max(0, (c[old]             ?? 0) - 1),
-          [newPaymentStatus]:           (c[newPaymentStatus]  ?? 0) + 1,
-        }));
-      }
-      return prev.map(r => r.id === id ? { ...r, paymentStatus: newPaymentStatus } : r);
     });
   }
 
@@ -540,8 +497,8 @@ export default function CustomRequestsPage() {
 
   // ── Mobile card ───────────────────────────────────────────────────────────────
   function MobileCard({ r, i }) {
-    const sm = STATUS_META[r.status]        ?? STATUS_META.open;
-    const pm = PAYMENT_META[r.paymentStatus] ?? PAYMENT_META.unpaid;
+    const sm = STATUS_META[r.status] ?? STATUS_META.open;
+    const pm = PAYMENT_META[r.isPaid ? 'paid' : 'unpaid'];
     return (
       <div style={{ padding: '14px 16px', borderTop: i > 0 ? '1px solid #F4F1EC' : 'none', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
@@ -575,13 +532,11 @@ export default function CustomRequestsPage() {
         )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
           <span style={{ fontSize: '11px', color: '#B5AA99' }}>{fmtDate(r.createdAt)}</span>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
             {authToken && (
-              <StatusAction  requestId={r.id} current={r.status        || 'open'}   onUpdated={handleStatusUpdated}  token={authToken} />
+              <StatusAction requestId={r.id} current={r.status || 'open'} onUpdated={handleStatusUpdated} token={authToken} />
             )}
-            {authToken && (
-              <PaymentAction requestId={r.id} current={r.paymentStatus || 'unpaid'} onUpdated={handlePaymentUpdated} token={authToken} />
-            )}
+            <PaymentBadge isPaid={r.isPaid} />
           </div>
         </div>
       </div>
@@ -744,14 +699,7 @@ export default function CustomRequestsPage() {
 
                       {/* Payment status */}
                       <td style={TD}>
-                        {authToken
-                          ? <PaymentAction requestId={r.id} current={r.paymentStatus || 'unpaid'} onUpdated={handlePaymentUpdated} token={authToken} />
-                          : (
-                            <span style={{ fontSize: '11px', fontWeight: '600', color: PAYMENT_META[r.paymentStatus]?.color ?? '#8C8070', background: PAYMENT_META[r.paymentStatus]?.bg ?? '#F4F1EC', padding: '3px 9px', borderRadius: '10px' }}>
-                              {PAYMENT_META[r.paymentStatus]?.label ?? 'Unpaid'}
-                            </span>
-                          )
-                        }
+                        <PaymentBadge isPaid={r.isPaid} />
                       </td>
                     </tr>,
 

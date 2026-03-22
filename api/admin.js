@@ -97,7 +97,7 @@ async function _handler(req, res) {
         const { id: bodyId, status: bodyStatus } = req.body ?? {};
         const requestId = bodyId     || id;
         const newStatus = bodyStatus || status;
-        const VALID_STATUS = ['open', 'in_progress', 'closed'];
+        const VALID_STATUS = ['open', 'in_progress', 'done'];
         if (!requestId) return res.status(400).json({ error: 'id is required' });
         if (!VALID_STATUS.includes(newStatus)) return res.status(400).json({ error: 'Invalid status' });
         const { rowCount } = await pool.query(
@@ -105,21 +105,16 @@ async function _handler(req, res) {
           [newStatus, requestId]
         );
         if (rowCount === 0) return res.status(404).json({ error: 'Request not found' });
-        return res.status(200).json({ ok: true });
-      }
-
-      if (action === 'custom-request-payment') {
-        const { id: bodyId, paymentStatus: bodyPaymentStatus } = req.body ?? {};
-        const requestId       = bodyId             || id;
-        const newPaymentStatus = bodyPaymentStatus;
-        const VALID_PAYMENT = ['unpaid', 'paid'];
-        if (!requestId)                        return res.status(400).json({ error: 'id is required' });
-        if (!VALID_PAYMENT.includes(newPaymentStatus)) return res.status(400).json({ error: 'Invalid payment status' });
-        const { rowCount } = await pool.query(
-          `UPDATE "CustomRequest" SET "paymentStatus" = $1 WHERE id = $2`,
-          [newPaymentStatus, requestId]
-        );
-        if (rowCount === 0) return res.status(404).json({ error: 'Request not found' });
+        // Sync linked Itinerary status: in_progress → processing, done → done
+        const itinStatus = newStatus === 'in_progress' ? 'processing' : newStatus === 'done' ? 'done' : null;
+        if (itinStatus) {
+          await pool.query(
+            `UPDATE "Itinerary" i SET status = $1
+             FROM "CustomRequest" cr
+             WHERE cr.id = $2 AND cr."itineraryId" = i.id`,
+            [itinStatus, requestId]
+          ).catch(err => console.warn('[admin] itinerary sync failed:', err.message));
+        }
         return res.status(200).json({ ok: true });
       }
 
@@ -554,80 +549,69 @@ async function getSales(pool, cutoff, offset) {
 // ── Custom Requests ───────────────────────────────────────────────────────────
 // noLimit=true: fetch all rows (used by admin table with client-side filtering).
 // When noLimit, status filter is skipped — the client handles it.
+// isPaid is derived from Purchase table, not from a column on CustomRequest.
 async function getCustomRequests(pool, statusParam, offset, noLimit = false) {
-  const VALID = ['open', 'in_progress', 'closed'];
+  const VALID = ['open', 'in_progress', 'done'];
 
   const statuses = (!noLimit && statusParam)
     ? statusParam.split(',').map(s => s.trim()).filter(s => VALID.includes(s))
     : [];
   const useFilter = statuses.length > 0;
 
-  let requests, total, counts, paymentCounts;
+  const limitClause = noLimit ? '' : `LIMIT 50 OFFSET ${useFilter ? '$2' : '$1'}`;
+  const params      = noLimit ? [] : (useFilter ? [statuses, offset] : [offset]);
 
-  try {
-    const limitClause = noLimit ? '' : `LIMIT 50 OFFSET ${useFilter ? '$2' : '$1'}`;
-    const params      = noLimit ? [] : (useFilter ? [statuses, offset] : [offset]);
+  const PAID_EXISTS = `
+    EXISTS (
+      SELECT 1 FROM "Purchase" p
+      WHERE p."itineraryId" = cr."itineraryId"
+        AND (p.status IS NULL OR p.status NOT IN ('refunded', 'cancelled', 'chargebacked'))
+    )`;
 
-    const { rows } = await pool.query(
-      `SELECT id, "fullName", email, phone, destination, dates, duration,
-              "groupSize", "groupType", budget, style, notes, status,
-              "paymentStatus", "createdAt"
-       FROM "CustomRequest"
-       ${useFilter ? `WHERE status = ANY($1::text[])` : ''}
-       ORDER BY "createdAt" DESC
-       ${limitClause}`,
-      params
-    );
-    requests = rows;
+  const { rows: requests } = await pool.query(
+    `SELECT
+       cr.id, cr."fullName", cr.email, cr.phone, cr.destination, cr.dates, cr.duration,
+       cr."groupSize", cr."groupType", cr.budget, cr.style, cr.notes, cr.status,
+       cr."itineraryId", cr."createdAt",
+       itin.slug   AS "linkedItinerarySlug",
+       itin.status AS "linkedItineraryStatus",
+       (cr."itineraryId" IS NOT NULL AND ${PAID_EXISTS}) AS "isPaid"
+     FROM "CustomRequest" cr
+     LEFT JOIN "Itinerary" itin ON itin.id = cr."itineraryId"
+     ${useFilter ? `WHERE cr.status = ANY($1::text[])` : ''}
+     ORDER BY cr."createdAt" DESC
+     ${limitClause}`,
+    params
+  );
 
-    const countRes = await pool.query(
-      `SELECT COUNT(*) AS total FROM "CustomRequest"
-       ${useFilter ? `WHERE status = ANY($1::text[])` : ''}`,
-      useFilter ? [statuses] : []
-    );
-    total = parseInt(countRes.rows[0].total, 10);
+  const countRes = await pool.query(
+    `SELECT COUNT(*) AS total FROM "CustomRequest"
+     ${useFilter ? `WHERE status = ANY($1::text[])` : ''}`,
+    useFilter ? [statuses] : []
+  );
+  const total = parseInt(countRes.rows[0].total, 10);
 
-    const [countsRes, paymentCountsRes] = await Promise.all([
-      pool.query(`SELECT status, COUNT(*) AS n FROM "CustomRequest" GROUP BY status`),
-      pool.query(`SELECT "paymentStatus", COUNT(*) AS n FROM "CustomRequest" GROUP BY "paymentStatus"`),
-    ]);
-    counts = { open: 0, in_progress: 0, closed: 0, all: 0 };
-    for (const row of countsRes.rows) {
-      if (['open', 'in_progress', 'closed'].includes(row.status)) {
-        counts[row.status] = parseInt(row.n, 10);
-      }
-      counts.all += parseInt(row.n, 10);
+  const countsRes = await pool.query(
+    `SELECT status, COUNT(*) AS n FROM "CustomRequest" GROUP BY status`
+  );
+  const counts = { open: 0, in_progress: 0, done: 0, all: 0 };
+  for (const row of countsRes.rows) {
+    if (['open', 'in_progress', 'done'].includes(row.status)) {
+      counts[row.status] = parseInt(row.n, 10);
     }
-    paymentCounts = { paid: 0, unpaid: 0 };
-    for (const row of paymentCountsRes.rows) {
-      if (row.paymentStatus === 'paid' || row.paymentStatus === 'unpaid') {
-        paymentCounts[row.paymentStatus] = parseInt(row.n, 10);
-      }
-    }
-  } catch (err) {
-    if (!err.message.toLowerCase().includes('column')) throw err;
-    console.warn('[admin/custom-requests] Extended columns missing — using fallback query:', err.message);
-
-    const { rows } = await pool.query(
-      `SELECT id, "fullName", email, destination, dates, "groupSize", notes, "createdAt",
-              'open'::text    AS status,
-              'unpaid'::text  AS "paymentStatus",
-              NULL::text      AS phone,
-              NULL::text      AS duration,
-              NULL::text      AS "groupType",
-              NULL::text      AS budget,
-              '[]'::jsonb     AS style
-       FROM "CustomRequest"
-       ORDER BY "createdAt" DESC
-       ${noLimit ? '' : 'LIMIT 50 OFFSET $1'}`,
-      noLimit ? [] : [offset]
-    );
-    requests = rows;
-    const countRes = await pool.query(`SELECT COUNT(*) AS total FROM "CustomRequest"`);
-    total         = parseInt(countRes.rows[0].total, 10);
-    counts        = { open: total, in_progress: 0, closed: 0, all: total };
-    paymentCounts = { paid: 0, unpaid: total };
+    counts.all += parseInt(row.n, 10);
   }
+
+  const paymentRes = await pool.query(
+    `SELECT
+       COUNT(*) FILTER (WHERE cr."itineraryId" IS NOT NULL AND ${PAID_EXISTS}) AS paid,
+       COUNT(*) FILTER (WHERE cr."itineraryId" IS NULL     OR  NOT ${PAID_EXISTS}) AS unpaid
+     FROM "CustomRequest" cr`
+  );
+  const paymentCounts = {
+    paid:   parseInt(paymentRes.rows[0].paid,   10) || 0,
+    unpaid: parseInt(paymentRes.rows[0].unpaid, 10) || 0,
+  };
 
   return { requests, total, counts, paymentCounts };
 }
