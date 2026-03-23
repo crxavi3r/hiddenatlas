@@ -145,7 +145,10 @@ async function handleCreate(pool, body) {
 
   if (!slug) throw Object.assign(new Error('slug is required'), { status: 400 });
 
-  const finalContent    = mergeEmptyContent(content);
+  const rawContent   = typeof content === 'string'
+    ? (() => { try { return JSON.parse(content); } catch { return {}; } })()
+    : (content ?? {});
+  const finalContent = mergeEmptyContent(rawContent);
   const finalType       = ['free', 'premium', 'custom'].includes(type) ? type : 'free';
   const finalAccessType = finalType === 'free' ? 'free' : 'paid';
   const finalPrivate    = finalType === 'custom' ? true : Boolean(isPrivate);
@@ -180,7 +183,13 @@ async function handleUpdate(pool, id, body) {
     type, isPrivate,
   } = body;
 
-  const finalContent = mergeEmptyContent(content ?? {});
+  // Defensive parse: body parsers sometimes deliver JSONB fields as strings
+  const rawContent = typeof content === 'string'
+    ? (() => { try { return JSON.parse(content); } catch { return {}; } })()
+    : (content ?? {});
+  const finalContent = mergeEmptyContent(rawContent);
+
+  console.log(`[itinerary-cms/update] id=${id} days=${finalContent.days?.length ?? 0}`);
 
   // Derive mirrored columns
   const derivedCoverImage  = finalContent.hero?.coverImage || coverImage || '';

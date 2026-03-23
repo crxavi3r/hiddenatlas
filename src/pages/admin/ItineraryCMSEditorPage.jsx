@@ -412,7 +412,11 @@ export default function ItineraryCMSEditorPage() {
       const json = await res.json();
       if (json.error) throw new Error(json.error);
       const it = json.itinerary;
-      const content = mergeContent(it.content ?? {});
+      // Defensive parse: JSONB may arrive as a string in some pg/Vercel configs
+      const rawContent = typeof it.content === 'string'
+        ? (() => { try { return JSON.parse(it.content); } catch { return {}; } })()
+        : (it.content ?? {});
+      const content = mergeContent(rawContent);
       // Derive canonical type from both `type` and legacy `accessType`
       const derivedType = it.type === 'custom' ? 'custom'
         : it.type === 'premium' ? 'premium'
@@ -553,10 +557,18 @@ export default function ItineraryCMSEditorPage() {
       const targetId = savedId.current || (isNew ? null : id);
       const action   = targetId ? `update&id=${targetId}` : 'create';
 
+      // Build content explicitly so days structure is always correct
+      const contentToSave = {
+        ...form.content,
+        days: Array.isArray(form.content?.days) ? form.content.days : [],
+      };
+
       const payload = {
         ...form,
+        content: contentToSave,
         accessType: form.type === 'free' ? 'free' : 'paid',
-        durationDays: form.durationDays ? parseInt(form.durationDays, 10) : null,
+        durationDays: form.durationDays !== '' && form.durationDays != null
+          ? parseInt(form.durationDays, 10) : null,
         price: form.price ? parseFloat(form.price) : 0,
       };
 
@@ -570,7 +582,8 @@ export default function ItineraryCMSEditorPage() {
 
       savedId.current = json.itinerary.id;
 
-      // Sync form with what the DB actually persisted (catches derived fields like coverImage)
+      // Sync scalar fields from what DB actually persisted (derived fields like coverImage).
+      // Do NOT replace content — f.content is what we just saved and is authoritative.
       const it = json.itinerary;
       const derivedType = it.type === 'custom' ? 'custom'
         : it.type === 'premium' ? 'premium'
@@ -578,20 +591,21 @@ export default function ItineraryCMSEditorPage() {
         : it.accessType === 'paid' ? 'premium' : 'free';
       setForm(f => ({
         ...f,
-        title:        it.title        ?? f.title,
-        subtitle:     it.subtitle     ?? f.subtitle,
-        slug:         it.slug         ?? f.slug,
-        destination:  it.destination  ?? f.destination,
-        country:      it.country      ?? f.country,
-        region:       it.region       ?? f.region,
-        durationDays: it.durationDays ?? f.durationDays,
-        coverImage:   it.coverImage   || f.coverImage,
-        status:       it.status       ?? f.status,
-        type:         derivedType,
-        isPrivate:    it.isPrivate    ?? f.isPrivate,
-        price:        it.price        ?? f.price,
+        title:         it.title         ?? f.title,
+        subtitle:      it.subtitle      ?? f.subtitle,
+        slug:          it.slug          ?? f.slug,
+        destination:   it.destination   ?? f.destination,
+        country:       it.country       ?? f.country,
+        region:        it.region        ?? f.region,
+        durationDays:  it.durationDays  ?? f.durationDays,
+        coverImage:    it.coverImage    || f.coverImage,
+        status:        it.status        ?? f.status,
+        type:          derivedType,
+        isPrivate:     it.isPrivate     ?? f.isPrivate,
+        price:         it.price         ?? f.price,
         stripePriceId: it.stripePriceId ?? f.stripePriceId,
-        content:      mergeContent(it.content ?? f.content),
+        // content intentionally preserved from f — never replace with DB response
+        // (JSONB may arrive as string in some pg/Vercel configurations)
       }));
 
       setSaveMsg({ ok: true, text: 'Saved.' });
