@@ -31,6 +31,13 @@ ALTER TABLE "Itinerary"
 
 CREATE INDEX IF NOT EXISTS "Itinerary_isCollection_idx" ON "Itinerary"("isCollection");
 
+-- Fix: isCollection column was added with DEFAULT false, so existing parent
+-- itineraries need to be corrected explicitly.
+UPDATE "Itinerary"
+   SET "isCollection" = true
+ WHERE slug = 'california-american-west'
+   AND "isCollection" = false;
+
 -- ── 2. ItineraryAsset ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS "ItineraryAsset" (
   "id"          TEXT        NOT NULL DEFAULT gen_random_uuid()::text,

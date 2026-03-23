@@ -121,7 +121,12 @@ async function handleList(pool) {
     GROUP BY i.id
     ORDER BY i."createdAt" DESC
   `);
-  return { itineraries: rows };
+  // Split server-side so both the main list and the collections tab work correctly.
+  // isCollection=true rows are parent/aggregate containers (e.g. "California and The
+  // American West") — they should never appear in the default CMS itinerary list.
+  const itineraries = rows.filter(r => !r.isCollection);
+  const collections = rows.filter(r => r.isCollection);
+  return { itineraries, collections };
 }
 
 // ── Get single itinerary with full content ────────────────────────────────────

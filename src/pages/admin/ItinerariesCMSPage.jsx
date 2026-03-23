@@ -94,6 +94,7 @@ export default function ItinerariesCMSPage() {
   const isMobile     = useIsMobile();
 
   const [items,      setItems]      = useState([]);
+  const [collections, setCollections] = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(null);
   const [seeding,    setSeeding]    = useState(false);
@@ -113,6 +114,7 @@ export default function ItinerariesCMSPage() {
       const json = await res.json();
       if (json.error) throw new Error(json.error);
       setItems(json.itineraries);
+      setCollections(json.collections ?? []);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   }, [getToken]);
@@ -212,9 +214,9 @@ export default function ItinerariesCMSPage() {
     } catch (e) { alert(e.message); setToDelete(null); }
   }
 
-  // Collections are displayed in their own tab; exclude them from the main list
-  const mainItems        = items.filter(it => !it.isCollection);
-  const collectionItems  = items.filter(it => it.isCollection);
+  // Server already splits itineraries vs collections; no client-side re-filter needed.
+  const mainItems       = items;
+  const collectionItems = collections;
 
   const filtered = filter === 'collections'
     ? collectionItems
