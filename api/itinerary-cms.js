@@ -571,7 +571,6 @@ async function handleUploadAsset(pool, body) {
   const blobPath = `itineraries/${slug}/${subfolder}/${safeName}`;
 
   // Detect MIME type from extension
-  const ext = safeName.split('.').pop().toLowerCase();
   const MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif', svg: 'image/svg+xml' };
   const contentType = MIME[ext] ?? 'application/octet-stream';
 
