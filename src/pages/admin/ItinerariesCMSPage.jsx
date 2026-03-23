@@ -47,6 +47,9 @@ function Badge({ meta }) {
   );
 }
 
+// Only render <img> for actual URLs — coverImage may be a legacy filename
+function isUrl(val) { return typeof val === 'string' && /^https?:\/\//.test(val); }
+
 function fmtDate(ts) {
   if (!ts) return '—';
   return new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -151,6 +154,17 @@ export default function ItinerariesCMSPage() {
       await load();
     } catch (e) { setSeedMsg(`Error: ${e.message}`); }
     finally { setPublishing(false); }
+  }
+
+  function handlePreview(it, nav) {
+    // Custom, private, or unpublished itineraries don't exist on the public storefront.
+    // Route to the CMS editor instead so the admin can still inspect the content.
+    const canPreview = it.isPublished && !it.isPrivate && it.type !== 'custom';
+    if (canPreview) {
+      window.open(`/itineraries/${it.slug}`, '_blank');
+    } else {
+      nav(`/admin/itineraries/${it.id}`);
+    }
   }
 
   async function handleTogglePublish(item) {
@@ -338,7 +352,7 @@ export default function ItinerariesCMSPage() {
         <MobileList
           items={filtered}
           onEdit={it => navigate(`/admin/itineraries/${it.id}`)}
-          onPreview={it => window.open(`/itineraries/${it.slug}`, '_blank')}
+          onPreview={it => handlePreview(it, navigate)}
           onTogglePublish={handleTogglePublish}
           onDuplicate={handleDuplicate}
           onDelete={it => setToDelete(it)}
@@ -347,7 +361,7 @@ export default function ItinerariesCMSPage() {
         <DesktopTable
           items={filtered}
           onEdit={it => navigate(`/admin/itineraries/${it.id}`)}
-          onPreview={it => window.open(`/itineraries/${it.slug}`, '_blank')}
+          onPreview={it => handlePreview(it, navigate)}
           onTogglePublish={handleTogglePublish}
           onDuplicate={handleDuplicate}
           onDelete={it => setToDelete(it)}
@@ -389,7 +403,7 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
                     width: '56px', height: '38px', borderRadius: '4px', overflow: 'hidden',
                     background: '#F4F1EC', flexShrink: 0,
                   }}>
-                    {it.coverImage && (
+                    {isUrl(it.coverImage) && (
                       <img src={it.coverImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     )}
                   </div>
@@ -424,7 +438,11 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
                     <button onClick={() => onEdit(it)} style={iconBtn} title="Edit">
                       <Edit2 size={13} />
                     </button>
-                    <button onClick={() => onPreview(it)} style={iconBtn} title="Preview">
+                    <button
+                      onClick={() => onPreview(it)}
+                      style={iconBtn}
+                      title={it.isPublished && !it.isPrivate && it.type !== 'custom' ? 'Preview on site' : 'Open in editor'}
+                    >
                       <Eye size={13} />
                     </button>
                     <button onClick={() => onDuplicate(it)} style={iconBtn} title="Duplicate">
@@ -466,7 +484,7 @@ function MobileList({ items, onEdit, onPreview, onTogglePublish, onDuplicate, on
           overflow: 'hidden',
         }}>
           <div style={{ display: 'flex', gap: '12px', padding: '14px' }}>
-            {it.coverImage && (
+            {isUrl(it.coverImage) && (
               <div style={{ width: '60px', height: '44px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0 }}>
                 <img src={it.coverImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
@@ -489,7 +507,7 @@ function MobileList({ items, onEdit, onPreview, onTogglePublish, onDuplicate, on
           <div style={{ display: 'flex', gap: '0', borderTop: '1px solid #F4F1EC' }}>
             {[
               { icon: Edit2, label: 'Edit',      action: () => onEdit(it) },
-              { icon: Eye,   label: 'Preview',   action: () => onPreview(it) },
+              { icon: Eye, label: it.isPublished && !it.isPrivate && it.type !== 'custom' ? 'Preview' : 'Editor', action: () => onPreview(it) },
               { icon: Copy,  label: 'Duplicate', action: () => onDuplicate(it) },
               {
                 icon: it.status === 'published' ? EyeOff : Globe,
