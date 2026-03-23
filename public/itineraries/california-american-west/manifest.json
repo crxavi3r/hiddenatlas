@@ -1,0 +1,72 @@
+{
+  "slug": "california-american-west",
+  "title": null,
+  "heroFile": null,
+  "gallery": [
+    "1715789658-yosemite-fall.jpg",
+    "Antelope-Canyon.jpg",
+    "Arizona_Route_66_Road.jpg",
+    "Malibu.jpg",
+    "Pacific-Coast-Highway.jpeg",
+    "cable-cars-downtown-san-francisco.jpg.jpeg",
+    "chateau-montelena.jpg",
+    "grand-canyon-ear.jpg",
+    "hollywood.jpg",
+    "national-park-express-grand-canyon.jpeg"
+  ],
+  "research": [
+    "66.jpg",
+    "cavalo.jpg",
+    "grand-canyon.jpg"
+  ],
+  "dayImages": {
+    "1": [
+      "day1.jpeg"
+    ],
+    "2": [
+      "day2.jpeg"
+    ],
+    "3": [
+      "day3.jpeg"
+    ],
+    "4": [
+      "day4.jpeg"
+    ],
+    "5": [
+      "day5.jpeg"
+    ],
+    "6": [
+      "day6.jpg"
+    ],
+    "7": [
+      "day7.jpg"
+    ],
+    "8": [
+      "day8.jpg"
+    ],
+    "9": [
+      "day9.jpeg"
+    ],
+    "10": [
+      "day10.jpeg"
+    ],
+    "11": [
+      "day11.jpg"
+    ],
+    "12": [
+      "day12.jpg"
+    ],
+    "13": [
+      "day13.jpg"
+    ],
+    "14": [
+      "day14.jpg"
+    ],
+    "15": [
+      "day15.jpg"
+    ],
+    "16": [
+      "day16.jpg"
+    ]
+  }
+}

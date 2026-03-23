@@ -21,7 +21,7 @@
 import pg                         from 'pg';
 import { verifyAuth }             from './_lib/verifyAuth.js';
 import { existsSync }             from 'fs';
-import { readdir, readFile }      from 'fs/promises';
+import { readFile }               from 'fs/promises';
 import path                       from 'path';
 
 const { Pool } = pg;
@@ -431,87 +431,62 @@ async function handleListAssets(pool, itineraryId) {
   return { assets: rows };
 }
 
-// ── Assets: scan filesystem ────────────────────────────────────────────────────
-// Walks content/itineraries/<slug>/ and returns normalized asset metadata.
-// URLs point to /api/content-image?slug=...&path=... proxy.
-// No DB involved — read-only, used to hydrate the Images tab on load.
+// ── Assets: scan filesystem via pre-built manifest ────────────────────────────
+// Reads public/itineraries/<slug>/manifest.json (committed, tiny — filenames only).
+// Returns static CDN URLs (/itineraries/<slug>/...) — no binary content in bundle.
+// Images are served as static assets by Vercel CDN, not through this function.
 async function handleScanAssets(slug) {
   if (!slug) throw Object.assign(new Error('slug is required'), { status: 400 });
 
-  const contentDir = path.join(process.cwd(), 'content', 'itineraries', slug);
-  if (!existsSync(contentDir)) return { assets: [] };
+  const manifestPath = path.join(process.cwd(), 'public', 'itineraries', slug, 'manifest.json');
+  if (!existsSync(manifestPath)) return { assets: [] };
 
-  const IMAGE_RE = /\.(jpg|jpeg|png|webp|gif|avif)$/i;
+  let manifest;
+  try {
+    manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  } catch { return { assets: [] }; }
 
-  function makeUrl(relPath) {
-    return `/api/content-image?slug=${encodeURIComponent(slug)}&path=${encodeURIComponent(relPath)}`;
-  }
-
-  function altFromFilename(filename) {
-    return filename.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-  }
-
+  const base = `/itineraries/${slug}`;
   const assets = [];
 
-  // Hero — read heroImage filename from itinerary.json, fallback to cover.jpg
-  let meta = {};
-  try {
-    meta = JSON.parse(await readFile(path.join(contentDir, 'itinerary.json'), 'utf8'));
-  } catch { /* no metadata */ }
+  function altFromFilename(f) { return f.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '); }
 
-  const heroFilename = meta.heroImage || 'cover.jpg';
-  const heroPath     = path.join(contentDir, heroFilename);
-  if (existsSync(heroPath) && IMAGE_RE.test(heroFilename)) {
+  // Hero
+  if (manifest.heroFile) {
     assets.push({
       id: null, assetType: 'hero',
-      url: makeUrl(heroFilename),
-      alt: `${meta.title || slug} cover`,
+      url:     `${base}/${manifest.heroFile}`,
+      alt:     manifest.title ? `${manifest.title} cover` : `${slug} cover`,
       caption: '', source: 'filesystem', active: true, sortOrder: 0,
     });
   }
 
   // Gallery
-  const galleryDir = path.join(contentDir, 'gallery');
-  if (existsSync(galleryDir)) {
-    const files = (await readdir(galleryDir)).filter(f => IMAGE_RE.test(f)).sort();
-    files.forEach((file, i) => assets.push({
-      id: null, assetType: 'gallery',
-      url:     makeUrl(`gallery/${file}`),
-      alt:     altFromFilename(file),
-      caption: '', source: 'filesystem', active: true, sortOrder: i,
-    }));
-  }
+  (manifest.gallery ?? []).forEach((file, i) => assets.push({
+    id: null, assetType: 'gallery',
+    url:     `${base}/gallery/${file}`,
+    alt:     altFromFilename(file),
+    caption: '', source: 'filesystem', active: true, sortOrder: i,
+  }));
 
   // Research
-  const researchDir = path.join(contentDir, 'research');
-  if (existsSync(researchDir)) {
-    const files = (await readdir(researchDir)).filter(f => IMAGE_RE.test(f)).sort();
-    files.forEach((file, i) => assets.push({
-      id: null, assetType: 'research',
-      url:     makeUrl(`research/${file}`),
-      alt:     altFromFilename(file),
+  (manifest.research ?? []).forEach((file, i) => assets.push({
+    id: null, assetType: 'research',
+    url:     `${base}/research/${file}`,
+    alt:     altFromFilename(file),
+    caption: '', source: 'filesystem', active: true, sortOrder: i,
+  }));
+
+  // Day images — manifest.dayImages is { "1": [...], "2": [...], ... }
+  for (const [dayKey, files] of Object.entries(manifest.dayImages ?? {})) {
+    const dayNumber = parseInt(dayKey, 10);
+    (files ?? []).forEach((file, i) => assets.push({
+      id: null, assetType: 'day',
+      dayNumber,
+      url:     `${base}/day-images/day${dayNumber}/${file}`,
+      alt:     `Day ${dayNumber}`,
       caption: '', source: 'filesystem', active: true, sortOrder: i,
     }));
-  }
-
-  // Day images — day-images/day{N}/<file>
-  const dayImagesDir = path.join(contentDir, 'day-images');
-  if (existsSync(dayImagesDir)) {
-    const dayFolders = (await readdir(dayImagesDir)).sort();
-    for (const dayFolder of dayFolders) {
-      const match = dayFolder.match(/^day(\d+)$/i);
-      if (!match) continue;
-      const dayNumber = parseInt(match[1], 10);
-      const dayDir    = path.join(dayImagesDir, dayFolder);
-      const files     = (await readdir(dayDir)).filter(f => IMAGE_RE.test(f)).sort();
-      files.forEach((file, i) => assets.push({
-        id: null, assetType: 'day',
-        dayNumber,
-        url:     makeUrl(`day-images/${dayFolder}/${file}`),
-        alt:     `Day ${dayNumber}`,
-        caption: '', source: 'filesystem', active: true, sortOrder: i,
-      }));
-    }
   }
 
   return { assets };

@@ -1,0 +1,87 @@
+{
+  "slug": "japan-grand-cultural-journey",
+  "title": "Japan",
+  "heroFile": "cover.jpg",
+  "gallery": [
+    "1.kanazawa.jpg",
+    "Shibuya-Crossing.jpg",
+    "arashiyama.jpg",
+    "dotonburi.jpg",
+    "food.jpg",
+    "food2.jpg",
+    "garden-nation-kyoto.jpg",
+    "hakone.jpg",
+    "kinkaku.jpg",
+    "kurashiki.jpg",
+    "myagawa.jpg",
+    "niio-castle.jpg",
+    "okayama.jpg",
+    "shirakawa-go.jpeg",
+    "shitenno.jpg",
+    "wagyu.jpeg"
+  ],
+  "research": [
+    "cris-florest.jpg",
+    "cris-shirakawa-go.jpg",
+    "cris-temple.jpg",
+    "kyoto-vanda.jpg",
+    "selfie.jpg",
+    "vanda-veado.jpg"
+  ],
+  "dayImages": {
+    "1": [
+      "Shinjuku.jpg"
+    ],
+    "2": [
+      "day2.jpg"
+    ],
+    "3": [
+      "Shibuya-Crossing.jpg"
+    ],
+    "4": [
+      "Kanazawa.jpg"
+    ],
+    "5": [
+      "Wajima-Morning-Market.jpeg"
+    ],
+    "6": [
+      "Shirakawa-go.jpeg"
+    ],
+    "7": [
+      "Takayama.jpg"
+    ],
+    "8": [
+      "Hida-Folk-Village.jpg"
+    ],
+    "9": [
+      "Fushimi-Inari.jpg"
+    ],
+    "10": [
+      "Tenryu-ji.jpg"
+    ],
+    "11": [
+      "Nara.jpg"
+    ],
+    "12": [
+      "Kyoto.jpeg"
+    ],
+    "13": [
+      "Osaka.jpeg"
+    ],
+    "14": [
+      "Koyasan.jpg"
+    ],
+    "15": [
+      "Himeji.jpg"
+    ],
+    "16": [
+      "Okayama.jpg"
+    ],
+    "17": [
+      "hakone.jpg"
+    ],
+    "18": [
+      "tokyo.jpg"
+    ]
+  }
+}

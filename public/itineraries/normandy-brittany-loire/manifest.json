@@ -1,0 +1,25 @@
+{
+  "slug": "normandy-brittany-loire",
+  "title": "Normandy, Brittany & Loire",
+  "heroFile": null,
+  "gallery": [
+    "1_chateau-gallard3.jpg",
+    "chambord.jpg",
+    "charbord.jpg",
+    "etretat.png",
+    "market.png",
+    "mont-saint-michel-2.png",
+    "porto-honfleur.png"
+  ],
+  "research": [
+    "bekas.jpeg",
+    "chambord-bekas2.jpeg",
+    "saint-malo-cris.jpeg"
+  ],
+  "dayImages": {
+    "1": [],
+    "2": [],
+    "3": [],
+    "4": []
+  }
+}

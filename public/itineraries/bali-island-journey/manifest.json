@@ -1,0 +1,51 @@
+{
+  "slug": "bali-island-journey",
+  "title": "Bali",
+  "heroFile": null,
+  "gallery": [
+    "arrozais.jpg",
+    "casa-sideman.jpg",
+    "cascata.jpg",
+    "floating-breakfast.jpg",
+    "piscina-infinita.jpg",
+    "praia-rocha.png",
+    "swing-red-dress.jpg"
+  ],
+  "research": [
+    "foto-dancers.jpg",
+    "selfie-arrozais.jpg",
+    "selfie-piscina-infinita.jpg"
+  ],
+  "dayImages": {
+    "1": [
+      "day1.jpeg"
+    ],
+    "2": [
+      "day1.jpeg"
+    ],
+    "3": [
+      "day3.jpeg"
+    ],
+    "4": [
+      "day4.jpeg"
+    ],
+    "5": [
+      "day5.jpg"
+    ],
+    "6": [
+      "day6.jpg"
+    ],
+    "7": [
+      "day7.jpeg"
+    ],
+    "8": [
+      "day6.jpeg"
+    ],
+    "9": [
+      "day9.jpeg"
+    ],
+    "10": [
+      "day10.jpeg"
+    ]
+  }
+}

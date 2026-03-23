@@ -1,0 +1,24 @@
+{
+  "slug": "rome-4-day-city-break",
+  "title": "Rome",
+  "heroFile": null,
+  "gallery": [
+    "Italy_Rome_Saint_Peter.jpg",
+    "Trevi-Fountain.jpeg",
+    "pantheom.jpg",
+    "rome-colosseum-.jpg"
+  ],
+  "research": [
+    "IMG_1189.jpg",
+    "IMG_1476.jpg",
+    "IMG_2289.jpg"
+  ],
+  "dayImages": {
+    "1": [],
+    "2": [],
+    "3": [],
+    "4": [
+      "baths-of-caracalla.jpeg"
+    ]
+  }
+}

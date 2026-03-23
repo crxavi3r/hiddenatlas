@@ -1,0 +1,21 @@
+{
+  "slug": "budapest-city-break",
+  "title": "Budapest",
+  "heroFile": null,
+  "gallery": [
+    "castle.jpeg",
+    "castle2.jpeg",
+    "danube.jpeg",
+    "street.jpeg"
+  ],
+  "research": [
+    "couple-castle.jpeg",
+    "selfie-boat.jpeg",
+    "selfie-danube.jpeg"
+  ],
+  "dayImages": {
+    "1": [],
+    "2": [],
+    "3": []
+  }
+}

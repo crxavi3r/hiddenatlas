@@ -1,0 +1,51 @@
+{
+  "slug": "morocco-motorcycle-expedition",
+  "title": "Morocco Motorcycle Expedition",
+  "heroFile": "cover.jpg",
+  "gallery": [
+    "20240213_075323.jpg",
+    "20240214_101727.jpg",
+    "IMG_1467.jpg",
+    "IMG_1577.jpg",
+    "IMG_1692.jpg",
+    "IMG_1709.jpg",
+    "IMG_20240214_104318.jpg",
+    "chefchaouen.png",
+    "marraquexe-capa.jpg",
+    "moto-2.png",
+    "moto.png",
+    "sahar.png",
+    "sun-rise.png"
+  ],
+  "research": [
+    "20240212_131501.jpg",
+    "20240212_141911.jpg",
+    "beach.jpeg"
+  ],
+  "dayImages": {
+    "1": [
+      "chefchaouen.jpeg"
+    ],
+    "2": [
+      "Errachidia.jpg"
+    ],
+    "3": [
+      "Aït Benhaddou.jpg"
+    ],
+    "4": [
+      "Ouarzazate.jpg"
+    ],
+    "5": [
+      "Merzouga-quad-dunes.jpg"
+    ],
+    "6": [
+      "marrakech.jpeg"
+    ],
+    "7": [
+      "Oualidia.jpg"
+    ],
+    "8": [
+      "Hassan-II-Mosque.jpg"
+    ]
+  }
+}
