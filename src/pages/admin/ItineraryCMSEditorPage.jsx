@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import {
   ArrowLeft, Save, Globe, EyeOff, Eye, Plus, Trash2, ChevronDown, ChevronUp,
-  Wand2, Image as ImageIcon, Clock, Check, User,
+  Wand2, Image as ImageIcon, Clock, Check, User, Upload,
 } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
@@ -393,7 +393,7 @@ export default function ItineraryCMSEditorPage() {
   // Images tab state
   const [assets,       setAssets]       = useState([]);
   const [assetsLoading, setAssetsLoading] = useState(false);
-  const [newAsset,     setNewAsset]     = useState({ assetType: 'gallery', url: '', alt: '', caption: '' });
+  const [newAsset,     setNewAsset]     = useState({ assetType: 'gallery', source: 'url', dayNumber: 1, url: '', alt: '', caption: '', file: null, filePreview: null });
 
   // AI tab state
   const [aiPrompt,      setAiPrompt]      = useState('');
@@ -663,21 +663,81 @@ export default function ItineraryCMSEditorPage() {
   }
 
   // ── Asset actions ─────────────────────────────────────────────────────────────
+  const EMPTY_ASSET = { assetType: 'gallery', source: 'url', dayNumber: 1, url: '', alt: '', caption: '', file: null, filePreview: null };
+
   async function handleAddAsset() {
     const targetId = savedId.current || (isNew ? null : id);
     if (!targetId) { alert('Save the itinerary first.'); return; }
-    if (!newAsset.url.trim()) { alert('URL is required.'); return; }
+    if (newAsset.assetType === 'day' && !newAsset.dayNumber) { alert('Select a day number.'); return; }
+
+    if (newAsset.source === 'upload') {
+      if (!newAsset.file) { alert('Choose a file to upload.'); return; }
+      await handleUploadAsset(targetId);
+      return;
+    }
+
+    if (!newAsset.url.trim()) {
+      alert(newAsset.source === 'filesystem' ? 'Select an image from the filesystem browser.' : 'URL is required.');
+      return;
+    }
+
     try {
       const token = await getToken();
+      const safeDay = newAsset.assetType === 'day' ? newAsset.dayNumber : null;
       const res   = await fetch('/api/itinerary-cms?action=save-asset', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...newAsset, itineraryId: targetId }),
+        body: JSON.stringify({
+          assetType: newAsset.assetType,
+          url: newAsset.url,
+          alt: newAsset.alt,
+          caption: newAsset.caption,
+          dayNumber: safeDay,
+          source: newAsset.source === 'filesystem' ? 'filesystem' : 'manual',
+          itineraryId: targetId,
+        }),
+      });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      // Replace filesystem entry (same URL, no id) with the new DB record
+      setAssets(prev => [
+        ...prev.filter(a => !(a.url === json.asset.url && !a.id)),
+        json.asset,
+      ]);
+      setNewAsset(EMPTY_ASSET);
+    } catch (e) { alert(e.message); }
+  }
+
+  async function handleUploadAsset(targetId) {
+    const slug = slugRef.current || form.slug;
+    if (!slug) { alert('Slug is required to upload images.'); return; }
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(newAsset.file);
+      });
+      const token = await getToken();
+      const res   = await fetch('/api/itinerary-cms?action=upload-asset', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itineraryId: targetId,
+          slug,
+          assetType: newAsset.assetType,
+          dayNumber: newAsset.assetType === 'day' ? newAsset.dayNumber : null,
+          filename: newAsset.file.name,
+          data: base64,
+          alt: newAsset.alt,
+          caption: newAsset.caption,
+        }),
       });
       const json = await res.json();
       if (json.error) throw new Error(json.error);
       setAssets(prev => [...prev, json.asset]);
-      setNewAsset({ assetType: 'gallery', url: '', alt: '', caption: '' });
+      setNewAsset(EMPTY_ASSET);
+      if (newAsset.filePreview) URL.revokeObjectURL(newAsset.filePreview);
     } catch (e) { alert(e.message); }
   }
 
@@ -848,6 +908,7 @@ export default function ItineraryCMSEditorPage() {
             newAsset={newAsset} setNewAsset={setNewAsset}
             onAdd={handleAddAsset} onToggle={handleToggleAsset} onDelete={handleDeleteAsset}
             isNew={isNew} hasSavedId={!!savedId.current}
+            durationDays={form.durationDays}
           />
         )}
         {activeTab === 'ai'       && (
@@ -1196,7 +1257,9 @@ function SectionsTab({ c, setContent }) {
 }
 
 // ── Images ────────────────────────────────────────────────────────────────────
-function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, onDelete, isNew, hasSavedId }) {
+function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, onDelete, isNew, hasSavedId, durationDays }) {
+  const fileInputRef = useRef(null);
+
   if (isNew && !hasSavedId) {
     return (
       <div style={{ ...sectionCard, textAlign: 'center', padding: '48px', color: '#B5AA99' }}>
@@ -1205,6 +1268,35 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
     );
   }
 
+  const maxDay = Math.max(parseInt(durationDays, 10) || 7, 7);
+  const days   = Array.from({ length: maxDay }, (_, i) => i + 1);
+
+  // Filesystem assets not yet promoted to DB, filtered for the current type + day
+  const fsBrowserAssets = assets.filter(a => {
+    if (a.id) return false;
+    if (a.assetType !== newAsset.assetType) return false;
+    if (newAsset.assetType === 'day' && String(a.dayNumber) !== String(newAsset.dayNumber)) return false;
+    return true;
+  });
+
+  const previewUrl = newAsset.source === 'upload' ? newAsset.filePreview : newAsset.url;
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (newAsset.filePreview) URL.revokeObjectURL(newAsset.filePreview);
+    const preview = URL.createObjectURL(file);
+    setNewAsset(a => ({ ...a, file, filePreview: preview }));
+  };
+
+  const srcBtn = (src) => ({
+    padding: '5px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px',
+    fontWeight: newAsset.source === src ? '600' : '400',
+    border: `1px solid ${newAsset.source === src ? '#1B6B65' : '#E8E3DA'}`,
+    background: newAsset.source === src ? '#EFF6F5' : 'white',
+    color: newAsset.source === src ? '#1B6B65' : '#6B6355',
+  });
+
   const grouped = ASSET_TYPES.reduce((acc, type) => {
     acc[type] = assets.filter(a => a.assetType === type);
     return acc;
@@ -1212,45 +1304,132 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
 
   return (
     <div>
-      {/* Add image form */}
+      {/* ── Add Image ──────────────────────────────────────────────────────── */}
       <div style={sectionCard}>
         <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>Add Image</p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
-          <Field label="Type">
+
+        {/* Type + Day row */}
+        <div style={{ display: 'flex', gap: '14px', marginBottom: '16px' }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Type</label>
             <select value={newAsset.assetType} style={inputStyle}
-              onChange={e => setNewAsset(a => ({ ...a, assetType: e.target.value }))}>
+              onChange={e => setNewAsset(a => ({ ...a, assetType: e.target.value, url: '', file: null, filePreview: null }))}>
               {ASSET_TYPES.map(t => (
                 <option key={t} value={t}>{ASSET_TYPE_LABELS[t] ?? t}</option>
               ))}
             </select>
-          </Field>
-          <Field label="Image URL *">
+          </div>
+          {newAsset.assetType === 'day' && (
+            <div style={{ flex: '0 0 130px' }}>
+              <label style={labelStyle}>Day *</label>
+              <select value={newAsset.dayNumber} style={inputStyle}
+                onChange={e => setNewAsset(a => ({ ...a, dayNumber: parseInt(e.target.value, 10), url: '', file: null, filePreview: null }))}>
+                {days.map(n => <option key={n} value={n}>Day {n}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {/* Source selector */}
+        <div style={{ marginBottom: '16px' }}>
+          <label style={labelStyle}>Source</label>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            {[['url', 'URL'], ['upload', 'Upload'], ['filesystem', 'Filesystem']].map(([src, lbl]) => (
+              <button key={src} style={srcBtn(src)}
+                onClick={() => setNewAsset(a => ({ ...a, source: src, url: '', file: null, filePreview: null }))}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* URL input */}
+        {newAsset.source === 'url' && (
+          <div style={{ marginBottom: '16px' }}>
+            <label style={labelStyle}>Image URL *</label>
             <input value={newAsset.url} style={inputStyle}
               placeholder="https://images.unsplash.com/…"
               onChange={e => setNewAsset(a => ({ ...a, url: e.target.value }))} />
-          </Field>
-          <Field label="Alt text">
+          </div>
+        )}
+
+        {/* Upload input */}
+        {newAsset.source === 'upload' && (
+          <div style={{ marginBottom: '16px' }}>
+            <label style={labelStyle}>File</label>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button onClick={() => fileInputRef.current?.click()} style={btnGhost}>
+                <Upload size={12} /> Choose file
+              </button>
+              {newAsset.file && (
+                <span style={{ fontSize: '12px', color: '#4A433A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>
+                  {newAsset.file.name}
+                </span>
+              )}
+            </div>
+            <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
+          </div>
+        )}
+
+        {/* Filesystem browser */}
+        {newAsset.source === 'filesystem' && (
+          <div style={{ marginBottom: '16px' }}>
+            <label style={labelStyle}>
+              Select from filesystem {fsBrowserAssets.length > 0 ? `(${fsBrowserAssets.length})` : ''}
+            </label>
+            {fsBrowserAssets.length === 0 ? (
+              <p style={{ fontSize: '12px', color: '#B5AA99', padding: '16px', background: '#F4F1EC', borderRadius: '6px', textAlign: 'center' }}>
+                No untracked filesystem images for {ASSET_TYPE_LABELS[newAsset.assetType] ?? newAsset.assetType}
+                {newAsset.assetType === 'day' ? ` · Day ${newAsset.dayNumber}` : ''}.
+              </p>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(84px, 1fr))', gap: '6px', maxHeight: '230px', overflowY: 'auto', padding: '2px' }}>
+                {fsBrowserAssets.map((a, i) => (
+                  <div key={i} title={a.url.split('/').pop()}
+                    onClick={() => setNewAsset(n => ({ ...n, url: a.url, alt: n.alt || a.alt || '' }))}
+                    style={{
+                      cursor: 'pointer', borderRadius: '5px', overflow: 'hidden', aspectRatio: '4/3',
+                      background: '#F4F1EC',
+                      border: `2px solid ${newAsset.url === a.url ? '#1B6B65' : 'transparent'}`,
+                      boxShadow: newAsset.url === a.url ? '0 0 0 1px #1B6B65' : 'none',
+                    }}>
+                    <img src={a.url} alt={a.alt || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Preview */}
+        {previewUrl && (
+          <div style={{ height: '120px', borderRadius: '6px', overflow: 'hidden', marginBottom: '16px', background: '#F4F1EC' }}>
+            <img src={previewUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          </div>
+        )}
+
+        {/* Alt + Caption */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }}>
+          <div>
+            <label style={labelStyle}>Alt text</label>
             <input value={newAsset.alt} style={inputStyle}
               placeholder="Brief description for accessibility"
               onChange={e => setNewAsset(a => ({ ...a, alt: e.target.value }))} />
-          </Field>
-          <Field label="Caption">
+          </div>
+          <div>
+            <label style={labelStyle}>Caption</label>
             <input value={newAsset.caption} style={inputStyle}
               placeholder="Optional visible caption"
               onChange={e => setNewAsset(a => ({ ...a, caption: e.target.value }))} />
-          </Field>
-        </div>
-        {newAsset.url && (
-          <div style={{ height: '120px', borderRadius: '6px', overflow: 'hidden', marginBottom: '14px', background: '#F4F1EC' }}>
-            <img src={newAsset.url} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
-        )}
+        </div>
+
         <button onClick={onAdd} style={btnPrimary}>
           <ImageIcon size={13} /> Add image
         </button>
       </div>
 
-      {/* Assets by type */}
+      {/* ── Asset list by type ─────────────────────────────────────────────── */}
       {loading ? (
         <div style={{ ...sectionCard, textAlign: 'center', color: '#B5AA99', fontSize: '13px' }}>Loading…</div>
       ) : assets.length === 0 ? (
@@ -1263,8 +1442,8 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
             <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '16px' }}>
               {ASSET_TYPE_LABELS[type]} ({grouped[type].length})
             </p>
-            {grouped[type].map(asset => (
-              <AssetRow key={asset.id} asset={asset} onToggle={onToggle} onDelete={onDelete} />
+            {grouped[type].map((asset, i) => (
+              <AssetRow key={asset.id ?? `fs-${i}`} asset={asset} onToggle={onToggle} onDelete={onDelete} />
             ))}
           </div>
         ))

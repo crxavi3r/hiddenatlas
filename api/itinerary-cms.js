@@ -21,7 +21,7 @@
 import pg                         from 'pg';
 import { verifyAuth }             from './_lib/verifyAuth.js';
 import { existsSync }             from 'fs';
-import { readFile }               from 'fs/promises';
+import { readFile, writeFile, mkdir } from 'fs/promises';
 import path                       from 'path';
 
 const { Pool } = pg;
@@ -90,6 +90,7 @@ export default async function handler(req, res) {
       if (action === 'seed')         return res.json(await handleSeed(pool, body));
       if (action === 'bulk-publish') return res.json(await handleBulkPublish(pool));
       if (action === 'save-asset')   return res.json(await handleSaveAsset(pool, body));
+      if (action === 'upload-asset') return res.json(await handleUploadAsset(pool, body));
       if (action === 'delete-asset') return res.json(await handleDeleteAsset(pool, id));
       if (action === 'toggle-asset') return res.json(await handleToggleAsset(pool, id));
       if (action === 'ai-generate')  return res.json(await handleAIGenerate(pool, body, adminEmail));
@@ -494,29 +495,115 @@ async function handleScanAssets(slug) {
 
 // ── Assets: save (create or update) ──────────────────────────────────────────
 async function handleSaveAsset(pool, body) {
-  const { itineraryId, id, assetType = 'gallery', url, alt = '', caption = '', sortOrder = 0, source = 'manual' } = body;
+  const { itineraryId, id, assetType = 'gallery', url, alt = '', caption = '', sortOrder = 0, source = 'manual', dayNumber } = body;
   if (!itineraryId) throw Object.assign(new Error('itineraryId is required'), { status: 400 });
   if (!url)         throw Object.assign(new Error('url is required'), { status: 400 });
+
+  const safeDay = (assetType === 'day' && dayNumber != null) ? parseInt(dayNumber, 10) : null;
 
   if (id) {
     // Update existing
     const { rows } = await pool.query(
       `UPDATE "ItineraryAsset"
-       SET "assetType"=$2, url=$3, alt=$4, caption=$5, "sortOrder"=$6
+       SET "assetType"=$2, url=$3, alt=$4, caption=$5, "sortOrder"=$6, "dayNumber"=$8
        WHERE id=$1 AND "itineraryId"=$7
        RETURNING *`,
-      [id, assetType, url, alt, caption, sortOrder, itineraryId]
+      [id, assetType, url, alt, caption, sortOrder, itineraryId, safeDay]
     );
     return { asset: rows[0] };
   }
 
   const { rows } = await pool.query(
-    `INSERT INTO "ItineraryAsset" ("itineraryId","assetType",url,alt,caption,"sortOrder",source)
-     VALUES ($1,$2,$3,$4,$5,$6,$7)
+    `INSERT INTO "ItineraryAsset" ("itineraryId","assetType",url,alt,caption,"sortOrder",source,"dayNumber")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
      RETURNING *`,
-    [itineraryId, assetType, url, alt, caption, sortOrder, source]
+    [itineraryId, assetType, url, alt, caption, sortOrder, source, safeDay]
   );
   return { asset: rows[0] };
+}
+
+// ── Assets: upload file ───────────────────────────────────────────────────────
+async function handleUploadAsset(pool, body) {
+  const {
+    itineraryId, slug, assetType = 'gallery', dayNumber,
+    filename, data: base64Data, alt = '', caption = '', sortOrder = 0,
+  } = body;
+
+  if (!itineraryId) throw Object.assign(new Error('itineraryId is required'), { status: 400 });
+  if (!slug)        throw Object.assign(new Error('slug is required'), { status: 400 });
+  if (!filename)    throw Object.assign(new Error('filename is required'), { status: 400 });
+  if (!base64Data)  throw Object.assign(new Error('data is required'), { status: 400 });
+  if (assetType === 'day' && !dayNumber) {
+    throw Object.assign(new Error('dayNumber is required for day images'), { status: 400 });
+  }
+
+  // Sanitize filename — no path traversal
+  const safeName = path.basename(filename).replace(/[^a-zA-Z0-9._\-]/g, '_');
+
+  // Determine subfolder
+  let subfolder;
+  if (assetType === 'hero')     subfolder = '';
+  else if (assetType === 'gallery')  subfolder = 'gallery';
+  else if (assetType === 'research') subfolder = 'research';
+  else if (assetType === 'day') subfolder = `day-images/day${parseInt(dayNumber, 10)}`;
+  else subfolder = assetType;
+
+  const cwd           = process.cwd();
+  const publicSlugDir = path.join(cwd, 'public', 'itineraries', slug);
+  const contentSlugDir = path.join(cwd, 'content', 'itineraries', slug);
+  const publicTargetDir  = subfolder ? path.join(publicSlugDir, subfolder) : publicSlugDir;
+  const contentTargetDir = subfolder ? path.join(contentSlugDir, subfolder) : contentSlugDir;
+
+  const fileBuffer = Buffer.from(base64Data, 'base64');
+
+  await mkdir(publicTargetDir,  { recursive: true });
+  await mkdir(contentTargetDir, { recursive: true });
+  await writeFile(path.join(publicTargetDir, safeName),  fileBuffer);
+  await writeFile(path.join(contentTargetDir, safeName), fileBuffer);
+
+  // Update manifest.json
+  const manifestPath = path.join(publicSlugDir, 'manifest.json');
+  if (existsSync(manifestPath)) {
+    try {
+      const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+      if (assetType === 'hero') {
+        manifest.heroFile = safeName;
+      } else if (assetType === 'gallery') {
+        if (!Array.isArray(manifest.gallery)) manifest.gallery = [];
+        if (!manifest.gallery.includes(safeName)) manifest.gallery.push(safeName);
+      } else if (assetType === 'research') {
+        if (!Array.isArray(manifest.research)) manifest.research = [];
+        if (!manifest.research.includes(safeName)) manifest.research.push(safeName);
+      } else if (assetType === 'day') {
+        const dayKey = String(parseInt(dayNumber, 10));
+        if (!manifest.dayImages) manifest.dayImages = {};
+        if (!Array.isArray(manifest.dayImages[dayKey])) manifest.dayImages[dayKey] = [];
+        if (!manifest.dayImages[dayKey].includes(safeName)) manifest.dayImages[dayKey].push(safeName);
+      }
+      await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
+    } catch { /* non-fatal: manifest update failure doesn't block the upload */ }
+  }
+
+  const relPath   = subfolder ? `${subfolder}/${safeName}` : safeName;
+  const publicUrl = `/itineraries/${slug}/${relPath}`;
+  const safeDay   = (assetType === 'day' && dayNumber != null) ? parseInt(dayNumber, 10) : null;
+
+  const { rows } = await pool.query(
+    `INSERT INTO "ItineraryAsset" ("itineraryId","assetType",url,alt,caption,"sortOrder",source,"dayNumber")
+     VALUES ($1,$2,$3,$4,$5,$6,'upload',$7)
+     ON CONFLICT DO NOTHING
+     RETURNING *`,
+    [itineraryId, assetType, publicUrl, alt, caption, sortOrder, safeDay]
+  );
+
+  if (!rows.length) {
+    const { rows: existing } = await pool.query(
+      `SELECT * FROM "ItineraryAsset" WHERE "itineraryId"=$1 AND url=$2 LIMIT 1`,
+      [itineraryId, publicUrl]
+    );
+    return { asset: existing[0], url: publicUrl };
+  }
+  return { asset: rows[0], url: publicUrl };
 }
 
 // ── Assets: delete ────────────────────────────────────────────────────────────
