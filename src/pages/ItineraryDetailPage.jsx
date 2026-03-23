@@ -19,6 +19,19 @@ import AmericanWestRouteMap from '../components/AmericanWestRouteMap';
 import AmericanWest12DaysRouteMap from '../components/AmericanWest12DaysRouteMap';
 import AmericanWest8DaysRouteMap from '../components/AmericanWest8DaysRouteMap';
 
+// ─────────────────────────────────────────────────────────────
+// DB + filesystem asset merge
+// DB-sourced assets take priority; filesystem fills the rest.
+// ─────────────────────────────────────────────────────────────
+function mergeAssets(fsImages, dbAssets, type) {
+  const dbOfType = dbAssets
+    .filter(a => a.assetType === type)
+    .map(a => ({ src: a.url, filename: a.alt || a.url.split('/').pop() }));
+  const dbUrls = new Set(dbOfType.map(a => a.src));
+  const fsFiltered = fsImages.filter(img => !dbUrls.has(img.src));
+  return [...dbOfType, ...fsFiltered];
+}
+
 const ROUTE_MAP_COMPONENTS = {
   'japan-grand-cultural-journey': JapanRouteMap,
   'morocco-motorcycle-expedition': MoroccoRouteMap,
@@ -338,8 +351,24 @@ const api = useApi();
   // Session-scoped dedup: save this itinerary at most once per page load
   const [savedItineraryId, setSavedItineraryId]       = useState(null);
   const [itinerarySaveState, setItinerarySaveState]   = useState('idle'); // 'idle'|'saving'|'saved'|'error'
+  const [dbAssets, setDbAssets]                       = useState([]);
 
   const isPremium = itinerary?.isPremium;
+
+  // Load DB-backed assets for this itinerary (blob uploads, manually added URLs)
+  useEffect(() => {
+    const slug = itinerary?.parentId || itinerary?.id;
+    if (!slug) return;
+    fetch(`/api/itinerary-assets?slug=${encodeURIComponent(slug)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.assets) {
+          console.log('[ItineraryDetailPage] DB assets loaded:', data.assets.length, data.assets.map(a => a.assetType));
+          setDbAssets(data.assets);
+        }
+      })
+      .catch(err => console.warn('[ItineraryDetailPage] Failed to load DB assets:', err));
+  }, [itinerary?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fire ITINERARY_VIEW once when a valid itinerary page loads
   useEffect(() => {
@@ -569,10 +598,13 @@ const api = useApi();
   const assetSlug    = itinerary.parentId || itinerary.id;
   const assetVariant = itinerary.variant; // 'premium'|'essential'|'short'|undefined
 
-  const galleryImages  = getGalleryImages(assetSlug, assetVariant);
-  const researchImages = getResearchImages(assetSlug, assetVariant);
-  // Local cover takes priority over the Unsplash-based coverImage fallback.
-  const localCover = getCoverImage(assetSlug);
+  const fsGallery      = getGalleryImages(assetSlug, assetVariant);
+  const fsResearch     = getResearchImages(assetSlug, assetVariant);
+  const galleryImages  = mergeAssets(fsGallery, dbAssets, 'gallery');
+  const researchImages = mergeAssets(fsResearch, dbAssets, 'research');
+  // DB hero > filesystem hero > Unsplash fallback
+  const dbHero     = dbAssets.find(a => a.assetType === 'hero');
+  const localCover = dbHero ? dbHero.url : getCoverImage(assetSlug);
   const mapImage   = getMapImage(assetSlug, assetVariant);
 
   // ── Parent chooser page ───────────────────────────────────────────────────
@@ -955,7 +987,8 @@ const api = useApi();
                   const isLocked = isPremium && !hasAccess && i >= 2;
                   // Load day image from day-images/dayN/ subfolder only.
                   // No external URLs. Returns null if folder is empty.
-                  const resolvedImg = getDayImage(assetSlug, day.day, assetVariant);
+                  const dbDayAsset = dbAssets.find(a => a.assetType === 'day' && a.dayNumber === day.day);
+                  const resolvedImg = dbDayAsset ? dbDayAsset.url : getDayImage(assetSlug, day.day, assetVariant);
                   return (
                     <DayEntry
                       key={i}
