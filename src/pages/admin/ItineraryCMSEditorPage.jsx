@@ -572,6 +572,26 @@ export default function ItineraryCMSEditorPage() {
         price: form.price ? parseFloat(form.price) : 0,
       };
 
+      // ── Pre-save diagnostic log ───────────────────────────────────────────
+      console.log('[CMS save] top-level fields', {
+        title:       payload.title,
+        subtitle:    payload.subtitle,
+        slug:        payload.slug,
+        destination: payload.destination,
+        country:     payload.country,
+        region:      payload.region,
+        durationDays: payload.durationDays,
+        type:        payload.type,
+        accessType:  payload.accessType,
+        isPrivate:   payload.isPrivate,
+        status:      payload.status,
+        coverImage:  payload.coverImage,
+      });
+      console.log('[CMS save] content.days count:', payload.content?.days?.length ?? 'MISSING');
+      console.log('[CMS save] content.days sample:', payload.content?.days?.slice(0, 2));
+      console.log('[CMS save] content keys:', Object.keys(payload.content ?? {}));
+      // ─────────────────────────────────────────────────────────────────────
+
       const res  = await fetch(`/api/itinerary-cms?action=${action}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
