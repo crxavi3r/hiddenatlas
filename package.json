@@ -10,7 +10,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "pdf": "tsx scripts/generate-pdf.mjs"
+    "pdf": "tsx scripts/generate-pdf.mjs",
+    "migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

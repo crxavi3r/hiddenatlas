@@ -99,7 +99,10 @@ export default async function handler(req, res) {
     }
   } catch (err) {
     console.error('[itinerary-cms]', err);
-    return res.status(500).json({ error: err.message });
+    const msg = err.message?.includes('does not exist')
+      ? 'Database schema is not up to date. Run: npm run migrate'
+      : err.message;
+    return res.status(err.status ?? 500).json({ error: msg });
   } finally {
     await pool.end();
   }
@@ -424,13 +427,21 @@ async function handleBulkPublish(pool) {
 // ── Assets: list ──────────────────────────────────────────────────────────────
 async function handleListAssets(pool, itineraryId) {
   if (!itineraryId) throw Object.assign(new Error('id is required'), { status: 400 });
-  const { rows } = await pool.query(
-    `SELECT * FROM "ItineraryAsset"
-     WHERE "itineraryId" = $1
-     ORDER BY "assetType", "sortOrder", "createdAt"`,
-    [itineraryId]
-  );
-  return { assets: rows };
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM "ItineraryAsset"
+       WHERE "itineraryId" = $1
+       ORDER BY "assetType", "dayNumber" NULLS LAST, "sortOrder", "createdAt"`,
+      [itineraryId]
+    );
+    return { assets: rows };
+  } catch (err) {
+    if (err.message?.includes('does not exist')) {
+      console.error('[itinerary-cms] ItineraryAsset table missing — run: npm run migrate');
+      return { assets: [], _warning: 'DB schema not yet migrated. Run: npm run migrate' };
+    }
+    throw err;
+  }
 }
 
 // ── Assets: scan filesystem via pre-built manifest ────────────────────────────
