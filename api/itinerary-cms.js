@@ -543,8 +543,22 @@ async function handleUploadAsset(pool, body) {
     throw Object.assign(new Error('Image uploads are not configured (missing BLOB_READ_WRITE_TOKEN)'), { status: 503 });
   }
 
-  // Sanitize filename — no path traversal
-  const safeName = path.basename(filename).replace(/[^a-zA-Z0-9._\-]/g, '_');
+  const VALID_TYPES = ['hero', 'gallery', 'research', 'day', 'manual'];
+  if (!VALID_TYPES.includes(assetType)) {
+    throw Object.assign(new Error(`Invalid asset type: ${assetType}`), { status: 400 });
+  }
+
+  // Sanitize: lowercase, hyphens only, unique timestamp suffix
+  const rawBase = path.basename(filename);
+  const ext     = rawBase.split('.').pop().toLowerCase();
+  const base    = rawBase
+    .replace(/\.[^.]+$/, '')           // strip extension
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')       // non-alphanumeric → hyphen
+    .replace(/^-+|-+$/g, '')           // trim leading/trailing hyphens
+    || 'image';
+  const ts      = Date.now().toString(36).slice(-5); // 5-char base-36 suffix
+  const safeName = `${base}-${ts}.${ext}`;
 
   // Logical storage path mirrors the itinerary folder structure
   let subfolder;
@@ -565,7 +579,7 @@ async function handleUploadAsset(pool, body) {
 
   let blobUrl;
   try {
-    const result = await blobPut(blobPath, fileBuffer, { access: 'public', contentType });
+    const result = await blobPut(blobPath, fileBuffer, { access: 'public', contentType, addRandomSuffix: false });
     blobUrl = result.url;
   } catch (err) {
     console.error('[upload-asset] Vercel Blob put failed:', err);
@@ -576,7 +590,7 @@ async function handleUploadAsset(pool, body) {
 
   const { rows } = await pool.query(
     `INSERT INTO "ItineraryAsset" ("itineraryId","assetType",url,alt,caption,"sortOrder",source,"dayNumber")
-     VALUES ($1,$2,$3,$4,$5,$6,'upload',$7)
+     VALUES ($1,$2,$3,$4,$5,$6,'blob',$7)
      ON CONFLICT DO NOTHING
      RETURNING *`,
     [itineraryId, assetType, blobUrl, alt, caption, sortOrder, safeDay]

@@ -1449,9 +1449,11 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
             <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '16px' }}>
               {ASSET_TYPE_LABELS[type]} ({grouped[type].length})
             </p>
-            {grouped[type].map((asset, i) => (
-              <AssetRow key={asset.id ?? `fs-${i}`} asset={asset} onToggle={onToggle} onDelete={onDelete} />
-            ))}
+            {[...grouped[type]]
+              .sort((a, b) => type === 'day' ? (a.dayNumber ?? 0) - (b.dayNumber ?? 0) : 0)
+              .map((asset, i) => (
+                <AssetRow key={asset.id ?? `fs-${i}`} asset={asset} onToggle={onToggle} onDelete={onDelete} />
+              ))}
           </div>
         ))
       )}
