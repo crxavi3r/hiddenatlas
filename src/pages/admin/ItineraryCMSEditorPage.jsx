@@ -668,7 +668,9 @@ export default function ItineraryCMSEditorPage() {
   async function handleAddAsset() {
     const targetId = savedId.current || (isNew ? null : id);
     if (!targetId) { alert('Save the itinerary first.'); return; }
-    if (newAsset.assetType === 'day' && !newAsset.dayNumber) { alert('Select a day number.'); return; }
+    const currentDayCount = (c('days') || []).length || parseInt(form.durationDays, 10) || 0;
+    if (newAsset.assetType === 'day' && currentDayCount === 0) { alert('Add days in the Days tab before attaching Day Images.'); return; }
+    if (newAsset.assetType === 'day' && (!newAsset.dayNumber || newAsset.dayNumber > currentDayCount)) { alert('Select a valid day number.'); return; }
 
     if (newAsset.source === 'upload') {
       if (!newAsset.file) { alert('Choose a file to upload.'); return; }
@@ -908,7 +910,7 @@ export default function ItineraryCMSEditorPage() {
             newAsset={newAsset} setNewAsset={setNewAsset}
             onAdd={handleAddAsset} onToggle={handleToggleAsset} onDelete={handleDeleteAsset}
             isNew={isNew} hasSavedId={!!savedId.current}
-            durationDays={form.durationDays}
+            dayCount={(c('days') || []).length || parseInt(form.durationDays, 10) || 0}
           />
         )}
         {activeTab === 'ai'       && (
@@ -1257,7 +1259,7 @@ function SectionsTab({ c, setContent }) {
 }
 
 // ── Images ────────────────────────────────────────────────────────────────────
-function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, onDelete, isNew, hasSavedId, durationDays }) {
+function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, onDelete, isNew, hasSavedId, dayCount }) {
   const fileInputRef = useRef(null);
 
   if (isNew && !hasSavedId) {
@@ -1268,8 +1270,7 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
     );
   }
 
-  const maxDay = Math.max(parseInt(durationDays, 10) || 7, 7);
-  const days   = Array.from({ length: maxDay }, (_, i) => i + 1);
+  const days = Array.from({ length: dayCount }, (_, i) => i + 1);
 
   // Filesystem assets not yet promoted to DB, filtered for the current type + day
   const fsBrowserAssets = assets.filter(a => {
@@ -1322,10 +1323,16 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
           {newAsset.assetType === 'day' && (
             <div style={{ flex: '0 0 130px' }}>
               <label style={labelStyle}>Day *</label>
-              <select value={newAsset.dayNumber} style={inputStyle}
-                onChange={e => setNewAsset(a => ({ ...a, dayNumber: parseInt(e.target.value, 10), url: '', file: null, filePreview: null }))}>
-                {days.map(n => <option key={n} value={n}>Day {n}</option>)}
-              </select>
+              {dayCount === 0 ? (
+                <p style={{ fontSize: '12px', color: '#B5AA99', padding: '9px 0' }}>
+                  Add days in the Days tab first.
+                </p>
+              ) : (
+                <select value={Math.min(newAsset.dayNumber, dayCount)} style={inputStyle}
+                  onChange={e => setNewAsset(a => ({ ...a, dayNumber: parseInt(e.target.value, 10), url: '', file: null, filePreview: null }))}>
+                  {days.map(n => <option key={n} value={n}>Day {n}</option>)}
+                </select>
+              )}
             </div>
           )}
         </div>
