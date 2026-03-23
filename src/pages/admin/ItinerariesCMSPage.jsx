@@ -4,6 +4,7 @@ import { useAuth } from '@clerk/clerk-react';
 import { Plus, RefreshCw, Eye, Edit2, Copy, Trash2, Globe, EyeOff } from 'lucide-react';
 import { itineraries as STATIC_ITINERARIES } from '../../data/itineraries';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { resolveCoverImage } from '../../lib/resolveCoverImage';
 
 // ── Shared style tokens ───────────────────────────────────────────────────────
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
@@ -47,8 +48,6 @@ function Badge({ meta }) {
   );
 }
 
-// Only render <img> for actual URLs — coverImage may be a legacy filename
-function isUrl(val) { return typeof val === 'string' && /^https?:\/\//.test(val); }
 
 function fmtDate(ts) {
   if (!ts) return '—';
@@ -425,9 +424,12 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
                     width: '56px', height: '38px', borderRadius: '4px', overflow: 'hidden',
                     background: '#F4F1EC', flexShrink: 0,
                   }}>
-                    {isUrl(it.coverImage) && (
-                      <img src={it.coverImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    )}
+                    <img
+                      src={resolveCoverImage(it.coverImage, it.slug)}
+                      alt=""
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={e => { e.currentTarget.style.display = 'none'; }}
+                    />
                   </div>
                 </td>
                 <td style={td}>
@@ -506,11 +508,14 @@ function MobileList({ items, onEdit, onPreview, onTogglePublish, onDuplicate, on
           overflow: 'hidden',
         }}>
           <div style={{ display: 'flex', gap: '12px', padding: '14px' }}>
-            {isUrl(it.coverImage) && (
-              <div style={{ width: '60px', height: '44px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0 }}>
-                <img src={it.coverImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              </div>
-            )}
+            <div style={{ width: '60px', height: '44px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0, background: '#F4F1EC' }}>
+              <img
+                src={resolveCoverImage(it.coverImage, it.slug)}
+                alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                onError={e => { e.currentTarget.style.display = 'none'; }}
+              />
+            </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontWeight: '600', color: '#1C1A16', fontSize: '13.5px', marginBottom: '4px',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

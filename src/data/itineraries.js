@@ -763,8 +763,8 @@ export const itineraries = [
     category: "Motorcycle Road Trip",
     bestFor: ["Friend Groups", "Adventurers", "Culture Seekers"],
     difficulty: "Moderate",
-    image: '/content/itineraries/morocco-motorcycle-expedition/cover.jpg',
-    coverImage: '/content/itineraries/morocco-motorcycle-expedition/cover.jpg',
+    image: '/itineraries/morocco-motorcycle-expedition/cover.jpg',
+    coverImage: '/itineraries/morocco-motorcycle-expedition/cover.jpg',
     description: "Morocco has been drawing motorcycle travellers for decades, and the route that keeps circulating through Chefchaouen, Fes, the southern gorges, the Sahara and Marrakech endures because it is genuinely excellent. This eight-day itinerary connects those places without padding, giving each section the time it needs. Two nights in the desert is the correct call; one is never enough. The return via the Atlantic coast at Oualidia closes the route quietly, with oysters and flat water two days after the dunes.",
     highlights: [
       "Chefchaouen: the blue-painted hillside medina of the Rif, at its most striking before midday",
@@ -1280,8 +1280,8 @@ export const itineraries = [
     category: "Cultural Journey",
     bestFor: ["Couples", "Culture Seekers", "Design Lovers"],
     difficulty: "Moderate",
-    image: '/content/itineraries/japan-grand-cultural-journey/cover.jpg',
-    coverImage: '/content/itineraries/japan-grand-cultural-journey/cover.jpg',
+    image: '/itineraries/japan-grand-cultural-journey/cover.jpg',
+    coverImage: '/itineraries/japan-grand-cultural-journey/cover.jpg',
     description: "Japan does not reveal itself quickly. This 18-day route follows the old road between Tokyo and Osaka — not the shinkansen route, but the cultural one: the lacquerware workshops of Kanazawa, the preserved farmhouse villages of Shirakawa-go, the temple city of Kyoto approached slowly from the north. Every overnight stay has been chosen for its relationship to the place. Every day has at least one thing that cannot be found in any guidebook.",
     highlights: [
       "Shirakawa-go at dusk — the UNESCO thatched-roof village in the snow mountains",

@@ -6,6 +6,7 @@ import {
   Wand2, Image as ImageIcon, Clock, Check, User, Upload,
 } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { resolveCoverImage } from '../../lib/resolveCoverImage';
 
 // ── Shared style tokens ───────────────────────────────────────────────────────
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
@@ -1092,9 +1093,14 @@ function HeroTab({ form, c, setContent }) {
             placeholder="https://images.unsplash.com/…"
             onChange={e => setContent('hero.coverImage', e.target.value)} />
         </Field>
-        {c('hero.coverImage') && /^https?:\/\//.test(c('hero.coverImage')) && (
+        {c('hero.coverImage') && (
           <div style={{ height: '180px', borderRadius: '8px', overflow: 'hidden', marginBottom: '16px', background: '#F4F1EC' }}>
-            <img src={c('hero.coverImage')} alt="Cover preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img
+              src={resolveCoverImage(c('hero.coverImage'), form.slug)}
+              alt="Cover preview"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              onError={e => { e.currentTarget.style.display = 'none'; }}
+            />
           </div>
         )}
 
