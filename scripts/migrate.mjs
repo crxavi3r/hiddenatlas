@@ -35,9 +35,8 @@ for (const envFile of ['.env', '.env.local']) {
 }
 
 if (!process.env.DATABASE_URL) {
-  console.error('ERROR: DATABASE_URL is not set.');
-  console.error('  Add it to .env, .env.local, or set it in the shell before running.');
-  process.exit(1);
+  console.warn('migrate: DATABASE_URL not set — skipping (no-op in local builds without DB).');
+  process.exit(0);
 }
 
 const { Pool } = pg;

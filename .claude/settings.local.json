@@ -96,7 +96,11 @@
       "Bash(wc:*)",
       "Bash(grep:*)",
       "Bash(__NEW_LINE_7b3e2810a0995a3b__ find:*)",
-      "Bash(__NEW_LINE_7b3e2810a0995a3b__ done:*)"
+      "Bash(__NEW_LINE_7b3e2810a0995a3b__ done:*)",
+      "Bash(du -sh /Users/cristianoxavier/Documents/Projects/HiddenAtlas/content/itineraries/*/gallery /Users/cristianoxavier/Documents/Projects/HiddenAtlas/content/itineraries/*/research /Users/cristianoxavier/Documents/Projects/HiddenAtlas/content/itineraries/*/day-images)",
+      "Bash(xargs du:*)",
+      "Bash(rsync -a --include='*/' --include='*.jpg' --include='*.jpeg' --include='*.png' --include='*.webp' --include='*.gif' --include='*.avif' --exclude='*' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/content/itineraries/ /Users/cristianoxavier/Documents/Projects/HiddenAtlas/public/itineraries/)",
+      "Bash(echo \"EXIT:$?\")"
     ]
   }
 }
