@@ -569,6 +569,31 @@ export default function ItineraryCMSEditorPage() {
       if (json.error) throw new Error(json.error);
 
       savedId.current = json.itinerary.id;
+
+      // Sync form with what the DB actually persisted (catches derived fields like coverImage)
+      const it = json.itinerary;
+      const derivedType = it.type === 'custom' ? 'custom'
+        : it.type === 'premium' ? 'premium'
+        : it.type === 'free'    ? 'free'
+        : it.accessType === 'paid' ? 'premium' : 'free';
+      setForm(f => ({
+        ...f,
+        title:        it.title        ?? f.title,
+        subtitle:     it.subtitle     ?? f.subtitle,
+        slug:         it.slug         ?? f.slug,
+        destination:  it.destination  ?? f.destination,
+        country:      it.country      ?? f.country,
+        region:       it.region       ?? f.region,
+        durationDays: it.durationDays ?? f.durationDays,
+        coverImage:   it.coverImage   || f.coverImage,
+        status:       it.status       ?? f.status,
+        type:         derivedType,
+        isPrivate:    it.isPrivate    ?? f.isPrivate,
+        price:        it.price        ?? f.price,
+        stripePriceId: it.stripePriceId ?? f.stripePriceId,
+        content:      mergeContent(it.content ?? f.content),
+      }));
+
       setSaveMsg({ ok: true, text: 'Saved.' });
       if (isNew) {
         navigate(`/admin/itineraries/${json.itinerary.id}`, { replace: true });
@@ -669,11 +694,24 @@ export default function ItineraryCMSEditorPage() {
       return;
     }
     if (!window.confirm('Apply AI draft to form? Your current unsaved changes will be overwritten.')) return;
-    const content = mergeContent(parsed);
+
+    const content      = mergeContent(parsed);
+    const aiDayCount   = Array.isArray(parsed.days) ? parsed.days.length : 0;
+    const aiCoverImage = parsed.hero?.coverImage || '';
+
     setForm(f => ({
       ...f,
-      title:    parsed.hero?.title      || f.title,
-      subtitle: parsed.hero?.subtitle   || f.subtitle,
+      // Title / subtitle from AI hero block
+      title:       parsed.hero?.title    || f.title,
+      subtitle:    parsed.hero?.subtitle || f.subtitle,
+      // Cover image: prefer AI output, fall back to existing
+      coverImage:  aiCoverImage || f.coverImage,
+      // Duration: prefer what's already in form, fill from AI days count if blank
+      durationDays: f.durationDays || (aiDayCount > 0 ? String(aiDayCount) : f.durationDays),
+      // Destination / metadata: keep existing form value; fill from linked request if empty
+      destination: f.destination || linkedRequest?.destination || f.destination,
+      country:     f.country     || linkedRequest?.country     || f.country,
+      region:      f.region      || linkedRequest?.region      || f.region,
       content,
     }));
   }
@@ -935,7 +973,7 @@ function HeroTab({ form, c, setContent }) {
             placeholder="https://images.unsplash.com/…"
             onChange={e => setContent('hero.coverImage', e.target.value)} />
         </Field>
-        {c('hero.coverImage') && (
+        {c('hero.coverImage') && /^https?:\/\//.test(c('hero.coverImage')) && (
           <div style={{ height: '180px', borderRadius: '8px', overflow: 'hidden', marginBottom: '16px', background: '#F4F1EC' }}>
             <img src={c('hero.coverImage')} alt="Cover preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
