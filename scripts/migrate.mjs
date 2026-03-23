@@ -81,9 +81,18 @@ for (const folder of folders) {
     console.log(`        ✓`);
     applied++;
   } catch (err) {
-    console.error(`        ✗ ${err.message}`);
-    await pool.end();
-    process.exit(1);
+    // "already exists" errors mean the schema was created before the tracking table
+    // existed (e.g. first run on a pre-existing DB). Mark as applied and continue.
+    const alreadyExists = err.message?.includes('already exists');
+    if (alreadyExists) {
+      await pool.query(`INSERT INTO "_migrations" ("name") VALUES ($1) ON CONFLICT DO NOTHING`, [folder]);
+      console.log(`        ✓ (pre-existing — marked as applied)`);
+      skipped++;
+    } else {
+      console.error(`        ✗ ${err.message}`);
+      await pool.end();
+      process.exit(1);
+    }
   }
 }
 

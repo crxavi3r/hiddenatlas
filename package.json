@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vercel dev",
     "dev:vite": "vite",
-    "prebuild": "node scripts/generate-itinerary-manifests.mjs",
+    "prebuild": "node scripts/migrate.mjs && node scripts/generate-itinerary-manifests.mjs",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
