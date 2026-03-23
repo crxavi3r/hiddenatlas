@@ -21,8 +21,9 @@
 import pg                         from 'pg';
 import { verifyAuth }             from './_lib/verifyAuth.js';
 import { existsSync }             from 'fs';
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { readFile }               from 'fs/promises';
 import path                       from 'path';
+import { put as blobPut }         from '@vercel/blob';
 
 const { Pool } = pg;
 
@@ -522,7 +523,9 @@ async function handleSaveAsset(pool, body) {
   return { asset: rows[0] };
 }
 
-// ── Assets: upload file ───────────────────────────────────────────────────────
+// ── Assets: upload file → Vercel Blob ────────────────────────────────────────
+// The serverless runtime filesystem (/var/task) is read-only on Vercel.
+// All uploads go to Vercel Blob; the returned public URL is stored in the DB.
 async function handleUploadAsset(pool, body) {
   const {
     itineraryId, slug, assetType = 'gallery', dayNumber,
@@ -536,74 +539,57 @@ async function handleUploadAsset(pool, body) {
   if (assetType === 'day' && !dayNumber) {
     throw Object.assign(new Error('dayNumber is required for day images'), { status: 400 });
   }
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    throw Object.assign(new Error('Image uploads are not configured (missing BLOB_READ_WRITE_TOKEN)'), { status: 503 });
+  }
 
   // Sanitize filename — no path traversal
   const safeName = path.basename(filename).replace(/[^a-zA-Z0-9._\-]/g, '_');
 
-  // Determine subfolder
+  // Logical storage path mirrors the itinerary folder structure
   let subfolder;
-  if (assetType === 'hero')     subfolder = '';
-  else if (assetType === 'gallery')  subfolder = 'gallery';
+  if (assetType === 'gallery')  subfolder = 'gallery';
   else if (assetType === 'research') subfolder = 'research';
   else if (assetType === 'day') subfolder = `day-images/day${parseInt(dayNumber, 10)}`;
+  else if (assetType === 'hero') subfolder = 'hero';
   else subfolder = assetType;
 
-  const cwd           = process.cwd();
-  const publicSlugDir = path.join(cwd, 'public', 'itineraries', slug);
-  const contentSlugDir = path.join(cwd, 'content', 'itineraries', slug);
-  const publicTargetDir  = subfolder ? path.join(publicSlugDir, subfolder) : publicSlugDir;
-  const contentTargetDir = subfolder ? path.join(contentSlugDir, subfolder) : contentSlugDir;
+  const blobPath = `itineraries/${slug}/${subfolder}/${safeName}`;
+
+  // Detect MIME type from extension
+  const ext = safeName.split('.').pop().toLowerCase();
+  const MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif', svg: 'image/svg+xml' };
+  const contentType = MIME[ext] ?? 'application/octet-stream';
 
   const fileBuffer = Buffer.from(base64Data, 'base64');
 
-  await mkdir(publicTargetDir,  { recursive: true });
-  await mkdir(contentTargetDir, { recursive: true });
-  await writeFile(path.join(publicTargetDir, safeName),  fileBuffer);
-  await writeFile(path.join(contentTargetDir, safeName), fileBuffer);
-
-  // Update manifest.json
-  const manifestPath = path.join(publicSlugDir, 'manifest.json');
-  if (existsSync(manifestPath)) {
-    try {
-      const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-      if (assetType === 'hero') {
-        manifest.heroFile = safeName;
-      } else if (assetType === 'gallery') {
-        if (!Array.isArray(manifest.gallery)) manifest.gallery = [];
-        if (!manifest.gallery.includes(safeName)) manifest.gallery.push(safeName);
-      } else if (assetType === 'research') {
-        if (!Array.isArray(manifest.research)) manifest.research = [];
-        if (!manifest.research.includes(safeName)) manifest.research.push(safeName);
-      } else if (assetType === 'day') {
-        const dayKey = String(parseInt(dayNumber, 10));
-        if (!manifest.dayImages) manifest.dayImages = {};
-        if (!Array.isArray(manifest.dayImages[dayKey])) manifest.dayImages[dayKey] = [];
-        if (!manifest.dayImages[dayKey].includes(safeName)) manifest.dayImages[dayKey].push(safeName);
-      }
-      await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
-    } catch { /* non-fatal: manifest update failure doesn't block the upload */ }
+  let blobUrl;
+  try {
+    const result = await blobPut(blobPath, fileBuffer, { access: 'public', contentType });
+    blobUrl = result.url;
+  } catch (err) {
+    console.error('[upload-asset] Vercel Blob put failed:', err);
+    throw Object.assign(new Error('Upload failed. Please try again.'), { status: 502 });
   }
 
-  const relPath   = subfolder ? `${subfolder}/${safeName}` : safeName;
-  const publicUrl = `/itineraries/${slug}/${relPath}`;
-  const safeDay   = (assetType === 'day' && dayNumber != null) ? parseInt(dayNumber, 10) : null;
+  const safeDay = (assetType === 'day' && dayNumber != null) ? parseInt(dayNumber, 10) : null;
 
   const { rows } = await pool.query(
     `INSERT INTO "ItineraryAsset" ("itineraryId","assetType",url,alt,caption,"sortOrder",source,"dayNumber")
      VALUES ($1,$2,$3,$4,$5,$6,'upload',$7)
      ON CONFLICT DO NOTHING
      RETURNING *`,
-    [itineraryId, assetType, publicUrl, alt, caption, sortOrder, safeDay]
+    [itineraryId, assetType, blobUrl, alt, caption, sortOrder, safeDay]
   );
 
   if (!rows.length) {
     const { rows: existing } = await pool.query(
       `SELECT * FROM "ItineraryAsset" WHERE "itineraryId"=$1 AND url=$2 LIMIT 1`,
-      [itineraryId, publicUrl]
+      [itineraryId, blobUrl]
     );
-    return { asset: existing[0], url: publicUrl };
+    return { asset: existing[0], url: blobUrl };
   }
-  return { asset: rows[0], url: publicUrl };
+  return { asset: rows[0], url: blobUrl };
 }
 
 // ── Assets: delete ────────────────────────────────────────────────────────────
