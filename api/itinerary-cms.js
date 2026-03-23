@@ -4,6 +4,7 @@
 // GET  /api/itinerary-cms?action=list
 // GET  /api/itinerary-cms?action=get&id=:id
 // GET  /api/itinerary-cms?action=assets&id=:id
+// GET  /api/itinerary-cms?action=scan-assets&slug=:slug
 // GET  /api/itinerary-cms?action=ai-history&id=:id
 // POST /api/itinerary-cms?action=create
 // POST /api/itinerary-cms?action=update&id=:id
@@ -17,8 +18,11 @@
 // POST /api/itinerary-cms?action=toggle-asset&id=:assetId
 // POST /api/itinerary-cms?action=ai-generate
 
-import pg from 'pg';
-import { verifyAuth } from './_lib/verifyAuth.js';
+import pg                         from 'pg';
+import { verifyAuth }             from './_lib/verifyAuth.js';
+import { existsSync }             from 'fs';
+import { readdir, readFile }      from 'fs/promises';
+import path                       from 'path';
 
 const { Pool } = pg;
 
@@ -69,6 +73,7 @@ export default async function handler(req, res) {
       if (action === 'list')           return res.json(await handleList(pool));
       if (action === 'get')            return res.json(await handleGet(pool, id));
       if (action === 'assets')         return res.json(await handleListAssets(pool, id));
+      if (action === 'scan-assets')    return res.json(await handleScanAssets(req.query.slug));
       if (action === 'ai-history')     return res.json(await handleAIHistory(pool, id));
       if (action === 'linked-request') return res.json(await handleLinkedRequest(pool, id));
       return res.status(400).json({ error: 'Unknown GET action' });
@@ -157,8 +162,8 @@ async function handleCreate(pool, body) {
     `INSERT INTO "Itinerary"
        (title, subtitle, slug, destination, country, region, "durationDays",
         "accessType", price, "stripePriceId", "coverImage", description,
-        type, "isPrivate", status, "isPublished", content, "schemaVersion", "updatedAt")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,1,NOW())
+        type, "isPrivate", "isCollection", status, "isPublished", content, "schemaVersion", "updatedAt")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,false,$15,$16,$17,1,NOW())
      RETURNING *`,
     [
       title, subtitle, slug, destination, country, region, durationDays,
@@ -180,7 +185,7 @@ async function handleUpdate(pool, id, body) {
   const {
     title, subtitle, slug, destination, country, region, durationDays,
     accessType, price, stripePriceId, coverImage, content, status,
-    type, isPrivate,
+    type, isPrivate, isCollection,
   } = body;
 
   // Defensive parse: body parsers sometimes deliver JSONB fields as strings
@@ -222,6 +227,7 @@ async function handleUpdate(pool, id, body) {
        content         = $16::jsonb,
        type            = COALESCE($17, type),
        "isPrivate"     = COALESCE($18::boolean, "isPrivate"),
+       "isCollection"  = COALESCE($19::boolean, "isCollection"),
        "updatedAt"     = NOW()
      WHERE id = $1
      RETURNING *`,
@@ -244,6 +250,7 @@ async function handleUpdate(pool, id, body) {
       JSON.stringify(finalContent),
       typeParam,
       isPrivateParam,
+      typeof isCollection === 'boolean' ? isCollection : null,
     ]
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
@@ -346,10 +353,11 @@ async function handleSeed(pool, body) {
     const slug = item.id || item.slug;
     if (!slug) continue;
 
-    const type        = item.isPremium ? 'premium' : 'free';
-    const accessType  = type === 'free' ? 'free' : 'paid';
+    const type         = item.isPremium ? 'premium' : 'free';
+    const accessType   = type === 'free' ? 'free' : 'paid';
     const durationDays = parseDurationDays(item.duration);
     const destination  = item.region || item.country || '';
+    const isCollection = Boolean(item.isParent);
 
     const content = buildContentFromStatic(item);
 
@@ -357,28 +365,29 @@ async function handleSeed(pool, body) {
       `INSERT INTO "Itinerary"
          (id, title, subtitle, slug, destination, country, region, "durationDays",
           "accessType", price, "stripePriceId", "coverImage", description,
-          type, "isPrivate", status, "isPublished", content, "schemaVersion", "updatedAt")
+          type, "isPrivate", "isCollection", status, "isPublished", content, "schemaVersion", "updatedAt")
        VALUES (
          gen_random_uuid()::text, $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-         $13, false, 'published', true, $14::jsonb, 1, NOW()
+         $13, false, $15, 'published', true, $14::jsonb, 1, NOW()
        )
        ON CONFLICT (slug) DO UPDATE SET
-         title          = EXCLUDED.title,
-         subtitle       = EXCLUDED.subtitle,
-         destination    = EXCLUDED.destination,
-         country        = EXCLUDED.country,
-         region         = EXCLUDED.region,
-         "durationDays" = EXCLUDED."durationDays",
-         "accessType"   = EXCLUDED."accessType",
-         price          = EXCLUDED.price,
-         "coverImage"   = EXCLUDED."coverImage",
-         description    = EXCLUDED.description,
-         type           = EXCLUDED.type,
-         "isPrivate"    = EXCLUDED."isPrivate",
-         status         = EXCLUDED.status,
-         "isPublished"  = EXCLUDED."isPublished",
-         content        = EXCLUDED.content,
-         "updatedAt"    = NOW()
+         title           = EXCLUDED.title,
+         subtitle        = EXCLUDED.subtitle,
+         destination     = EXCLUDED.destination,
+         country         = EXCLUDED.country,
+         region          = EXCLUDED.region,
+         "durationDays"  = EXCLUDED."durationDays",
+         "accessType"    = EXCLUDED."accessType",
+         price           = EXCLUDED.price,
+         "coverImage"    = EXCLUDED."coverImage",
+         description     = EXCLUDED.description,
+         type            = EXCLUDED.type,
+         "isPrivate"     = EXCLUDED."isPrivate",
+         "isCollection"  = EXCLUDED."isCollection",
+         status          = EXCLUDED.status,
+         "isPublished"   = EXCLUDED."isPublished",
+         content         = EXCLUDED.content,
+         "updatedAt"     = NOW()
        RETURNING (xmax = 0) AS inserted`,
       [
         item.title, item.subtitle || '', slug, destination, item.country || '', item.region || '',
@@ -386,6 +395,7 @@ async function handleSeed(pool, body) {
         item.coverImage || '', item.shortDescription || item.description || '',
         type,
         JSON.stringify(content),
+        isCollection,
       ]
     );
     if (rows[0]?.inserted) inserted++;
@@ -402,6 +412,7 @@ async function handleBulkPublish(pool) {
     SET status = 'published', "isPublished" = true, "updatedAt" = NOW()
     WHERE (type IS NULL OR type != 'custom')
       AND "isPrivate" = false
+      AND "isCollection" = false
       AND "isPublished" = false
     RETURNING id, slug, type, "accessType", price
   `);
@@ -418,6 +429,92 @@ async function handleListAssets(pool, itineraryId) {
     [itineraryId]
   );
   return { assets: rows };
+}
+
+// ── Assets: scan filesystem ────────────────────────────────────────────────────
+// Walks content/itineraries/<slug>/ and returns normalized asset metadata.
+// URLs point to /api/content-image?slug=...&path=... proxy.
+// No DB involved — read-only, used to hydrate the Images tab on load.
+async function handleScanAssets(slug) {
+  if (!slug) throw Object.assign(new Error('slug is required'), { status: 400 });
+
+  const contentDir = path.join(process.cwd(), 'content', 'itineraries', slug);
+  if (!existsSync(contentDir)) return { assets: [] };
+
+  const IMAGE_RE = /\.(jpg|jpeg|png|webp|gif|avif)$/i;
+
+  function makeUrl(relPath) {
+    return `/api/content-image?slug=${encodeURIComponent(slug)}&path=${encodeURIComponent(relPath)}`;
+  }
+
+  function altFromFilename(filename) {
+    return filename.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+  }
+
+  const assets = [];
+
+  // Hero — read heroImage filename from itinerary.json, fallback to cover.jpg
+  let meta = {};
+  try {
+    meta = JSON.parse(await readFile(path.join(contentDir, 'itinerary.json'), 'utf8'));
+  } catch { /* no metadata */ }
+
+  const heroFilename = meta.heroImage || 'cover.jpg';
+  const heroPath     = path.join(contentDir, heroFilename);
+  if (existsSync(heroPath) && IMAGE_RE.test(heroFilename)) {
+    assets.push({
+      id: null, assetType: 'hero',
+      url: makeUrl(heroFilename),
+      alt: `${meta.title || slug} cover`,
+      caption: '', source: 'filesystem', active: true, sortOrder: 0,
+    });
+  }
+
+  // Gallery
+  const galleryDir = path.join(contentDir, 'gallery');
+  if (existsSync(galleryDir)) {
+    const files = (await readdir(galleryDir)).filter(f => IMAGE_RE.test(f)).sort();
+    files.forEach((file, i) => assets.push({
+      id: null, assetType: 'gallery',
+      url:     makeUrl(`gallery/${file}`),
+      alt:     altFromFilename(file),
+      caption: '', source: 'filesystem', active: true, sortOrder: i,
+    }));
+  }
+
+  // Research
+  const researchDir = path.join(contentDir, 'research');
+  if (existsSync(researchDir)) {
+    const files = (await readdir(researchDir)).filter(f => IMAGE_RE.test(f)).sort();
+    files.forEach((file, i) => assets.push({
+      id: null, assetType: 'research',
+      url:     makeUrl(`research/${file}`),
+      alt:     altFromFilename(file),
+      caption: '', source: 'filesystem', active: true, sortOrder: i,
+    }));
+  }
+
+  // Day images — day-images/day{N}/<file>
+  const dayImagesDir = path.join(contentDir, 'day-images');
+  if (existsSync(dayImagesDir)) {
+    const dayFolders = (await readdir(dayImagesDir)).sort();
+    for (const dayFolder of dayFolders) {
+      const match = dayFolder.match(/^day(\d+)$/i);
+      if (!match) continue;
+      const dayNumber = parseInt(match[1], 10);
+      const dayDir    = path.join(dayImagesDir, dayFolder);
+      const files     = (await readdir(dayDir)).filter(f => IMAGE_RE.test(f)).sort();
+      files.forEach((file, i) => assets.push({
+        id: null, assetType: 'day',
+        dayNumber,
+        url:     makeUrl(`day-images/${dayFolder}/${file}`),
+        alt:     `Day ${dayNumber}`,
+        caption: '', source: 'filesystem', active: true, sortOrder: i,
+      }));
+    }
+  }
+
+  return { assets };
 }
 
 // ── Assets: save (create or update) ──────────────────────────────────────────

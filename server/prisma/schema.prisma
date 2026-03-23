@@ -55,6 +55,8 @@ model Itinerary {
   content       Json     @default("{}")     // structured editorial content (see CONTENT_SCHEMA)
   updatedAt     DateTime @default(now())    // updated via raw SQL; @updatedAt not used (raw pool)
 
+  isCollection  Boolean  @default(false)   // true for parent/aggregate itineraries (excluded from default CMS list)
+
   purchases         Purchase[]
   assets            ItineraryAsset[]
   aiGenerations     ItineraryAIGeneration[]

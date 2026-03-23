@@ -138,7 +138,7 @@ export default function ItinerariesCMSPage() {
   }
 
   async function handleBulkPublish() {
-    const unpublished = items.filter(it => !it.isPublished && it.type !== 'custom' && !it.isPrivate);
+    const unpublished = mainItems.filter(it => !it.isPublished && it.type !== 'custom' && !it.isPrivate);
     if (unpublished.length === 0) return alert('All public itineraries are already published.');
     if (!window.confirm(`Publish ${unpublished.length} unpublished public itinerary${unpublished.length > 1 ? 'ies' : ''}?`)) return;
     setPublishing(true);
@@ -212,23 +212,30 @@ export default function ItinerariesCMSPage() {
     } catch (e) { alert(e.message); setToDelete(null); }
   }
 
-  const filtered = items.filter(it => {
-    const statusOk = filter === 'all'       ? true
-                   : filter === 'published' ? it.isPublished
-                   : /* draft */              !it.isPublished;
-    const typeOk   = typeFilter === 'all' ? true : getItineraryType(it) === typeFilter;
-    return statusOk && typeOk;
-  });
+  // Collections are displayed in their own tab; exclude them from the main list
+  const mainItems        = items.filter(it => !it.isCollection);
+  const collectionItems  = items.filter(it => it.isCollection);
+
+  const filtered = filter === 'collections'
+    ? collectionItems
+    : mainItems.filter(it => {
+        const statusOk = filter === 'all'       ? true
+                       : filter === 'published' ? it.isPublished
+                       : /* draft */              !it.isPublished;
+        const typeOk   = typeFilter === 'all' ? true : getItineraryType(it) === typeFilter;
+        return statusOk && typeOk;
+      });
 
   const counts = {
-    all:        items.length,
-    published:  items.filter(i => i.isPublished).length,
-    draft:      items.filter(i => !i.isPublished).length,
-    unpublishedPublic: items.filter(i => !i.isPublished && i.type !== 'custom' && !i.isPrivate).length,
-    free:       items.filter(i => getItineraryType(i) === 'free').length,
-    premium:    items.filter(i => getItineraryType(i) === 'premium').length,
-    custom:     items.filter(i => getItineraryType(i) === 'custom').length,
-    private:    items.filter(i => i.isPrivate).length,
+    all:        mainItems.length,
+    published:  mainItems.filter(i => i.isPublished).length,
+    draft:      mainItems.filter(i => !i.isPublished).length,
+    unpublishedPublic: mainItems.filter(i => !i.isPublished && i.type !== 'custom' && !i.isPrivate).length,
+    free:       mainItems.filter(i => getItineraryType(i) === 'free').length,
+    premium:    mainItems.filter(i => getItineraryType(i) === 'premium').length,
+    custom:     mainItems.filter(i => getItineraryType(i) === 'custom').length,
+    private:    mainItems.filter(i => i.isPrivate).length,
+    collections: collectionItems.length,
   };
 
   return (
@@ -254,6 +261,7 @@ export default function ItinerariesCMSPage() {
             {counts.premium > 0 && ` · ${counts.premium} premium`}
             {counts.custom > 0 && ` · ${counts.custom} custom`}
             {counts.private > 0 && ` · ${counts.private} private`}
+            {counts.collections > 0 && ` · ${counts.collections} collection${counts.collections > 1 ? 's' : ''}`}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -296,7 +304,7 @@ export default function ItinerariesCMSPage() {
         {/* Status filter */}
         <div style={{ display: 'flex', gap: '3px', background: 'white', border: '1px solid #E8E3DA', borderRadius: '6px', padding: '3px' }}>
           {['all', 'published', 'draft'].map(f => (
-            <button key={f} onClick={() => setFilter(f)} style={{
+            <button key={f} onClick={() => { setFilter(f); setTypeFilter('all'); }} style={{
               padding: '5px 14px', fontSize: '12px', fontWeight: '500', border: 'none', borderRadius: '4px',
               cursor: 'pointer',
               background: filter === f ? '#1C1A16' : 'transparent',
@@ -305,8 +313,19 @@ export default function ItinerariesCMSPage() {
               {f === 'all' ? `All (${counts.all})` : f === 'published' ? `Published (${counts.published})` : `Draft (${counts.draft})`}
             </button>
           ))}
+          {counts.collections > 0 && (
+            <button onClick={() => { setFilter('collections'); setTypeFilter('all'); }} style={{
+              padding: '5px 14px', fontSize: '12px', fontWeight: '500', border: 'none', borderRadius: '4px',
+              cursor: 'pointer',
+              background: filter === 'collections' ? '#7C5CBA' : 'transparent',
+              color: filter === 'collections' ? 'white' : '#7C5CBA',
+            }}>
+              Collections ({counts.collections})
+            </button>
+          )}
         </div>
-        {/* Type filter */}
+        {/* Type filter — hidden when Collections tab is active */}
+        {filter !== 'collections' && (
         <div style={{ display: 'flex', gap: '3px', background: 'white', border: '1px solid #E8E3DA', borderRadius: '6px', padding: '3px' }}>
           {[
             { key: 'all',     label: 'All types' },
@@ -324,6 +343,7 @@ export default function ItinerariesCMSPage() {
             </button>
           ))}
         </div>
+        )}
       </div>
 
       {/* Content */}

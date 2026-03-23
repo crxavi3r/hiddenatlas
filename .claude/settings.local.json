@@ -94,7 +94,9 @@
       "Bash(md5 /tmp/admin_exact.js)",
       "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas -type f -name *admin* -o -name *backoffice* -o -name *back-office*)",
       "Bash(wc:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(__NEW_LINE_7b3e2810a0995a3b__ find:*)",
+      "Bash(__NEW_LINE_7b3e2810a0995a3b__ done:*)"
     ]
   }
 }

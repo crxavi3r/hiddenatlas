@@ -327,10 +327,11 @@ function FAQEditor({ faq = [], onChange }) {
 }
 
 // ── Image asset row ───────────────────────────────────────────────────────────
-const ASSET_TYPES = ['hero', 'gallery', 'research', 'manual'];
-const ASSET_TYPE_LABELS = { hero: 'Hero', gallery: 'Gallery', research: 'Research', ai_suggested: 'AI Suggested', manual: 'Manual' };
+const ASSET_TYPES = ['hero', 'gallery', 'day', 'research', 'manual'];
+const ASSET_TYPE_LABELS = { hero: 'Hero', gallery: 'Gallery', day: 'Day Images', research: 'Research', ai_suggested: 'AI Suggested', manual: 'Manual' };
 
 function AssetRow({ asset, onToggle, onDelete }) {
+  const isFilesystem = !asset.id;
   return (
     <div style={{
       display: 'flex', gap: '12px', alignItems: 'flex-start',
@@ -345,6 +346,7 @@ function AssetRow({ asset, onToggle, onDelete }) {
         <div style={{ display: 'flex', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '10px', fontWeight: '600', color: '#1B6B65', background: '#EFF6F5', padding: '2px 7px', borderRadius: '8px', textTransform: 'uppercase' }}>
             {ASSET_TYPE_LABELS[asset.assetType] ?? asset.assetType}
+            {asset.dayNumber != null ? ` · Day ${asset.dayNumber}` : ''}
           </span>
           <span style={{ fontSize: '10px', color: '#B5AA99', padding: '2px 7px', background: '#F4F1EC', borderRadius: '8px' }}>
             {asset.source}
@@ -354,15 +356,17 @@ function AssetRow({ asset, onToggle, onDelete }) {
           {asset.alt || asset.caption || asset.url}
         </p>
       </div>
-      <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-        <button onClick={() => onToggle(asset)} style={{ ...iconBtn, color: asset.active ? '#C9A96E' : '#1B6B65' }}
-          title={asset.active ? 'Deactivate' : 'Activate'}>
-          {asset.active ? <EyeOff size={13} /> : <Eye size={13} />}
-        </button>
-        <button onClick={() => onDelete(asset)} style={{ ...iconBtn, color: '#C0392B' }} title="Delete">
-          <Trash2 size={13} />
-        </button>
-      </div>
+      {!isFilesystem && (
+        <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+          <button onClick={() => onToggle(asset)} style={{ ...iconBtn, color: asset.active ? '#C9A96E' : '#1B6B65' }}
+            title={asset.active ? 'Deactivate' : 'Activate'}>
+            {asset.active ? <EyeOff size={13} /> : <Eye size={13} />}
+          </button>
+          <button onClick={() => onDelete(asset)} style={{ ...iconBtn, color: '#C0392B' }} title="Delete">
+            <Trash2 size={13} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -381,7 +385,7 @@ export default function ItineraryCMSEditorPage() {
   const [saveMsg,    setSaveMsg]    = useState(null); // { ok: bool, text: string }
   const [form,       setForm]       = useState({
     title: '', subtitle: '', slug: '', destination: '', country: '',
-    region: '', durationDays: '', type: 'free', isPrivate: false,
+    region: '', durationDays: '', type: 'free', isPrivate: false, isCollection: false,
     price: '', stripePriceId: '',
     coverImage: '', status: 'draft', content: { ...EMPTY_CONTENT },
   });
@@ -398,7 +402,8 @@ export default function ItineraryCMSEditorPage() {
   const [aiHistory,     setAiHistory]     = useState([]);
   const [linkedRequest, setLinkedRequest] = useState(null);
 
-  const savedId = useRef(null); // set after first create
+  const savedId  = useRef(null); // set after first create
+  const slugRef  = useRef('');  // set after load, used by loadAssets for FS scan
 
   // ── Load existing itinerary ──────────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -429,11 +434,13 @@ export default function ItineraryCMSEditorPage() {
         country: it.country || '', region: it.region || '',
         durationDays: it.durationDays ?? '', type: derivedType,
         isPrivate: it.isPrivate ?? false,
+        isCollection: it.isCollection ?? false,
         price: it.price || '', stripePriceId: it.stripePriceId || '',
         coverImage: it.coverImage || '', status: it.status || 'draft',
         content,
       });
       savedId.current = it.id;
+      slugRef.current = it.slug || '';
     } catch (e) { alert(e.message); navigate('/admin/itineraries'); }
     finally { setLoading(false); }
   }, [id, isNew, getToken, navigate]);
@@ -461,11 +468,32 @@ export default function ItineraryCMSEditorPage() {
     setAssetsLoading(true);
     try {
       const token = await getToken();
-      const res   = await fetch(`/api/itinerary-cms?action=assets&id=${targetId}`, {
+
+      // 1. DB assets
+      const dbRes  = await fetch(`/api/itinerary-cms?action=assets&id=${targetId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const json = await res.json();
-      if (!json.error) setAssets(json.assets);
+      const dbJson = await dbRes.json();
+      const dbAssets = dbJson.error ? [] : (dbJson.assets ?? []);
+
+      // 2. Filesystem scan (by slug)
+      const slug = slugRef.current || form.slug;
+      let fsAssets = [];
+      if (slug) {
+        try {
+          const fsRes  = await fetch(`/api/itinerary-cms?action=scan-assets&slug=${encodeURIComponent(slug)}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const fsJson = await fsRes.json();
+          if (!fsJson.error) fsAssets = fsJson.assets ?? [];
+        } catch { /* no content folder — skip */ }
+      }
+
+      // 3. Merge: FS assets whose URL already exists in DB are excluded (no dupes)
+      const dbUrls = new Set(dbAssets.map(a => a.url));
+      const newFsAssets = fsAssets.filter(a => !dbUrls.has(a.url));
+
+      setAssets([...dbAssets, ...newFsAssets]);
     } catch { /* silent */ }
     finally { setAssetsLoading(false); }
   }
@@ -572,26 +600,6 @@ export default function ItineraryCMSEditorPage() {
         price: form.price ? parseFloat(form.price) : 0,
       };
 
-      // ── Pre-save diagnostic log ───────────────────────────────────────────
-      console.log('[CMS save] top-level fields', {
-        title:       payload.title,
-        subtitle:    payload.subtitle,
-        slug:        payload.slug,
-        destination: payload.destination,
-        country:     payload.country,
-        region:      payload.region,
-        durationDays: payload.durationDays,
-        type:        payload.type,
-        accessType:  payload.accessType,
-        isPrivate:   payload.isPrivate,
-        status:      payload.status,
-        coverImage:  payload.coverImage,
-      });
-      console.log('[CMS save] content.days count:', payload.content?.days?.length ?? 'MISSING');
-      console.log('[CMS save] content.days sample:', payload.content?.days?.slice(0, 2));
-      console.log('[CMS save] content keys:', Object.keys(payload.content ?? {}));
-      // ─────────────────────────────────────────────────────────────────────
-
       const res  = await fetch(`/api/itinerary-cms?action=${action}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -622,6 +630,7 @@ export default function ItineraryCMSEditorPage() {
         status:        it.status        ?? f.status,
         type:          derivedType,
         isPrivate:     it.isPrivate     ?? f.isPrivate,
+        isCollection:  it.isCollection  ?? f.isCollection,
         price:         it.price         ?? f.price,
         stripePriceId: it.stripePriceId ?? f.stripePriceId,
         // content intentionally preserved from f — never replace with DB response
@@ -953,6 +962,19 @@ function BasicsTab({ form, setForm, onTitleChange }) {
             />
             <span style={{ fontSize: '13.5px', color: form.type === 'custom' ? '#B5AA99' : '#4A433A' }}>
               Private {form.type === 'custom' ? '(always private for custom itineraries)' : ''}
+            </span>
+          </label>
+        </Field>
+
+        <Field label="Collection" hint="Mark as a collection/parent itinerary. Collections are hidden from the main CMS list and shown under a separate Collections tab.">
+          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+            <input type="checkbox"
+              checked={form.isCollection ?? false}
+              onChange={e => set('isCollection', e.target.checked)}
+              style={{ width: '15px', height: '15px', accentColor: '#7C5CBA' }}
+            />
+            <span style={{ fontSize: '13.5px', color: '#4A433A' }}>
+              This is a collection (parent/aggregator — has no standalone day plan)
             </span>
           </label>
         </Field>
