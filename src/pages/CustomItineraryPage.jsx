@@ -119,7 +119,7 @@ function DayEntry({ day, isLast }) {
 // ─────────────────────────────────────────────────────────────
 // Custom sidebar — "Your Journey" + PDF download
 // ─────────────────────────────────────────────────────────────
-function CustomSidebar({ itinerary, days, durationStr, pdfState, onDownload }) {
+function CustomSidebar({ itinerary, days, durationStr, pdfState, pdfError, onDownload }) {
   const pdfLabel = pdfState === 'generating' ? 'Generating PDF…'
     : pdfState === 'done'  ? 'Downloaded!'
     : pdfState === 'error' ? 'PDF failed — retry'
@@ -208,6 +208,16 @@ function CustomSidebar({ itinerary, days, durationStr, pdfState, onDownload }) {
           {pdfLabel}
         </button>
 
+        {pdfState === 'error' && pdfError && (
+          <p style={{
+            fontSize: '11.5px', color: '#B04040', lineHeight: '1.5',
+            marginBottom: '12px', padding: '8px 10px',
+            background: '#FDF3F3', borderRadius: '4px', border: '1px solid #F5C6C6',
+          }}>
+            {pdfError}
+          </p>
+        )}
+
         <Link
           to="/my-trips"
           style={{
@@ -247,6 +257,7 @@ export default function CustomItineraryPage() {
   const [pageStatus, setPageStatus] = useState('loading');
   const [errorMsg,   setErrorMsg]   = useState('');
   const [pdfState,   setPdfState]   = useState('idle'); // idle | generating | done | error
+  const [pdfError,   setPdfError]   = useState('');    // human-readable error from last failure
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -282,15 +293,18 @@ export default function CustomItineraryPage() {
       return;
     }
     setPdfState('generating');
+    setPdfError('');
     try {
       const { downloadCustomPDF } = await import('../utils/buildCustomPDF');
       await downloadCustomPDF(itinerary, dbAssets);
       setPdfState('done');
       setTimeout(() => setPdfState('idle'), 3000);
     } catch (err) {
-      console.error('[CustomItineraryPage] PDF error:', err);
+      console.error('[CustomItineraryPage] PDF generation failed:', err);
+      const msg = err?.message || String(err) || 'Unknown error';
+      setPdfError(msg);
       setPdfState('error');
-      setTimeout(() => setPdfState('idle'), 4000);
+      setTimeout(() => setPdfState('idle'), 6000);
     }
   }
 
@@ -672,6 +686,7 @@ export default function CustomItineraryPage() {
               days={days}
               durationStr={durationStr}
               pdfState={pdfState}
+              pdfError={pdfError}
               onDownload={handleDownloadPDF}
             />
           </div>
