@@ -103,7 +103,8 @@
       "Bash(echo \"EXIT:$?\")",
       "Bash(git commit:*)",
       "Bash(npm run build\":*)",
-      "Bash(retry\" with no diagnostic info. Added pdfError state that captures the:*)"
+      "Bash(retry\" with no diagnostic info. Added pdfError state that captures the:*)",
+      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas -name *buildCustomPDF* -o -name *pdf* -type f)"
     ]
   }
 }

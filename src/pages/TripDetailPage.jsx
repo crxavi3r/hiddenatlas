@@ -5,6 +5,7 @@ import { useAuth } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
 import { itineraries } from '../data/itineraries';
 import { getAiCoverImage } from '../lib/coverImage';
+import { useSEO } from '../hooks/useSEO';
 
 const T = {
   label: {
@@ -32,6 +33,7 @@ function triggerDownload(blob, filename) {
 }
 
 export default function TripDetailPage() {
+  useSEO({ title: 'Trip Details', noindex: true });
   const { id } = useParams();
   const { isLoaded, isSignedIn } = useAuth();
   const api = useApi();

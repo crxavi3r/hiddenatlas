@@ -97,8 +97,9 @@ export default async function handler(req, res) {
       if (action === 'upload-asset') return res.json(await handleUploadAsset(pool, body));
       if (action === 'delete-asset') return res.json(await handleDeleteAsset(pool, id));
       if (action === 'toggle-asset') return res.json(await handleToggleAsset(pool, id));
-      if (action === 'upload-pdf')      return res.json(await handleUploadPDF(pool, id, body));
-      if (action === 'ai-generate')     return res.json(await handleAIGenerate(pool, body, adminEmail));
+      if (action === 'upload-pdf')        return res.json(await handleUploadPDF(pool, id, body));
+      if (action === 'update-pdf-status') return res.json(await handleUpdatePDFStatus(pool, id, body));
+      if (action === 'ai-generate')       return res.json(await handleAIGenerate(pool, body, adminEmail));
       if (action === 'backfill-pricing') return res.json(await handleBackfillPricing(pool));
       return res.status(400).json({ error: 'Unknown POST action' });
     }
@@ -264,6 +265,7 @@ async function handleUpdate(pool, id, body) {
        type            = COALESCE($17, type),
        "isPrivate"     = COALESCE($18::boolean, "isPrivate"),
        "isCollection"  = COALESCE($19::boolean, "isCollection"),
+       "pdfStatus"     = 'stale',
        "updatedAt"     = NOW()
      WHERE id = $1
      RETURNING *`,
@@ -597,11 +599,34 @@ async function handleUploadPDF(pool, id, body) {
   });
 
   const { rows: updated } = await pool.query(
-    `UPDATE "Itinerary" SET "pdfUrl" = $2, "updatedAt" = NOW()
-     WHERE id = $1 RETURNING id, slug, "pdfUrl"`,
+    `UPDATE "Itinerary"
+     SET "pdfUrl" = $2, "pdfStatus" = 'ready', "pdfGeneratedAt" = NOW(), "pdfError" = NULL, "updatedAt" = NOW()
+     WHERE id = $1 RETURNING id, slug, "pdfUrl", "pdfStatus", "pdfGeneratedAt"`,
     [id, result.url]
   );
   return { ok: true, pdfUrl: result.url, itinerary: updated[0] };
+}
+
+// ── Update PDF status (called by client on failure to record stale/failed state) ──
+async function handleUpdatePDFStatus(pool, id, body) {
+  if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
+  const { status: pdfStatus, error: pdfError } = body;
+  const allowed = ['generating', 'failed', 'stale', 'ready'];
+  if (!allowed.includes(pdfStatus)) {
+    throw Object.assign(new Error(`pdfStatus must be one of: ${allowed.join(', ')}`), { status: 400 });
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE "Itinerary"
+     SET "pdfStatus" = $2,
+         "pdfError"  = $3,
+         "updatedAt" = NOW()
+     WHERE id = $1
+     RETURNING id, "pdfStatus", "pdfError"`,
+    [id, pdfStatus, pdfError ?? null]
+  );
+  if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+  return { ok: true, itinerary: rows[0] };
 }
 
 // ── Assets: list ──────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useApi } from '../lib/api';
 import { Check, ArrowRight, MapPin, Calendar, Users, Heart, Lock } from 'lucide-react';
 import { CUSTOM_TIERS, GROUP_SIZE_OPTIONS, getTierByGroupSize } from '../data/customPricingTiers';
+import { useSEO } from '../hooks/useSEO';
 
 const ERR_COLOR = '#C97070';
 const ERR_TEXT  = '#B04040';
@@ -159,6 +160,12 @@ export default function CustomPlanningPage() {
   const { user, isLoaded } = useUser();
   const api = useApi();
   const [searchParams] = useSearchParams();
+
+  useSEO({
+    title: 'Custom Trip Planning — Bespoke Travel Itineraries for Groups & Couples',
+    description: 'Get a fully personalised travel itinerary designed for your group, dates, and style. Custom trip planning for couples, families, and groups of 2 to 13+ people.',
+    canonical: 'https://hiddenatlas.travel/custom',
+  });
 
   const [formData, setFormData] = useState({
     name: '', email: '', phone: '',

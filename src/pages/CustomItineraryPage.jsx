@@ -6,6 +6,7 @@ import {
   Star, FileText, Users, Check, ArrowRight, Route,
 } from 'lucide-react';
 import { resolveCoverImage } from '../lib/resolveCoverImage';
+import { useSEO } from '../hooks/useSEO';
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -245,6 +246,7 @@ function CustomSidebar({ itinerary, days, durationStr, pdfState, pdfError, onDow
 // Main page
 // ─────────────────────────────────────────────────────────────
 export default function CustomItineraryPage() {
+  useSEO({ title: 'Your Custom Itinerary', noindex: true });
   const { slug }       = useParams();
   const [searchParams] = useSearchParams();
   const { getToken, isLoaded, isSignedIn } = useAuth();

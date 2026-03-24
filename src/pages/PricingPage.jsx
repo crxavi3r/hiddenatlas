@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Check, ArrowRight } from 'lucide-react';
 import { CUSTOM_TIERS } from '../data/customPricingTiers';
+import { useSEO } from '../hooks/useSEO';
 
 const itineraryIncludes = [
   'Day-by-day travel route and schedule',
@@ -11,6 +12,12 @@ const itineraryIncludes = [
 ];
 
 export default function PricingPage() {
+  useSEO({
+    title: 'Pricing — Digital Itineraries & Custom Trip Planning',
+    description: 'Premium travel itineraries from €29. Custom trip planning from €600 for couples to €1,400+ for large groups. One-time purchase, no subscriptions.',
+    canonical: 'https://hiddenatlas.travel/pricing',
+  });
+
   return (
     <div style={{ background: '#FAFAF8', paddingTop: '72px' }}>
 

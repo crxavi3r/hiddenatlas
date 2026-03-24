@@ -9,6 +9,7 @@ const ADMIN_EMAILS = [
 ];
 import { itineraries } from '../data/itineraries';
 import { downloadItineraryPDF } from '../utils/downloadPDF';
+import { useSEO } from '../hooks/useSEO';
 import { useApi } from '../lib/api';
 import { getGalleryImages, getResearchImages, getDayImage, getCoverImage, getMapImage } from '../lib/itineraryImages';
 import { useTrack } from '../hooks/useTrack';
@@ -354,6 +355,49 @@ const api = useApi();
   const [dbAssets, setDbAssets]                       = useState([]);
 
   const isPremium = itinerary?.isPremium;
+
+  // ── SEO ───────────────────────────────────────────────────────────────────
+  const HA_DOMAIN = 'https://hiddenatlas.travel';
+  const seoTitle = itinerary
+    ? `${itinerary.title}${itinerary.subtitle ? ': ' + itinerary.subtitle : ''}`
+    : null;
+  const seoDescription = itinerary?.shortDescription || null;
+  const seoImage = itinerary?.image || null;
+  const seoCanonical = itinerary ? `${HA_DOMAIN}/itineraries/${itinerary.id}` : null;
+  const seoSchemas = itinerary ? [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: `${HA_DOMAIN}/` },
+        { '@type': 'ListItem', position: 2, name: 'Itineraries', item: `${HA_DOMAIN}/itineraries` },
+        { '@type': 'ListItem', position: 3, name: seoTitle, item: seoCanonical },
+      ],
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: seoTitle,
+      description: seoDescription,
+      image: seoImage,
+      brand: { '@type': 'Brand', name: 'HiddenAtlas' },
+      offers: {
+        '@type': 'Offer',
+        price: String(itinerary.price),
+        priceCurrency: 'EUR',
+        availability: 'https://schema.org/InStock',
+        url: seoCanonical,
+      },
+    },
+  ] : [];
+  useSEO({
+    title: seoTitle,
+    description: seoDescription,
+    canonical: seoCanonical,
+    ogImage: seoImage,
+    schemas: seoSchemas,
+  });
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Load DB-backed assets for this itinerary (blob uploads, manually added URLs)
   useEffect(() => {

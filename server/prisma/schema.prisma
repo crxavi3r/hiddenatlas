@@ -62,6 +62,11 @@ model Itinerary {
   isPrivate     Boolean  @default(false)   // true for custom/private itineraries
   userId        String?                    // owner for custom itineraries; null for public ones
 
+  // ── PDF generation status ──────────────────
+  pdfStatus       String?   // ready | generating | failed | stale
+  pdfGeneratedAt  DateTime?
+  pdfError        String?
+
   purchases         Purchase[]
   assets            ItineraryAsset[]
   aiGenerations     ItineraryAIGeneration[]
@@ -99,13 +104,15 @@ model ItineraryAsset {
 // AI output is NEVER auto-published.
 // ─────────────────────────────────────────────
 model ItineraryAIGeneration {
-  id            String   @id @default(uuid())
-  itineraryId   String?  // nullable: can generate before saving
+  id            String     @id @default(uuid())
+  itineraryId   String?    // nullable: can generate before saving
   prompt        String
-  rawOutput     String   @default("")
-  parsedOutput  Json     @default("{}")
-  createdBy     String?  // admin email
-  createdAt     DateTime @default(now())
+  rawOutput     String     @default("")
+  parsedOutput  Json       @default("{}")
+  createdBy     String?    // admin email
+  createdAt     DateTime   @default(now())
+
+  itinerary     Itinerary? @relation(fields: [itineraryId], references: [id])
 
   @@index([itineraryId])
   @@index([createdAt])

@@ -3,10 +3,17 @@ import { Search } from 'lucide-react';
 import { itineraries } from '../data/itineraries';
 import ItineraryCard from '../components/ItineraryCard';
 import { usePurchasedSlugs } from '../lib/usePurchasedSlugs';
+import { useSEO } from '../hooks/useSEO';
 
 export default function ItinerariesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const purchasedSlugs = usePurchasedSlugs();
+
+  useSEO({
+    title: 'Travel Itineraries — Free & Premium Journeys',
+    description: 'Browse curated travel itineraries for Bali, Japan, Morocco, Italy, Albania and more. Free and premium guides researched on the ground by real travellers.',
+    canonical: 'https://hiddenatlas.travel/itineraries',
+  });
 
   const matchesSearch = (it) => {
     if (!searchQuery) return true;

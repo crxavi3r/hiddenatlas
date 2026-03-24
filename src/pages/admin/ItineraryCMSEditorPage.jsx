@@ -540,8 +540,9 @@ export default function ItineraryCMSEditorPage() {
   const [pdfState,       setPdfState]       = useState('idle'); // idle | generating | done | error
   const [pricingOptions, setPricingOptions] = useState([]);    // loaded from ITINERARY_PRICING_OPTIONS
 
-  const savedId  = useRef(null); // set after first create
-  const slugRef  = useRef('');  // set after load, used by loadAssets for FS scan
+  const savedId       = useRef(null);  // set after first create
+  const slugRef       = useRef('');   // set after load, used by loadAssets for FS scan
+  const pdfInFlight   = useRef(false); // guard against concurrent PDF generations
 
   // ── Load existing itinerary ──────────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -802,6 +803,9 @@ export default function ItineraryCMSEditorPage() {
       setSaveMsg({ ok: true, text: 'Saved.' });
       if (isNew) {
         navigate(`/admin/itineraries/${json.itinerary.id}`, { replace: true });
+      } else {
+        // Auto-regenerate PDF after every save (fire-and-forget, does not block save)
+        setTimeout(() => handleGeneratePDF({ silent: true }), 0);
       }
     } catch (e) { setSaveMsg({ ok: false, text: e.message }); }
     finally { setSaving(false); setTimeout(() => setSaveMsg(null), 4000); }
@@ -828,11 +832,20 @@ export default function ItineraryCMSEditorPage() {
     } catch (e) { alert(e.message); }
   }
 
-  // ── Generate + upload PDF (custom itineraries) ───────────────────────────────
-  async function handleGeneratePDF() {
+  // ── Generate + upload PDF ─────────────────────────────────────────────────────
+  // silent=true: suppress the alert on failure (used when auto-triggered from Save).
+  async function handleGeneratePDF({ silent = false } = {}) {
     const targetId = savedId.current || (isNew ? null : id);
-    if (!targetId) { alert('Save the itinerary first.'); return; }
+    if (!targetId) {
+      if (!silent) alert('Save the itinerary first.');
+      return;
+    }
+
+    // Guard: only one generation at a time
+    if (pdfInFlight.current) return;
+    pdfInFlight.current = true;
     setPdfState('generating');
+
     try {
       // Fetch fresh assets from DB (don't rely on images tab having been visited)
       const token       = await getToken();
@@ -866,9 +879,24 @@ export default function ItineraryCMSEditorPage() {
       setTimeout(() => setPdfState('idle'), 4000);
     } catch (e) {
       console.error('[CMS] PDF generation failed:', e.message);
-      alert(`PDF generation failed: ${e.message}`);
+      if (!silent) alert(`PDF generation failed: ${e.message}`);
       setPdfState('error');
       setTimeout(() => setPdfState('idle'), 4000);
+
+      // Record failure in DB so pdfStatus reflects reality
+      const targetId2 = savedId.current || (isNew ? null : id);
+      if (targetId2) {
+        try {
+          const token = await getToken();
+          await fetch(`/api/itinerary-cms?action=update-pdf-status&id=${targetId2}`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'failed', error: e.message }),
+          });
+        } catch { /* best-effort — don't surface secondary errors */ }
+      }
+    } finally {
+      pdfInFlight.current = false;
     }
   }
 

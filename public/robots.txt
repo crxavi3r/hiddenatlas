@@ -1,0 +1,18 @@
+User-agent: *
+
+# Private / authenticated areas
+Disallow: /admin
+Disallow: /admin/
+Disallow: /my-trips
+Disallow: /my-trips/
+Disallow: /itinerary/custom/
+Disallow: /sign-in
+Disallow: /sign-up
+
+# API endpoints — not crawlable content
+Disallow: /api/
+
+# All other public pages are allowed
+Allow: /
+
+Sitemap: https://hiddenatlas.travel/sitemap.xml

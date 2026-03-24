@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useSignUp } from '@clerk/clerk-react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useSEO } from '../hooks/useSEO';
 
 const inputStyle = {
   padding: '10px 14px',
@@ -37,6 +38,7 @@ const errorStyle = {
 };
 
 export default function SignUpPage() {
+  useSEO({ title: 'Create Account', noindex: true });
   const { isLoaded, signUp, setActive } = useSignUp();
   const navigate = useNavigate();
 

@@ -1,7 +1,13 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight, Instagram, Mail } from 'lucide-react';
+import { useSEO } from '../hooks/useSEO';
 
 export default function AboutPage() {
+  useSEO({
+    title: 'About HiddenAtlas — Independent Travel Itineraries Built on Real Experience',
+    description: 'HiddenAtlas is an independent travel planning platform built on firsthand travel experience. No sponsored placements, no affiliate commissions. Just honest, well-researched itineraries.',
+    canonical: 'https://hiddenatlas.travel/about',
+  });
   const values = [
     { title: 'Depth over breadth', desc: 'Three places done brilliantly beats six places done adequately. Every itinerary is designed for depth of experience, not passport stamp counts.' },
     { title: 'Radical honesty', desc: 'If somewhere is over-touristed, we say so. If a famous restaurant no longer deserves its reputation, we tell you. We don\'t publish anything we can\'t stand behind.' },

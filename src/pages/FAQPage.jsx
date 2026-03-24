@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
+import { useSEO } from '../hooks/useSEO';
 
 const faqs = [
   {
@@ -131,6 +132,28 @@ function FAQAccordion({ question, answer }) {
 
 export default function FAQPage() {
   const [activeCategory, setActiveCategory] = useState(null);
+
+  useSEO({
+    title: 'Frequently Asked Questions — Travel Planning, Itineraries & Custom Trips',
+    description: 'Answers to common questions about HiddenAtlas itineraries, custom trip planning, pricing, refunds, and who our travel guides are designed for.',
+    canonical: 'https://hiddenatlas.travel/faq',
+    schemas: [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: faqs.flatMap(section =>
+          section.items.map(item => ({
+            '@type': 'Question',
+            name: item.q,
+            acceptedAnswer: {
+              '@type': 'Answer',
+              text: item.a.replace(/\n/g, ' '),
+            },
+          }))
+        ),
+      },
+    ],
+  });
 
   return (
     <div style={{ background: '#FAFAF8', paddingTop: '72px' }}>

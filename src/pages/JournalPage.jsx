@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowRight, Clock, Calendar } from 'lucide-react';
 import { journalPosts } from '../data/itineraries';
+import { useSEO } from '../hooks/useSEO';
 
 const allPosts = [
   ...journalPosts,
@@ -155,6 +156,12 @@ export function JournalListPage() {
 
   const filtered = active === 'All' ? allPosts : allPosts.filter(p => p.category === active);
 
+  useSEO({
+    title: 'Travel Journal — Destination Guides & Planning Advice',
+    description: 'Honest destination guides, stay recommendations, and practical travel advice from HiddenAtlas. Written by people who have actually been there.',
+    canonical: 'https://hiddenatlas.travel/journal',
+  });
+
   return (
     <div style={{ background: '#FAFAF8', paddingTop: '72px' }}>
       <section style={{ padding: 'clamp(48px, 8vw, 100px) 24px', background: '#F4F1EC', textAlign: 'center' }}>
@@ -223,6 +230,13 @@ export function JournalListPage() {
 export function JournalPostPage() {
   const { id } = useParams();
   const post = allPosts.find(p => p.id === id);
+
+  useSEO({
+    title: post ? post.title : null,
+    description: post ? post.excerpt : null,
+    canonical: post ? `https://hiddenatlas.travel/journal/${post.id}` : null,
+    ogImage: post ? post.image : null,
+  });
 
   if (!post) {
     return (

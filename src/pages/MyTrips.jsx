@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Calendar, BookOpen, MapPin, Clock, Trash2, Sparkles, Download } from 'lucide-react';
 import { useUser } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
+import { useSEO } from '../hooks/useSEO';
 import { getTripSource } from '../lib/tripSource';
 import { itineraries } from '../data/itineraries';
 import { getAiCoverImage } from '../lib/coverImage';
@@ -590,6 +591,7 @@ function resolveFirstName(user) {
 
 // ── Page ────────────────────────────────────────────────────────────────────
 export default function MyTrips() {
+  useSEO({ title: 'My Trips', noindex: true });
   const { isLoaded, isSignedIn, user } = useUser();
   const api = useApi();
   const [searchParams, setSearchParams] = useSearchParams();

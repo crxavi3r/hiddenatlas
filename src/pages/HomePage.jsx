@@ -4,6 +4,7 @@ import { ArrowRight, ChevronDown, Star, Check, MapPin, Lock, BookOpen, Compass }
 import { useUser } from '@clerk/clerk-react';
 import { itineraries, journeyImg } from '../data/itineraries';
 import { usePurchasedSlugs } from '../lib/usePurchasedSlugs';
+import { useSEO } from '../hooks/useSEO';
 
 const ADMIN_EMAILS = [
   'cristiano.xavier@outlook.com',
@@ -81,6 +82,29 @@ export default function HomePage() {
   const { user } = useUser();
   const isAdmin = ADMIN_EMAILS.includes(user?.primaryEmailAddress?.emailAddress);
   const isPhilippinesPurchased = isAdmin || purchasedSlugs.has('philippines-island-journey');
+
+  useSEO({
+    title: 'Curated Luxury Travel Itineraries',
+    description: 'Expert-crafted travel itineraries for discerning travelers. Boutique stays, hidden routes, real local knowledge. No tourist traps, no guesswork.',
+    canonical: 'https://hiddenatlas.travel/',
+    ogImage: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1200&q=80',
+    schemas: [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'Organization',
+        name: 'HiddenAtlas',
+        url: 'https://hiddenatlas.travel',
+        logo: 'https://hiddenatlas.travel/assets/logo-hiddenatlas.svg',
+        description: 'Expert-crafted travel itineraries for discerning travelers. Boutique stays, hidden routes, real local knowledge.',
+        contactPoint: {
+          '@type': 'ContactPoint',
+          email: 'contact@hiddenatlas.travel',
+          contactType: 'customer support',
+        },
+        sameAs: ['https://www.instagram.com/hiddenatlas.travel'],
+      },
+    ],
+  });
 
   useEffect(() => {
     const t = setTimeout(() => setHeroLoaded(true), 120);

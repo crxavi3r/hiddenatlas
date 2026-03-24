@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useSignIn } from '@clerk/clerk-react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useSEO } from '../hooks/useSEO';
 
 export default function SignInPage() {
+  useSEO({ title: 'Sign In', noindex: true });
   const { isLoaded, signIn, setActive } = useSignIn();
   const navigate = useNavigate();
 
