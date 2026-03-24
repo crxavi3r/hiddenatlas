@@ -653,12 +653,12 @@ export default function MyTrips() {
           return r.json();
         })
         .catch(err => { console.error('[MyTrips] /api/trips error:', err.message); return []; }),
-      api.get('/api/my-trips')
+      api.get('/api/itineraries?action=my-trips')
         .then(async r => {
           const json = await r.json().catch(() => []);
           return Array.isArray(json) ? json : [];
         })
-        .catch(err => { console.error('[MyTrips] /api/my-trips fetch error:', err); return []; }),
+        .catch(err => { console.error('[MyTrips] /api/itineraries?action=my-trips fetch error:', err); return []; }),
       api.get('/api/custom-requests')
         .then(r => r.ok ? r.json() : [])
         .catch(() => []),

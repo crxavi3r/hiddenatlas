@@ -387,7 +387,7 @@ export default function ItineraryCMSEditorPage() {
   const [form,       setForm]       = useState({
     title: '', subtitle: '', slug: '', destination: '', country: '',
     region: '', durationDays: '', type: 'free', isPrivate: false, isCollection: false,
-    price: '', stripePriceId: '',
+    stripePriceId: '',
     coverImage: '', status: 'draft', pdfUrl: '', content: { ...EMPTY_CONTENT },
   });
 
@@ -403,7 +403,8 @@ export default function ItineraryCMSEditorPage() {
   const [aiHistory,     setAiHistory]     = useState([]);
   const [linkedRequest, setLinkedRequest] = useState(null);
 
-  const [pdfState, setPdfState] = useState('idle'); // idle | generating | done | error
+  const [pdfState,       setPdfState]       = useState('idle'); // idle | generating | done | error
+  const [pricingOptions, setPricingOptions] = useState([]);    // loaded from ITINERARY_PRICING_OPTIONS
 
   const savedId  = useRef(null); // set after first create
   const slugRef  = useRef('');  // set after load, used by loadAssets for FS scan
@@ -438,7 +439,7 @@ export default function ItineraryCMSEditorPage() {
         durationDays: it.durationDays ?? '', type: derivedType,
         isPrivate: it.isPrivate ?? false,
         isCollection: it.isCollection ?? false,
-        price: it.price || '', stripePriceId: it.stripePriceId || '',
+        stripePriceId: it.stripePriceId || '',
         coverImage: it.coverImage || '', status: it.status || 'draft',
         pdfUrl: it.pdfUrl || '',
         content,
@@ -450,6 +451,18 @@ export default function ItineraryCMSEditorPage() {
   }, [id, isNew, getToken, navigate]);
 
   useEffect(() => { load(); }, [load]);
+
+  // ── Load pricing options once on mount ───────────────────────────────────────
+  useEffect(() => {
+    getToken().then(token =>
+      fetch('/api/itinerary-cms?action=pricing-options', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(r => r.json())
+        .then(json => { if (Array.isArray(json.options)) setPricingOptions(json.options); })
+        .catch(() => {})
+    ).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load assets when Images tab opens ────────────────────────────────────────
   useEffect(() => {
@@ -601,7 +614,7 @@ export default function ItineraryCMSEditorPage() {
         accessType: form.type === 'free' ? 'free' : 'paid',
         durationDays: form.durationDays !== '' && form.durationDays != null
           ? parseInt(form.durationDays, 10) : null,
-        price: form.price ? parseFloat(form.price) : 0,
+        stripePriceId: form.type === 'premium' ? (form.stripePriceId || null) : null,
       };
 
       const res  = await fetch(`/api/itinerary-cms?action=${action}`, {
@@ -635,7 +648,6 @@ export default function ItineraryCMSEditorPage() {
         type:          derivedType,
         isPrivate:     it.isPrivate     ?? f.isPrivate,
         isCollection:  it.isCollection  ?? f.isCollection,
-        price:         it.price         ?? f.price,
         stripePriceId: it.stripePriceId ?? f.stripePriceId,
         // content intentionally preserved from f — never replace with DB response
         // (JSONB may arrive as string in some pg/Vercel configurations)
@@ -654,6 +666,10 @@ export default function ItineraryCMSEditorPage() {
     const targetId = savedId.current || (isNew ? null : id);
     if (!targetId) { alert('Save the itinerary first.'); return; }
     const action = form.status === 'published' ? 'unpublish' : 'publish';
+    if (action === 'publish' && form.type === 'premium' && !form.stripePriceId) {
+      alert('Cannot publish: select a pricing plan before publishing a premium itinerary.');
+      return;
+    }
     try {
       const token = await getToken();
       const res   = await fetch(`/api/itinerary-cms?action=${action}&id=${targetId}`, {
@@ -975,7 +991,7 @@ export default function ItineraryCMSEditorPage() {
         </div>
 
         {/* ── Tab panels ── */}
-        {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} />}
+        {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} />}
         {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} />}
         {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} />}
         {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} />}
@@ -1006,7 +1022,7 @@ export default function ItineraryCMSEditorPage() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ── Basics ────────────────────────────────────────────────────────────────────
-function BasicsTab({ form, setForm, onTitleChange }) {
+function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [] }) {
   function set(field, value) { setForm(f => ({ ...f, [field]: value })); }
 
   return (
@@ -1076,7 +1092,8 @@ function BasicsTab({ form, setForm, onTitleChange }) {
                     ...f,
                     type: value,
                     isPrivate: value === 'custom' ? true : (value === 'free' ? false : f.isPrivate),
-                    price: value === 'free' ? '' : f.price,
+                    // clear pricing when switching away from premium
+                    ...(value !== 'premium' ? { stripePriceId: '' } : {}),
                   }))}
                   style={{ display: 'none' }}
                 />
@@ -1117,20 +1134,38 @@ function BasicsTab({ form, setForm, onTitleChange }) {
           </label>
         </Field>
 
-        {form.type !== 'free' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <Field label="Price (€)">
-              <input type="number" value={form.price} style={inputStyle}
-                placeholder="29" min="0" step="0.01"
-                onChange={e => set('price', e.target.value)} />
+        {form.type === 'premium' && (() => {
+          const selectedOption = pricingOptions.find(o => o.stripePriceId === form.stripePriceId);
+          return (
+            <Field label="Pricing plan" hint="Required before publishing.">
+              {pricingOptions.length === 0 ? (
+                <p style={{ fontSize: '13px', color: '#E05353', margin: 0 }}>
+                  No pricing plans available. Set STRIPE_PRICE_PREMIUM_SHORT / ESSENTIAL / COMPLETE in Vercel env vars.
+                </p>
+              ) : (
+                <>
+                  <select
+                    value={form.stripePriceId}
+                    onChange={e => setForm(f => ({ ...f, stripePriceId: e.target.value }))}
+                    style={{ ...inputStyle, cursor: 'pointer' }}
+                  >
+                    <option value="">— select a plan —</option>
+                    {pricingOptions.map(opt => (
+                      <option key={opt.key} value={opt.stripePriceId}>
+                        {opt.label} · {opt.displayPrice}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedOption && (
+                    <p style={{ fontSize: '12px', color: '#7A7265', margin: '6px 0 0', fontFamily: 'monospace' }}>
+                      {selectedOption.stripePriceId}
+                    </p>
+                  )}
+                </>
+              )}
             </Field>
-            <Field label="Stripe Price ID" hint="From your Stripe Dashboard → Products">
-              <input value={form.stripePriceId} style={{ ...inputStyle, fontFamily: 'monospace' }}
-                placeholder="price_xxxxxxxxx"
-                onChange={e => set('stripePriceId', e.target.value)} />
-            </Field>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       <div style={sectionCard}>

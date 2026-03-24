@@ -100,7 +100,9 @@
       "Bash(du -sh /Users/cristianoxavier/Documents/Projects/HiddenAtlas/content/itineraries/*/gallery /Users/cristianoxavier/Documents/Projects/HiddenAtlas/content/itineraries/*/research /Users/cristianoxavier/Documents/Projects/HiddenAtlas/content/itineraries/*/day-images)",
       "Bash(xargs du:*)",
       "Bash(rsync -a --include='*/' --include='*.jpg' --include='*.jpeg' --include='*.png' --include='*.webp' --include='*.gif' --include='*.avif' --exclude='*' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/content/itineraries/ /Users/cristianoxavier/Documents/Projects/HiddenAtlas/public/itineraries/)",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(git commit:*)",
+      "Bash(npm run build\":*)"
     ]
   }
 }

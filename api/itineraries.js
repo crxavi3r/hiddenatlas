@@ -3,17 +3,70 @@ import { verifyAuth } from './_lib/verifyAuth.js';
 
 const { Pool } = pg;
 
+const ADMIN_EMAILS = [
+  'cristiano.xavier@outlook.com',
+  'cristiano.xavier@hiddenatlas.travel',
+];
+
 // GET /api/itineraries?action=access&slug=:slug
 //   Returns { hasAccess: bool, pdfUrl: string|null }
 //
 // GET /api/itineraries?action=purchases
 //   Returns { slugs: string[] } — all purchased itinerary slugs for the user
+//
+// GET /api/itineraries?action=assets&slug=:slug
+//   Public (no auth). Returns { assets: ItineraryAsset[] } for the given slug.
+//
+// GET /api/itineraries?action=custom&slug=:slug[&preview=true]
+//   Auth required. Owner or admin access to a private/custom itinerary + assets.
+//   Returns { itinerary, assets, isAdmin }
+//
+// GET /api/itineraries?action=my-trips
+//   Auth required. Returns purchased premium itineraries for the authenticated user.
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!process.env.CLERK_SECRET_KEY || !process.env.DATABASE_URL) {
+  if (!process.env.DATABASE_URL) {
+    return res.status(500).json({ error: 'Server misconfigured' });
+  }
+
+  const { action, slug, preview } = req.query;
+
+  // ── GET /api/itineraries?action=assets&slug= ────────────────────────────────
+  // Public — no auth required. Asset URLs are already public (Vercel Blob / CDN).
+  if (action === 'assets') {
+    res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=30');
+    if (!slug) return res.status(400).json({ error: 'slug is required' });
+
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      const { rows } = await pool.query(
+        `SELECT ia."assetType", ia."url", ia."alt", ia."caption",
+                ia."dayNumber", ia."source", ia."sortOrder"
+         FROM   "ItineraryAsset" ia
+         JOIN   "Itinerary"      i  ON i.id = ia."itineraryId"
+         WHERE  i.slug = $1
+           AND  ia.active = true
+         ORDER BY ia."assetType",
+                  ia."dayNumber" NULLS LAST,
+                  ia."sortOrder",
+                  ia."createdAt"`,
+        [slug]
+      );
+      return res.json({ assets: rows });
+    } catch (err) {
+      if (err.message?.includes('does not exist')) return res.json({ assets: [] });
+      console.error('[itineraries/assets]', err.message);
+      return res.status(500).json({ error: err.message });
+    } finally {
+      await pool.end();
+    }
+  }
+
+  // ── All remaining actions require authentication ────────────────────────────
+  if (!process.env.CLERK_SECRET_KEY) {
     return res.status(500).json({ error: 'Server misconfigured' });
   }
 
@@ -24,9 +77,7 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { action, slug } = req.query;
-
-  // ── GET /api/itineraries?action=access&slug= ───────────────────────────────
+  // ── GET /api/itineraries?action=access&slug= ──────────────────────────────
   if (action === 'access') {
     if (!slug) return res.status(400).json({ error: 'slug is required' });
 
@@ -53,7 +104,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── GET /api/itineraries?action=purchases ──────────────────────────────────
+  // ── GET /api/itineraries?action=purchases ─────────────────────────────────
   if (action === 'purchases') {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
@@ -74,5 +125,93 @@ export default async function handler(req, res) {
     }
   }
 
-  return res.status(400).json({ error: 'Unknown action. Use ?action=access or ?action=purchases' });
+  // ── GET /api/itineraries?action=my-trips ─────────────────────────────────
+  // Returns purchased premium itineraries for the user (excludes custom type).
+  if (action === 'my-trips') {
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      const { rows: userRows } = await pool.query(
+        `SELECT id, email FROM "User" WHERE "clerkId" = $1`,
+        [clerkId]
+      );
+      console.log('[itineraries/my-trips] clerkId:', clerkId,
+        '| user:', userRows[0] ? `${userRows[0].id} <${userRows[0].email}>` : 'NOT FOUND');
+
+      if (!userRows.length) return res.status(200).json([]);
+      const userId = userRows[0].id;
+
+      const { rows } = await pool.query(
+        `SELECT
+           p.id              AS "purchaseId",
+           p."purchasedAt",
+           p.status,
+           i.slug,
+           i.title,
+           i.description     AS excerpt,
+           i."coverImage",
+           i."pdfUrl"
+         FROM "Purchase" p
+         JOIN "Itinerary" i ON i.id = p."itineraryId"
+         WHERE p."userId" = $1
+           AND (p.status IS NULL OR p.status NOT IN ('refunded', 'cancelled', 'chargebacked'))
+           AND (i.type IS DISTINCT FROM 'custom')
+         ORDER BY p."purchasedAt" DESC`,
+        [userId]
+      );
+      return res.status(200).json(rows);
+    } catch (err) {
+      console.error('[itineraries/my-trips] DB error:', err.message);
+      return res.status(500).json({ error: 'Database error', detail: err.message });
+    } finally {
+      await pool.end();
+    }
+  }
+
+  // ── GET /api/itineraries?action=custom&slug=[&preview=true] ──────────────
+  // Owner or admin access to a private/custom itinerary with assets.
+  if (action === 'custom') {
+    if (!slug) return res.status(400).json({ error: 'slug is required' });
+
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      const userRes = await pool.query(
+        `SELECT id, email FROM "User" WHERE "clerkId" = $1 LIMIT 1`, [clerkId]
+      );
+      const userId    = userRes.rows[0]?.id ?? null;
+      const userEmail = userRes.rows[0]?.email ?? '';
+      const isAdmin   = ADMIN_EMAILS.includes(userEmail);
+
+      const { rows } = await pool.query(
+        `SELECT * FROM "Itinerary" WHERE slug = $1 LIMIT 1`, [slug]
+      );
+      if (!rows.length) return res.status(404).json({ error: 'Itinerary not found' });
+      const it = rows[0];
+
+      const isOwner = userId !== null && it.userId === userId;
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ error: 'You do not have access to this itinerary' });
+      }
+
+      if (preview !== 'true' && it.status !== 'published' && !isAdmin) {
+        return res.status(403).json({ error: 'This itinerary is not ready yet' });
+      }
+
+      const assetRes = await pool.query(
+        `SELECT "assetType", url, alt, caption, "dayNumber", source, "sortOrder"
+         FROM   "ItineraryAsset"
+         WHERE  "itineraryId" = $1 AND active = true
+         ORDER  BY "assetType", "dayNumber" NULLS LAST, "sortOrder", "createdAt"`,
+        [it.id]
+      );
+
+      return res.json({ itinerary: it, assets: assetRes.rows, isAdmin });
+    } catch (err) {
+      console.error('[itineraries/custom]', err.message);
+      return res.status(500).json({ error: 'Database error' });
+    } finally {
+      await pool.end();
+    }
+  }
+
+  return res.status(400).json({ error: 'Unknown action' });
 }

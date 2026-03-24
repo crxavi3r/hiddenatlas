@@ -127,7 +127,7 @@ export default function CustomItineraryPage() {
 
     getToken()
       .then(token =>
-        fetch(`/api/itinerary-custom?slug=${encodeURIComponent(slug)}${isPreview ? '&preview=true' : ''}`, {
+        fetch(`/api/itineraries?action=custom&slug=${encodeURIComponent(slug)}${isPreview ? '&preview=true' : ''}`, {
           headers: { Authorization: `Bearer ${token}` },
         })
       )

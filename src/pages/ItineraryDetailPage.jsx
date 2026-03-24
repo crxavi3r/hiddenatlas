@@ -359,7 +359,7 @@ const api = useApi();
   useEffect(() => {
     const slug = itinerary?.parentId || itinerary?.id;
     if (!slug) return;
-    fetch(`/api/itinerary-assets?slug=${encodeURIComponent(slug)}`)
+    fetch(`/api/itineraries?action=assets&slug=${encodeURIComponent(slug)}`)
       .then(r => r.json())
       .then(data => {
         if (data.assets) {

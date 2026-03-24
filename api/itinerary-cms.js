@@ -2,6 +2,7 @@
 // Admin-only. All actions require a valid admin JWT.
 //
 // GET  /api/itinerary-cms?action=list
+// GET  /api/itinerary-cms?action=pricing-options    — returns tiers from STRIPE_PRICE_PREMIUM_* env vars
 // GET  /api/itinerary-cms?action=get&id=:id
 // GET  /api/itinerary-cms?action=assets&id=:id
 // GET  /api/itinerary-cms?action=scan-assets&slug=:slug
@@ -72,12 +73,13 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      if (action === 'list')           return res.json(await handleList(pool));
-      if (action === 'get')            return res.json(await handleGet(pool, id));
-      if (action === 'assets')         return res.json(await handleListAssets(pool, id));
-      if (action === 'scan-assets')    return res.json(await handleScanAssets(req.query.slug));
-      if (action === 'ai-history')     return res.json(await handleAIHistory(pool, id));
-      if (action === 'linked-request') return res.json(await handleLinkedRequest(pool, id));
+      if (action === 'list')             return res.json(await handleList(pool));
+      if (action === 'get')              return res.json(await handleGet(pool, id));
+      if (action === 'assets')           return res.json(await handleListAssets(pool, id));
+      if (action === 'scan-assets')      return res.json(await handleScanAssets(req.query.slug));
+      if (action === 'ai-history')       return res.json(await handleAIHistory(pool, id));
+      if (action === 'linked-request')   return res.json(await handleLinkedRequest(pool, id));
+      if (action === 'pricing-options')  return res.json(handlePricingOptions());
       return res.status(400).json({ error: 'Unknown GET action' });
     }
 
@@ -108,6 +110,22 @@ export default async function handler(req, res) {
   } finally {
     await pool.end();
   }
+}
+
+// ── Pricing options (from env) ────────────────────────────────────────────────
+// Reads three named env vars — one per pricing tier.
+// Returns only tiers whose env var is set so the dropdown is always accurate.
+// Each option: { key, label, displayPrice, stripePriceId }
+function handlePricingOptions() {
+  const tiers = [
+    { key: 'premium_short',     label: 'Premium Itinerary Short',     displayPrice: '€14', envVar: 'STRIPE_PRICE_PREMIUM_SHORT'     },
+    { key: 'premium_essential', label: 'Premium Itinerary Essential', displayPrice: '€19', envVar: 'STRIPE_PRICE_PREMIUM_ESSENTIAL' },
+    { key: 'premium_complete',  label: 'Premium Itinerary Complete',  displayPrice: '€29', envVar: 'STRIPE_PRICE_PREMIUM_COMPLETE'  },
+  ];
+  const options = tiers
+    .filter(t => process.env[t.envVar])
+    .map(t => ({ key: t.key, label: t.label, displayPrice: t.displayPrice, stripePriceId: process.env[t.envVar] }));
+  return { options };
 }
 
 // ── List all itineraries (CMS view) ──────────────────────────────────────────
@@ -153,7 +171,6 @@ async function handleCreate(pool, body) {
     durationDays = null,
     type = 'free',
     isPrivate = false,
-    price = 0,
     stripePriceId = null,
     coverImage = '',
     content = {},
@@ -179,7 +196,7 @@ async function handleCreate(pool, body) {
      RETURNING *`,
     [
       title, subtitle, slug, destination, country, region, durationDays,
-      finalAccessType, finalType === 'free' ? 0 : (price || 0), stripePriceId || null,
+      finalAccessType, 0, stripePriceId || null,
       coverImage,
       finalContent.summary?.shortDescription || '',
       finalType, finalPrivate,
@@ -196,7 +213,7 @@ async function handleUpdate(pool, id, body) {
 
   const {
     title, subtitle, slug, destination, country, region, durationDays,
-    accessType, price, stripePriceId, coverImage, content, status,
+    accessType, stripePriceId, coverImage, content, status,
     type, isPrivate, isCollection,
   } = body;
 
@@ -230,16 +247,15 @@ async function handleUpdate(pool, id, body) {
        region          = COALESCE(NULLIF($7,''), region),
        "durationDays"  = COALESCE($8, "durationDays"),
        "accessType"    = COALESCE($9, "accessType"),
-       price           = COALESCE($10, price),
-       "stripePriceId" = $11,
-       "coverImage"    = COALESCE(NULLIF($12,''), "coverImage"),
-       description     = COALESCE(NULLIF($13,''), description),
-       status          = COALESCE($14, status),
-       "isPublished"   = $15,
-       content         = $16::jsonb,
-       type            = COALESCE($17, type),
-       "isPrivate"     = COALESCE($18::boolean, "isPrivate"),
-       "isCollection"  = COALESCE($19::boolean, "isCollection"),
+       "stripePriceId" = $10,
+       "coverImage"    = COALESCE(NULLIF($11,''), "coverImage"),
+       description     = COALESCE(NULLIF($12,''), description),
+       status          = COALESCE($13, status),
+       "isPublished"   = $14,
+       content         = $15::jsonb,
+       type            = COALESCE($16, type),
+       "isPrivate"     = COALESCE($17::boolean, "isPrivate"),
+       "isCollection"  = COALESCE($18::boolean, "isCollection"),
        "updatedAt"     = NOW()
      WHERE id = $1
      RETURNING *`,
@@ -253,7 +269,6 @@ async function handleUpdate(pool, id, body) {
       region ?? null,
       durationDays ?? null,
       accessTypeParam,
-      accessTypeParam === 'free' ? 0 : (price ?? null),
       stripePriceId ?? null,
       derivedCoverImage,
       derivedDescription,
@@ -337,6 +352,21 @@ async function handleDelete(pool, id) {
 // ── Publish / Unpublish ───────────────────────────────────────────────────────
 async function handleSetStatus(pool, id, status) {
   if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
+
+  // Validate premium itineraries have a Stripe Price ID before publishing
+  if (status === 'published') {
+    const { rows: check } = await pool.query(
+      `SELECT type, "stripePriceId" FROM "Itinerary" WHERE id = $1 LIMIT 1`, [id]
+    );
+    if (!check.length) throw Object.assign(new Error('Not found'), { status: 404 });
+    if (check[0].type === 'premium' && !check[0].stripePriceId) {
+      throw Object.assign(
+        new Error('Cannot publish: premium itinerary has no Stripe Price ID. Select a pricing plan first.'),
+        { status: 422 }
+      );
+    }
+  }
+
   const { rows } = await pool.query(
     `UPDATE "Itinerary"
      SET status = $2, "isPublished" = $3, "updatedAt" = NOW()
