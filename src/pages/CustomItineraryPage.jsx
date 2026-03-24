@@ -123,8 +123,7 @@ function CustomSidebar({ itinerary, days, durationStr, pdfState, pdfError, onDow
   const pdfLabel = pdfState === 'generating' ? 'Generating PDF…'
     : pdfState === 'done'  ? 'Downloaded!'
     : pdfState === 'error' ? 'PDF failed — retry'
-    : itinerary.pdfUrl     ? 'Download PDF'
-    : 'Generate PDF';
+    : 'Download PDF';
 
   return (
     <div style={{
