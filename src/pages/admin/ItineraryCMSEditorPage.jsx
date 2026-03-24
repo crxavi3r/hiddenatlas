@@ -164,7 +164,7 @@ function CheckboxGroup({ label, options, value = [], onChange }) {
 }
 
 // ── Day card ──────────────────────────────────────────────────────────────────
-function DayCard({ day, index, total, onChange, onDelete, onMove }) {
+function DayCard({ day, index, total, onChange, onDelete, onMove, assets, onUpload }) {
   const [open, setOpen] = useState(index === 0);
 
   function upd(field, val) {
@@ -215,16 +215,20 @@ function DayCard({ day, index, total, onChange, onDelete, onMove }) {
 
       {open && (
         <div style={{ padding: '20px 16px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-            <Field label="Title">
-              <input value={day.title || ''} style={inputStyle} placeholder="Day title"
-                onChange={e => upd('title', e.target.value)} />
-            </Field>
-            <Field label="Image URL">
-              <input value={day.img || ''} style={inputStyle} placeholder="https://images.unsplash.com/…"
-                onChange={e => upd('img', e.target.value)} />
-            </Field>
-          </div>
+          <Field label="Title">
+            <input value={day.title || ''} style={inputStyle} placeholder="Day title"
+              onChange={e => upd('title', e.target.value)} />
+          </Field>
+
+          <ImagePicker
+            label="Day Image"
+            value={day.img || ''}
+            onChange={url => upd('img', url)}
+            assets={assets}
+            onUpload={onUpload ? (file) => onUpload(file, 'day', day.day) : null}
+            assetType="day"
+            dayNumber={day.day}
+          />
 
           <Field label="Description">
             <textarea value={day.desc || ''} style={{ ...textareaStyle, minHeight: '100px' }}
@@ -331,7 +335,7 @@ function FAQEditor({ faq = [], onChange }) {
 const ASSET_TYPES = ['hero', 'gallery', 'day', 'research', 'manual'];
 const ASSET_TYPE_LABELS = { hero: 'Hero', gallery: 'Gallery', day: 'Day Images', research: 'Research', ai_suggested: 'AI Suggested', manual: 'Manual' };
 
-function AssetRow({ asset, onToggle, onDelete }) {
+function AssetRow({ asset, onToggle, onDelete, usedAs, onSetHero }) {
   const isFilesystem = !asset.id;
   return (
     <div style={{
@@ -344,7 +348,7 @@ function AssetRow({ asset, onToggle, onDelete }) {
         <img src={asset.url} alt={asset.alt || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
           <span style={{ fontSize: '10px', fontWeight: '600', color: '#1B6B65', background: '#EFF6F5', padding: '2px 7px', borderRadius: '8px', textTransform: 'uppercase' }}>
             {ASSET_TYPE_LABELS[asset.assetType] ?? asset.assetType}
             {asset.dayNumber != null ? ` · Day ${asset.dayNumber}` : ''}
@@ -352,10 +356,21 @@ function AssetRow({ asset, onToggle, onDelete }) {
           <span style={{ fontSize: '10px', color: '#B5AA99', padding: '2px 7px', background: '#F4F1EC', borderRadius: '8px' }}>
             {asset.source}
           </span>
+          {usedAs && (
+            <span style={{ fontSize: '10px', fontWeight: '600', color: '#C9A96E', background: 'rgba(201,169,110,0.1)', border: '1px solid rgba(201,169,110,0.3)', padding: '2px 7px', borderRadius: '8px' }}>
+              ● {usedAs}
+            </span>
+          )}
         </div>
         <p style={{ fontSize: '12px', color: '#4A433A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {asset.alt || asset.caption || asset.url}
         </p>
+        {onSetHero && !usedAs && (
+          <button onClick={() => onSetHero(asset.url)}
+            style={{ ...btnGhost, fontSize: '11px', padding: '3px 8px', marginTop: '4px', color: '#1B6B65', borderColor: '#1B6B65' }}>
+            Set as hero
+          </button>
+        )}
       </div>
       {!isFilesystem && (
         <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
@@ -366,6 +381,121 @@ function AssetRow({ asset, onToggle, onDelete }) {
           <button onClick={() => onDelete(asset)} style={{ ...iconBtn, color: '#C0392B' }} title="Delete">
             <Trash2 size={13} />
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Image Picker — shared library browser + inline upload ─────────────────────
+function ImagePicker({ value, onChange, assets = [], onUpload, assetType = 'gallery', dayNumber, label, hint }) {
+  const [open, setOpen]           = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileRef                   = useRef(null);
+
+  const libraryAssets = assets.filter(a => a.active !== false);
+
+  async function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file || !onUpload) return;
+    setUploading(true);
+    try {
+      const url = await onUpload(file, assetType, dayNumber);
+      if (url) { onChange(url); setOpen(false); }
+    } catch (err) {
+      alert(err.message || 'Upload failed.');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  return (
+    <div style={fieldStyle}>
+      {label && <label style={labelStyle}>{label}</label>}
+      {hint && <p style={{ fontSize: '11px', color: '#B5AA99', marginBottom: '6px' }}>{hint}</p>}
+
+      {/* Thumbnail */}
+      {value ? (
+        <div style={{ height: '160px', borderRadius: '8px', overflow: 'hidden', marginBottom: '8px', background: '#F4F1EC' }}>
+          <img src={value} alt="Selected"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            onError={e => { e.currentTarget.style.display = 'none'; }} />
+        </div>
+      ) : (
+        <div style={{
+          height: '80px', borderRadius: '8px', border: '2px dashed #E8E3DA',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: '#FAFAF8', color: '#B5AA99', fontSize: '13px', marginBottom: '8px',
+        }}>
+          No image selected
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: open ? '10px' : '0' }}>
+        <button type="button" onClick={() => setOpen(o => !o)} style={btnGhost}>
+          <ImageIcon size={12} />
+          {open ? 'Close library' : `Library${libraryAssets.length > 0 ? ` (${libraryAssets.length})` : ''}`}
+        </button>
+        <button type="button" onClick={() => fileRef.current?.click()}
+          disabled={!onUpload || uploading} style={btnGhost}>
+          <Upload size={12} /> {uploading ? 'Uploading…' : 'Upload'}
+        </button>
+        {value && (
+          <button type="button" onClick={() => onChange('')}
+            style={{ ...btnGhost, fontSize: '11px', color: '#B5AA99', borderColor: '#F0EDE8' }}>
+            ✕ Clear
+          </button>
+        )}
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
+
+      {/* Library grid */}
+      {open && (
+        <div style={{
+          border: '1px solid #E8E3DA', borderRadius: '8px', padding: '12px',
+          background: '#FAFAF8', marginBottom: '4px',
+        }}>
+          {libraryAssets.length === 0 ? (
+            <p style={{ fontSize: '12px', color: '#B5AA99', textAlign: 'center', padding: '20px 0' }}>
+              No images in library yet. Upload one above or add images in the Images tab.
+            </p>
+          ) : (
+            <>
+              <p style={{ fontSize: '10px', fontWeight: '600', color: '#8C8070', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                {libraryAssets.length} image{libraryAssets.length !== 1 ? 's' : ''} in library — click to select
+              </p>
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))',
+                gap: '5px', maxHeight: '200px', overflowY: 'auto',
+              }}>
+                {libraryAssets.map((a, i) => (
+                  <div key={a.id ?? `lib-${i}`}
+                    onClick={() => { onChange(a.url); setOpen(false); }}
+                    title={a.alt || a.caption || a.assetType}
+                    style={{
+                      cursor: 'pointer', borderRadius: '4px', overflow: 'hidden',
+                      aspectRatio: '4/3', background: '#F4F1EC', position: 'relative',
+                      border: `2px solid ${value === a.url ? '#1B6B65' : 'transparent'}`,
+                    }}
+                  >
+                    <img src={a.url} alt={a.alt || ''}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      onError={e => { e.currentTarget.style.opacity = '0.3'; }} />
+                    {value === a.url && (
+                      <div style={{
+                        position: 'absolute', inset: 0, background: 'rgba(27,107,101,0.2)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <Check size={14} color="white" strokeWidth={3} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -464,7 +594,13 @@ export default function ItineraryCMSEditorPage() {
     ).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Load assets when Images tab opens ────────────────────────────────────────
+  // ── Load assets eagerly so hero/day pickers have data on all tabs ────────────
+  useEffect(() => {
+    if (isNew || !id) return;
+    loadAssets();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Reload assets when Images tab opens (picks up any external changes) ──────
   useEffect(() => {
     if (activeTab !== 'images' || isNew || !id) return;
     loadAssets();
@@ -838,6 +974,47 @@ export default function ItineraryCMSEditorPage() {
     } catch (e) { alert(e.message); }
   }
 
+  // ── Upload from any picker (hero/day) — adds to shared assets[] ──────────────
+  async function uploadAssetFromPicker(file, assetType, dayNumber) {
+    const targetId = savedId.current || (isNew ? null : id);
+    if (!targetId) { alert('Save the itinerary first before uploading images.'); return null; }
+    const slug = slugRef.current || form.slug;
+    if (!slug) { alert('Slug is required to upload images.'); return null; }
+
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = e => resolve(e.target.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    const token = await getToken();
+    const res = await fetch('/api/itinerary-cms?action=upload-asset', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        itineraryId: targetId,
+        slug,
+        assetType,
+        dayNumber: assetType === 'day' ? (dayNumber ?? null) : null,
+        filename: file.name,
+        data: base64,
+        alt: '',
+        caption: '',
+      }),
+    });
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+    setAssets(prev => [...prev, json.asset]);
+    return json.asset.url;
+  }
+
+  // ── Set hero from Images tab ──────────────────────────────────────────────────
+  function handleSetHero(url) {
+    setContent('hero.coverImage', url);
+    setForm(f => ({ ...f, coverImage: url }));
+  }
+
   // ── AI generate ───────────────────────────────────────────────────────────────
   async function handleAIGenerate() {
     if (!aiPrompt.trim()) return;
@@ -998,8 +1175,8 @@ export default function ItineraryCMSEditorPage() {
 
         {/* ── Tab panels ── */}
         {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} />}
-        {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} />}
-        {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} />}
+        {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} />}
+        {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} />}
         {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} />}
         {activeTab === 'images'   && (
           <ImagesTab
@@ -1008,6 +1185,9 @@ export default function ItineraryCMSEditorPage() {
             onAdd={handleAddAsset} onToggle={handleToggleAsset} onDelete={handleDeleteAsset}
             isNew={isNew} hasSavedId={!!savedId.current}
             dayCount={(c('days') || []).length || parseInt(form.durationDays, 10) || 0}
+            heroImageUrl={c('hero.coverImage') || form.coverImage || ''}
+            dayImages={(c('days') || []).reduce((acc, d) => { if (d.img) acc[d.day] = d.img; return acc; }, {})}
+            onSetHero={handleSetHero}
           />
         )}
         {activeTab === 'ai'       && (
@@ -1232,27 +1412,24 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [] }) {
 }
 
 // ── Hero & Summary ────────────────────────────────────────────────────────────
-function HeroTab({ form, c, setContent }) {
+function HeroTab({ form, c, setContent, assets, onUpload }) {
   return (
     <div style={{ maxWidth: '720px' }}>
       <div style={sectionCard}>
         <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>Hero</p>
 
-        <Field label="Cover Image URL" hint="Paste an Unsplash or hosted image URL (1600px width recommended).">
-          <input value={c('hero.coverImage') || ''} style={inputStyle}
-            placeholder="https://images.unsplash.com/…"
-            onChange={e => setContent('hero.coverImage', e.target.value)} />
-        </Field>
-        {c('hero.coverImage') && (
-          <div style={{ height: '180px', borderRadius: '8px', overflow: 'hidden', marginBottom: '16px', background: '#F4F1EC' }}>
-            <img
-              src={resolveCoverImage(c('hero.coverImage'), form.slug)}
-              alt="Cover preview"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              onError={e => { e.currentTarget.style.display = 'none'; }}
-            />
-          </div>
-        )}
+        <ImagePicker
+          label="Cover Image"
+          hint="Select from the shared library, upload a new file, or use a URL from the library."
+          value={resolveCoverImage(c('hero.coverImage'), form.slug) || ''}
+          onChange={url => {
+            setContent('hero.coverImage', url);
+            setContent('coverImage', url); // keep scalar in sync
+          }}
+          assets={assets}
+          onUpload={onUpload ? (file) => onUpload(file, 'hero') : null}
+          assetType="hero"
+        />
 
         <Field label="Tagline">
           <input value={c('hero.tagline') || ''} style={inputStyle}
@@ -1334,7 +1511,7 @@ function HeroTab({ form, c, setContent }) {
 }
 
 // ── Days ──────────────────────────────────────────────────────────────────────
-function DaysTab({ c, addDay, updateDay, deleteDay, moveDay }) {
+function DaysTab({ c, addDay, updateDay, deleteDay, moveDay, assets, onUpload }) {
   const days = c('days') || [];
   return (
     <div>
@@ -1357,6 +1534,8 @@ function DaysTab({ c, addDay, updateDay, deleteDay, moveDay }) {
             onChange={updated => updateDay(i, updated)}
             onDelete={() => deleteDay(i)}
             onMove={(idx, dir) => moveDay(idx, dir)}
+            assets={assets}
+            onUpload={onUpload}
           />
         ))
       )}
@@ -1415,7 +1594,7 @@ function SectionsTab({ c, setContent }) {
 }
 
 // ── Images ────────────────────────────────────────────────────────────────────
-function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, onDelete, isNew, hasSavedId, dayCount }) {
+function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, onDelete, isNew, hasSavedId, dayCount, heroImageUrl, dayImages, onSetHero }) {
   const fileInputRef = useRef(null);
 
   if (isNew && !hasSavedId) {
@@ -1607,9 +1786,25 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
             </p>
             {[...grouped[type]]
               .sort((a, b) => type === 'day' ? (a.dayNumber ?? 0) - (b.dayNumber ?? 0) : 0)
-              .map((asset, i) => (
-                <AssetRow key={asset.id ?? `fs-${i}`} asset={asset} onToggle={onToggle} onDelete={onDelete} />
-              ))}
+              .map((asset, i) => {
+                // Compute usage badge for this asset
+                let usedAs = null;
+                if (heroImageUrl && asset.url === heroImageUrl) usedAs = 'Hero';
+                else if (dayImages) {
+                  const dayMatch = Object.entries(dayImages).find(([, url]) => url === asset.url);
+                  if (dayMatch) usedAs = `Day ${dayMatch[0]}`;
+                }
+                return (
+                  <AssetRow
+                    key={asset.id ?? `fs-${i}`}
+                    asset={asset}
+                    onToggle={onToggle}
+                    onDelete={onDelete}
+                    usedAs={usedAs}
+                    onSetHero={onSetHero && !usedAs ? onSetHero : null}
+                  />
+                );
+              })}
           </div>
         ))
       )}
