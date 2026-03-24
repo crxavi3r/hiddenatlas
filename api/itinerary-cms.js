@@ -192,6 +192,7 @@ async function handleCreate(pool, body) {
   const finalType       = ['free', 'premium', 'custom'].includes(type) ? type : 'free';
   const finalAccessType = finalType === 'free' ? 'free' : 'paid';
   const finalPrivate    = finalType === 'custom' ? true : Boolean(isPrivate);
+  const derivedCoverImage = finalContent.hero?.coverImage || coverImage || '';
 
   const { rows } = await pool.query(
     `INSERT INTO "Itinerary"
@@ -203,7 +204,7 @@ async function handleCreate(pool, body) {
     [
       title, subtitle, slug, destination, country, region, durationDays,
       finalAccessType, 0, stripePriceId || null, pricingKey || null,
-      coverImage,
+      derivedCoverImage,
       finalContent.summary?.shortDescription || '',
       finalType, finalPrivate,
       status, status === 'published',

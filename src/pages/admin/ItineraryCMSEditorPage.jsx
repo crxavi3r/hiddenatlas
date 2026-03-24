@@ -391,7 +391,11 @@ function AssetRow({ asset, onToggle, onDelete, usedAs, onSetHero }) {
 function ImagePicker({ value, onChange, assets = [], onUpload, assetType = 'gallery', dayNumber, label, hint }) {
   const [open, setOpen]           = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [localValue, setLocalValue] = useState(value);
   const fileRef                   = useRef(null);
+
+  // Sync when parent propagates a new value (e.g. initial load or external change)
+  useEffect(() => { setLocalValue(value); }, [value]);
 
   const libraryAssets = assets.filter(a => a.active !== false);
 
@@ -401,7 +405,7 @@ function ImagePicker({ value, onChange, assets = [], onUpload, assetType = 'gall
     setUploading(true);
     try {
       const url = await onUpload(file, assetType, dayNumber);
-      if (url) { onChange(url); setOpen(false); }
+      if (url) { setLocalValue(url); onChange(url); setOpen(false); }
     } catch (err) {
       alert(err.message || 'Upload failed.');
     } finally {
@@ -416,9 +420,9 @@ function ImagePicker({ value, onChange, assets = [], onUpload, assetType = 'gall
       {hint && <p style={{ fontSize: '11px', color: '#B5AA99', marginBottom: '6px' }}>{hint}</p>}
 
       {/* Thumbnail */}
-      {value ? (
+      {localValue ? (
         <div style={{ height: '160px', borderRadius: '8px', overflow: 'hidden', marginBottom: '8px', background: '#F4F1EC' }}>
-          <img src={value} alt="Selected"
+          <img src={localValue} alt="Selected"
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
             onError={e => { e.currentTarget.style.display = 'none'; }} />
         </div>
@@ -442,8 +446,8 @@ function ImagePicker({ value, onChange, assets = [], onUpload, assetType = 'gall
           disabled={!onUpload || uploading} style={btnGhost}>
           <Upload size={12} /> {uploading ? 'Uploading…' : 'Upload'}
         </button>
-        {value && (
-          <button type="button" onClick={() => onChange('')}
+        {localValue && (
+          <button type="button" onClick={() => { setLocalValue(''); onChange(''); }}
             style={{ ...btnGhost, fontSize: '11px', color: '#B5AA99', borderColor: '#F0EDE8' }}>
             ✕ Clear
           </button>
@@ -472,18 +476,18 @@ function ImagePicker({ value, onChange, assets = [], onUpload, assetType = 'gall
               }}>
                 {libraryAssets.map((a, i) => (
                   <div key={a.id ?? `lib-${i}`}
-                    onClick={() => { onChange(a.url); setOpen(false); }}
+                    onClick={() => { setLocalValue(a.url); onChange(a.url); setOpen(false); }}
                     title={a.alt || a.caption || a.assetType}
                     style={{
                       cursor: 'pointer', borderRadius: '4px', overflow: 'hidden',
                       aspectRatio: '4/3', background: '#F4F1EC', position: 'relative',
-                      border: `2px solid ${value === a.url ? '#1B6B65' : 'transparent'}`,
+                      border: `2px solid ${localValue === a.url ? '#1B6B65' : 'transparent'}`,
                     }}
                   >
                     <img src={a.url} alt={a.alt || ''}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                       onError={e => { e.currentTarget.style.opacity = '0.3'; }} />
-                    {value === a.url && (
+                    {localValue === a.url && (
                       <div style={{
                         position: 'absolute', inset: 0, background: 'rgba(27,107,101,0.2)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1009,8 +1013,8 @@ export default function ItineraryCMSEditorPage() {
     return json.asset.url;
   }
 
-  // ── Set hero from Images tab ──────────────────────────────────────────────────
-  function handleSetHero(url) {
+  // ── Set hero image (shared by HeroTab picker and Images tab "Set as hero") ───
+  function handleHeroCoverImage(url) {
     setContent('hero.coverImage', url);
     setForm(f => ({ ...f, coverImage: url }));
   }
@@ -1175,7 +1179,7 @@ export default function ItineraryCMSEditorPage() {
 
         {/* ── Tab panels ── */}
         {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} />}
-        {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} />}
+        {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} onCoverImageChange={handleHeroCoverImage} />}
         {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} />}
         {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} />}
         {activeTab === 'images'   && (
@@ -1187,7 +1191,7 @@ export default function ItineraryCMSEditorPage() {
             dayCount={(c('days') || []).length || parseInt(form.durationDays, 10) || 0}
             heroImageUrl={c('hero.coverImage') || form.coverImage || ''}
             dayImages={(c('days') || []).reduce((acc, d) => { if (d.img) acc[d.day] = d.img; return acc; }, {})}
-            onSetHero={handleSetHero}
+            onSetHero={handleHeroCoverImage}
           />
         )}
         {activeTab === 'ai'       && (
@@ -1412,7 +1416,7 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [] }) {
 }
 
 // ── Hero & Summary ────────────────────────────────────────────────────────────
-function HeroTab({ form, c, setContent, assets, onUpload }) {
+function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) {
   return (
     <div style={{ maxWidth: '720px' }}>
       <div style={sectionCard}>
@@ -1422,10 +1426,7 @@ function HeroTab({ form, c, setContent, assets, onUpload }) {
           label="Cover Image"
           hint="Select from the shared library, upload a new file, or use a URL from the library."
           value={resolveCoverImage(c('hero.coverImage'), form.slug) || ''}
-          onChange={url => {
-            setContent('hero.coverImage', url);
-            setContent('coverImage', url); // keep scalar in sync
-          }}
+          onChange={url => onCoverImageChange(url)}
           assets={assets}
           onUpload={onUpload ? (file) => onUpload(file, 'hero') : null}
           assetType="hero"

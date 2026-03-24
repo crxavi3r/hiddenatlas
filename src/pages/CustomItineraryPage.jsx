@@ -394,7 +394,9 @@ export default function CustomItineraryPage() {
     ? `${itinerary.durationDays} Day${itinerary.durationDays !== 1 ? 's' : ''}`
     : '';
 
-  const coverSrc = resolveCoverImage(itinerary.coverImage, itinerary.slug);
+  // Scalar coverImage may not be set on older records — fall back to content.hero.coverImage
+  const rawCoverImage = itinerary.coverImage || content.hero?.coverImage || '';
+  const coverSrc = resolveCoverImage(rawCoverImage, itinerary.slug);
 
   // Inject DB day images into each day (DB asset takes priority over inline img)
   const days = (content.days || []).map(day => {
@@ -424,13 +426,15 @@ export default function CustomItineraryPage() {
       )}
 
       {/* ── Hero ── */}
-      <section style={{ position: 'relative', height: 'clamp(400px, 55vw, 600px)', overflow: 'hidden' }}>
-        <img
-          src={coverSrc}
-          alt={itinerary.title}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }}
-          onError={e => { e.currentTarget.onerror = null; e.currentTarget.style.background = '#1B6B65'; }}
-        />
+      <section style={{ position: 'relative', height: 'clamp(400px, 55vw, 600px)', overflow: 'hidden', background: '#0E3D39' }}>
+        {coverSrc && (
+          <img
+            src={coverSrc}
+            alt={itinerary.title}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }}
+            onError={e => { e.currentTarget.onerror = null; e.currentTarget.style.display = 'none'; }}
+          />
+        )}
         <div style={{
           position: 'absolute', inset: 0,
           background: 'linear-gradient(to top, rgba(14,61,57,0.85) 0%, rgba(14,61,57,0.2) 60%, transparent 100%)',
