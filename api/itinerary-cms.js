@@ -290,6 +290,16 @@ async function handleUpdate(pool, id, body) {
     ]
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+
+  // Auto-sync: publishing a custom itinerary marks the linked request as Ready.
+  if (derivedIsPublished) {
+    await pool.query(
+      `UPDATE "CustomRequest" SET status = 'done'
+       WHERE "itineraryId" = $1 AND status != 'done'`,
+      [id]
+    ).catch(err => console.warn('[itinerary-cms/update] CustomRequest sync failed:', err.message));
+  }
+
   return { itinerary: rows[0] };
 }
 
@@ -384,6 +394,16 @@ async function handleSetStatus(pool, id, status) {
     [id, status, status === 'published']
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+
+  // Auto-sync: publishing a custom itinerary marks the linked request as Ready.
+  if (status === 'published') {
+    await pool.query(
+      `UPDATE "CustomRequest" SET status = 'done'
+       WHERE "itineraryId" = $1 AND status != 'done'`,
+      [id]
+    ).catch(err => console.warn('[itinerary-cms/set-status] CustomRequest sync failed:', err.message));
+  }
+
   return { itinerary: rows[0] };
 }
 
