@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import {
   ArrowLeft, Save, Globe, EyeOff, Eye, Plus, Trash2, ChevronDown, ChevronUp,
-  Wand2, Image as ImageIcon, Clock, Check, User, Upload,
+  Wand2, Image as ImageIcon, Clock, Check, User, Upload, FileText, ExternalLink,
 } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { resolveCoverImage } from '../../lib/resolveCoverImage';
@@ -388,7 +388,7 @@ export default function ItineraryCMSEditorPage() {
     title: '', subtitle: '', slug: '', destination: '', country: '',
     region: '', durationDays: '', type: 'free', isPrivate: false, isCollection: false,
     price: '', stripePriceId: '',
-    coverImage: '', status: 'draft', content: { ...EMPTY_CONTENT },
+    coverImage: '', status: 'draft', pdfUrl: '', content: { ...EMPTY_CONTENT },
   });
 
   // Images tab state
@@ -402,6 +402,8 @@ export default function ItineraryCMSEditorPage() {
   const [aiOutput,      setAiOutput]      = useState(null);
   const [aiHistory,     setAiHistory]     = useState([]);
   const [linkedRequest, setLinkedRequest] = useState(null);
+
+  const [pdfState, setPdfState] = useState('idle'); // idle | generating | done | error
 
   const savedId  = useRef(null); // set after first create
   const slugRef  = useRef('');  // set after load, used by loadAssets for FS scan
@@ -438,6 +440,7 @@ export default function ItineraryCMSEditorPage() {
         isCollection: it.isCollection ?? false,
         price: it.price || '', stripePriceId: it.stripePriceId || '',
         coverImage: it.coverImage || '', status: it.status || 'draft',
+        pdfUrl: it.pdfUrl || '',
         content,
       });
       savedId.current = it.id;
@@ -663,6 +666,50 @@ export default function ItineraryCMSEditorPage() {
     } catch (e) { alert(e.message); }
   }
 
+  // ── Generate + upload PDF (custom itineraries) ───────────────────────────────
+  async function handleGeneratePDF() {
+    const targetId = savedId.current || (isNew ? null : id);
+    if (!targetId) { alert('Save the itinerary first.'); return; }
+    setPdfState('generating');
+    try {
+      // Fetch fresh assets from DB (don't rely on images tab having been visited)
+      const token       = await getToken();
+      const assetsRes   = await fetch(`/api/itinerary-cms?action=assets&id=${targetId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const assetsJson  = await assetsRes.json();
+      const freshAssets = assetsJson.assets ?? [];
+
+      const { buildCustomPDFBlob } = await import('../../utils/buildCustomPDF');
+      const blob = await buildCustomPDFBlob({ ...form, id: targetId }, freshAssets);
+
+      // Convert blob to base64
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = e => resolve(e.target.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      const res  = await fetch(`/api/itinerary-cms?action=upload-pdf&id=${targetId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: base64 }),
+      });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+
+      setForm(f => ({ ...f, pdfUrl: json.pdfUrl }));
+      setPdfState('done');
+      setTimeout(() => setPdfState('idle'), 4000);
+    } catch (e) {
+      console.error('[CMS] PDF generation failed:', e.message);
+      alert(`PDF generation failed: ${e.message}`);
+      setPdfState('error');
+      setTimeout(() => setPdfState('idle'), 4000);
+    }
+  }
+
   // ── Asset actions ─────────────────────────────────────────────────────────────
   const EMPTY_ASSET = { assetType: 'gallery', source: 'url', dayNumber: 1, url: '', alt: '', caption: '', file: null, filePreview: null };
 
@@ -869,6 +916,33 @@ export default function ItineraryCMSEditorPage() {
           }}>
             {isPublished ? 'Published' : 'Draft'}
           </span>
+
+          {/* Preview — opens custom itinerary page in new tab */}
+          {form.slug && (
+            <a
+              href={`/itinerary/custom/${form.slug}?preview=true`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <ExternalLink size={12} /> Preview
+            </a>
+          )}
+
+          {/* Generate PDF — custom itineraries only */}
+          {form.type === 'custom' && !isNew && (savedId.current || id) && (
+            <button
+              onClick={handleGeneratePDF}
+              disabled={pdfState === 'generating'}
+              style={{
+                ...btnSecondary,
+                color: pdfState === 'done' ? '#1B6B65' : pdfState === 'error' ? '#C0392B' : btnSecondary.color,
+              }}
+            >
+              <FileText size={12} />
+              {pdfState === 'generating' ? 'Generating…' : pdfState === 'done' ? 'PDF ready!' : pdfState === 'error' ? 'PDF failed' : form.pdfUrl ? 'Regenerate PDF' : 'Generate PDF'}
+            </button>
+          )}
 
           <button onClick={handleTogglePublish} style={btnSecondary}>
             {isPublished ? <><EyeOff size={12} /> Unpublish</> : <><Globe size={12} /> Publish</>}

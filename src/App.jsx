@@ -18,6 +18,7 @@ import { JournalListPage, JournalPostPage } from './pages/JournalPage';
 import AIPlannerPage from './pages/AIPlannerPage';
 import MyTrips from './pages/MyTrips';
 import TripDetailPage from './pages/TripDetailPage';
+import CustomItineraryPage from './pages/CustomItineraryPage';
 import SignInPage from './pages/SignInPage';
 import SignUpPage from './pages/SignUpPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
@@ -103,6 +104,7 @@ export default function App() {
           <Route path="/ai-planner" element={<AIPlannerPage />} />
           <Route path="/my-trips" element={<MyTrips />} />
           <Route path="/my-trips/:id" element={<TripDetailPage />} />
+          <Route path="/itinerary/custom/:slug" element={<CustomItineraryPage />} />
           <Route path="/sign-in/*" element={<SignInPage />} />
           <Route path="/sign-up/*" element={<SignUpPage />} />
           <Route path="/privacy" element={<PrivacyPolicyPage />} />

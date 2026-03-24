@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowRight, Calendar, BookOpen, MapPin, Clock, Trash2, Sparkles } from 'lucide-react';
+import { ArrowRight, Calendar, BookOpen, MapPin, Clock, Trash2, Sparkles, Download } from 'lucide-react';
 import { useUser } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
 import { getTripSource } from '../lib/tripSource';
 import { itineraries } from '../data/itineraries';
 import { getAiCoverImage } from '../lib/coverImage';
+import { resolveCoverImage } from '../lib/resolveCoverImage';
 
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -385,44 +386,66 @@ const REQUEST_STATUS = {
 
 function CustomRequestCard({ request }) {
   const [hovered, setHovered] = useState(false);
-  const meta = REQUEST_STATUS[request.status] ?? REQUEST_STATUS.open;
+  const meta        = REQUEST_STATUS[request.status] ?? REQUEST_STATUS.open;
+  const linkedSlug  = request.linkedItinerarySlug;
+  const linkedReady = request.linkedItineraryStatus === 'published';
 
-  // Priority order for CTA/link:
-  //   'itinerary' — paid custom itinerary is done → link to /itineraries/:slug
-  //   'processing' — paid custom itinerary is still being prepared → status pill
-  //   'trip'       — legacy AI trip link via tripId
-  //   'status'     — no link, show workflow status pill
-  const linkedStatus = request.linkedItineraryStatus;
-  const linkedSlug   = request.linkedItinerarySlug;
+  // Resolve presentation fields from linked itinerary (if ready) or request fallback
+  const title       = request.linkedItineraryTitle || request.destination || 'Custom trip';
+  const coverSrc    = linkedSlug
+    ? resolveCoverImage(request.linkedItineraryCoverImage, linkedSlug)
+    : null;
+  const durationStr = request.linkedItineraryDurationDays
+    ? `${request.linkedItineraryDurationDays} days`
+    : null;
+  const country     = request.linkedItineraryCountry || null;
+  const pdfUrl      = request.linkedItineraryPdfUrl  || null;
 
+  // CTA mode
   let ctaMode = 'status';
-  if ((request.status === 'done' || linkedStatus === 'done') && linkedSlug) ctaMode = 'itinerary';
-  else if (request.tripId) ctaMode = 'trip';
+  if (linkedSlug && linkedReady)                    ctaMode = 'itinerary';
+  else if (linkedSlug)                              ctaMode = 'processing';
+  else if (request.tripId)                          ctaMode = 'trip';
 
-  const isClickable = ctaMode === 'itinerary' || ctaMode === 'trip';
+  const itineraryUrl = `/itinerary/custom/${linkedSlug}`;
 
-  const content = (
+  return (
     <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         background: 'white', borderRadius: '10px',
-        border: '1px solid #E8E3DA',
+        border: '1px solid #E8E3DA', overflow: 'hidden',
         boxShadow: hovered ? '0 20px 60px rgba(28,26,22,0.12)' : '0 2px 16px rgba(28,26,22,0.05)',
         transform: hovered ? 'translateY(-4px)' : 'translateY(0)',
         transition: 'box-shadow 0.3s ease, transform 0.3s ease',
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        cursor: isClickable ? 'pointer' : 'default',
-        textDecoration: 'none',
+        display: 'flex', flexDirection: 'column',
       }}
     >
-      {/* Banner */}
+      {/* Banner — hero image or gradient fallback */}
       <div style={{
-        height: '140px',
+        position: 'relative', height: '180px', flexShrink: 0, overflow: 'hidden',
         background: 'linear-gradient(135deg, #0E3D39 0%, #1B6B65 60%, #2A8A7E 100%)',
-        position: 'relative', flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <Sparkles size={32} color="rgba(255,255,255,0.25)" />
-        {/* Badge */}
+        {coverSrc ? (
+          <img
+            src={coverSrc}
+            alt={title}
+            style={{
+              width: '100%', height: '100%', objectFit: 'cover',
+              transform: hovered ? 'scale(1.05)' : 'scale(1)',
+              transition: 'transform 0.5s ease',
+            }}
+            onError={e => { e.currentTarget.style.display = 'none'; }}
+          />
+        ) : (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Sparkles size={32} color="rgba(255,255,255,0.25)" />
+          </div>
+        )}
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(14,61,57,0.7) 0%, transparent 55%)' }} />
+
+        {/* Custom Journey badge */}
         <div style={{
           position: 'absolute', top: '12px', left: '14px',
           padding: '4px 10px', borderRadius: '3px',
@@ -431,13 +454,13 @@ function CustomRequestCard({ request }) {
         }}>
           Custom Journey
         </div>
+
         {/* Status pill */}
         <div style={{
           position: 'absolute', bottom: '12px', left: '14px',
-          fontSize: '10.5px', fontWeight: '600',
-          color: 'white', background: 'rgba(0,0,0,0.35)',
-          padding: '3px 9px', borderRadius: '10px',
-          backdropFilter: 'blur(4px)',
+          fontSize: '10.5px', fontWeight: '600', color: 'white',
+          background: 'rgba(0,0,0,0.4)', padding: '3px 9px',
+          borderRadius: '10px', backdropFilter: 'blur(4px)',
         }}>
           {meta.label}
         </div>
@@ -450,76 +473,110 @@ function CustomRequestCard({ request }) {
           fontSize: '18px', fontWeight: '600', color: '#1C1A16',
           lineHeight: '1.3', marginBottom: '6px',
         }}>
-          {request.destination || 'Custom trip'}
+          {title}
         </h3>
-        {request.dates && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#8C8070', marginBottom: '10px' }}>
-            <Calendar size={10} strokeWidth={2} />
-            {request.dates}
-          </div>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: '#B5AA99', marginBottom: '14px' }}>
+
+        {/* Metadata row */}
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '10px' }}>
+          {country && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#8C8070' }}>
+              <MapPin size={10} strokeWidth={2} />{country}
+            </span>
+          )}
+          {durationStr && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#8C8070' }}>
+              <Clock size={10} strokeWidth={2} />{durationStr}
+            </span>
+          )}
+          {!country && request.dates && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#8C8070' }}>
+              <Calendar size={10} strokeWidth={2} />{request.dates}
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: '#B5AA99', marginBottom: '16px' }}>
           <Calendar size={11} strokeWidth={2} />
           Submitted {formatDate(request.createdAt)}
         </div>
 
-        {/* CTA — one of four modes */}
-        {(ctaMode === 'itinerary' || ctaMode === 'trip') && (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
-            padding: '11px 16px', background: '#1B6B65', color: 'white',
-            borderRadius: '4px', fontSize: '12.5px', fontWeight: '600',
-            letterSpacing: '0.4px', textTransform: 'uppercase',
-            justifyContent: 'center',
-          }}>
-            <BookOpen size={13} /> View your itinerary
-          </div>
-        )}
-        {ctaMode === 'status' && (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
-            padding: '11px 16px',
-            background: meta.bg, color: meta.color,
-            border: `1px solid ${meta.color}22`,
-            borderRadius: '4px', fontSize: '12px', fontWeight: '600',
-            letterSpacing: '0.4px', justifyContent: 'center',
-          }}>
-            {meta.label}
-          </div>
-        )}
+        {/* CTAs */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: 'auto' }}>
+          {ctaMode === 'itinerary' && (
+            <>
+              <Link
+                to={itineraryUrl}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  padding: '11px 16px', background: '#1B6B65', color: 'white',
+                  borderRadius: '4px', fontSize: '12.5px', fontWeight: '600',
+                  letterSpacing: '0.4px', textTransform: 'uppercase',
+                  textDecoration: 'none', justifyContent: 'center',
+                }}
+              >
+                <BookOpen size={13} /> View Itinerary
+              </Link>
+              {pdfUrl && (
+                <a
+                  href={pdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={e => e.stopPropagation()}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    padding: '10px 16px', background: 'white', color: '#C9A96E',
+                    border: '1px solid #C9A96E', borderRadius: '4px',
+                    fontSize: '12.5px', fontWeight: '600',
+                    letterSpacing: '0.4px', textTransform: 'uppercase',
+                    textDecoration: 'none', justifyContent: 'center',
+                  }}
+                >
+                  <Download size={13} /> Download PDF
+                </a>
+              )}
+            </>
+          )}
+
+          {ctaMode === 'processing' && (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '11px 16px', background: '#FBF6EE', color: '#A07830',
+              border: '1px solid #A0783022', borderRadius: '4px',
+              fontSize: '12px', fontWeight: '600', letterSpacing: '0.4px',
+              justifyContent: 'center',
+            }}>
+              Building your itinerary…
+            </div>
+          )}
+
+          {ctaMode === 'trip' && (
+            <Link
+              to={`/my-trips/${request.tripId}`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                padding: '11px 16px', background: '#1B6B65', color: 'white',
+                borderRadius: '4px', fontSize: '12.5px', fontWeight: '600',
+                letterSpacing: '0.4px', textTransform: 'uppercase',
+                textDecoration: 'none', justifyContent: 'center',
+              }}
+            >
+              <BookOpen size={13} /> View trip
+            </Link>
+          )}
+
+          {ctaMode === 'status' && (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '11px 16px', background: meta.bg, color: meta.color,
+              border: `1px solid ${meta.color}22`, borderRadius: '4px',
+              fontSize: '12px', fontWeight: '600', letterSpacing: '0.4px',
+              justifyContent: 'center',
+            }}>
+              {meta.label}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
-
-  if (ctaMode === 'itinerary') {
-    return (
-      <Link
-        to={`/itineraries/${linkedSlug}`}
-        style={{ textDecoration: 'none' }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-      >
-        {content}
-      </Link>
-    );
-  }
-
-  if (ctaMode === 'trip') {
-    return (
-      <Link
-        to={`/my-trips/${request.tripId}`}
-        style={{ textDecoration: 'none' }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-      >
-        {content}
-      </Link>
-    );
-  }
-
-  return (
-    <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
-      {content}
     </div>
   );
 }

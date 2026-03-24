@@ -16,6 +16,7 @@
 // POST /api/itinerary-cms?action=save-asset
 // POST /api/itinerary-cms?action=delete-asset&id=:assetId
 // POST /api/itinerary-cms?action=toggle-asset&id=:assetId
+// POST /api/itinerary-cms?action=upload-pdf&id=:id    — upload PDF blob → store pdfUrl
 // POST /api/itinerary-cms?action=ai-generate
 
 import pg                         from 'pg';
@@ -94,6 +95,7 @@ export default async function handler(req, res) {
       if (action === 'upload-asset') return res.json(await handleUploadAsset(pool, body));
       if (action === 'delete-asset') return res.json(await handleDeleteAsset(pool, id));
       if (action === 'toggle-asset') return res.json(await handleToggleAsset(pool, id));
+      if (action === 'upload-pdf')   return res.json(await handleUploadPDF(pool, id, body));
       if (action === 'ai-generate')  return res.json(await handleAIGenerate(pool, body, adminEmail));
       return res.status(400).json({ error: 'Unknown POST action' });
     }
@@ -427,6 +429,36 @@ async function handleBulkPublish(pool) {
     RETURNING id, slug, type, "accessType", price
   `);
   return { ok: true, published: rows.length, items: rows };
+}
+
+// ── Upload PDF → Vercel Blob → store pdfUrl ───────────────────────────────────
+async function handleUploadPDF(pool, id, body) {
+  if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
+  const { data: base64Data } = body;
+  if (!base64Data) throw Object.assign(new Error('data (base64) is required'), { status: 400 });
+
+  const { rows } = await pool.query(
+    `SELECT slug FROM "Itinerary" WHERE id = $1 LIMIT 1`, [id]
+  );
+  if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+  const slug = rows[0].slug;
+
+  const filename = `${slug}-hiddenatlas.pdf`;
+  const blobPath = `itineraries/${slug}/pdf/${filename}`;
+  const buffer   = Buffer.from(base64Data, 'base64');
+
+  const result = await blobPut(blobPath, buffer, {
+    access: 'public',
+    contentType: 'application/pdf',
+    addRandomSuffix: false,
+  });
+
+  const { rows: updated } = await pool.query(
+    `UPDATE "Itinerary" SET "pdfUrl" = $2, "updatedAt" = NOW()
+     WHERE id = $1 RETURNING id, slug, "pdfUrl"`,
+    [id, result.url]
+  );
+  return { ok: true, pdfUrl: result.url, itinerary: updated[0] };
 }
 
 // ── Assets: list ──────────────────────────────────────────────────────────────
