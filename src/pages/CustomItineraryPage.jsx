@@ -23,11 +23,21 @@ function mergeByType(dbAssets, type) {
 // Day card
 // ─────────────────────────────────────────────────────────────
 function DayCard({ day, dayImg, isLast }) {
+  // Support both field name variants (desc vs description, bullets vs places)
+  const description = day.desc || day.description || null;
+  const bullets     = Array.isArray(day.bullets) && day.bullets.length > 0
+    ? day.bullets
+    : Array.isArray(day.places) && day.places.length > 0
+      ? day.places
+      : [];
+  // DB asset takes priority; fall back to inline img URL saved in content
+  const imgSrc = dayImg || day.img || null;
+
   return (
     <div style={{
       display: 'flex', gap: '0',
       borderLeft: isLast ? 'none' : '2px solid #E8E3DA',
-      marginLeft: '16px', paddingLeft: '28px', paddingBottom: isLast ? 0 : '40px',
+      marginLeft: '16px', paddingLeft: '28px', paddingBottom: isLast ? 0 : '48px',
       position: 'relative',
     }}>
       {/* Dot */}
@@ -48,18 +58,18 @@ function DayCard({ day, dayImg, isLast }) {
         <h3 style={{
           fontFamily: "'Playfair Display', Georgia, serif",
           fontSize: '20px', fontWeight: '600', color: '#1C1A16',
-          lineHeight: '1.3', marginBottom: '12px',
+          lineHeight: '1.3', marginBottom: '16px',
         }}>
           {day.title}
         </h3>
 
-        {dayImg && (
+        {imgSrc && (
           <div style={{
-            height: '200px', borderRadius: '8px', overflow: 'hidden',
-            marginBottom: '16px',
+            height: '220px', borderRadius: '8px', overflow: 'hidden',
+            marginBottom: '20px',
           }}>
             <img
-              src={dayImg}
+              src={imgSrc}
               alt={`Day ${day.day}`}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               onError={e => { e.currentTarget.style.display = 'none'; }}
@@ -67,28 +77,46 @@ function DayCard({ day, dayImg, isLast }) {
           </div>
         )}
 
-        {day.description && (
-          <p style={{ fontSize: '15px', color: '#4A433A', lineHeight: '1.75', marginBottom: '16px' }}>
-            {day.description}
+        {description && (
+          <p style={{ fontSize: '15px', color: '#4A433A', lineHeight: '1.8', marginBottom: '20px' }}>
+            {description}
           </p>
         )}
 
-        {Array.isArray(day.places) && day.places.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-            {day.places.map((p, i) => (
-              <span key={i} style={{
-                fontSize: '12px', color: '#4A433A',
-                background: '#F4F1EC', borderRadius: '3px',
-                padding: '3px 10px', border: '1px solid #E8E3DA',
-              }}>
-                {p}
-              </span>
+        {bullets.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
+            {bullets.map((b, i) => (
+              <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <div style={{
+                  width: '6px', height: '6px', borderRadius: '50%',
+                  background: '#1B6B65', flexShrink: 0, marginTop: '7px',
+                }} />
+                <span style={{ fontSize: '14px', color: '#4A433A', lineHeight: '1.6' }}>{b}</span>
+              </div>
             ))}
           </div>
         )}
 
+        {day.tip && (
+          <div style={{
+            background: '#EFF6F5', borderLeft: '3px solid #1B6B65',
+            borderRadius: '0 6px 6px 0', padding: '14px 16px',
+            marginBottom: '8px',
+          }}>
+            <p style={{
+              fontSize: '10px', fontWeight: '700', letterSpacing: '1.5px',
+              textTransform: 'uppercase', color: '#1B6B65', marginBottom: '6px',
+            }}>
+              Insider Tip
+            </p>
+            <p style={{ fontSize: '13.5px', color: '#3D3830', lineHeight: '1.7', margin: 0 }}>
+              {day.tip}
+            </p>
+          </div>
+        )}
+
         {Array.isArray(day.hotels) && day.hotels.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
             {day.hotels.map((h, i) => (
               <span key={i} style={{
                 fontSize: '11.5px', color: '#8C8070',
