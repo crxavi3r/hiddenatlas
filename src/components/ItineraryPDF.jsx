@@ -805,13 +805,15 @@ const PDF_ROUTE_MAPS = {
 
 /** Thin running header shared by all inner pages */
 function RunHeader({ country, title }) {
+  const c = (country || '').toUpperCase();
+  const t = (title   || '').toUpperCase();
   return (
     <View style={s.header}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <StarMark size={11} color={C.gold} />
         <Text style={s.headerBrand}>HiddenAtlas</Text>
       </View>
-      <Text style={s.headerSection}>{country.toUpperCase()} — {title.toUpperCase()}</Text>
+      <Text style={s.headerSection}>{c}{c && t ? ' — ' : ''}{t}</Text>
     </View>
   );
 }
@@ -876,7 +878,7 @@ function RouteTimeline({ days }) {
 // ── Page components ───────────────────────────────────────────────────────────
 
 function CoverPage({ itinerary }) {
-  const { title, subtitle, country, region, duration, nights, groupSize, coverImage, image } = itinerary;
+  const { title = '', subtitle = '', country = '', region, duration = '', nights, groupSize, coverImage, image } = itinerary;
   const durationLabel = nights
     ? `${duration.replace(/\bdays?\b/i, 'Days')} \u2022 ${nights} Nights`
     : duration;
@@ -947,7 +949,7 @@ function CoverPage({ itinerary }) {
 
 function RouteMapPage({ itinerary }) {
   const {
-    title, country, region, duration, nights,
+    title = '', country = '', region, duration = '', nights,
     days = [], highlights = [],
   } = itinerary;
   const durationLabel = nights
@@ -1391,9 +1393,34 @@ function CTAPage({ itinerary }) {
 }
 
 // ── Main document ─────────────────────────────────────────────────────────────
+//
+// @react-pdf/renderer v4 calls each component function and then processes its
+// return value. If a component returns null the renderer crashes attempting
+// `null.props`. Guard every optional page here so null never reaches it.
 
 export default function ItineraryPDF({ itinerary }) {
   const { days = [] } = itinerary;
+
+  // Conditions mirror each optional component's own early-return guard so we
+  // never invoke a component that would return null.
+  const mapImageUrl   = itinerary.mapImage || null;
+  const hasMapPng     = !!(mapImageUrl && !mapImageUrl.endsWith('.svg'));
+  const hasSvgMap     = !mapImageUrl && !!PDF_ROUTE_MAPS[itinerary.id];
+  const hasTransport  = !!itinerary.transport;
+  const hasClosing    = !!(itinerary.whySpecial || itinerary.routeOverview);
+
+  // Build an explicit array so the Document receives only valid Page elements —
+  // no nulls, no false values, no conditional JSX that could resolve to nothing.
+  const pages = [
+    <CoverPage    key="cover"          itinerary={itinerary} />,
+    <RouteMapPage key="route-overview" itinerary={itinerary} />,
+    ...(hasMapPng    ? [<DestinationMapPage    key="map"       itinerary={itinerary} />] : []),
+    ...(hasSvgMap    ? [<DestinationSvgMapPage key="svg-map"   itinerary={itinerary} />] : []),
+    ...days.map((day, i) => <DayPage key={`day-${i}`} day={day} index={i} itinerary={itinerary} />),
+    ...(hasTransport ? [<TransportPage key="transport"          itinerary={itinerary} />] : []),
+    ...(hasClosing   ? [<ClosingPage   key="closing"            itinerary={itinerary} />] : []),
+    <CTAPage key="cta" itinerary={itinerary} />,
+  ];
 
   return (
     <Document
@@ -1403,31 +1430,7 @@ export default function ItineraryPDF({ itinerary }) {
       keywords="travel, itinerary, luxury, HiddenAtlas"
       hyphenationCallback={word => [word]}
     >
-      {/* Page 1 – Cover */}
-      <CoverPage itinerary={itinerary} />
-
-      {/* Page 2 – Expedition Route + Highlights */}
-      <RouteMapPage itinerary={itinerary} />
-
-      {/* Page 3 (optional) – Destination route map: PNG asset or PDF-native SVG */}
-      {itinerary.mapImage
-        ? <DestinationMapPage itinerary={itinerary} />
-        : <DestinationSvgMapPage itinerary={itinerary} />
-      }
-
-      {/* Pages 3/4…N – Day by day */}
-      {days.map((day, i) => (
-        <DayPage key={i} day={day} index={i} itinerary={itinerary} />
-      ))}
-
-      {/* Transport Between Cities (optional) – after route, before closing */}
-      {itinerary.transport && <TransportPage itinerary={itinerary} />}
-
-      {/* Closing editorial page – Why This Journey Is Special + Journey Snapshot */}
-      <ClosingPage itinerary={itinerary} />
-
-      {/* Final page – CTA */}
-      <CTAPage itinerary={itinerary} />
+      {pages}
     </Document>
   );
 }
