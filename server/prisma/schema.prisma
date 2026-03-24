@@ -58,6 +58,10 @@ model Itinerary {
   isCollection  Boolean  @default(false)   // true for parent/aggregate itineraries (excluded from default CMS list)
   pricingKey    String?                    // 'premium_complete' | 'premium_essential' | 'premium_short'
 
+  type          String   @default("free")  // free | premium | custom
+  isPrivate     Boolean  @default(false)   // true for custom/private itineraries
+  userId        String?                    // owner for custom itineraries; null for public ones
+
   purchases         Purchase[]
   assets            ItineraryAsset[]
   aiGenerations     ItineraryAIGeneration[]
