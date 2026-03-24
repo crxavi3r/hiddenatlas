@@ -39,7 +39,7 @@ export const SLUG_TO_VARIANT = Object.fromEntries(
 // Falls back to STRIPE_PRICE_PREMIUM if a tier-specific var is not set.
 export function getVariantPriceId(variant) {
   const map = {
-    premium:   process.env.STRIPE_PRICE_PREMIUM   || process.env.STRIPE_PRICE_ID,
+    premium:   process.env.STRIPE_PRICE_PREMIUM_COMPLETE || process.env.STRIPE_PRICE_PREMIUM || process.env.STRIPE_PRICE_ID,
     essential: process.env.STRIPE_PRICE_PREMIUM_ESSENTIAL,
     short:     process.env.STRIPE_PRICE_PREMIUM_SHORT,
   };

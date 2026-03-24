@@ -97,8 +97,9 @@ export default async function handler(req, res) {
       if (action === 'upload-asset') return res.json(await handleUploadAsset(pool, body));
       if (action === 'delete-asset') return res.json(await handleDeleteAsset(pool, id));
       if (action === 'toggle-asset') return res.json(await handleToggleAsset(pool, id));
-      if (action === 'upload-pdf')   return res.json(await handleUploadPDF(pool, id, body));
-      if (action === 'ai-generate')  return res.json(await handleAIGenerate(pool, body, adminEmail));
+      if (action === 'upload-pdf')      return res.json(await handleUploadPDF(pool, id, body));
+      if (action === 'ai-generate')     return res.json(await handleAIGenerate(pool, body, adminEmail));
+      if (action === 'backfill-pricing') return res.json(await handleBackfillPricing(pool));
       return res.status(400).json({ error: 'Unknown POST action' });
     }
   } catch (err) {
@@ -113,18 +114,22 @@ export default async function handler(req, res) {
 }
 
 // ── Pricing options (from env) ────────────────────────────────────────────────
-// Reads three named env vars — one per pricing tier.
-// Returns only tiers whose env var is set so the dropdown is always accurate.
-// Each option: { key, label, displayPrice, stripePriceId }
+// The 'complete' (€29) tier uses the same fallback chain as getVariantPriceId so
+// existing STRIPE_PRICE_PREMIUM / STRIPE_PRICE_ID values also surface it correctly.
+// Returns only tiers whose price ID resolves to a non-empty string.
+// Each option: { key, label, displayPrice, price, currency, stripePriceId }
 function handlePricingOptions() {
+  const completeId  = process.env.STRIPE_PRICE_PREMIUM_COMPLETE || process.env.STRIPE_PRICE_PREMIUM || process.env.STRIPE_PRICE_ID || '';
+  const essentialId = process.env.STRIPE_PRICE_PREMIUM_ESSENTIAL || '';
+  const shortId     = process.env.STRIPE_PRICE_PREMIUM_SHORT     || '';
+
   const tiers = [
-    { key: 'premium_short',     label: 'Premium Itinerary Short',     displayPrice: '€14', envVar: 'STRIPE_PRICE_PREMIUM_SHORT'     },
-    { key: 'premium_essential', label: 'Premium Itinerary Essential', displayPrice: '€19', envVar: 'STRIPE_PRICE_PREMIUM_ESSENTIAL' },
-    { key: 'premium_complete',  label: 'Premium Itinerary Complete',  displayPrice: '€29', envVar: 'STRIPE_PRICE_PREMIUM_COMPLETE'  },
+    { key: 'premium_short',     label: 'Premium Itinerary Short',     displayPrice: '€14', price: 14, currency: 'EUR', stripePriceId: shortId     },
+    { key: 'premium_essential', label: 'Premium Itinerary Essential', displayPrice: '€19', price: 19, currency: 'EUR', stripePriceId: essentialId },
+    { key: 'premium_complete',  label: 'Premium Itinerary',           displayPrice: '€29', price: 29, currency: 'EUR', stripePriceId: completeId  },
   ];
-  const options = tiers
-    .filter(t => process.env[t.envVar])
-    .map(t => ({ key: t.key, label: t.label, displayPrice: t.displayPrice, stripePriceId: process.env[t.envVar] }));
+
+  const options = tiers.filter(t => t.stripePriceId);
   return { options };
 }
 
@@ -172,6 +177,7 @@ async function handleCreate(pool, body) {
     type = 'free',
     isPrivate = false,
     stripePriceId = null,
+    pricingKey = null,
     coverImage = '',
     content = {},
     status = 'draft',
@@ -190,13 +196,13 @@ async function handleCreate(pool, body) {
   const { rows } = await pool.query(
     `INSERT INTO "Itinerary"
        (title, subtitle, slug, destination, country, region, "durationDays",
-        "accessType", price, "stripePriceId", "coverImage", description,
+        "accessType", price, "stripePriceId", "pricingKey", "coverImage", description,
         type, "isPrivate", "isCollection", status, "isPublished", content, "schemaVersion", "updatedAt")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,false,$15,$16,$17,1,NOW())
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,$16,$17,$18,1,NOW())
      RETURNING *`,
     [
       title, subtitle, slug, destination, country, region, durationDays,
-      finalAccessType, 0, stripePriceId || null,
+      finalAccessType, 0, stripePriceId || null, pricingKey || null,
       coverImage,
       finalContent.summary?.shortDescription || '',
       finalType, finalPrivate,
@@ -213,7 +219,7 @@ async function handleUpdate(pool, id, body) {
 
   const {
     title, subtitle, slug, destination, country, region, durationDays,
-    accessType, stripePriceId, coverImage, content, status,
+    accessType, stripePriceId, pricingKey, coverImage, content, status,
     type, isPrivate, isCollection,
   } = body;
 
@@ -248,14 +254,15 @@ async function handleUpdate(pool, id, body) {
        "durationDays"  = COALESCE($8, "durationDays"),
        "accessType"    = COALESCE($9, "accessType"),
        "stripePriceId" = $10,
-       "coverImage"    = COALESCE(NULLIF($11,''), "coverImage"),
-       description     = COALESCE(NULLIF($12,''), description),
-       status          = COALESCE($13, status),
-       "isPublished"   = $14,
-       content         = $15::jsonb,
-       type            = COALESCE($16, type),
-       "isPrivate"     = COALESCE($17::boolean, "isPrivate"),
-       "isCollection"  = COALESCE($18::boolean, "isCollection"),
+       "pricingKey"    = $11,
+       "coverImage"    = COALESCE(NULLIF($12,''), "coverImage"),
+       description     = COALESCE(NULLIF($13,''), description),
+       status          = COALESCE($14, status),
+       "isPublished"   = $15,
+       content         = $16::jsonb,
+       type            = COALESCE($17, type),
+       "isPrivate"     = COALESCE($18::boolean, "isPrivate"),
+       "isCollection"  = COALESCE($19::boolean, "isCollection"),
        "updatedAt"     = NOW()
      WHERE id = $1
      RETURNING *`,
@@ -270,6 +277,7 @@ async function handleUpdate(pool, id, body) {
       durationDays ?? null,
       accessTypeParam,
       stripePriceId ?? null,
+      pricingKey ?? null,
       derivedCoverImage,
       derivedDescription,
       status ?? null,
@@ -376,6 +384,75 @@ async function handleSetStatus(pool, id, status) {
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
   return { itinerary: rows[0] };
+}
+
+// ── Backfill pricing on existing premium itineraries ─────────────────────────
+// Sets stripePriceId + pricingKey for all premium itineraries in the DB:
+//   - USA variants (california-american-west-*) are mapped by their variant tier
+//   - All other premium itineraries get the 'premium_complete' (€29) plan
+// Idempotent: safe to run multiple times.
+async function handleBackfillPricing(pool) {
+  const { options } = handlePricingOptions();
+  const completeOpt  = options.find(o => o.key === 'premium_complete');
+  const essentialOpt = options.find(o => o.key === 'premium_essential');
+  const shortOpt     = options.find(o => o.key === 'premium_short');
+
+  if (!completeOpt) {
+    throw Object.assign(
+      new Error('Cannot backfill: STRIPE_PRICE_PREMIUM_COMPLETE (or STRIPE_PRICE_ID) is not set'),
+      { status: 422 }
+    );
+  }
+
+  const results = [];
+
+  // ── 1. All non-USA premium itineraries → premium_complete ─────────────────
+  const { rowCount: defaultCount } = await pool.query(
+    `UPDATE "Itinerary"
+     SET "stripePriceId" = $1, "pricingKey" = 'premium_complete', "updatedAt" = NOW()
+     WHERE type = 'premium'
+       AND slug NOT LIKE 'california-american-west-%'`,
+    [completeOpt.stripePriceId]
+  );
+  results.push({ rule: 'non-USA premium → complete', updated: defaultCount });
+
+  // ── 2. USA complete (16-day) → premium_complete ───────────────────────────
+  const { rowCount: c16 } = await pool.query(
+    `UPDATE "Itinerary"
+     SET "stripePriceId" = $1, "pricingKey" = 'premium_complete', "updatedAt" = NOW()
+     WHERE slug = 'california-american-west-16-days' AND type = 'premium'`,
+    [completeOpt.stripePriceId]
+  );
+  results.push({ rule: 'california-american-west-16-days → complete', updated: c16 });
+
+  // ── 3. USA essential (12-day) → premium_essential ────────────────────────
+  if (essentialOpt) {
+    const { rowCount: c12 } = await pool.query(
+      `UPDATE "Itinerary"
+       SET "stripePriceId" = $1, "pricingKey" = 'premium_essential', "updatedAt" = NOW()
+       WHERE slug = 'california-american-west-12-days' AND type = 'premium'`,
+      [essentialOpt.stripePriceId]
+    );
+    results.push({ rule: 'california-american-west-12-days → essential', updated: c12 });
+  } else {
+    results.push({ rule: 'california-american-west-12-days → essential', updated: 0, skipped: 'STRIPE_PRICE_PREMIUM_ESSENTIAL not set' });
+  }
+
+  // ── 4. USA short (8-day) → premium_short ────────────────────────────────
+  if (shortOpt) {
+    const { rowCount: c8 } = await pool.query(
+      `UPDATE "Itinerary"
+       SET "stripePriceId" = $1, "pricingKey" = 'premium_short', "updatedAt" = NOW()
+       WHERE slug = 'california-american-west-8-days' AND type = 'premium'`,
+      [shortOpt.stripePriceId]
+    );
+    results.push({ rule: 'california-american-west-8-days → short', updated: c8 });
+  } else {
+    results.push({ rule: 'california-american-west-8-days → short', updated: 0, skipped: 'STRIPE_PRICE_PREMIUM_SHORT not set' });
+  }
+
+  console.log('[itinerary-cms/backfill-pricing] results:', JSON.stringify(results));
+  return { ok: true, results };
 }
 
 // ── Seed from static data ─────────────────────────────────────────────────────

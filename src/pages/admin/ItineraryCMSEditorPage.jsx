@@ -387,7 +387,7 @@ export default function ItineraryCMSEditorPage() {
   const [form,       setForm]       = useState({
     title: '', subtitle: '', slug: '', destination: '', country: '',
     region: '', durationDays: '', type: 'free', isPrivate: false, isCollection: false,
-    stripePriceId: '',
+    stripePriceId: '', pricingKey: '',
     coverImage: '', status: 'draft', pdfUrl: '', content: { ...EMPTY_CONTENT },
   });
 
@@ -439,7 +439,7 @@ export default function ItineraryCMSEditorPage() {
         durationDays: it.durationDays ?? '', type: derivedType,
         isPrivate: it.isPrivate ?? false,
         isCollection: it.isCollection ?? false,
-        stripePriceId: it.stripePriceId || '',
+        stripePriceId: it.stripePriceId || '', pricingKey: it.pricingKey || '',
         coverImage: it.coverImage || '', status: it.status || 'draft',
         pdfUrl: it.pdfUrl || '',
         content,
@@ -596,6 +596,10 @@ export default function ItineraryCMSEditorPage() {
       alert('Title and slug are required.');
       return;
     }
+    if (form.type === 'premium' && !form.stripePriceId) {
+      alert('A pricing plan is required for premium itineraries. Select one in the Basics tab.');
+      return;
+    }
     setSaving(true); setSaveMsg(null);
     try {
       const token = await getToken();
@@ -615,6 +619,7 @@ export default function ItineraryCMSEditorPage() {
         durationDays: form.durationDays !== '' && form.durationDays != null
           ? parseInt(form.durationDays, 10) : null,
         stripePriceId: form.type === 'premium' ? (form.stripePriceId || null) : null,
+        pricingKey:    form.type === 'premium' ? (form.pricingKey    || null) : null,
       };
 
       const res  = await fetch(`/api/itinerary-cms?action=${action}`, {
@@ -649,6 +654,7 @@ export default function ItineraryCMSEditorPage() {
         isPrivate:     it.isPrivate     ?? f.isPrivate,
         isCollection:  it.isCollection  ?? f.isCollection,
         stripePriceId: it.stripePriceId ?? f.stripePriceId,
+        pricingKey:    it.pricingKey    ?? f.pricingKey,
         // content intentionally preserved from f — never replace with DB response
         // (JSONB may arrive as string in some pg/Vercel configurations)
       }));
@@ -1088,13 +1094,35 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [] }) {
               }}>
                 <input type="radio" name="type" value={value}
                   checked={form.type === value}
-                  onChange={() => setForm(f => ({
-                    ...f,
-                    type: value,
-                    isPrivate: value === 'custom' ? true : (value === 'free' ? false : f.isPrivate),
-                    // clear pricing when switching away from premium
-                    ...(value !== 'premium' ? { stripePriceId: '' } : {}),
-                  }))}
+                  onChange={() => setForm(f => {
+                    const isPremium = value === 'premium';
+                    // When switching TO premium, auto-select the correct default plan:
+                    //   USA variants → their tier; all others → premium_complete (€29)
+                    let autoOption = null;
+                    if (isPremium && !f.stripePriceId) {
+                      const usaSlugMap = {
+                        'california-american-west-8-days':  'premium_short',
+                        'california-american-west-12-days': 'premium_essential',
+                        'california-american-west-16-days': 'premium_complete',
+                      };
+                      const targetKey = usaSlugMap[f.slug] ?? 'premium_complete';
+                      autoOption = pricingOptions.find(o => o.key === targetKey)
+                        ?? pricingOptions.find(o => o.key === 'premium_complete')
+                        ?? pricingOptions[pricingOptions.length - 1]
+                        ?? null;
+                    }
+                    return {
+                      ...f,
+                      type: value,
+                      isPrivate: value === 'custom' ? true : (value === 'free' ? false : f.isPrivate),
+                      // clear pricing when leaving premium; auto-default when entering
+                      ...(!isPremium
+                        ? { stripePriceId: '', pricingKey: '' }
+                        : autoOption
+                          ? { stripePriceId: autoOption.stripePriceId, pricingKey: autoOption.key }
+                          : {}),
+                    };
+                  })}
                   style={{ display: 'none' }}
                 />
                 {form.type === value && <Check size={13} strokeWidth={3} />}
@@ -1135,23 +1163,31 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [] }) {
         </Field>
 
         {form.type === 'premium' && (() => {
-          const selectedOption = pricingOptions.find(o => o.stripePriceId === form.stripePriceId);
+          const selectedOption = pricingOptions.find(o => o.key === form.pricingKey)
+            ?? pricingOptions.find(o => o.stripePriceId === form.stripePriceId);
           return (
-            <Field label="Pricing plan" hint="Required before publishing.">
+            <Field label="Pricing plan" hint="Required before saving or publishing.">
               {pricingOptions.length === 0 ? (
                 <p style={{ fontSize: '13px', color: '#E05353', margin: 0 }}>
-                  No pricing plans available. Set STRIPE_PRICE_PREMIUM_SHORT / ESSENTIAL / COMPLETE in Vercel env vars.
+                  No pricing plans available. Set STRIPE_PRICE_PREMIUM_COMPLETE (or STRIPE_PRICE_ID) in Vercel env vars.
                 </p>
               ) : (
                 <>
                   <select
-                    value={form.stripePriceId}
-                    onChange={e => setForm(f => ({ ...f, stripePriceId: e.target.value }))}
+                    value={form.pricingKey || ''}
+                    onChange={e => {
+                      const opt = pricingOptions.find(o => o.key === e.target.value);
+                      setForm(f => ({
+                        ...f,
+                        pricingKey:    opt ? opt.key            : '',
+                        stripePriceId: opt ? opt.stripePriceId  : '',
+                      }));
+                    }}
                     style={{ ...inputStyle, cursor: 'pointer' }}
                   >
                     <option value="">— select a plan —</option>
                     {pricingOptions.map(opt => (
-                      <option key={opt.key} value={opt.stripePriceId}>
+                      <option key={opt.key} value={opt.key}>
                         {opt.label} · {opt.displayPrice}
                       </option>
                     ))}
@@ -1159,6 +1195,11 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [] }) {
                   {selectedOption && (
                     <p style={{ fontSize: '12px', color: '#7A7265', margin: '6px 0 0', fontFamily: 'monospace' }}>
                       {selectedOption.stripePriceId}
+                    </p>
+                  )}
+                  {!selectedOption && form.stripePriceId && (
+                    <p style={{ fontSize: '12px', color: '#C97B2E', margin: '6px 0 0' }}>
+                      Stored price ID does not match any configured plan — select a plan to update.
                     </p>
                   )}
                 </>

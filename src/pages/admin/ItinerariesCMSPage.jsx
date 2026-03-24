@@ -96,8 +96,9 @@ export default function ItinerariesCMSPage() {
   const [collections, setCollections] = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState(null);
-  const [seeding,    setSeeding]    = useState(false);
-  const [seedMsg,    setSeedMsg]    = useState(null);
+  const [seeding,      setSeeding]      = useState(false);
+  const [seedMsg,      setSeedMsg]      = useState(null);
+  const [backfilling,  setBackfilling]  = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [toDelete,   setToDelete]   = useState(null);
   const [filter,     setFilter]     = useState('all');      // all | draft | published
@@ -136,6 +137,24 @@ export default function ItinerariesCMSPage() {
       await load();
     } catch (e) { setSeedMsg(`Error: ${e.message}`); }
     finally { setSeeding(false); }
+  }
+
+  async function handleBackfillPricing() {
+    if (!window.confirm('This will assign the correct pricing plan to all premium itineraries.\n\n• Non-USA premiums → Premium Itinerary (€29)\n• USA 8-day → Short (€14)\n• USA 12-day → Essential (€19)\n• USA 16-day → Complete (€29)\n\nSafe to run multiple times. Continue?')) return;
+    setBackfilling(true); setSeedMsg(null);
+    try {
+      const token = await getToken();
+      const res   = await fetch('/api/itinerary-cms?action=backfill-pricing', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      const total = json.results?.reduce((n, r) => n + (r.updated || 0), 0) ?? '?';
+      setSeedMsg(`Pricing backfill done — ${total} record(s) updated.`);
+      await load();
+    } catch (e) { setSeedMsg(`Error: ${e.message}`); }
+    finally { setBackfilling(false); }
   }
 
   async function handleBulkPublish() {
@@ -273,6 +292,15 @@ export default function ItinerariesCMSPage() {
           >
             <RefreshCw size={12} />
             {seeding ? 'Seeding…' : 'Seed from static data'}
+          </button>
+          <button
+            onClick={handleBackfillPricing}
+            disabled={backfilling}
+            title="Assign correct Stripe pricing plan to all premium itineraries"
+            style={{ ...btnSecondary, display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <RefreshCw size={12} />
+            {backfilling ? 'Backfilling…' : 'Backfill pricing'}
           </button>
           {counts.unpublishedPublic > 0 && (
             <button

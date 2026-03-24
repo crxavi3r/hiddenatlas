@@ -38,6 +38,10 @@ UPDATE "Itinerary"
  WHERE slug = 'california-american-west'
    AND "isCollection" = false;
 
+-- ── 1b. pricingKey on Itinerary ─────────────────────────────────────────────
+ALTER TABLE "Itinerary"
+  ADD COLUMN IF NOT EXISTS "pricingKey" TEXT;
+
 -- ── 2. ItineraryAsset ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS "ItineraryAsset" (
   "id"          TEXT        NOT NULL DEFAULT gen_random_uuid()::text,

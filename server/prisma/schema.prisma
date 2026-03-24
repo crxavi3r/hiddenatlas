@@ -56,6 +56,7 @@ model Itinerary {
   updatedAt     DateTime @default(now())    // updated via raw SQL; @updatedAt not used (raw pool)
 
   isCollection  Boolean  @default(false)   // true for parent/aggregate itineraries (excluded from default CMS list)
+  pricingKey    String?                    // 'premium_complete' | 'premium_essential' | 'premium_short'
 
   purchases         Purchase[]
   assets            ItineraryAsset[]
