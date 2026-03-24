@@ -613,7 +613,9 @@ const s = StyleSheet.create({
 
 /** Normalise image URL — strip existing query params and append w/q */
 function imgUrl(src, w = 1000) {
-  if (!src) return null;
+  // Guard: must be a non-empty string. Objects/nulls/undefined must never reach
+  // <Image src={...}> — react-pdf crashes accessing null.props on invalid sources.
+  if (!src || typeof src !== 'string') return null;
   // Local bundled asset (resolved by downloadPDF.js) — pass through unchanged
   if (!src.startsWith('http')) return src;
   return `${src.replace(/\?.*/, '')}?w=${w}&q=85`;

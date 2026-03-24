@@ -33,13 +33,23 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = []) {
     : '';
 
   // ── Inject DB day images into each day ─────────────────────────────────────
+  // imgs must be plain URL strings — DayPage's imgUrl() helper expects strings.
+  // Passing objects (e.g. { src, filename }) causes imgUrl to return the object
+  // unchanged, which then crashes @react-pdf/renderer with null.props.
+  // Priority: DB assets (ItineraryAsset rows) → inline day.img field.
   console.log('[buildCustomPDF] injecting day images — days:', (content.days || []).length);
-  const days = (content.days || []).map(day => ({
-    ...day,
-    imgs: dbAssets
+  const days = (content.days || []).map(day => {
+    const dbImgs = dbAssets
       .filter(a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day))
-      .map(a => ({ src: a.url, filename: a.alt || `day-${day.day}` })),
-  }));
+      .map(a => a.url)          // ← plain URL string, not { src, filename }
+      .filter(Boolean);
+    // Fall back to the inline day.img field when no DB asset exists for this day
+    const imgs = dbImgs.length > 0
+      ? dbImgs
+      : (day.img ? [day.img] : []);
+    console.log(`[buildCustomPDF] day ${day.day} imgs:`, imgs.length, imgs[0]?.slice(0, 50) || '(none)');
+    return { ...day, imgs };
+  });
 
   // ── Resolve cover image ─────────────────────────────────────────────────────
   // Use the scalar coverImage field first (synced by save), fall back to
