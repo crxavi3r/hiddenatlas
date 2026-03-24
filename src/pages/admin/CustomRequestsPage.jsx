@@ -332,27 +332,72 @@ function ColHeader({ col, sort, onSort, filterActive, onOpenFilter }) {
 }
 
 // ── StatusAction — workflow status badge + advance button ─────────────────────
-function StatusAction({ requestId, current, onUpdated, token }) {
-  const [loading, setLoading] = useState(false);
+function StatusAction({ requestId, current, linkedItineraryStatus, onUpdated, token }) {
+  const [loading,     setLoading]     = useState(false);
+  const [confirming,  setConfirming]  = useState(false); // waiting for publish confirmation
 
-  async function advance() {
-    const next = NEXT_STATUS[current]?.value;
-    if (!next) return;
+  async function doAdvance(next, confirm = false) {
     setLoading(true);
     try {
-      await fetch(`/api/admin?action=custom-request-status`, {
+      const body = { id: requestId, status: next };
+      if (confirm) body.confirm = true;
+      const res  = await fetch(`/api/admin?action=custom-request-status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ id: requestId, status: next }),
+        body: JSON.stringify(body),
       });
+      const data = await res.json();
+      if (data.needsConfirm) {
+        // Itinerary is still draft — ask the admin to confirm publishing it
+        setConfirming(true);
+        return;
+      }
       onUpdated(requestId, next);
     } catch (err) {
       console.error('[admin/custom-requests] status update failed:', err);
     } finally { setLoading(false); }
   }
 
+  function advance() {
+    const next = NEXT_STATUS[current]?.value;
+    if (!next) return;
+    doAdvance(next);
+  }
+
+  function confirmPublish() {
+    setConfirming(false);
+    doAdvance('done', true);
+  }
+
   const m    = STATUS_META[current] ?? STATUS_META.open;
   const next = NEXT_STATUS[current];
+
+  if (confirming) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: '260px' }}>
+        <p style={{ fontSize: '11px', color: '#4A433A', lineHeight: '1.4', margin: 0 }}>
+          The linked itinerary is still a draft. Mark ready and publish it now?
+        </p>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button onClick={confirmPublish} disabled={loading} style={{
+            fontSize: '11px', fontWeight: '600', color: 'white', background: '#1B6B65',
+            border: 'none', borderRadius: '6px',
+            padding: '4px 10px', cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.6 : 1,
+          }}>
+            {loading ? '…' : 'Publish + Mark Ready'}
+          </button>
+          <button onClick={() => setConfirming(false)} disabled={loading} style={{
+            fontSize: '11px', fontWeight: '500', color: '#6B6156', background: 'white',
+            border: '1px solid #E8E3DA', borderRadius: '6px',
+            padding: '4px 10px', cursor: 'pointer',
+          }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
       <span style={{
@@ -535,7 +580,7 @@ export default function CustomRequestsPage() {
           <span style={{ fontSize: '11px', color: '#B5AA99' }}>{fmtDate(r.createdAt)}</span>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
             {authToken && (
-              <StatusAction requestId={r.id} current={r.status || 'open'} onUpdated={handleStatusUpdated} token={authToken} />
+              <StatusAction requestId={r.id} current={r.status || 'open'} linkedItineraryStatus={r.linkedItineraryStatus} onUpdated={handleStatusUpdated} token={authToken} />
             )}
             <PaymentBadge isPaid={r.isPaid} />
             {r.itineraryId && (
@@ -705,7 +750,7 @@ export default function CustomRequestsPage() {
                       {/* Workflow status */}
                       <td style={TD}>
                         {authToken
-                          ? <StatusAction requestId={r.id} current={r.status || 'open'} onUpdated={handleStatusUpdated} token={authToken} />
+                          ? <StatusAction requestId={r.id} current={r.status || 'open'} linkedItineraryStatus={r.linkedItineraryStatus} onUpdated={handleStatusUpdated} token={authToken} />
                           : (
                             <span style={{ fontSize: '11px', fontWeight: '600', color: STATUS_META[r.status]?.color ?? '#1B6B65', background: STATUS_META[r.status]?.bg ?? '#EFF6F5', padding: '3px 9px', borderRadius: '10px' }}>
                               {STATUS_META[r.status]?.label ?? 'Open'}

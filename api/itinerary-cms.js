@@ -291,13 +291,22 @@ async function handleUpdate(pool, id, body) {
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
 
-  // Auto-sync: publishing a custom itinerary marks the linked request as Ready.
+  // Auto-sync linked CustomRequest status with itinerary status.
+  // Draft save  → advance open → in_progress ("Building your itinerary")
+  // Publish     → advance any non-done → done ("Ready")
+  // Never go backwards.
   if (derivedIsPublished) {
     await pool.query(
       `UPDATE "CustomRequest" SET status = 'done'
        WHERE "itineraryId" = $1 AND status != 'done'`,
       [id]
     ).catch(err => console.warn('[itinerary-cms/update] CustomRequest sync failed:', err.message));
+  } else {
+    await pool.query(
+      `UPDATE "CustomRequest" SET status = 'in_progress'
+       WHERE "itineraryId" = $1 AND status = 'open'`,
+      [id]
+    ).catch(err => console.warn('[itinerary-cms/update] CustomRequest draft sync failed:', err.message));
   }
 
   return { itinerary: rows[0] };
@@ -395,13 +404,19 @@ async function handleSetStatus(pool, id, status) {
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
 
-  // Auto-sync: publishing a custom itinerary marks the linked request as Ready.
+  // Auto-sync linked CustomRequest status with itinerary status.
   if (status === 'published') {
     await pool.query(
       `UPDATE "CustomRequest" SET status = 'done'
        WHERE "itineraryId" = $1 AND status != 'done'`,
       [id]
     ).catch(err => console.warn('[itinerary-cms/set-status] CustomRequest sync failed:', err.message));
+  } else if (status === 'draft') {
+    await pool.query(
+      `UPDATE "CustomRequest" SET status = 'in_progress'
+       WHERE "itineraryId" = $1 AND status = 'open'`,
+      [id]
+    ).catch(err => console.warn('[itinerary-cms/set-status] CustomRequest draft sync failed:', err.message));
   }
 
   return { itinerary: rows[0] };

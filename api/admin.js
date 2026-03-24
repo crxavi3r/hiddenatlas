@@ -94,27 +94,42 @@ async function _handler(req, res) {
     // ── PATCH: status updates ─────────────────────────────────────────────
     if (req.method === 'PATCH') {
       if (action === 'custom-request-status') {
-        const { id: bodyId, status: bodyStatus } = req.body ?? {};
+        const { id: bodyId, status: bodyStatus, confirm: confirmPublish } = req.body ?? {};
         const requestId = bodyId     || id;
         const newStatus = bodyStatus || status;
         const VALID_STATUS = ['open', 'in_progress', 'done'];
         if (!requestId) return res.status(400).json({ error: 'id is required' });
         if (!VALID_STATUS.includes(newStatus)) return res.status(400).json({ error: 'Invalid status' });
+
+        // When marking done: check whether the linked itinerary is published.
+        // If it's still a draft and the caller hasn't confirmed, return a flag
+        // so the UI can show a confirmation dialog before auto-publishing.
+        if (newStatus === 'done') {
+          const { rows: linkRows } = await pool.query(
+            `SELECT i.id, i.status FROM "Itinerary" i
+             JOIN "CustomRequest" cr ON cr."itineraryId" = i.id
+             WHERE cr.id = $1`,
+            [requestId]
+          );
+          const linked = linkRows[0] ?? null;
+          if (linked && linked.status !== 'published') {
+            if (!confirmPublish) {
+              // Ask the UI to confirm before we publish + mark ready
+              return res.status(200).json({ needsConfirm: true, itineraryStatus: linked.status });
+            }
+            // Confirmed — publish the itinerary first
+            await pool.query(
+              `UPDATE "Itinerary" SET status = 'published', "isPublished" = true WHERE id = $1`,
+              [linked.id]
+            );
+          }
+        }
+
         const { rowCount } = await pool.query(
           `UPDATE "CustomRequest" SET status = $1 WHERE id = $2`,
           [newStatus, requestId]
         );
         if (rowCount === 0) return res.status(404).json({ error: 'Request not found' });
-        // Sync linked Itinerary status: in_progress → processing, done → done
-        const itinStatus = newStatus === 'in_progress' ? 'processing' : newStatus === 'done' ? 'done' : null;
-        if (itinStatus) {
-          await pool.query(
-            `UPDATE "Itinerary" i SET status = $1
-             FROM "CustomRequest" cr
-             WHERE cr.id = $2 AND cr."itineraryId" = i.id`,
-            [itinStatus, requestId]
-          ).catch(err => console.warn('[admin] itinerary sync failed:', err.message));
-        }
         return res.status(200).json({ ok: true });
       }
 
