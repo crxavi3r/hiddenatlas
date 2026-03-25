@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
-import { itineraries } from '../data/itineraries';
+import { itineraries as staticItineraries } from '../data/itineraries';
 import ItineraryCard from '../components/ItineraryCard';
 import { usePurchasedSlugs } from '../lib/usePurchasedSlugs';
 import { useSEO } from '../hooks/useSEO';
@@ -8,6 +8,22 @@ import { useSEO } from '../hooks/useSEO';
 export default function ItinerariesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const purchasedSlugs = usePurchasedSlugs();
+
+  // DB hero images override the static coverImage so CMS changes are reflected immediately.
+  const [heroOverrides, setHeroOverrides] = useState({});
+  useEffect(() => {
+    fetch('/api/itineraries?action=hero-images')
+      .then(r => r.ok ? r.json() : { heroes: {} })
+      .then(data => setHeroOverrides(data.heroes || {}))
+      .catch(() => {});
+  }, []);
+
+  const itineraries = heroOverrides && Object.keys(heroOverrides).length > 0
+    ? staticItineraries.map(it => {
+        const heroUrl = heroOverrides[it.id];
+        return heroUrl ? { ...it, coverImage: heroUrl } : it;
+      })
+    : staticItineraries;
 
   useSEO({
     title: 'Travel Itineraries — Free & Premium Journeys',

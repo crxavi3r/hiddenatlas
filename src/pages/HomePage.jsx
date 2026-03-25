@@ -1052,7 +1052,7 @@ function DestinationCard({ it }) {
         cursor: 'pointer',
       }}>
         <img
-          src={it.image || journeyImg(it.id, 900)}
+          src={it.coverImage || it.image || journeyImg(it.id, 900)}
           alt={it.title}
           style={{
             position: 'absolute', inset: 0, width: '100%', height: '100%',
@@ -1131,7 +1131,7 @@ function ItineraryBigCard({ it }) {
       }}>
         <div style={{ position: 'relative', paddingTop: '58%', overflow: 'hidden', flexShrink: 0 }}>
           <img
-            src={it.image} alt={it.title}
+            src={it.coverImage || it.image} alt={it.title}
             style={{
               position: 'absolute', inset: 0, width: '100%', height: '100%',
               objectFit: 'cover',
@@ -1210,7 +1210,7 @@ function ItinerarySmallCard({ it }) {
       }}>
         <div style={{ position: 'relative', overflow: 'hidden', minHeight: '110px' }}>
           <img
-            src={it.image} alt={it.title}
+            src={it.coverImage || it.image} alt={it.title}
             style={{
               position: 'absolute', inset: 0, width: '100%', height: '100%',
               objectFit: 'cover',
@@ -1316,7 +1316,7 @@ function CuratedJourneyCard({ it, isPurchased = false }) {
       }}>
         <div style={{ position: 'relative', paddingTop: '56%', overflow: 'hidden', flexShrink: 0 }}>
           <img
-            src={it.image} alt={it.title}
+            src={it.coverImage || it.image} alt={it.title}
             style={{
               position: 'absolute', inset: 0, width: '100%', height: '100%',
               objectFit: 'cover',

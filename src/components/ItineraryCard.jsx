@@ -7,7 +7,8 @@ const audienceIcon = { 'Couples': '♥', 'Families': '⌂', 'Friend Groups': '�
 
 export default function ItineraryCard({ itinerary, variant = 'default', isPurchased = false }) {
   const [hovered, setHovered] = useState(false);
-  const { id, title, subtitle, country, duration, durationRange, groupSize, price, isPremium, tag, image, bestFor } = itinerary;
+  const { id, title, subtitle, country, duration, durationRange, groupSize, price, isPremium, tag, coverImage, image, bestFor } = itinerary;
+  const mainImage = coverImage || image;
   const displayDuration = durationRange || duration;
 
   if (variant === 'featured') {
@@ -33,7 +34,7 @@ export default function ItineraryCard({ itinerary, variant = 'default', isPurcha
           {/* Image */}
           <div style={{ position: 'relative', height: '220px', overflow: 'hidden', flexShrink: 0 }}>
             <img
-              src={image}
+              src={mainImage}
               alt={title}
               style={{
                 position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
@@ -213,7 +214,7 @@ export default function ItineraryCard({ itinerary, variant = 'default', isPurcha
       }}>
         <div style={{ position: 'relative', overflow: 'hidden' }}>
           <img
-            src={image}
+            src={mainImage}
             alt={title}
             style={{
               width: '100%', height: '100%',

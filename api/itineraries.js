@@ -34,6 +34,34 @@ export default async function handler(req, res) {
 
   const { action, slug, preview } = req.query;
 
+  // ── GET /api/itineraries?action=hero-images ─────────────────────────────────
+  // Public — returns { heroes: { [slug]: url } } for all itineraries that have
+  // an active DB hero asset. Used by the listing page so card images stay in
+  // sync with whatever is set in the CMS.
+  if (action === 'hero-images') {
+    res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=30');
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      const { rows } = await pool.query(
+        `SELECT i.slug, ia.url
+         FROM   "ItineraryAsset" ia
+         JOIN   "Itinerary"      i ON i.id = ia."itineraryId"
+         WHERE  ia."assetType" = 'hero'
+           AND  ia.active = true`
+      );
+      const heroes = {};
+      for (const row of rows) heroes[row.slug] = row.url;
+      return res.json({ heroes });
+    } catch (err) {
+      // Table may not exist yet — return empty map so the page still renders
+      if (err.message?.includes('does not exist')) return res.json({ heroes: {} });
+      console.error('[itineraries/hero-images]', err.message);
+      return res.status(500).json({ error: err.message });
+    } finally {
+      await pool.end();
+    }
+  }
+
   // ── GET /api/itineraries?action=assets&slug= ────────────────────────────────
   // Public — no auth required. Asset URLs are already public (Vercel Blob / CDN).
   if (action === 'assets') {

@@ -104,7 +104,9 @@
       "Bash(git commit:*)",
       "Bash(npm run build\":*)",
       "Bash(retry\" with no diagnostic info. Added pdfError state that captures the:*)",
-      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas -name *buildCustomPDF* -o -name *pdf* -type f)"
+      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas -name *buildCustomPDF* -o -name *pdf* -type f)",
+      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas -name *.sql -o -name *migration* -o -name *schema*)",
+      "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas -path */node_modules -prune -o -name *.sql -type f -print)"
     ]
   }
 }
