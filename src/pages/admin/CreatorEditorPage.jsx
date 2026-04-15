@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Upload, User, X } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
@@ -21,6 +21,11 @@ const btnPrimary = {
   fontSize: '12.5px', fontWeight: '600', background: '#1B6B65', color: 'white',
   display: 'flex', alignItems: 'center', gap: '6px',
 };
+const btnSecondary = {
+  padding: '7px 14px', borderRadius: '5px', border: '1px solid #E8E3DA', cursor: 'pointer',
+  fontSize: '12px', fontWeight: '500', background: 'white', color: '#4A433A',
+  display: 'flex', alignItems: 'center', gap: '6px',
+};
 
 function slugify(name) {
   return name.toLowerCase()
@@ -31,16 +36,18 @@ function slugify(name) {
 }
 
 export default function CreatorEditorPage() {
-  const { id }       = useParams();
-  const navigate     = useNavigate();
-  const { getToken } = useAuth();
-  const isMobile     = useIsMobile();
-  const isNew        = id === 'new';
+  const { id }         = useParams();
+  const navigate       = useNavigate();
+  const { getToken }   = useAuth();
+  const isMobile       = useIsMobile();
+  const isNew          = id === 'new';
+  const avatarInputRef = useRef(null);
 
-  const [loading, setLoading] = useState(!isNew);
-  const [saving,  setSaving]  = useState(false);
-  const [saveMsg, setSaveMsg] = useState(null);
-  const [form,    setForm]    = useState({
+  const [loading,   setLoading]   = useState(!isNew);
+  const [saving,    setSaving]    = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [saveMsg,   setSaveMsg]   = useState(null);
+  const [form,      setForm]      = useState({
     name: '', slug: '', avatarUrl: '', bio: '', userId: '', isActive: true,
   });
 
@@ -49,7 +56,6 @@ export default function CreatorEditorPage() {
     setLoading(true);
     try {
       const token = await getToken();
-      // Use the admin list to find by id (creators API get is by slug)
       const res   = await fetch('/api/creators?action=list', {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -79,6 +85,42 @@ export default function CreatorEditorPage() {
     }));
   }
 
+  async function handleAvatarUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = ''; // reset so same file can be re-selected
+
+    const slug = form.slug.trim();
+    if (!slug) {
+      alert('Please enter a slug before uploading an avatar.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = ev => resolve(ev.target.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const token = await getToken();
+      const res   = await fetch('/api/creators?action=upload-avatar', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug, filename: file.name, data: base64 }),
+      });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      setForm(f => ({ ...f, avatarUrl: json.url }));
+    } catch (err) {
+      alert(`Upload failed: ${err.message}`);
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function handleSave() {
     if (!form.name.trim() || !form.slug.trim()) {
       alert('Name and slug are required.');
@@ -94,9 +136,9 @@ export default function CreatorEditorPage() {
         body: JSON.stringify({
           name:      form.name.trim(),
           slug:      form.slug.trim(),
-          avatarUrl: form.avatarUrl.trim() || null,
-          bio:       form.bio.trim()       || null,
-          userId:    form.userId.trim()    || null,
+          avatarUrl: form.avatarUrl || null,
+          bio:       form.bio.trim() || null,
+          userId:    form.userId.trim() || null,
           isActive:  form.isActive,
         }),
       });
@@ -154,16 +196,60 @@ export default function CreatorEditorPage() {
             placeholder="cristiano-xavier" onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} />
         </div>
 
+        {/* Avatar upload */}
         <div style={fieldStyle}>
-          <label style={labelStyle}>Avatar URL</label>
-          <input value={form.avatarUrl} style={inputStyle} placeholder="https://..."
-            onChange={e => setForm(f => ({ ...f, avatarUrl: e.target.value }))} />
-          {form.avatarUrl && (
-            <img src={form.avatarUrl} alt="Preview"
-              style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover',
-                marginTop: '8px', border: '2px solid #E8E3DA' }}
-              onError={e => { e.currentTarget.style.display = 'none'; }}
-            />
+          <label style={labelStyle}>Avatar</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+
+            {/* Preview circle */}
+            <div style={{
+              width: '72px', height: '72px', borderRadius: '50%', flexShrink: 0,
+              border: '2px solid #E8E3DA', background: '#F4F1EC', overflow: 'hidden',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              {form.avatarUrl
+                ? <img src={form.avatarUrl} alt="Avatar preview"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={e => { e.currentTarget.style.display = 'none'; }}
+                  />
+                : <User size={28} color="#B5AA99" />
+              }
+            </div>
+
+            {/* Controls */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+                style={{ display: 'none' }}
+                onChange={handleAvatarUpload}
+              />
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={uploading}
+                style={{ ...btnSecondary, opacity: uploading ? 0.7 : 1 }}
+              >
+                <Upload size={12} />
+                {uploading ? 'Uploading…' : form.avatarUrl ? 'Replace photo' : 'Upload photo'}
+              </button>
+              {form.avatarUrl && !uploading && (
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, avatarUrl: '' }))}
+                  style={{ ...btnSecondary, color: '#C0392B', borderColor: '#FDECEA', fontSize: '11.5px', padding: '5px 12px' }}
+                >
+                  <X size={11} />
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+          {!form.slug.trim() && (
+            <p style={{ fontSize: '11px', color: '#B5AA99', marginTop: '8px' }}>
+              Enter a slug above before uploading.
+            </p>
           )}
         </div>
 

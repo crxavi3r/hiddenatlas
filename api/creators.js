@@ -9,8 +9,10 @@
 //   POST /api/creators?action=update&id=:id           — update creator (admin or self)
 //   POST /api/creators?action=delete&id=:id           — delete creator (admin only)
 
-import pg           from 'pg';
-import { verifyAuth } from './_lib/verifyAuth.js';
+import pg                     from 'pg';
+import path                   from 'path';
+import { verifyAuth }         from './_lib/verifyAuth.js';
+import { put as blobPut }     from '@vercel/blob';
 
 const { Pool } = pg;
 
@@ -72,6 +74,11 @@ export default async function handler(req, res) {
       if (!ctx) return res.status(401).json({ error: 'Unauthorized' });
 
       const body = req.body ?? {};
+
+      if (action === 'upload-avatar') {
+        if (!ctx.isAdmin) return res.status(403).json({ error: 'Admin only' });
+        return res.json(await handleUploadAvatar(body));
+      }
 
       if (action === 'create') {
         if (!ctx.isAdmin) return res.status(403).json({ error: 'Admin only' });
@@ -141,6 +148,38 @@ async function handleGet(pool, slug) {
   );
 
   return { creator, itineraries: itineraryRows };
+}
+
+// ── Upload avatar → Vercel Blob ───────────────────────────────────────────────
+async function handleUploadAvatar(body) {
+  const { slug, filename, data: base64Data } = body;
+  if (!slug)       throw Object.assign(new Error('slug is required'), { status: 400 });
+  if (!filename)   throw Object.assign(new Error('filename is required'), { status: 400 });
+  if (!base64Data) throw Object.assign(new Error('data is required'), { status: 400 });
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    throw Object.assign(new Error('Image uploads are not configured (missing BLOB_READ_WRITE_TOKEN)'), { status: 503 });
+  }
+
+  const rawBase   = path.basename(filename);
+  const ext       = rawBase.split('.').pop().toLowerCase();
+  const base      = (rawBase.replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')) || 'avatar';
+  const ts        = Date.now().toString(36).slice(-5);
+  const safeName  = `${base}-${ts}.${ext}`;
+  const blobPath  = `creators/${slug}/avatar/${safeName}`;
+
+  const MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif' };
+  const contentType = MIME[ext] ?? 'image/jpeg';
+
+  let blobUrl;
+  try {
+    const result = await blobPut(blobPath, Buffer.from(base64Data, 'base64'), { access: 'public', contentType, addRandomSuffix: false });
+    blobUrl = result.url;
+  } catch (err) {
+    console.error('[creators/upload-avatar] Vercel Blob put failed:', err);
+    throw Object.assign(new Error('Upload failed. Please try again.'), { status: 502 });
+  }
+
+  return { url: blobUrl };
 }
 
 // ── Create creator ────────────────────────────────────────────────────────────
