@@ -28,7 +28,7 @@ export default function CreatorProfilePage() {
   }, [creatorSlug]);
 
   useSEO({
-    title: creator ? `${creator.name} — HiddenAtlas Creator` : null,
+    title: creator ? `${creator.name} — HiddenAtlas Travel Designer` : null,
     description: creator?.bio || null,
   });
 
@@ -96,7 +96,7 @@ export default function CreatorProfilePage() {
             letterSpacing: '2px', textTransform: 'uppercase',
             color: '#C9A96E', marginBottom: '12px',
           }}>
-            Creator
+            Travel Designer
           </span>
           <h1 style={{
             fontFamily: "'Playfair Display', Georgia, serif",

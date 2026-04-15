@@ -191,11 +191,11 @@ export default function CreatorEditorPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
           <Link to="/admin/creators" style={{ display: 'flex', alignItems: 'center', gap: '5px',
             color: '#6B6156', textDecoration: 'none', fontSize: '13px' }}>
-            <ArrowLeft size={14} /> Creators
+            <ArrowLeft size={14} /> Travel Designers
           </Link>
           <span style={{ color: '#D8D0C4' }}>›</span>
           <span style={{ fontSize: '13px', color: '#1C1A16', fontWeight: '500' }}>
-            {isNew ? 'New Creator' : form.name || 'Edit Creator'}
+            {isNew ? 'New Travel Designer' : form.name || 'Edit Travel Designer'}
           </span>
         </div>
 

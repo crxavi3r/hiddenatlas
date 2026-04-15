@@ -226,7 +226,7 @@ export default function HomePage() {
                   e.currentTarget.style.borderColor = 'rgba(255,255,255,0.35)';
                 }}
               >
-                Meet the Creators
+                Meet the Travel Designers
               </a>
             </div>
 
@@ -279,117 +279,6 @@ export default function HomePage() {
           `}</style>
           <span style={{ fontSize: '9px', letterSpacing: '2.5px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)' }}>Scroll</span>
           <ChevronDown size={16} color="rgba(255,255,255,0.5)" />
-        </div>
-      </section>
-
-      {/* ══════════════════════════════
-          §0.5  FEATURED CREATORS
-      ══════════════════════════════ */}
-      {creators.length > 0 && (
-        <section id="creators" style={{ padding: 'clamp(56px, 7vw, 96px) 24px', background: '#FAFAF8' }}>
-          <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
-            <Reveal>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '44px', flexWrap: 'wrap', gap: '20px' }}>
-                <div>
-                  <span style={T.label}>The people behind the journeys</span>
-                  <h2 style={T.h2}>Meet our creators</h2>
-                </div>
-              </div>
-            </Reveal>
-            <div className="creators-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
-              {creators.map((c, i) => (
-                <Reveal key={c.id} delay={i * 0.07}>
-                  <CreatorCard creator={c} />
-                </Reveal>
-              ))}
-            </div>
-            <style>{`
-              @media (max-width: 900px) { .creators-grid { grid-template-columns: repeat(2, 1fr) !important; } }
-              @media (max-width: 480px) { .creators-grid { grid-template-columns: 1fr !important; } }
-            `}</style>
-          </div>
-        </section>
-      )}
-
-      {/* ══════════════════════════════
-          §1  EXPLORE DESTINATIONS
-      ══════════════════════════════ */}
-      <section style={{ padding: 'clamp(64px, 8vw, 120px) 24px' }}>
-        <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
-
-          <Reveal>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '48px', flexWrap: 'wrap', gap: '20px' }}>
-              <div>
-                <span style={T.label}>Where do you want to go?</span>
-                <h2 style={T.h2}>Explore destinations</h2>
-              </div>
-              <Link to="/itineraries" style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                fontSize: '12px', fontWeight: '700', letterSpacing: '1px',
-                textTransform: 'uppercase', color: '#1B6B65', textDecoration: 'none',
-                borderBottom: '1px solid #1B6B65', paddingBottom: '2px', whiteSpace: 'nowrap',
-              }}>
-                All destinations <ArrowRight size={13} />
-              </Link>
-            </div>
-          </Reveal>
-
-          {/* 3-column destination grid — all 8 journeys */}
-          <div className="dest-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-            {itineraries.filter(it => !it.parentId).map((it, i) => (
-              <Reveal key={it.id} delay={i * 0.06} style={{ height: '100%' }}>
-                <DestinationCard it={it} />
-              </Reveal>
-            ))}
-          </div>
-
-          <style>{`
-            @media (max-width: 768px) {
-              .dest-grid { grid-template-columns: repeat(2, 1fr) !important; }
-            }
-            @media (max-width: 480px) {
-              .dest-grid { grid-template-columns: 1fr !important; }
-            }
-          `}</style>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════
-          §1.5  PRODUCT CONCEPT
-      ══════════════════════════════ */}
-      <section style={{ background: '#F4F1EC', padding: 'clamp(48px, 5vw, 72px) 24px' }}>
-        <div style={{ maxWidth: '860px', margin: '0 auto', textAlign: 'center' }}>
-          <Reveal>
-            <span style={T.label}>How it works</span>
-            <h2 style={{ ...T.h2, marginBottom: '16px' }}>Journeys designed to be followed day by day.</h2>
-            <p style={{ ...T.body, maxWidth: '560px', margin: '0 auto 44px' }}>
-              HiddenAtlas journeys are curated travel routes built from real trips. Each journey is designed to be followed step by step, like a travel recipe. No planning required.
-            </p>
-            <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', textAlign: 'left' }}>
-              <div style={{ background: 'white', borderRadius: '8px', padding: '28px 30px', border: '1px solid #E8E3DA' }}>
-                <span style={{ display: 'inline-block', padding: '4px 11px', background: '#EFF6F5', color: '#1B6B65', borderRadius: '3px', fontSize: '10px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '14px' }}>
-                  Free Journey
-                </span>
-                <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '18px', fontWeight: '600', color: '#1C1A16', marginBottom: '10px', lineHeight: '1.3' }}>
-                  Explore the route, free
-                </p>
-                <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.7' }}>
-                  A curated day-by-day itinerary you can explore freely. See the full route logic, the destinations, and the travel structure.
-                </p>
-              </div>
-              <div style={{ background: '#0E3D39', borderRadius: '8px', padding: '28px 30px' }}>
-                <span style={{ display: 'inline-block', padding: '4px 11px', background: '#C9A96E', color: 'white', borderRadius: '3px', fontSize: '10px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '14px' }}>
-                  Premium · €29
-                </span>
-                <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '18px', fontWeight: '600', color: 'white', marginBottom: '10px', lineHeight: '1.3' }}>
-                  The complete travel plan
-                </p>
-                <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.65)', lineHeight: '1.7' }}>
-                  A deeper journey with full day-by-day structure, curated route logic, destination highlights, and hidden stops. Designed for real trips.
-                </p>
-              </div>
-            </div>
-          </Reveal>
         </div>
       </section>
 
@@ -514,6 +403,88 @@ export default function HomePage() {
                 >
                   Unlock Premium Journey <ArrowRight size={13} />
                 </Link>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ══════════════════════════════
+          §1  EXPLORE DESTINATIONS
+      ══════════════════════════════ */}
+      <section style={{ padding: 'clamp(64px, 8vw, 120px) 24px' }}>
+        <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+
+          <Reveal>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '48px', flexWrap: 'wrap', gap: '20px' }}>
+              <div>
+                <span style={T.label}>Where do you want to go?</span>
+                <h2 style={T.h2}>Explore destinations</h2>
+              </div>
+              <Link to="/itineraries" style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                fontSize: '12px', fontWeight: '700', letterSpacing: '1px',
+                textTransform: 'uppercase', color: '#1B6B65', textDecoration: 'none',
+                borderBottom: '1px solid #1B6B65', paddingBottom: '2px', whiteSpace: 'nowrap',
+              }}>
+                All destinations <ArrowRight size={13} />
+              </Link>
+            </div>
+          </Reveal>
+
+          {/* 3-column destination grid */}
+          <div className="dest-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+            {itineraries.filter(it => !it.parentId).map((it, i) => (
+              <Reveal key={it.id} delay={i * 0.06} style={{ height: '100%' }}>
+                <DestinationCard it={it} creator={creatorMap[it.id]} />
+              </Reveal>
+            ))}
+          </div>
+
+          <style>{`
+            @media (max-width: 768px) {
+              .dest-grid { grid-template-columns: repeat(2, 1fr) !important; }
+            }
+            @media (max-width: 480px) {
+              .dest-grid { grid-template-columns: 1fr !important; }
+            }
+          `}</style>
+        </div>
+      </section>
+
+      {/* ══════════════════════════════
+          §1.5  PRODUCT CONCEPT
+      ══════════════════════════════ */}
+      <section style={{ background: '#F4F1EC', padding: 'clamp(48px, 5vw, 72px) 24px' }}>
+        <div style={{ maxWidth: '860px', margin: '0 auto', textAlign: 'center' }}>
+          <Reveal>
+            <span style={T.label}>How it works</span>
+            <h2 style={{ ...T.h2, marginBottom: '16px' }}>Journeys designed to be followed day by day.</h2>
+            <p style={{ ...T.body, maxWidth: '560px', margin: '0 auto 44px' }}>
+              HiddenAtlas journeys are curated travel routes built from real trips. Each journey is designed to be followed step by step, like a travel recipe. No planning required.
+            </p>
+            <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', textAlign: 'left' }}>
+              <div style={{ background: 'white', borderRadius: '8px', padding: '28px 30px', border: '1px solid #E8E3DA' }}>
+                <span style={{ display: 'inline-block', padding: '4px 11px', background: '#EFF6F5', color: '#1B6B65', borderRadius: '3px', fontSize: '10px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '14px' }}>
+                  Free Journey
+                </span>
+                <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '18px', fontWeight: '600', color: '#1C1A16', marginBottom: '10px', lineHeight: '1.3' }}>
+                  Explore the route, free
+                </p>
+                <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.7' }}>
+                  A curated day-by-day itinerary you can explore freely. See the full route logic, the destinations, and the travel structure.
+                </p>
+              </div>
+              <div style={{ background: '#0E3D39', borderRadius: '8px', padding: '28px 30px' }}>
+                <span style={{ display: 'inline-block', padding: '4px 11px', background: '#C9A96E', color: 'white', borderRadius: '3px', fontSize: '10px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '14px' }}>
+                  Premium · €29
+                </span>
+                <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '18px', fontWeight: '600', color: 'white', marginBottom: '10px', lineHeight: '1.3' }}>
+                  The complete travel plan
+                </p>
+                <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.65)', lineHeight: '1.7' }}>
+                  A deeper journey with full day-by-day structure, curated route logic, destination highlights, and hidden stops. Designed for real trips.
+                </p>
               </div>
             </div>
           </Reveal>
@@ -754,6 +725,43 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ══════════════════════════════
+          §4.5  TRAVEL DESIGNERS
+      ══════════════════════════════ */}
+      {creators.length > 0 && (
+        <section id="creators" style={{ padding: 'clamp(56px, 7vw, 96px) 24px', background: 'white' }}>
+          <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+            <Reveal>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '44px', flexWrap: 'wrap', gap: '20px' }}>
+                <div>
+                  <span style={T.label}>The people behind the itineraries</span>
+                  <h2 style={T.h2}>Meet our travel designers</h2>
+                </div>
+                <Link to="/itineraries" style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  fontSize: '12px', fontWeight: '700', letterSpacing: '1px',
+                  textTransform: 'uppercase', color: '#1B6B65', textDecoration: 'none',
+                  borderBottom: '1px solid #1B6B65', paddingBottom: '2px', whiteSpace: 'nowrap',
+                }}>
+                  Browse itineraries <ArrowRight size={13} />
+                </Link>
+              </div>
+            </Reveal>
+            <div className="creators-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
+              {creators.map((c, i) => (
+                <Reveal key={c.id} delay={i * 0.07}>
+                  <CreatorCard creator={c} />
+                </Reveal>
+              ))}
+            </div>
+            <style>{`
+              @media (max-width: 900px) { .creators-grid { grid-template-columns: repeat(2, 1fr) !important; } }
+              @media (max-width: 480px) { .creators-grid { grid-template-columns: 1fr !important; } }
+            `}</style>
+          </div>
+        </section>
+      )}
 
       {/* ══════════════════════════════
           §5  SOCIAL PROOF
@@ -1076,7 +1084,7 @@ export default function HomePage() {
    SUB-COMPONENTS
 ════════════════════════════════════════ */
 
-function DestinationCard({ it }) {
+function DestinationCard({ it, creator }) {
   const [hovered, setHovered] = useState(false);
   return (
     <Link
@@ -1131,9 +1139,18 @@ function DestinationCard({ it }) {
             lineHeight: '1.4', letterSpacing: '0.2px',
             opacity: hovered ? 1 : 0.75,
             transition: 'opacity 0.3s',
+            marginBottom: creator ? '6px' : '0',
           }}>
             {it.tagline}
           </p>
+          {creator && (
+            <p style={{
+              fontSize: '10.5px', color: 'rgba(201,169,110,0.85)',
+              letterSpacing: '0.2px', lineHeight: '1.3',
+            }}>
+              by {creator.name}
+            </p>
+          )}
         </div>
         {/* Arrow on hover */}
         <div style={{

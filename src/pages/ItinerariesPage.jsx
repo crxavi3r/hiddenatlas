@@ -172,7 +172,7 @@ export default function ItinerariesPage() {
             display: 'flex', alignItems: 'center', gap: '8px', minHeight: '52px' }}>
             <span style={{ fontSize: '11px', fontWeight: '600', color: '#8C8070',
               textTransform: 'uppercase', letterSpacing: '0.8px', flexShrink: 0, marginRight: '4px' }}>
-              By creator:
+              By designer:
             </span>
             <button
               onClick={() => setCreatorFilter('')}

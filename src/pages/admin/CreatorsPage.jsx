@@ -99,14 +99,14 @@ export default function CreatorsPage() {
         <div>
           <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px',
             fontWeight: '600', color: '#1C1A16' }}>
-            Creators
+            Travel Designers
           </h1>
           <p style={{ fontSize: '12.5px', color: '#8C8070', marginTop: '3px' }}>
-            {creators.length} creator{creators.length !== 1 ? 's' : ''}
+            {creators.length} travel designer{creators.length !== 1 ? 's' : ''}
           </p>
         </div>
         <button onClick={() => navigate('/admin/creators/new')} style={btnPrimary}>
-          <Plus size={13} /> New creator
+          <Plus size={13} /> New designer
         </button>
       </div>
 
@@ -123,10 +123,10 @@ export default function CreatorsPage() {
       ) : creators.length === 0 ? (
         <div style={{ ...card, padding: '48px', textAlign: 'center' }}>
           <p style={{ fontSize: '14px', color: '#B5AA99', marginBottom: '16px' }}>
-            No creators yet. Add the first one.
+            No travel designers yet. Add the first one.
           </p>
           <button onClick={() => navigate('/admin/creators/new')} style={btnPrimary}>
-            <Plus size={13} /> New creator
+            <Plus size={13} /> New designer
           </button>
         </div>
       ) : isMobile ? (
@@ -141,7 +141,7 @@ export default function CreatorsPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#FAFAF8' }}>
-                  <th style={th}>Creator</th>
+                  <th style={th}>Travel Designer</th>
                   <th style={th}>Slug</th>
                   <th style={{ ...th, textAlign: 'center' }}>Itineraries</th>
                   <th style={{ ...th, textAlign: 'center' }}>Status</th>

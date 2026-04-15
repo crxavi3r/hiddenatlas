@@ -31,9 +31,9 @@ function SidebarContent({ onClose, isAdmin }) {
       <div style={{ padding: '22px 20px 18px', borderBottom: '1px solid #1C1A16', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <p style={{ fontSize: '11px', fontWeight: '700', color: '#1B6B65', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '3px' }}>
-            {isAdmin ? 'Backoffice' : 'Creator Portal'}
+            {isAdmin ? 'Backoffice' : 'Designer Portal'}
           </p>
-          <p style={{ fontSize: '12px', color: '#4A433A' }}>HiddenAtlas {isAdmin ? 'Admin' : 'Creator'}</p>
+          <p style={{ fontSize: '12px', color: '#4A433A' }}>HiddenAtlas {isAdmin ? 'Admin' : 'Travel Designer'}</p>
         </div>
         {onClose && (
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4A433A', padding: '4px', display: 'flex' }}>

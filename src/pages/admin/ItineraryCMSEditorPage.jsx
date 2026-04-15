@@ -1297,13 +1297,13 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
         </Field>
 
         {creators.length > 0 && (
-          <Field label="Creator" hint="Assign this itinerary to a creator. Leave empty to show no creator attribution.">
+          <Field label="Travel Designer" hint="Assign this itinerary to a travel designer. Leave empty to show no attribution.">
             <select
               value={form.creatorId || ''}
               onChange={e => set('creatorId', e.target.value || null)}
               style={{ ...inputStyle, maxWidth: '320px' }}
             >
-              <option value="">None (no creator attribution)</option>
+              <option value="">None (no attribution)</option>
               {creators.map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
