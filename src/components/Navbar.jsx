@@ -8,9 +8,8 @@ import {
 import { useUserCtx } from '../lib/useUserCtx.jsx';
 
 const navLinks = [
-  { label: 'Itineraries',     href: '/itineraries' },
-  { label: 'Custom Planning', href: '/custom' },
-  { label: 'My Trips',        href: '/my-trips' },
+  { label: 'Itineraries', href: '/itineraries' },
+  { label: 'My Trips',    href: '/my-trips' },
 ];
 
 function UserAvatar() {
@@ -221,9 +220,9 @@ export default function Navbar() {
           {/* Right: CTA + auth */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
 
-            {/* Plan My Trip CTA */}
-            <Link
-              to="/custom"
+            {/* Plan My Trip CTA — goes to designer selection */}
+            <a
+              href="/#creators"
               className="hidden-mobile"
               style={{
                 padding: '10px 20px', borderRadius: '4px',
@@ -239,7 +238,7 @@ export default function Navbar() {
               onMouseLeave={e => { e.currentTarget.style.background = isTransparent ? 'rgba(255,255,255,0.15)' : '#1B6B65'; }}
             >
               Plan My Trip
-            </Link>
+            </a>
 
             {/* ── Auth — desktop ── */}
             <div className="hidden-mobile" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -354,8 +353,8 @@ export default function Navbar() {
 
             {/* CTA */}
             <div style={{ marginTop: '32px' }}>
-              <Link
-                to="/custom"
+              <a
+                href="/#creators"
                 style={{
                   display: 'block',
                   padding: '15px 24px',
@@ -371,7 +370,7 @@ export default function Navbar() {
                 }}
               >
                 Plan My Trip
-              </Link>
+              </a>
             </div>
 
             {/* Auth */}

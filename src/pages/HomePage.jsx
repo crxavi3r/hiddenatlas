@@ -870,47 +870,30 @@ export default function HomePage() {
 
             <Reveal>
               <div>
-                <span style={{ ...T.label, color: '#C9A96E' }}>Custom trip planning</span>
+                <span style={{ ...T.label, color: '#C9A96E' }}>Custom trips by travel designers</span>
                 <h2 style={{ ...T.h2, color: 'white', marginBottom: '20px' }}>
-                  Prefer a journey designed<br />entirely around you?
+                  Want a journey designed<br />entirely around you?
                 </h2>
                 <p style={{ fontSize: '17px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.8', marginBottom: '16px' }}>
-                  We design deeply personalised travel itineraries shaped around exceptional places, remarkable experiences and thoughtful pacing.
+                  Our travel designers craft personalised itineraries shaped around exceptional places, remarkable experiences and thoughtful pacing.
                 </p>
-                <p style={{ fontSize: '17px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.8', marginBottom: '16px' }}>
-                  You receive a fully crafted plan with carefully curated recommendations. Everything is ready for you to book directly, at your own pace.
+                <p style={{ fontSize: '17px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.8', marginBottom: '36px' }}>
+                  You work directly with the person who built the itinerary. No middlemen. Everything ready to book at your own pace.
                 </p>
-                <p style={{ fontSize: '14px', color: 'rgba(201,169,110,0.75)', lineHeight: '1.7', marginBottom: '36px', fontStyle: 'italic' }}>
-                  Independent travel planning. No commissions. Only thoughtful recommendations.
-                </p>
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                  <Link
-                    to="/custom"
-                    style={{
-                      padding: '15px 30px', background: '#C9A96E', color: 'white',
-                      borderRadius: '4px', fontSize: '13px', fontWeight: '700',
-                      letterSpacing: '0.8px', textTransform: 'uppercase',
-                      textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px',
-                      transition: 'background 0.2s',
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#B08D4E'}
-                    onMouseLeave={e => e.currentTarget.style.background = '#C9A96E'}
-                  >
-                    Plan my trip <ArrowRight size={15} />
-                  </Link>
-                  <Link
-                    to="/pricing"
-                    style={{
-                      padding: '15px 30px', background: 'transparent',
-                      color: 'rgba(255,255,255,0.85)',
-                      border: '1px solid rgba(255,255,255,0.3)',
-                      borderRadius: '4px', fontSize: '13px', fontWeight: '700',
-                      letterSpacing: '0.8px', textTransform: 'uppercase', textDecoration: 'none',
-                    }}
-                  >
-                    See pricing
-                  </Link>
-                </div>
+                <a
+                  href="#creators"
+                  style={{
+                    padding: '15px 30px', background: '#C9A96E', color: 'white',
+                    borderRadius: '4px', fontSize: '13px', fontWeight: '700',
+                    letterSpacing: '0.8px', textTransform: 'uppercase',
+                    textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px',
+                    transition: 'background 0.2s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#B08D4E'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#C9A96E'}
+                >
+                  Meet the designers <ArrowRight size={15} />
+                </a>
               </div>
             </Reveal>
 
@@ -984,8 +967,8 @@ export default function HomePage() {
               >
                 Browse itineraries <ArrowRight size={14} />
               </Link>
-              <Link
-                to="/custom"
+              <a
+                href="#creators"
                 style={{
                   padding: '16px 34px', background: 'white', color: '#1C1A16',
                   border: '1px solid #D4CCBF', borderRadius: '4px',
@@ -997,7 +980,7 @@ export default function HomePage() {
                 onMouseLeave={e => e.currentTarget.style.borderColor = '#D4CCBF'}
               >
                 Plan my trip
-              </Link>
+              </a>
             </div>
           </Reveal>
         </div>

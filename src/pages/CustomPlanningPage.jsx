@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { User } from 'lucide-react';
 import { useApi } from '../lib/api';
 import { Check, ArrowRight, MapPin, Calendar, Users, Heart, Lock } from 'lucide-react';
@@ -53,16 +53,16 @@ const SCROLL_ORDER = ['name', 'email', 'phone', 'destination', 'dates', 'duratio
 /* ─── Next steps for each flow ─── */
 const STEPS_PAID = [
   'Secure payment processed immediately',
-  'Your planner reaches out within 24–48h',
-  'We design your itinerary (7–10 working days)',
+  'Your designer reaches out within 24–48h',
+  'Your designer works on your itinerary (7–10 working days)',
   'You review. Revisions included.',
   'Final delivery, ready to book',
 ];
 
 const STEPS_REVIEW = [
-  'We review your brief and confirm scope (within 24h)',
-  'Your planner reaches out to discuss the details',
-  'We design your itinerary (7–10 working days)',
+  'Your designer reviews the brief and confirms scope (within 24h)',
+  'Your designer reaches out to discuss the details',
+  'Your itinerary is designed over 7–10 working days',
   'You review. Revisions included.',
   'Final delivery, ready to book',
 ];
@@ -112,7 +112,7 @@ function MobilePricingBlock() {
         fontSize: '20px', fontWeight: '600',
         color: 'white', marginBottom: '8px',
       }}>
-        Custom trip planning
+        Custom trips by travel designers
       </h3>
       <p style={{ fontSize: '13.5px', color: 'rgba(255,255,255,0.55)', lineHeight: '1.6', marginBottom: '24px' }}>
         A personalised itinerary designed around your travel style, pace and priorities.
@@ -160,8 +160,10 @@ function SectionLegend({ label, helper }) {
 export default function CustomPlanningPage() {
   const { user, isLoaded } = useUser();
   const api = useApi();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [designer, setDesigner] = useState(null);
+  const [designer, setDesigner]   = useState(null);
+  const [designers, setDesigners] = useState(null); // null = loading
 
   // Load a specific designer when ?designer=slug is present
   useEffect(() => {
@@ -172,6 +174,18 @@ export default function CustomPlanningPage() {
       .then(data => { if (data?.creator) setDesigner(data.creator); })
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch all active designers for the picker
+  useEffect(() => {
+    fetch('/api/creators?action=list')
+      .then(r => r.ok ? r.json() : { creators: [] })
+      .then(data => {
+        setDesigners(
+          (data.creators || []).filter(c => c.isActive && (c.itinerary_count > 0 || c.total_itinerary_count > 0))
+        );
+      })
+      .catch(() => setDesigners([]));
+  }, []);
 
   useSEO({
     title: 'Custom Trip Planning — Bespoke Travel Itineraries for Groups & Couples',
@@ -343,7 +357,7 @@ export default function CustomPlanningPage() {
             Payment confirmed.
           </h1>
           <p style={{ fontSize: '17px', color: '#6B6156', lineHeight: '1.7', marginBottom: '32px' }}>
-            Your trip planning is now in progress. Your dedicated planner will reach out within 48 hours to begin designing your itinerary.
+            Your trip planning is now in progress. Your travel designer will reach out within 48 hours to begin working on your itinerary.
           </p>
           <a
             href="/itineraries"
@@ -379,7 +393,7 @@ export default function CustomPlanningPage() {
             We've received your brief.
           </h1>
           <p style={{ fontSize: '17px', color: '#6B6156', lineHeight: '1.7', marginBottom: '32px' }}>
-            One of our planners will reach out to {formData.email} within 48 hours to review scope and confirm your planning fee before we begin.
+            {designer ? `${designer.name} will be in touch at ${formData.email} within 48 hours to review the details and confirm your planning fee.` : `A travel designer will reach out to ${formData.email} within 48 hours to review scope and confirm your planning fee before we begin.`}
           </p>
           <a
             href="/itineraries"
@@ -524,6 +538,83 @@ export default function CustomPlanningPage() {
         </div>
       </section>
 
+      {/* ── Designer picker — shown when no designer is pre-selected ── */}
+      {!designer && designers !== null && designers.length > 0 && (
+        <section style={{ padding: 'clamp(40px, 6vw, 72px) 24px', background: '#F4F1EC', borderBottom: '1px solid #E8E3DA' }}>
+          <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+            <div style={{ marginBottom: '36px' }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                fontSize: '10.5px', fontWeight: '700', letterSpacing: '2px',
+                textTransform: 'uppercase', color: '#1B6B65', marginBottom: '10px',
+              }}>
+                <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#1B6B65', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '700', flexShrink: 0 }}>1</span>
+                Choose your travel designer
+              </span>
+              <h2 style={{
+                fontFamily: "'Playfair Display', Georgia, serif",
+                fontSize: 'clamp(22px, 3vw, 32px)', fontWeight: '600', color: '#1C1A16',
+              }}>
+                Who do you want to plan your trip?
+              </h2>
+            </div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+              gap: '16px',
+            }}>
+              {designers.map(d => {
+                const initials = d.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+                const count = d.itinerary_count || 0;
+                return (
+                  <button
+                    key={d.id}
+                    onClick={() => navigate(`/custom?designer=${encodeURIComponent(d.slug)}`)}
+                    style={{
+                      background: 'white', border: '1px solid #E8E3DA', borderRadius: '10px',
+                      padding: '24px', textAlign: 'left', cursor: 'pointer',
+                      transition: 'box-shadow 0.25s, transform 0.25s, border-color 0.25s',
+                      display: 'flex', gap: '16px', alignItems: 'flex-start',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.boxShadow = '0 8px 32px rgba(28,26,22,0.10)';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.borderColor = '#1B6B65';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.transform = 'none';
+                      e.currentTarget.style.borderColor = '#E8E3DA';
+                    }}
+                  >
+                    {d.avatarUrl
+                      ? <img src={d.avatarUrl} alt={d.name} style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                      : <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#EFF6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: "'Playfair Display', Georgia, serif", fontSize: '16px', fontWeight: '600', color: '#1B6B65' }}>{initials}</div>
+                    }
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '16px', fontWeight: '600', color: '#1C1A16', marginBottom: '3px' }}>{d.name}</p>
+                      {count > 0 && (
+                        <p style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase', color: '#C9A96E', marginBottom: '6px' }}>
+                          {count} {count === 1 ? 'itinerary' : 'itineraries'}
+                        </p>
+                      )}
+                      {d.bio && (
+                        <p style={{ fontSize: '13px', color: '#6B6156', lineHeight: '1.55', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                          {d.bio}
+                        </p>
+                      )}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '10px', fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase', color: '#1B6B65' }}>
+                        Plan with {d.name.split(' ')[0]} <ArrowRight size={11} />
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Form + Sidebar */}
       <section style={{ padding: 'clamp(40px, 6vw, 80px) 24px' }}>
         <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
@@ -531,6 +622,16 @@ export default function CustomPlanningPage() {
 
             {/* ── FORM ── */}
             <form onSubmit={handleSubmit} noValidate>
+              {designer && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '8px',
+                  fontSize: '10.5px', fontWeight: '700', letterSpacing: '2px',
+                  textTransform: 'uppercase', color: '#1B6B65', marginBottom: '14px',
+                }}>
+                  <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#1B6B65', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '700', flexShrink: 0 }}>2</span>
+                  Your trip details
+                </span>
+              )}
               <h2 style={{
                 fontFamily: "'Playfair Display', Georgia, serif",
                 fontSize: 'clamp(26px, 3vw, 34px)', fontWeight: '600', color: '#1C1A16',
@@ -720,7 +821,7 @@ export default function CustomPlanningPage() {
               <fieldset id="field-style" style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
                 <SectionLegend
                   label="How do you like to travel?"
-                  helper="Select everything that resonates. Your planner will use this to shape the tone of the itinerary."
+                  helper="Select everything that resonates. Your designer will use this to shape the tone of the itinerary."
                 />
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {travelStyles.map(style => {
@@ -872,7 +973,7 @@ export default function CustomPlanningPage() {
                   fontSize: '22px', fontWeight: '600',
                   color: 'white', marginBottom: '8px',
                 }}>
-                  Custom trip planning
+                  Custom trips by travel designers
                 </h3>
                 <p style={{ fontSize: '13.5px', color: 'rgba(255,255,255,0.45)', lineHeight: '1.6', marginBottom: '28px' }}>
                   A personalised itinerary designed around your travel style, pace and priorities.
