@@ -11,6 +11,23 @@ datasource db {
 }
 
 // ─────────────────────────────────────────────
+// Creator  (influencer / guide profile)
+// ─────────────────────────────────────────────
+model Creator {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  avatarUrl String?
+  bio       String?
+  userId    String?  @unique  // FK to User.id — links to an authenticated account
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  itineraries Itinerary[]
+}
+
+// ─────────────────────────────────────────────
 // User
 // ─────────────────────────────────────────────
 model User {
@@ -61,12 +78,14 @@ model Itinerary {
   type          String   @default("free")  // free | premium | custom
   isPrivate     Boolean  @default(false)   // true for custom/private itineraries
   userId        String?                    // owner for custom itineraries; null for public ones
+  creatorId     String?                    // FK to Creator.id — nullable for backwards compat
 
   // ── PDF generation status ──────────────────
   pdfStatus       String?   // ready | generating | failed | stale
   pdfGeneratedAt  DateTime?
   pdfError        String?
 
+  creator           Creator?   @relation(fields: [creatorId], references: [id])
   purchases         Purchase[]
   assets            ItineraryAsset[]
   aiGenerations     ItineraryAIGeneration[]
@@ -74,6 +93,7 @@ model Itinerary {
   @@index([status])
   @@index([accessType])
   @@index([updatedAt])
+  @@index([creatorId])
 }
 
 // ─────────────────────────────────────────────

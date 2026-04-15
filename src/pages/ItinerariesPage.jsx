@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { itineraries as staticItineraries } from '../data/itineraries';
 import ItineraryCard from '../components/ItineraryCard';
 import { usePurchasedSlugs } from '../lib/usePurchasedSlugs';
 import { useSEO } from '../hooks/useSEO';
 
 export default function ItinerariesPage() {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery,    setSearchQuery]    = useState('');
+  const [creatorFilter,  setCreatorFilter]  = useState('');   // creator slug or ''
+  const [creators,       setCreators]       = useState([]);   // for filter dropdown
+  const [creatorMap,     setCreatorMap]     = useState({});   // { slug: { name, slug, avatarUrl } }
   const purchasedSlugs = usePurchasedSlugs();
 
   // DB hero images override the static coverImage so CMS changes are reflected immediately.
@@ -18,12 +21,27 @@ export default function ItinerariesPage() {
       .catch(() => {});
   }, []);
 
-  const itineraries = heroOverrides && Object.keys(heroOverrides).length > 0
-    ? staticItineraries.map(it => {
-        const heroUrl = heroOverrides[it.id];
-        return heroUrl ? { ...it, coverImage: heroUrl } : it;
-      })
-    : staticItineraries;
+  // Fetch creator-to-itinerary map for card bylines
+  useEffect(() => {
+    fetch('/api/itineraries?action=creator-map')
+      .then(r => r.ok ? r.json() : { creators: {} })
+      .then(data => setCreatorMap(data.creators || {}))
+      .catch(() => {});
+  }, []);
+
+  // Fetch creator list for filter dropdown
+  useEffect(() => {
+    fetch('/api/creators?action=list')
+      .then(r => r.ok ? r.json() : { creators: [] })
+      .then(data => setCreators((data.creators || []).filter(c => c.isActive && c.itinerary_count > 0)))
+      .catch(() => {});
+  }, []);
+
+  const itineraries = staticItineraries.map(it => {
+    const heroUrl = heroOverrides[it.id];
+    const creator = creatorMap[it.id] || null;
+    return { ...it, ...(heroUrl ? { coverImage: heroUrl } : {}), ...(creator ? { creator } : {}) };
+  });
 
   useSEO({
     title: 'Travel Itineraries — Free & Premium Journeys',
@@ -37,8 +55,15 @@ export default function ItinerariesPage() {
     return it.title.toLowerCase().includes(q) || it.country.toLowerCase().includes(q);
   };
 
-  const freeJourneys = itineraries.filter(it => !it.isPremium && !it.parentId && matchesSearch(it));
-  const premiumJourneys = itineraries.filter(it => it.isPremium && !it.parentId && matchesSearch(it));
+  const matchesCreator = (it) => {
+    if (!creatorFilter) return true;
+    return it.creator?.slug === creatorFilter;
+  };
+
+  const freeJourneys    = itineraries.filter(it => !it.isPremium && !it.parentId && matchesSearch(it) && matchesCreator(it));
+  const premiumJourneys = itineraries.filter(it => it.isPremium  && !it.parentId && matchesSearch(it) && matchesCreator(it));
+
+  const activeCreator = creators.find(c => c.slug === creatorFilter);
 
   return (
     <div style={{ background: '#FAFAF8', paddingTop: '72px' }}>
@@ -139,6 +164,84 @@ export default function ItinerariesPage() {
           @media (max-width: 600px) { .ha-search-input { width: calc(100vw - 64px); } }
         `}</style>
       </section>
+
+      {/* Creator filter bar — only shown when there are creators with itineraries */}
+      {creators.length > 0 && (
+        <div style={{ background: 'white', borderBottom: '1px solid #E8E3DA', overflowX: 'auto' }}>
+          <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 24px',
+            display: 'flex', alignItems: 'center', gap: '8px', minHeight: '52px' }}>
+            <span style={{ fontSize: '11px', fontWeight: '600', color: '#8C8070',
+              textTransform: 'uppercase', letterSpacing: '0.8px', flexShrink: 0, marginRight: '4px' }}>
+              By creator:
+            </span>
+            <button
+              onClick={() => setCreatorFilter('')}
+              style={{
+                padding: '5px 14px', borderRadius: '20px', border: '1px solid',
+                fontSize: '12px', fontWeight: '500', cursor: 'pointer', flexShrink: 0,
+                borderColor: !creatorFilter ? '#1B6B65' : '#E8E3DA',
+                background:  !creatorFilter ? '#EFF6F5' : 'white',
+                color:       !creatorFilter ? '#1B6B65' : '#4A433A',
+              }}
+            >
+              All
+            </button>
+            {creators.map(c => (
+              <button
+                key={c.slug}
+                onClick={() => setCreatorFilter(c.slug === creatorFilter ? '' : c.slug)}
+                style={{
+                  padding: '5px 14px', borderRadius: '20px', border: '1px solid',
+                  fontSize: '12px', fontWeight: '500', cursor: 'pointer', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  borderColor: creatorFilter === c.slug ? '#1B6B65' : '#E8E3DA',
+                  background:  creatorFilter === c.slug ? '#EFF6F5' : 'white',
+                  color:       creatorFilter === c.slug ? '#1B6B65' : '#4A433A',
+                }}
+              >
+                {c.avatarUrl && (
+                  <img src={c.avatarUrl} alt={c.name}
+                    style={{ width: '16px', height: '16px', borderRadius: '50%', objectFit: 'cover' }}
+                    onError={e => { e.currentTarget.style.display = 'none'; }}
+                  />
+                )}
+                {c.name}
+              </button>
+            ))}
+            {creatorFilter && (
+              <button
+                onClick={() => setCreatorFilter('')}
+                style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
+                  color: '#8C8070', display: 'flex', alignItems: 'center', gap: '4px',
+                  fontSize: '12px', padding: '4px 8px', flexShrink: 0 }}
+              >
+                <X size={12} /> Clear filter
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeCreator && (
+        <div style={{ background: '#EFF6F5', borderBottom: '1px solid #A8D5D0' }}>
+          <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '12px 24px',
+            display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {activeCreator.avatarUrl && (
+              <img src={activeCreator.avatarUrl} alt={activeCreator.name}
+                style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }}
+                onError={e => { e.currentTarget.style.display = 'none'; }}
+              />
+            )}
+            <span style={{ fontSize: '13px', color: '#1B6B65' }}>
+              Showing itineraries by <strong>{activeCreator.name}</strong>
+            </span>
+            <a href={`/${activeCreator.slug}`} style={{ marginLeft: 'auto', fontSize: '12px',
+              color: '#1B6B65', textDecoration: 'none', fontWeight: '500' }}>
+              View profile →
+            </a>
+          </div>
+        </div>
+      )}
 
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: 'clamp(40px, 5vw, 80px) 24px' }}>
 

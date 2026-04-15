@@ -522,8 +522,10 @@ export default function ItineraryCMSEditorPage() {
     title: '', subtitle: '', slug: '', destination: '', country: '',
     region: '', durationDays: '', type: 'free', isPrivate: false, isCollection: false,
     stripePriceId: '', pricingKey: '',
-    coverImage: '', status: 'draft', pdfUrl: '', content: { ...EMPTY_CONTENT },
+    coverImage: '', status: 'draft', pdfUrl: '', creatorId: '',
+    content: { ...EMPTY_CONTENT },
   });
+  const [allCreators, setAllCreators] = useState([]);  // for creator selector
 
   // Images tab state
   const [assets,       setAssets]       = useState([]);
@@ -577,6 +579,7 @@ export default function ItineraryCMSEditorPage() {
         stripePriceId: it.stripePriceId || '', pricingKey: it.pricingKey || '',
         coverImage: it.coverImage || '', status: it.status || 'draft',
         pdfUrl: it.pdfUrl || '',
+        creatorId: it.creatorId || '',
         content,
       });
       savedId.current = it.id;
@@ -587,16 +590,23 @@ export default function ItineraryCMSEditorPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // ── Load pricing options once on mount ───────────────────────────────────────
+  // ── Load pricing options + creators once on mount ────────────────────────────
   useEffect(() => {
-    getToken().then(token =>
+    getToken().then(token => {
       fetch('/api/itinerary-cms?action=pricing-options', {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then(r => r.json())
         .then(json => { if (Array.isArray(json.options)) setPricingOptions(json.options); })
-        .catch(() => {})
-    ).catch(() => {});
+        .catch(() => {});
+
+      fetch('/api/creators?action=list', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(r => r.json())
+        .then(json => { if (Array.isArray(json.creators)) setAllCreators(json.creators); })
+        .catch(() => {});
+    }).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load assets eagerly so hero/day pickers have data on all tabs ────────────
@@ -796,6 +806,7 @@ export default function ItineraryCMSEditorPage() {
         isCollection:  it.isCollection  ?? f.isCollection,
         stripePriceId: it.stripePriceId ?? f.stripePriceId,
         pricingKey:    it.pricingKey    ?? f.pricingKey,
+        creatorId:     it.creatorId     ?? f.creatorId,
         // content intentionally preserved from f — never replace with DB response
         // (JSONB may arrive as string in some pg/Vercel configurations)
       }));
@@ -1206,7 +1217,7 @@ export default function ItineraryCMSEditorPage() {
         </div>
 
         {/* ── Tab panels ── */}
-        {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} />}
+        {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} creators={allCreators} />}
         {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} onCoverImageChange={handleHeroCoverImage} />}
         {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} />}
         {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} />}
@@ -1240,7 +1251,7 @@ export default function ItineraryCMSEditorPage() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ── Basics ────────────────────────────────────────────────────────────────────
-function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [] }) {
+function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators = [] }) {
   function set(field, value) { setForm(f => ({ ...f, [field]: value })); }
 
   return (
@@ -1284,6 +1295,21 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [] }) {
             placeholder="10" min="1" max="60"
             onChange={e => set('durationDays', e.target.value)} />
         </Field>
+
+        {creators.length > 0 && (
+          <Field label="Creator" hint="Assign this itinerary to a creator. Leave empty to show no creator attribution.">
+            <select
+              value={form.creatorId || ''}
+              onChange={e => set('creatorId', e.target.value || null)}
+              style={{ ...inputStyle, maxWidth: '320px' }}
+            >
+              <option value="">None (no creator attribution)</option>
+              {creators.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </Field>
+        )}
       </div>
 
       <div style={sectionCard}>

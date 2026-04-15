@@ -74,6 +74,8 @@ a { text-decoration: none; color: inherit; }
 button { font-family: inherit; cursor: pointer; }
 img { display: block; max-width: 100%; }
 
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ── Responsive layout utilities ── */
 @media (max-width: 900px) {
   .resp-detail-grid { grid-template-columns: 1fr !important; }

@@ -92,29 +92,34 @@ export default function ItinerariesCMSPage() {
   const navigate     = useNavigate();
   const isMobile     = useIsMobile();
 
-  const [items,      setItems]      = useState([]);
-  const [collections, setCollections] = useState([]);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState(null);
-  const [seeding,      setSeeding]      = useState(false);
-  const [seedMsg,      setSeedMsg]      = useState(null);
-  const [backfilling,  setBackfilling]  = useState(false);
-  const [publishing, setPublishing] = useState(false);
-  const [toDelete,   setToDelete]   = useState(null);
-  const [filter,     setFilter]     = useState('all');      // all | draft | published
-  const [typeFilter, setTypeFilter] = useState('all');      // all | free | premium | custom
+  const [items,          setItems]          = useState([]);
+  const [collections,    setCollections]    = useState([]);
+  const [loading,        setLoading]        = useState(true);
+  const [error,          setError]          = useState(null);
+  const [seeding,        setSeeding]        = useState(false);
+  const [seedMsg,        setSeedMsg]        = useState(null);
+  const [backfilling,    setBackfilling]    = useState(false);
+  const [publishing,     setPublishing]     = useState(false);
+  const [toDelete,       setToDelete]       = useState(null);
+  const [filter,         setFilter]         = useState('all');   // all | draft | published
+  const [typeFilter,     setTypeFilter]     = useState('all');   // all | free | premium | custom
+  const [creatorFilter,  setCreatorFilter]  = useState('');      // creator id or ''
+  const [allCreators,    setAllCreators]    = useState([]);      // for filter dropdown
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
       const token = await getToken();
-      const res   = await fetch('/api/itinerary-cms?action=list', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      setItems(json.itineraries);
-      setCollections(json.collections ?? []);
+      const [cmsRes, creatorsRes] = await Promise.all([
+        fetch('/api/itinerary-cms?action=list', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/creators?action=list', { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      const cmsJson      = await cmsRes.json();
+      const creatorsJson = await creatorsRes.json();
+      if (cmsJson.error) throw new Error(cmsJson.error);
+      setItems(cmsJson.itineraries);
+      setCollections(cmsJson.collections ?? []);
+      if (!creatorsJson.error) setAllCreators(creatorsJson.creators || []);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   }, [getToken]);
@@ -239,11 +244,12 @@ export default function ItinerariesCMSPage() {
   const filtered = filter === 'collections'
     ? collectionItems
     : mainItems.filter(it => {
-        const statusOk = filter === 'all'       ? true
-                       : filter === 'published' ? it.isPublished
-                       : /* draft */              !it.isPublished;
-        const typeOk   = typeFilter === 'all' ? true : getItineraryType(it) === typeFilter;
-        return statusOk && typeOk;
+        const statusOk  = filter === 'all'       ? true
+                        : filter === 'published' ? it.isPublished
+                        : /* draft */              !it.isPublished;
+        const typeOk    = typeFilter === 'all' ? true : getItineraryType(it) === typeFilter;
+        const creatorOk = !creatorFilter ? true : (it.creatorId === creatorFilter);
+        return statusOk && typeOk && creatorOk;
       });
 
   const counts = {
@@ -373,6 +379,26 @@ export default function ItinerariesCMSPage() {
           ))}
         </div>
         )}
+
+        {/* Creator filter — only shown when creators exist */}
+        {filter !== 'collections' && allCreators.length > 0 && (
+          <select
+            value={creatorFilter}
+            onChange={e => setCreatorFilter(e.target.value)}
+            style={{
+              padding: '5px 12px', fontSize: '12px', fontWeight: '500',
+              border: '1px solid #E8E3DA', borderRadius: '6px', cursor: 'pointer',
+              background: creatorFilter ? '#EFF6F5' : 'white',
+              color: creatorFilter ? '#1B6B65' : '#6B6156',
+              outline: 'none',
+            }}
+          >
+            <option value="">All creators</option>
+            {allCreators.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Content */}
@@ -434,6 +460,7 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
               <th style={th}>Cover</th>
               <th style={th}>Title / Slug</th>
               <th style={th}>Type</th>
+              <th style={th}>Creator</th>
               <th style={th}>Destination</th>
               <th style={{ ...th, textAlign: 'center' }}>Days</th>
               <th style={{ ...th, textAlign: 'right' }}>Price</th>
@@ -469,6 +496,15 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
                     <Badge meta={TYPE_META[itType] ?? TYPE_META.free} />
                     {it.isPrivate && <Badge meta={VISIBILITY_META.private} />}
                   </div>
+                </td>
+                <td style={{ ...td, color: '#4A433A', fontSize: '12px' }}>
+                  {it.creator_name
+                    ? <a href={`/${it.creator_slug}`} target="_blank" rel="noopener noreferrer"
+                        style={{ color: '#1B6B65', textDecoration: 'none', fontWeight: '500' }}>
+                        {it.creator_name}
+                      </a>
+                    : <span style={{ color: '#D8D0C4' }}>—</span>
+                  }
                 </td>
                 <td style={{ ...td, color: '#4A433A' }}>
                   {it.destination || it.country || '—'}

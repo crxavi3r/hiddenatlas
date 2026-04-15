@@ -34,6 +34,9 @@ import DownloadsPage from './pages/admin/DownloadsPage';
 import CustomRequestsPage from './pages/admin/CustomRequestsPage';
 import ItinerariesCMSPage from './pages/admin/ItinerariesCMSPage';
 import ItineraryCMSEditorPage from './pages/admin/ItineraryCMSEditorPage';
+import CreatorsPage from './pages/admin/CreatorsPage';
+import CreatorEditorPage from './pages/admin/CreatorEditorPage';
+import CreatorProfilePage from './pages/CreatorProfilePage';
 
 // ── Scroll to top on route change ────────────────────────────────────────────
 function ScrollToTop() {
@@ -88,6 +91,8 @@ export default function App() {
           <Route path="custom-requests" element={<CustomRequestsPage />} />
           <Route path="itineraries" element={<ItinerariesCMSPage />} />
           <Route path="itineraries/:id" element={<ItineraryCMSEditorPage />} />
+          <Route path="creators" element={<CreatorsPage />} />
+          <Route path="creators/:id" element={<CreatorEditorPage />} />
         </Route>
 
         {/* ── Public pages — shared Navbar + Footer ── */}
@@ -110,6 +115,9 @@ export default function App() {
           <Route path="/privacy" element={<PrivacyPolicyPage />} />
           <Route path="/terms" element={<TermsOfServicePage />} />
           <Route path="/refunds" element={<RefundPolicyPage />} />
+          {/* Creator profile page — must be last: React Router v6 prefers static
+              paths (higher specificity) over this dynamic catch-all */}
+          <Route path="/:creatorSlug" element={<CreatorProfilePage />} />
         </Route>
 
       </Routes>

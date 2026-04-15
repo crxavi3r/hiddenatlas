@@ -34,6 +34,33 @@ export default async function handler(req, res) {
 
   const { action, slug, preview } = req.query;
 
+  // ── GET /api/itineraries?action=creator-map ────────────────────────────────
+  // Public — returns { creators: { [itinerary_slug]: { name, slug, avatarUrl } } }
+  // Used by listing + detail pages to show creator attribution without a full auth call.
+  if (action === 'creator-map') {
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60');
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      const { rows } = await pool.query(
+        `SELECT i.slug AS itinerary_slug, c.name, c.slug, c."avatarUrl"
+         FROM "Itinerary" i
+         JOIN "Creator" c ON c.id = i."creatorId" AND c."isActive" = true
+         WHERE i.status = 'published'`
+      );
+      const creators = {};
+      for (const row of rows) {
+        creators[row.itinerary_slug] = { name: row.name, slug: row.slug, avatarUrl: row.avatarUrl };
+      }
+      return res.json({ creators });
+    } catch (err) {
+      if (err.message?.includes('does not exist')) return res.json({ creators: {} });
+      console.error('[itineraries/creator-map]', err.message);
+      return res.status(500).json({ error: err.message });
+    } finally {
+      await pool.end();
+    }
+  }
+
   // ── GET /api/itineraries?action=hero-images ─────────────────────────────────
   // Public — returns { heroes: { [slug]: url } } for all itineraries that have
   // an active DB hero asset. Used by the listing page so card images stay in

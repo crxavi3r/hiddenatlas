@@ -348,6 +348,7 @@ const api = useApi();
   const [pdfUrl, setPdfUrl]           = useState(null);
   const [purchasing, setPurchasing]   = useState(false);
   const [purchaseError, setPurchaseError] = useState(null);
+  const [creator, setCreator]         = useState(null); // creator profile for this itinerary
 
   // Session-scoped dedup: save this itinerary at most once per page load
   const [savedItineraryId, setSavedItineraryId]       = useState(null);
@@ -399,6 +400,16 @@ const api = useApi();
     schemas: seoSchemas,
   });
   // ─────────────────────────────────────────────────────────────────────────
+
+  // Load creator attribution for this itinerary
+  useEffect(() => {
+    const slug = itinerary?.parentId || itinerary?.id;
+    if (!slug) return;
+    fetch('/api/itineraries?action=creator-map')
+      .then(r => r.ok ? r.json() : { creators: {} })
+      .then(data => { const c = data.creators?.[slug]; if (c) setCreator(c); })
+      .catch(() => {});
+  }, [itinerary?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load published day content from DB — overrides static itineraries.js data.
   // Falls back silently to static data if the itinerary is not yet in the DB
@@ -853,10 +864,31 @@ const api = useApi();
         }} />
         <div style={{ position: 'absolute', bottom: '40px', left: 0, right: 0, padding: '0 24px' }}>
           <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
               <Link to="/itineraries" style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', textDecoration: 'none' }}>Itineraries</Link>
               <ChevronRight size={12} color="rgba(255,255,255,0.5)" />
               <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)' }}>{country}</span>
+              {creator && (
+                <>
+                  <ChevronRight size={12} color="rgba(255,255,255,0.5)" />
+                  <Link
+                    to={`/${creator.slug}`}
+                    style={{ display: 'flex', alignItems: 'center', gap: '5px',
+                      fontSize: '13px', color: 'rgba(255,255,255,0.7)', textDecoration: 'none',
+                      transition: 'color 0.2s' }}
+                    onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,1)'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.7)'}
+                  >
+                    {creator.avatarUrl && (
+                      <img src={creator.avatarUrl} alt={creator.name}
+                        style={{ width: '18px', height: '18px', borderRadius: '50%', objectFit: 'cover' }}
+                        onError={e => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    )}
+                    by {creator.name}
+                  </Link>
+                </>
+              )}
             </div>
             <h1 style={{
               fontFamily: "'Playfair Display', Georgia, serif",

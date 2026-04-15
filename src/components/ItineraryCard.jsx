@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { User } from 'lucide-react';
 import { Clock, Users, ArrowRight, Lock, Check } from 'lucide-react';
 
 // Audience icon map
@@ -7,7 +8,7 @@ const audienceIcon = { 'Couples': '♥', 'Families': '⌂', 'Friend Groups': '�
 
 export default function ItineraryCard({ itinerary, variant = 'default', isPurchased = false }) {
   const [hovered, setHovered] = useState(false);
-  const { id, title, subtitle, country, duration, durationRange, groupSize, price, isPremium, tag, coverImage, image, bestFor } = itinerary;
+  const { id, title, subtitle, country, duration, durationRange, groupSize, price, isPremium, tag, coverImage, image, bestFor, creator } = itinerary;
   const mainImage = coverImage || image;
   const displayDuration = durationRange || duration;
 
@@ -119,9 +120,35 @@ export default function ItineraryCard({ itinerary, variant = 'default', isPurcha
                 In your library
               </p>
             )}
-            <p style={{ fontSize: '13.5px', color: '#8C8070', marginBottom: '14px', lineHeight: '1.4' }}>
+            <p style={{ fontSize: '13.5px', color: '#8C8070', marginBottom: creator ? '10px' : '14px', lineHeight: '1.4' }}>
               {subtitle}
             </p>
+
+            {/* Creator byline */}
+            {creator && (
+              <Link
+                to={`/${creator.slug}`}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '5px',
+                  textDecoration: 'none', marginBottom: '12px',
+                  fontSize: '11.5px', fontWeight: '500', color: '#9C9488',
+                  transition: 'color 0.2s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.color = '#1B6B65'}
+                onMouseLeave={e => e.currentTarget.style.color = '#9C9488'}
+              >
+                {creator.avatarUrl ? (
+                  <img src={creator.avatarUrl} alt={creator.name}
+                    style={{ width: '16px', height: '16px', borderRadius: '50%', objectFit: 'cover' }}
+                    onError={e => { e.currentTarget.style.display = 'none'; }}
+                  />
+                ) : (
+                  <User size={11} strokeWidth={2} />
+                )}
+                by {creator.name}
+              </Link>
+            )}
 
             {/* Best For pills */}
             {bestFor && (
@@ -233,7 +260,30 @@ export default function ItineraryCard({ itinerary, variant = 'default', isPurcha
           <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '18px', fontWeight: '600', color: '#1C1A16', marginBottom: '6px' }}>
             {title}
           </h3>
-          <p style={{ fontSize: '13px', color: '#8C8070', marginBottom: '12px' }}>{subtitle}</p>
+          <p style={{ fontSize: '13px', color: '#8C8070', marginBottom: creator ? '8px' : '12px' }}>{subtitle}</p>
+          {creator && (
+            <Link
+              to={`/${creator.slug}`}
+              onClick={e => e.stopPropagation()}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                textDecoration: 'none', marginBottom: '10px',
+                fontSize: '11px', fontWeight: '500', color: '#9C9488',
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = '#1B6B65'}
+              onMouseLeave={e => e.currentTarget.style.color = '#9C9488'}
+            >
+              {creator.avatarUrl ? (
+                <img src={creator.avatarUrl} alt={creator.name}
+                  style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'cover' }}
+                  onError={e => { e.currentTarget.style.display = 'none'; }}
+                />
+              ) : (
+                <User size={10} strokeWidth={2} />
+              )}
+              by {creator.name}
+            </Link>
+          )}
           <div style={{ display: 'flex', gap: '12px' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#6B6156' }}>
               <Clock size={12} />{displayDuration}

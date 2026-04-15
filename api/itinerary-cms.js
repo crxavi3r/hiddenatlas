@@ -34,20 +34,43 @@ const ADMIN_EMAILS = [
   'cristiano.xavier@hiddenatlas.travel',
 ];
 
-// ── Auth guard (same pattern as api/admin.js) ─────────────────────────────────
-async function verifyAdmin(authHeader, pool) {
+// ── Auth guard — admin OR creator ────────────────────────────────────────────
+// Returns { email, isAdmin, creatorId } where creatorId is the Creator.id linked
+// to this user, or null if the user has no creator profile.
+// Throws 401/403 if the caller is neither admin nor an active creator.
+async function verifyUser(authHeader, pool) {
   let clerkId;
   try { clerkId = await verifyAuth(authHeader); }
   catch { throw Object.assign(new Error('Unauthorized'), { status: 401 }); }
 
   const { rows } = await pool.query(
-    `SELECT email FROM "User" WHERE "clerkId" = $1 LIMIT 1`, [clerkId]
+    `SELECT u.email, c.id as "creatorId"
+     FROM "User" u
+     LEFT JOIN "Creator" c ON c."userId" = u.id AND c."isActive" = true
+     WHERE u."clerkId" = $1 LIMIT 1`,
+    [clerkId]
   );
-  const email = rows[0]?.email;
-  if (!email || !ADMIN_EMAILS.includes(email)) {
+  const email     = rows[0]?.email;
+  const creatorId = rows[0]?.creatorId ?? null;
+  const isAdmin   = email ? ADMIN_EMAILS.includes(email) : false;
+
+  if (!email || (!isAdmin && !creatorId)) {
     throw Object.assign(new Error('Forbidden'), { status: 403 });
   }
-  return email;
+  return { email, isAdmin, creatorId };
+}
+
+// ── Ownership guard for itinerary-scoped operations ───────────────────────────
+// If the caller is not admin, verifies the itinerary belongs to their creator.
+async function assertOwnership(pool, itineraryId, ctx) {
+  if (ctx.isAdmin) return; // admins bypass ownership
+  const { rows } = await pool.query(
+    `SELECT "creatorId" FROM "Itinerary" WHERE id = $1 LIMIT 1`, [itineraryId]
+  );
+  if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+  if (rows[0].creatorId !== ctx.creatorId) {
+    throw Object.assign(new Error('Forbidden'), { status: 403 });
+  }
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -60,9 +83,9 @@ export default async function handler(req, res) {
   }
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  let adminEmail;
+  let ctx;
   try {
-    adminEmail = await verifyAdmin(req.headers.authorization, pool);
+    ctx = await verifyUser(req.headers.authorization, pool);
   } catch (err) {
     await pool.end();
     return res.status(err.status ?? 401).json({ error: err.message });
@@ -71,36 +94,41 @@ export default async function handler(req, res) {
   const action = req.query.action;
   const id     = req.query.id;
 
+  // Admin-only shorthand
+  const adminOnly = () => {
+    if (!ctx.isAdmin) throw Object.assign(new Error('Admin only'), { status: 403 });
+  };
+
   try {
     if (req.method === 'GET') {
-      if (action === 'list')             return res.json(await handleList(pool));
-      if (action === 'get')              return res.json(await handleGet(pool, id));
-      if (action === 'assets')           return res.json(await handleListAssets(pool, id));
-      if (action === 'scan-assets')      return res.json(await handleScanAssets(req.query.slug));
-      if (action === 'ai-history')       return res.json(await handleAIHistory(pool, id));
-      if (action === 'linked-request')   return res.json(await handleLinkedRequest(pool, id));
+      if (action === 'list')             return res.json(await handleList(pool, ctx));
+      if (action === 'get')              return res.json(await handleGet(pool, id, ctx));
+      if (action === 'assets')           { await assertOwnership(pool, id, ctx); return res.json(await handleListAssets(pool, id)); }
+      if (action === 'scan-assets')      { adminOnly(); return res.json(await handleScanAssets(req.query.slug)); }
+      if (action === 'ai-history')       { await assertOwnership(pool, id, ctx); return res.json(await handleAIHistory(pool, id)); }
+      if (action === 'linked-request')   { adminOnly(); return res.json(await handleLinkedRequest(pool, id)); }
       if (action === 'pricing-options')  return res.json(handlePricingOptions());
       return res.status(400).json({ error: 'Unknown GET action' });
     }
 
     if (req.method === 'POST') {
       const body = req.body ?? {};
-      if (action === 'create')       return res.json(await handleCreate(pool, body));
-      if (action === 'update')       return res.json(await handleUpdate(pool, id, body));
-      if (action === 'duplicate')    return res.json(await handleDuplicate(pool, id));
-      if (action === 'delete')       return res.json(await handleDelete(pool, id));
-      if (action === 'publish')      return res.json(await handleSetStatus(pool, id, 'published'));
-      if (action === 'unpublish')    return res.json(await handleSetStatus(pool, id, 'draft'));
-      if (action === 'seed')         return res.json(await handleSeed(pool, body));
-      if (action === 'bulk-publish') return res.json(await handleBulkPublish(pool));
-      if (action === 'save-asset')   return res.json(await handleSaveAsset(pool, body));
-      if (action === 'upload-asset') return res.json(await handleUploadAsset(pool, body));
-      if (action === 'delete-asset') return res.json(await handleDeleteAsset(pool, id));
-      if (action === 'toggle-asset') return res.json(await handleToggleAsset(pool, id));
-      if (action === 'upload-pdf')        return res.json(await handleUploadPDF(pool, id, body));
-      if (action === 'update-pdf-status') return res.json(await handleUpdatePDFStatus(pool, id, body));
-      if (action === 'ai-generate')       return res.json(await handleAIGenerate(pool, body, adminEmail));
-      if (action === 'backfill-pricing') return res.json(await handleBackfillPricing(pool));
+      if (action === 'create')       return res.json(await handleCreate(pool, body, ctx));
+      if (action === 'update')       { await assertOwnership(pool, id, ctx); return res.json(await handleUpdate(pool, id, body, ctx)); }
+      if (action === 'duplicate')    { await assertOwnership(pool, id, ctx); return res.json(await handleDuplicate(pool, id)); }
+      if (action === 'delete')       { adminOnly(); return res.json(await handleDelete(pool, id)); }
+      if (action === 'publish')      { await assertOwnership(pool, id, ctx); return res.json(await handleSetStatus(pool, id, 'published')); }
+      if (action === 'unpublish')    { await assertOwnership(pool, id, ctx); return res.json(await handleSetStatus(pool, id, 'draft')); }
+      if (action === 'seed')         { adminOnly(); return res.json(await handleSeed(pool, body)); }
+      if (action === 'bulk-publish') { adminOnly(); return res.json(await handleBulkPublish(pool)); }
+      if (action === 'save-asset')   return res.json(await handleSaveAsset(pool, body, ctx));
+      if (action === 'upload-asset') return res.json(await handleUploadAsset(pool, body, ctx));
+      if (action === 'delete-asset') return res.json(await handleDeleteAsset(pool, id, ctx));
+      if (action === 'toggle-asset') return res.json(await handleToggleAsset(pool, id, ctx));
+      if (action === 'upload-pdf')        { await assertOwnership(pool, id, ctx); return res.json(await handleUploadPDF(pool, id, body)); }
+      if (action === 'update-pdf-status') { await assertOwnership(pool, id, ctx); return res.json(await handleUpdatePDFStatus(pool, id, body)); }
+      if (action === 'ai-generate')       { adminOnly(); return res.json(await handleAIGenerate(pool, body, ctx.email)); }
+      if (action === 'backfill-pricing')  { adminOnly(); return res.json(await handleBackfillPricing(pool)); }
       return res.status(400).json({ error: 'Unknown POST action' });
     }
   } catch (err) {
@@ -135,38 +163,50 @@ function handlePricingOptions() {
 }
 
 // ── List all itineraries (CMS view) ──────────────────────────────────────────
-// Uses SELECT i.* so the query works on both the base schema (pre-migration) and
-// the extended schema (post-migration). New columns (subtitle, destination, status,
-// updatedAt, etc.) will be undefined in rows until the 20260316100000 migration runs.
-// ORDER BY createdAt is always safe; updatedAt is used by the UI when available.
-async function handleList(pool) {
+// Admin: all itineraries.  Creator: only itineraries assigned to them.
+// Returns creator name/slug alongside each row for display in the CMS table.
+async function handleList(pool, ctx) {
+  const creatorFilter = ctx.isAdmin ? '' : `WHERE i."creatorId" = $1`;
+  const params        = ctx.isAdmin ? [] : [ctx.creatorId];
+
   const { rows } = await pool.query(`
-    SELECT i.*, COUNT(p.id)::int AS purchase_count
+    SELECT i.*,
+           COUNT(p.id)::int AS purchase_count,
+           c.name  AS creator_name,
+           c.slug  AS creator_slug
     FROM "Itinerary" i
     LEFT JOIN "Purchase" p ON p."itineraryId" = i.id
-    GROUP BY i.id
+    LEFT JOIN "Creator"  c ON c.id = i."creatorId"
+    ${creatorFilter}
+    GROUP BY i.id, c.name, c.slug
     ORDER BY i."createdAt" DESC
-  `);
-  // Split server-side so both the main list and the collections tab work correctly.
-  // isCollection=true rows are parent/aggregate containers (e.g. "California and The
-  // American West") — they should never appear in the default CMS itinerary list.
+  `, params);
   const itineraries = rows.filter(r => !r.isCollection);
   const collections = rows.filter(r => r.isCollection);
   return { itineraries, collections };
 }
 
 // ── Get single itinerary with full content ────────────────────────────────────
-async function handleGet(pool, id) {
+async function handleGet(pool, id, ctx = null) {
   if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
   const { rows } = await pool.query(
-    `SELECT * FROM "Itinerary" WHERE id = $1 LIMIT 1`, [id]
+    `SELECT i.*, c.name AS creator_name, c.slug AS creator_slug, c."avatarUrl" AS creator_avatar
+     FROM "Itinerary" i
+     LEFT JOIN "Creator" c ON c.id = i."creatorId"
+     WHERE i.id = $1 LIMIT 1`,
+    [id]
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
-  return { itinerary: rows[0] };
+  const row = rows[0];
+  // Non-admin creators can only view their own itineraries
+  if (ctx && !ctx.isAdmin && ctx.creatorId && row.creatorId !== ctx.creatorId) {
+    throw Object.assign(new Error('Forbidden'), { status: 403 });
+  }
+  return { itinerary: row };
 }
 
 // ── Create new itinerary ──────────────────────────────────────────────────────
-async function handleCreate(pool, body) {
+async function handleCreate(pool, body, ctx) {
   const {
     title = 'Untitled Itinerary',
     subtitle = '',
@@ -186,6 +226,12 @@ async function handleCreate(pool, body) {
 
   if (!slug) throw Object.assign(new Error('slug is required'), { status: 400 });
 
+  // Creator assignment: non-admin creators are forced to their own creatorId
+  let creatorId = body.creatorId || null;
+  if (!ctx.isAdmin) {
+    creatorId = ctx.creatorId; // override regardless of what was sent
+  }
+
   const rawContent   = typeof content === 'string'
     ? (() => { try { return JSON.parse(content); } catch { return {}; } })()
     : (content ?? {});
@@ -199,8 +245,9 @@ async function handleCreate(pool, body) {
     `INSERT INTO "Itinerary"
        (title, subtitle, slug, destination, country, region, "durationDays",
         "accessType", price, "stripePriceId", "pricingKey", "coverImage", description,
-        type, "isPrivate", "isCollection", status, "isPublished", content, "schemaVersion", "updatedAt")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,$16,$17,$18,1,NOW())
+        type, "isPrivate", "isCollection", status, "isPublished", content, "schemaVersion", "updatedAt",
+        "creatorId")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,$16,$17,$18,1,NOW(),$19)
      RETURNING *`,
     [
       title, subtitle, slug, destination, country, region, durationDays,
@@ -210,13 +257,14 @@ async function handleCreate(pool, body) {
       finalType, finalPrivate,
       status, status === 'published',
       JSON.stringify(finalContent),
+      creatorId,
     ]
   );
   return { itinerary: rows[0] };
 }
 
 // ── Update itinerary ──────────────────────────────────────────────────────────
-async function handleUpdate(pool, id, body) {
+async function handleUpdate(pool, id, body, ctx) {
   if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
 
   const {
@@ -224,6 +272,11 @@ async function handleUpdate(pool, id, body) {
     accessType, stripePriceId, pricingKey, coverImage, content, status,
     type, isPrivate, isCollection,
   } = body;
+
+  // creatorId: only admins can re-assign; non-admins can't change it
+  const creatorIdParam = ctx.isAdmin && body.creatorId !== undefined
+    ? (body.creatorId || null)
+    : undefined; // undefined = leave unchanged
 
   // Defensive parse: body parsers sometimes deliver JSONB fields as strings
   const rawContent = typeof content === 'string'
@@ -265,6 +318,7 @@ async function handleUpdate(pool, id, body) {
        type            = COALESCE($17, type),
        "isPrivate"     = COALESCE($18::boolean, "isPrivate"),
        "isCollection"  = COALESCE($19::boolean, "isCollection"),
+       "creatorId"     = CASE WHEN $20 THEN $21::text ELSE "creatorId" END,
        "pdfStatus"     = 'stale',
        "updatedAt"     = NOW()
      WHERE id = $1
@@ -289,6 +343,8 @@ async function handleUpdate(pool, id, body) {
       typeParam,
       isPrivateParam,
       typeof isCollection === 'boolean' ? isCollection : null,
+      creatorIdParam !== undefined, // $20: whether to update creatorId at all
+      creatorIdParam !== undefined ? creatorIdParam : null, // $21: the new value (may be null)
     ]
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
@@ -334,8 +390,9 @@ async function handleDuplicate(pool, id) {
     `INSERT INTO "Itinerary"
        (title, subtitle, slug, destination, country, region, "durationDays",
         "accessType", price, "stripePriceId", "coverImage", description, "pdfUrl",
-        type, "isPrivate", status, "isPublished", content, "schemaVersion", "updatedAt")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'draft',false,$16,$17,NOW())
+        type, "isPrivate", status, "isPublished", content, "schemaVersion", "updatedAt",
+        "creatorId")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'draft',false,$16,$17,NOW(),$18)
      RETURNING *`,
     [
       `${base.title} (Copy)`,
@@ -355,6 +412,7 @@ async function handleDuplicate(pool, id) {
       base.isPrivate ?? false,
       JSON.stringify(base.content ?? {}),
       base.schemaVersion ?? 1,
+      base.creatorId ?? null,
     ]
   );
   return { itinerary: rows[0] };
@@ -711,9 +769,10 @@ async function handleScanAssets(slug) {
 }
 
 // ── Assets: save (create or update) ──────────────────────────────────────────
-async function handleSaveAsset(pool, body) {
+async function handleSaveAsset(pool, body, ctx) {
   const { itineraryId, id, assetType = 'gallery', url, alt = '', caption = '', sortOrder = 0, source = 'manual', dayNumber } = body;
   if (!itineraryId) throw Object.assign(new Error('itineraryId is required'), { status: 400 });
+  await assertOwnership(pool, itineraryId, ctx);
   if (!url)         throw Object.assign(new Error('url is required'), { status: 400 });
 
   const safeDay = (assetType === 'day' && dayNumber != null) ? parseInt(dayNumber, 10) : null;
@@ -742,13 +801,14 @@ async function handleSaveAsset(pool, body) {
 // ── Assets: upload file → Vercel Blob ────────────────────────────────────────
 // The serverless runtime filesystem (/var/task) is read-only on Vercel.
 // All uploads go to Vercel Blob; the returned public URL is stored in the DB.
-async function handleUploadAsset(pool, body) {
+async function handleUploadAsset(pool, body, ctx) {
   const {
     itineraryId, slug, assetType = 'gallery', dayNumber,
     filename, data: base64Data, alt = '', caption = '', sortOrder = 0,
   } = body;
 
   if (!itineraryId) throw Object.assign(new Error('itineraryId is required'), { status: 400 });
+  await assertOwnership(pool, itineraryId, ctx);
   if (!slug)        throw Object.assign(new Error('slug is required'), { status: 400 });
   if (!filename)    throw Object.assign(new Error('filename is required'), { status: 400 });
   if (!base64Data)  throw Object.assign(new Error('data is required'), { status: 400 });
@@ -822,15 +882,36 @@ async function handleUploadAsset(pool, body) {
 }
 
 // ── Assets: delete ────────────────────────────────────────────────────────────
-async function handleDeleteAsset(pool, id) {
+async function handleDeleteAsset(pool, id, ctx) {
   if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
+  if (!ctx.isAdmin) {
+    // Verify the asset's itinerary belongs to this creator
+    const { rows } = await pool.query(
+      `SELECT i."creatorId" FROM "ItineraryAsset" a
+       JOIN "Itinerary" i ON i.id = a."itineraryId"
+       WHERE a.id = $1 LIMIT 1`,
+      [id]
+    );
+    if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+    if (rows[0].creatorId !== ctx.creatorId) throw Object.assign(new Error('Forbidden'), { status: 403 });
+  }
   await pool.query(`DELETE FROM "ItineraryAsset" WHERE id = $1`, [id]);
   return { ok: true };
 }
 
 // ── Assets: toggle active ─────────────────────────────────────────────────────
-async function handleToggleAsset(pool, id) {
+async function handleToggleAsset(pool, id, ctx) {
   if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
+  if (!ctx.isAdmin) {
+    const { rows } = await pool.query(
+      `SELECT i."creatorId" FROM "ItineraryAsset" a
+       JOIN "Itinerary" i ON i.id = a."itineraryId"
+       WHERE a.id = $1 LIMIT 1`,
+      [id]
+    );
+    if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+    if (rows[0].creatorId !== ctx.creatorId) throw Object.assign(new Error('Forbidden'), { status: 403 });
+  }
   const { rows } = await pool.query(
     `UPDATE "ItineraryAsset" SET active = NOT active WHERE id = $1 RETURNING *`,
     [id]
