@@ -9,13 +9,30 @@ const { Pool } = pg;
 // Returns { role, creatorSlug, email } for the authenticated user.
 // Used by the frontend to determine admin/designer access without ADMIN_EMAILS.
 async function handleMe(req, res) {
+  // ── Debug: log incoming auth details ────────────────────────────────────────
+  const authHeader = req.headers.authorization;
+  console.log('[api/auth/me] incoming request:', {
+    method:        req.method,
+    hasAuthHeader: !!authHeader,
+    authPrefix:    authHeader ? authHeader.slice(0, 14) + '...' : 'missing',
+    hasCookie:     !!req.headers.cookie,
+    origin:        req.headers.origin  ?? 'none',
+    host:          req.headers.host    ?? 'none',
+    referer:       req.headers.referer ?? 'none',
+    CLERK_SECRET_KEY_SET: !!process.env.CLERK_SECRET_KEY,
+    DATABASE_URL_SET:     !!process.env.DATABASE_URL,
+  });
+
   if (!process.env.DATABASE_URL) {
     return res.status(500).json({ error: 'DATABASE_URL not configured' });
   }
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
     const ctx = await resolveUserCtx(req.headers.authorization, pool);
-    if (!ctx) return res.status(401).json({ error: 'Unauthorized' });
+    if (!ctx) {
+      console.warn('[api/auth/me] resolveUserCtx returned null — sending 401');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     // Fetch creatorSlug if this user has a linked creator profile
     let creatorSlug = null;

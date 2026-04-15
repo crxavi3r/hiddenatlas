@@ -22,7 +22,21 @@ function parseCutoff(from, period) {
 }
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
-async function verifyAdmin(authHeader, pool) {
+async function verifyAdmin(req, pool) {
+  const authHeader = req.headers.authorization;
+
+  // ── Debug: log incoming auth details ──────────────────────────────────────
+  console.log('[api/admin] incoming request:', {
+    action:        req.query?.action,
+    hasAuthHeader: !!authHeader,
+    authPrefix:    authHeader ? authHeader.slice(0, 14) + '...' : 'missing',
+    origin:        req.headers.origin  ?? 'none',
+    host:          req.headers.host    ?? 'none',
+    CLERK_SECRET_KEY_SET: !!process.env.CLERK_SECRET_KEY,
+    DATABASE_URL_SET:     !!process.env.DATABASE_URL,
+    VERCEL_URL:    process.env.VERCEL_URL ?? 'not set',
+  });
+
   const ctx = await resolveUserCtx(authHeader, pool);
   if (!ctx) {
     console.warn('[api/admin] verifyAdmin — UNAUTHORIZED: resolveUserCtx returned null (missing/invalid token or no user row and no admin email match)');
@@ -74,7 +88,7 @@ async function _handler(req, res) {
   });
 
   try {
-    await verifyAdmin(req.headers.authorization, pool);
+    await verifyAdmin(req, pool);
   } catch (err) {
     try { await pool.end(); } catch {}
     return res.status(err.status ?? 401).json({ error: err.message });
