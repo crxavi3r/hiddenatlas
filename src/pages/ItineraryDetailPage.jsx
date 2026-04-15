@@ -1,12 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { Clock, Users, MapPin, Check, Star, ArrowRight, Lock, Download, ChevronRight, Route, Train, Bus, Shuffle } from 'lucide-react';
-import { useAuth, useUser } from '@clerk/clerk-react';
-
-const ADMIN_EMAILS = [
-  'cristiano.xavier@outlook.com',
-  'cristiano.xavier@hiddenatlas.travel',
-];
+import { useAuth } from '@clerk/clerk-react';
+import { useUserCtx } from '../lib/useUserCtx.jsx';
 import { itineraries } from '../data/itineraries';
 import { downloadItineraryPDF } from '../utils/downloadPDF';
 import { useSEO } from '../hooks/useSEO';
@@ -337,8 +333,7 @@ export default function ItineraryDetailPage() {
   const itinerary = itineraries.find(it => it.id === id);
 
   const { isLoaded, isSignedIn } = useAuth();
-  const { user } = useUser();
-  const isAdmin = ADMIN_EMAILS.includes(user?.primaryEmailAddress?.emailAddress);
+  const { isAdmin } = useUserCtx();
   const { track } = useTrack();
 const api = useApi();
   const [searchParams, setSearchParams] = useSearchParams();

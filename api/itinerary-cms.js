@@ -21,7 +21,7 @@
 // POST /api/itinerary-cms?action=ai-generate
 
 import pg                         from 'pg';
-import { verifyAuth }             from './_lib/verifyAuth.js';
+import { resolveUserCtx }         from './_lib/resolveUserCtx.js';
 import { existsSync }             from 'fs';
 import { readFile }               from 'fs/promises';
 import path                       from 'path';
@@ -29,35 +29,19 @@ import { put as blobPut }         from '@vercel/blob';
 
 const { Pool } = pg;
 
-const ADMIN_EMAILS = [
-  'cristiano.xavier@outlook.com',
-  'cristiano.xavier@hiddenatlas.travel',
-];
-
-// ── Auth guard — admin OR creator ────────────────────────────────────────────
+// ── Auth guard — admin OR active designer ─────────────────────────────────────
 // Returns { email, isAdmin, creatorId } where creatorId is the Creator.id linked
 // to this user, or null if the user has no creator profile.
-// Throws 401/403 if the caller is neither admin nor an active creator.
+// Throws 401/403 if the caller is neither admin nor an active designer.
 async function verifyUser(authHeader, pool) {
-  let clerkId;
-  try { clerkId = await verifyAuth(authHeader); }
-  catch { throw Object.assign(new Error('Unauthorized'), { status: 401 }); }
+  const ctx = await resolveUserCtx(authHeader, pool);
+  if (!ctx) throw Object.assign(new Error('Unauthorized'), { status: 401 });
 
-  const { rows } = await pool.query(
-    `SELECT u.email, c.id as "creatorId"
-     FROM "User" u
-     LEFT JOIN "Creator" c ON c.user_id = u.id AND c.is_active = true
-     WHERE u."clerkId" = $1 LIMIT 1`,
-    [clerkId]
-  );
-  const email     = rows[0]?.email;
-  const creatorId = rows[0]?.creatorId ?? null;
-  const isAdmin   = email ? ADMIN_EMAILS.includes(email) : false;
-
-  if (!email || (!isAdmin && !creatorId)) {
+  // Must be admin, OR a designer with an active creator profile
+  if (!ctx.isAdmin && !ctx.creatorId) {
     throw Object.assign(new Error('Forbidden'), { status: 403 });
   }
-  return { email, isAdmin, creatorId };
+  return { email: ctx.email, isAdmin: ctx.isAdmin, creatorId: ctx.creatorId };
 }
 
 // ── Ownership guard for itinerary-scoped operations ───────────────────────────

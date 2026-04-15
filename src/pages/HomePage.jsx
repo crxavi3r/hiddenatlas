@@ -1,15 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, ChevronDown, Star, Check, MapPin, Lock, BookOpen, Compass, User } from 'lucide-react';
-import { useUser } from '@clerk/clerk-react';
 import { itineraries, journeyImg } from '../data/itineraries';
 import { usePurchasedSlugs } from '../lib/usePurchasedSlugs';
 import { useSEO } from '../hooks/useSEO';
-
-const ADMIN_EMAILS = [
-  'cristiano.xavier@outlook.com',
-  'cristiano.xavier@hiddenatlas.travel',
-];
+import { useUserCtx } from '../lib/useUserCtx.jsx';
 
 /* ─── Scroll animation hook ─── */
 function useInView(threshold = 0.1) {
@@ -81,8 +76,7 @@ export default function HomePage() {
   const [creators,    setCreators]    = useState([]);
   const [creatorMap,  setCreatorMap]  = useState({});
   const purchasedSlugs = usePurchasedSlugs();
-  const { user } = useUser();
-  const isAdmin = ADMIN_EMAILS.includes(user?.primaryEmailAddress?.emailAddress);
+  const { isAdmin } = useUserCtx();
   const isPhilippinesPurchased = isAdmin || purchasedSlugs.has('philippines-island-journey');
 
   useEffect(() => {
@@ -176,20 +170,18 @@ export default function HomePage() {
 
             <h1 style={{
               fontFamily: "'Playfair Display', Georgia, serif",
-              fontSize: 'clamp(40px, 5.5vw, 76px)',
+              fontSize: 'clamp(36px, 5vw, 68px)',
               fontWeight: '600', color: 'white',
-              lineHeight: '1.1', letterSpacing: '-1px', marginBottom: '22px',
+              lineHeight: '1.12', letterSpacing: '-0.5px', marginBottom: '22px',
             }}>
-              Curated journeys<br />
-              <em style={{ fontStyle: 'italic', color: 'rgba(255,255,255,0.82)' }}>designed to be followed.</em>
+              Discover travel itineraries designed by people who truly know the places they share.
             </h1>
 
             <p style={{
               fontSize: 'clamp(16px, 1.8vw, 18px)', color: 'rgba(255,255,255,0.72)',
               lineHeight: '1.75', maxWidth: '540px', marginBottom: '36px',
             }}>
-              Premium travel itineraries crafted by expert creators. Each journey is built from a real trip,
-              structured day by day, so you can simply follow it.
+              Real journeys. Thought through, refined, and ready to follow.
             </p>
 
             <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
@@ -205,7 +197,7 @@ export default function HomePage() {
                 onMouseEnter={e => e.currentTarget.style.background = '#B08D4E'}
                 onMouseLeave={e => e.currentTarget.style.background = '#C9A96E'}
               >
-                Browse Itineraries <ArrowRight size={15} />
+                Explore itineraries <ArrowRight size={15} />
               </Link>
               <a
                 href="#creators"
@@ -226,7 +218,7 @@ export default function HomePage() {
                   e.currentTarget.style.borderColor = 'rgba(255,255,255,0.35)';
                 }}
               >
-                Meet the Travel Designers
+                Meet our travel designers
               </a>
             </div>
 
@@ -280,6 +272,15 @@ export default function HomePage() {
           <span style={{ fontSize: '9px', letterSpacing: '2.5px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)' }}>Scroll</span>
           <ChevronDown size={16} color="rgba(255,255,255,0.5)" />
         </div>
+      </section>
+
+      {/* ══════════════════════════════
+          §0.75  SUPPORTING COPY
+      ══════════════════════════════ */}
+      <section style={{ background: '#F4F1EC', padding: 'clamp(28px, 4vw, 44px) 24px', textAlign: 'center', borderBottom: '1px solid #E8E3DA' }}>
+        <p style={{ fontSize: 'clamp(15px, 1.8vw, 17px)', color: '#6B6156', lineHeight: '1.75', maxWidth: '620px', margin: '0 auto' }}>
+          Each itinerary is created by a travel designer with a unique perspective. No generic guides. Just journeys that make sense.
+        </p>
       </section>
 
       {/* ══════════════════════════════
@@ -420,6 +421,9 @@ export default function HomePage() {
               <div>
                 <span style={T.label}>Where do you want to go?</span>
                 <h2 style={T.h2}>Explore destinations</h2>
+                <p style={{ ...T.body, marginTop: '10px', maxWidth: '360px' }}>
+                  Find journeys designed for each destination
+                </p>
               </div>
               <Link to="/itineraries" style={{
                 display: 'flex', alignItems: 'center', gap: '6px',
@@ -737,6 +741,9 @@ export default function HomePage() {
                 <div>
                   <span style={T.label}>The people behind the itineraries</span>
                   <h2 style={T.h2}>Meet our travel designers</h2>
+                  <p style={{ ...T.body, marginTop: '12px', maxWidth: '460px' }}>
+                    People who turn experience into journeys you can actually follow.
+                  </p>
                 </div>
                 <Link to="/itineraries" style={{
                   display: 'flex', alignItems: 'center', gap: '6px',
@@ -939,86 +946,6 @@ export default function HomePage() {
       </section>
 
       {/* ══════════════════════════════
-          §7.5  AI PLANNER TEASER
-      ══════════════════════════════ */}
-      <section style={{ background: '#1C1A16', padding: 'clamp(64px, 8vw, 120px) 24px' }}>
-        <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
-          <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '80px', alignItems: 'center' }}>
-            <Reveal>
-              <div>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '6px',
-                  fontSize: '10.5px', fontWeight: '700', letterSpacing: '2.5px',
-                  textTransform: 'uppercase', color: '#C9A96E', marginBottom: '14px',
-                }}>
-                  New · Powered by AI
-                </span>
-                <h2 style={{
-                  fontFamily: "'Playfair Display', Georgia, serif",
-                  fontSize: 'clamp(28px, 3.8vw, 48px)',
-                  fontWeight: '600', color: 'white',
-                  lineHeight: '1.18', letterSpacing: '-0.5px', marginBottom: '20px',
-                }}>
-                  Plan your journey,<br />
-                  <em style={{ fontStyle: 'italic', color: 'rgba(255,255,255,0.65)' }}>in seconds.</em>
-                </h2>
-                <p style={{ fontSize: '16px', color: 'rgba(255,255,255,0.6)', lineHeight: '1.8', marginBottom: '36px', maxWidth: '440px' }}>
-                  Tell us where you want to go. Our AI generates a complete, personalised itinerary built around your travel style: day plans, hotel suggestions, and local experiences.
-                </p>
-                <Link
-                  to="/ai-planner"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '8px',
-                    padding: '15px 30px', background: '#C9A96E', color: 'white',
-                    borderRadius: '4px', fontSize: '13px', fontWeight: '700',
-                    letterSpacing: '0.8px', textTransform: 'uppercase', textDecoration: 'none',
-                    transition: 'background 0.2s',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#B08D4E'}
-                  onMouseLeave={e => e.currentTarget.style.background = '#C9A96E'}
-                >
-                  Try the AI Planner <ArrowRight size={15} />
-                </Link>
-              </div>
-            </Reveal>
-            <Reveal delay={0.12}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {[
-                  { step: '01', title: 'Enter your destination', desc: 'Any place in the world: city, region, or country.' },
-                  { step: '02', title: 'Set your travel style', desc: 'Trip length, group type, budget, and travel preferences.' },
-                  { step: '03', title: 'Get your itinerary', desc: 'A day-by-day plan with hotels, experiences, and insider notes.' },
-                ].map((item, i) => (
-                  <div key={i} style={{
-                    padding: '20px 24px',
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: '8px',
-                    display: 'flex', gap: '18px', alignItems: 'flex-start',
-                  }}>
-                    <span style={{
-                      fontFamily: "'Playfair Display', Georgia, serif",
-                      fontSize: '22px', fontWeight: '600',
-                      color: '#2E2922', lineHeight: 1, flexShrink: 0, userSelect: 'none',
-                    }}>
-                      {item.step}
-                    </span>
-                    <div>
-                      <p style={{ fontSize: '14px', fontWeight: '600', color: 'rgba(255,255,255,0.85)', marginBottom: '4px' }}>
-                        {item.title}
-                      </p>
-                      <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.45)', lineHeight: '1.55' }}>
-                        {item.desc}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Reveal>
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════
           §8  FINAL CTA
       ══════════════════════════════ */}
       <section style={{
@@ -1148,7 +1075,7 @@ function DestinationCard({ it, creator }) {
               fontSize: '10.5px', color: 'rgba(201,169,110,0.85)',
               letterSpacing: '0.2px', lineHeight: '1.3',
             }}>
-              by {creator.name}
+              Designed by {creator.name}
             </p>
           )}
         </div>
@@ -1253,7 +1180,7 @@ function ItineraryBigCard({ it, creator }) {
                 ? <img src={creator.avatarUrl} alt={creator.name} style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
                 : <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#EFF6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><User size={12} color="#1B6B65" /></div>
               }
-              <span style={{ fontSize: '12px', color: '#8C8070' }}>by <span style={{ color: '#1B6B65', fontWeight: '600' }}>{creator.name}</span></span>
+              <span style={{ fontSize: '12px', color: '#8C8070' }}>Designed by <span style={{ color: '#1B6B65', fontWeight: '600' }}>{creator.name}</span></span>
             </Link>
           )}
           <div style={{
@@ -1330,7 +1257,7 @@ function ItinerarySmallCard({ it, creator }) {
           </div>
           {creator && (
             <p style={{ fontSize: '11px', color: '#8C8070', marginBottom: '8px' }}>
-              by <span style={{ color: '#1B6B65', fontWeight: '600' }}>{creator.name}</span>
+              Designed by <span style={{ color: '#1B6B65', fontWeight: '600' }}>{creator.name}</span>
             </p>
           )}
           <span style={{
@@ -1553,7 +1480,7 @@ function CuratedJourneyCard({ it, isPurchased = false, creator }) {
                 ? <img src={creator.avatarUrl} alt={creator.name} style={{ width: '20px', height: '20px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
                 : <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#EFF6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><User size={11} color="#1B6B65" /></div>
               }
-              <span style={{ fontSize: '12px', color: '#8C8070' }}>by <span style={{ color: '#1B6B65', fontWeight: '600' }}>{creator.name}</span></span>
+              <span style={{ fontSize: '12px', color: '#8C8070' }}>Designed by <span style={{ color: '#1B6B65', fontWeight: '600' }}>{creator.name}</span></span>
             </Link>
           )}
           <span style={{

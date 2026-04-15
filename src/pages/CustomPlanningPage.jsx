@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { useSearchParams } from 'react-router-dom';
+import { User } from 'lucide-react';
 import { useApi } from '../lib/api';
 import { Check, ArrowRight, MapPin, Calendar, Users, Heart, Lock } from 'lucide-react';
 import { CUSTOM_TIERS, GROUP_SIZE_OPTIONS, getTierByGroupSize } from '../data/customPricingTiers';
@@ -160,6 +161,17 @@ export default function CustomPlanningPage() {
   const { user, isLoaded } = useUser();
   const api = useApi();
   const [searchParams] = useSearchParams();
+  const [designer, setDesigner] = useState(null);
+
+  // Load a specific designer when ?designer=slug is present
+  useEffect(() => {
+    const slug = searchParams.get('designer');
+    if (!slug) return;
+    fetch(`/api/creators?action=get&slug=${encodeURIComponent(slug)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.creator) setDesigner(data.creator); })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useSEO({
     title: 'Custom Trip Planning — Bespoke Travel Itineraries for Groups & Couples',
@@ -446,24 +458,41 @@ export default function CustomPlanningPage() {
             fontWeight: '600', color: 'white',
             lineHeight: '1.15', letterSpacing: '-0.5px', marginBottom: '20px',
           }}>
-            A trip built entirely<br />around you.
+            Custom trips, designed for you
           </h1>
           <p style={{ fontSize: '17px', color: 'rgba(255,255,255,0.72)', lineHeight: '1.75', maxWidth: '540px', margin: '0 auto 24px' }}>
-            For families, couples, and friend groups who want something genuinely tailored, not a template with your name on it. One dedicated planner. No shortcuts.
+            Work directly with a travel designer to create a journey tailored to your trip.
           </p>
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            {['Families', 'Couples', 'Friend Groups'].map(label => (
-              <span key={label} style={{
-                padding: '5px 14px',
-                border: '1px solid rgba(201,169,110,0.4)',
-                borderRadius: '20px',
-                fontSize: '11px', fontWeight: '600', letterSpacing: '0.5px',
-                color: '#C9A96E', background: 'rgba(201,169,110,0.08)',
-              }}>
-                {label}
+          {designer ? (
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: '12px',
+              background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.25)',
+              borderRadius: '50px', padding: '8px 20px 8px 8px',
+              backdropFilter: 'blur(8px)',
+            }}>
+              {designer.avatarUrl
+                ? <img src={designer.avatarUrl} alt={designer.name} style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                : <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(27,107,101,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><User size={14} color="white" /></div>
+              }
+              <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.9)', fontWeight: '500' }}>
+                Planning your trip with <strong style={{ fontWeight: '700' }}>{designer.name}</strong>
               </span>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              {['Families', 'Couples', 'Friend Groups'].map(label => (
+                <span key={label} style={{
+                  padding: '5px 14px',
+                  border: '1px solid rgba(201,169,110,0.4)',
+                  borderRadius: '20px',
+                  fontSize: '11px', fontWeight: '600', letterSpacing: '0.5px',
+                  color: '#C9A96E', background: 'rgba(201,169,110,0.08)',
+                }}>
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -507,10 +536,13 @@ export default function CustomPlanningPage() {
                 fontSize: 'clamp(26px, 3vw, 34px)', fontWeight: '600', color: '#1C1A16',
                 marginBottom: '8px',
               }}>
-                Tell us about your trip
+                {designer ? `Plan your trip with ${designer.name}` : 'Tell us about your trip'}
               </h2>
               <p style={{ fontSize: '15px', color: '#6B6156', marginBottom: '36px', lineHeight: '1.7', maxWidth: '560px' }}>
-                The more you share, the better we can plan. We'll be in touch within 48 hours.
+                {designer
+                  ? `Share the details and ${designer.name} will be in touch within 48 hours to start planning.`
+                  : 'The more you share, the better we can plan. We\'ll be in touch within 48 hours.'
+                }
               </p>
 
               {/* Mobile pricing block */}

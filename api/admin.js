@@ -1,12 +1,7 @@
 import pg from 'pg';
-import { verifyAuth } from './_lib/verifyAuth.js';
+import { resolveUserCtx } from './_lib/resolveUserCtx.js';
 
 const { Pool } = pg;
-
-const ADMIN_EMAILS = [
-  'cristiano.xavier@outlook.com',
-  'cristiano.xavier@hiddenatlas.travel',
-];
 
 // Returns a Date object representing the start of the requested period.
 // Prefers the `from` timestamp sent by the browser (which uses the local
@@ -28,18 +23,10 @@ function parseCutoff(from, period) {
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
 async function verifyAdmin(authHeader, pool) {
-  let clerkId;
-  try { clerkId = await verifyAuth(authHeader); }
-  catch { throw Object.assign(new Error('Unauthorized'), { status: 401 }); }
-
-  const { rows } = await pool.query(
-    `SELECT email FROM "User" WHERE "clerkId" = $1 LIMIT 1`, [clerkId]
-  );
-  const email = rows[0]?.email;
-  if (!email || !ADMIN_EMAILS.includes(email)) {
-    throw Object.assign(new Error('Forbidden'), { status: 403 });
-  }
-  return email;
+  const ctx = await resolveUserCtx(authHeader, pool);
+  if (!ctx) throw Object.assign(new Error('Unauthorized'), { status: 401 });
+  if (!ctx.isAdmin) throw Object.assign(new Error('Forbidden'), { status: 403 });
+  return ctx.email;
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────

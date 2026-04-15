@@ -11,35 +11,10 @@
 
 import pg                     from 'pg';
 import path                   from 'path';
-import { verifyAuth }         from './_lib/verifyAuth.js';
+import { resolveUserCtx }     from './_lib/resolveUserCtx.js';
 import { put as blobPut }     from '@vercel/blob';
 
 const { Pool } = pg;
-
-const ADMIN_EMAILS = [
-  'cristiano.xavier@outlook.com',
-  'cristiano.xavier@hiddenatlas.travel',
-];
-
-// ── Auth helpers ──────────────────────────────────────────────────────────────
-async function resolveUser(authHeader, pool) {
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  try {
-    const clerkId = await verifyAuth(authHeader);
-    const { rows } = await pool.query(
-      `SELECT u.id, u.email, c.id as "creatorId"
-       FROM "User" u
-       LEFT JOIN "Creator" c ON c.user_id = u.id AND c.is_active = true
-       WHERE u."clerkId" = $1 LIMIT 1`,
-      [clerkId]
-    );
-    if (!rows.length) return null;
-    const { id: userId, email, creatorId } = rows[0];
-    return { userId, email, isAdmin: ADMIN_EMAILS.includes(email), creatorId };
-  } catch {
-    return null;
-  }
-}
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
@@ -70,7 +45,7 @@ export default async function handler(req, res) {
 
     // ── Protected POST actions ──────────────────────────────────────────────
     if (req.method === 'POST') {
-      const ctx = await resolveUser(req.headers.authorization, pool);
+      const ctx = await resolveUserCtx(req.headers.authorization, pool);
       if (!ctx) return res.status(401).json({ error: 'Unauthorized' });
 
       const body = req.body ?? {};

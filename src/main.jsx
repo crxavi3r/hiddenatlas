@@ -4,6 +4,7 @@ import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { ClerkProvider } from '@clerk/clerk-react';
 import './index.css';
 import App from './App.jsx';
+import { UserCtxProvider } from './lib/useUserCtx.jsx';
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -31,7 +32,9 @@ createRoot(document.getElementById('root')).render(
     {PUBLISHABLE_KEY ? (
       <BrowserRouter>
         <ClerkWithRouter>
-          <App />
+          <UserCtxProvider>
+            <App />
+          </UserCtxProvider>
         </ClerkWithRouter>
       </BrowserRouter>
     ) : (

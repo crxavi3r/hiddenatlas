@@ -122,6 +122,22 @@ export default function CreatorProfilePage() {
           <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.45)', marginTop: '16px' }}>
             {visibleCount} {visibleCount === 1 ? 'itinerary' : 'itineraries'}
           </p>
+          <div style={{ marginTop: '28px' }}>
+            <Link
+              to={`/custom?designer=${encodeURIComponent(creator.slug)}`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                padding: '13px 28px', background: '#C9A96E', color: 'white',
+                borderRadius: '4px', fontSize: '13px', fontWeight: '700',
+                letterSpacing: '0.6px', textTransform: 'uppercase', textDecoration: 'none',
+                transition: 'background 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#B08D4E'}
+              onMouseLeave={e => e.currentTarget.style.background = '#C9A96E'}
+            >
+              Request a custom trip from {creator.name} <ArrowRight size={13} />
+            </Link>
+          </div>
         </div>
       </section>
 

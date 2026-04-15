@@ -1,13 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Outlet, NavLink, Navigate } from 'react-router-dom';
-import { useUser, useAuth } from '@clerk/clerk-react';
+import { useUser } from '@clerk/clerk-react';
 import { LayoutDashboard, Users, CreditCard, Download, ExternalLink, Inbox, Menu, X, Map, UserCheck } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
-
-const ADMIN_EMAILS = [
-  'cristiano.xavier@outlook.com',
-  'cristiano.xavier@hiddenatlas.travel',
-];
+import { useUserCtx } from '../lib/useUserCtx.jsx';
 
 const NAV = [
   { label: 'Dashboard',       path: '/admin',                   icon: LayoutDashboard, end: true },
@@ -82,41 +78,18 @@ function SidebarContent({ onClose, isAdmin }) {
 }
 
 export default function AdminPage() {
-  const { isLoaded, isSignedIn, user } = useUser();
-  const { getToken }  = useAuth();
-  const isMobile      = useIsMobile();
-  const [menuOpen,    setMenuOpen]    = useState(false);
-  const [isCreator,   setIsCreator]   = useState(null); // null = loading, bool otherwise
+  const { isLoaded, isSignedIn } = useUser();
+  const isMobile  = useIsMobile();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { isAdmin, isDesigner, loading: ctxLoading } = useUserCtx();
 
-  const email = user?.primaryEmailAddress?.emailAddress;
-  const isAdmin = isSignedIn && ADMIN_EMAILS.includes(email);
-
-  // For non-admin users, check if they have a creator profile (async DB check)
-  useEffect(() => {
-    if (!isLoaded || !isSignedIn || isAdmin) { setIsCreator(false); return; }
-    getToken().then(token =>
-      fetch('/api/creators?action=list', { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.ok ? r.json() : { creators: [] })
-        .then(data => {
-          // Check if any creator's userId matches the current user (via the user sync)
-          // We use the CMS list endpoint — if it returns without 403, user has creator access
-          return fetch('/api/itinerary-cms?action=list', { headers: { Authorization: `Bearer ${token}` } });
-        })
-        .then(r => setIsCreator(r.ok))
-        .catch(() => setIsCreator(false))
-    ).catch(() => setIsCreator(false));
-  }, [isLoaded, isSignedIn, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (!isLoaded) return <div style={{ minHeight: '100vh', background: '#111110' }} />;
-  if (!isSignedIn) return <Navigate to="/" replace />;
-
-  // Admin: immediate access. Creator: wait for async check. Other: redirect.
-  if (!isAdmin && isCreator === null) {
+  if (!isLoaded || ctxLoading) {
     return <div style={{ minHeight: '100vh', background: '#111110', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #1B6B65', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
     </div>;
   }
-  if (!isAdmin && !isCreator) return <Navigate to="/" replace />;
+  if (!isSignedIn) return <Navigate to="/" replace />;
+  if (!isDesigner) return <Navigate to="/" replace />;
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#F4F1EC' }}>

@@ -146,7 +146,7 @@ export default function ItineraryCard({ itinerary, variant = 'default', isPurcha
                 ) : (
                   <User size={11} strokeWidth={2} />
                 )}
-                by {creator.name}
+                Designed by {creator.name}
               </Link>
             )}
 
@@ -281,7 +281,7 @@ export default function ItineraryCard({ itinerary, variant = 'default', isPurcha
               ) : (
                 <User size={10} strokeWidth={2} />
               )}
-              by {creator.name}
+              Designed by {creator.name}
             </Link>
           )}
           <div style={{ display: 'flex', gap: '12px' }}>

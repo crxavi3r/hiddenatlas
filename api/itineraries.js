@@ -1,12 +1,8 @@
 import pg from 'pg';
 import { verifyAuth } from './_lib/verifyAuth.js';
+import { resolveUserCtx } from './_lib/resolveUserCtx.js';
 
 const { Pool } = pg;
-
-const ADMIN_EMAILS = [
-  'cristiano.xavier@outlook.com',
-  'cristiano.xavier@hiddenatlas.travel',
-];
 
 // GET /api/itineraries?action=access&slug=:slug
 //   Returns { hasAccess: bool, pdfUrl: string|null }
@@ -256,12 +252,9 @@ export default async function handler(req, res) {
 
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
-      const userRes = await pool.query(
-        `SELECT id, email FROM "User" WHERE "clerkId" = $1 LIMIT 1`, [clerkId]
-      );
-      const userId    = userRes.rows[0]?.id ?? null;
-      const userEmail = userRes.rows[0]?.email ?? '';
-      const isAdmin   = ADMIN_EMAILS.includes(userEmail);
+      const userCtx = await resolveUserCtx(req.headers.authorization, pool);
+      const userId  = userCtx?.userId ?? null;
+      const isAdmin = userCtx?.isAdmin ?? false;
 
       const { rows } = await pool.query(
         `SELECT * FROM "Itinerary" WHERE slug = $1 LIMIT 1`, [slug]

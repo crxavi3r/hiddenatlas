@@ -1,12 +1,49 @@
 import { createClerkClient } from '@clerk/backend';
 import pg from 'pg';
 import { verifyAuth } from './_lib/verifyAuth.js';
+import { resolveUserCtx } from './_lib/resolveUserCtx.js';
 
 const { Pool } = pg;
+
+// GET /api/auth?action=me
+// Returns { role, creatorSlug, email } for the authenticated user.
+// Used by the frontend to determine admin/designer access without ADMIN_EMAILS.
+async function handleMe(req, res) {
+  if (!process.env.DATABASE_URL) {
+    return res.status(500).json({ error: 'DATABASE_URL not configured' });
+  }
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    const ctx = await resolveUserCtx(req.headers.authorization, pool);
+    if (!ctx) return res.status(401).json({ error: 'Unauthorized' });
+
+    // Fetch creatorSlug if this user has a linked creator profile
+    let creatorSlug = null;
+    if (ctx.creatorId) {
+      const { rows } = await pool.query(
+        `SELECT slug FROM "Creator" WHERE id = $1 LIMIT 1`, [ctx.creatorId]
+      );
+      creatorSlug = rows[0]?.slug ?? null;
+    }
+
+    return res.status(200).json({ role: ctx.role, creatorSlug, email: ctx.email });
+  } catch (err) {
+    console.error('[api/auth/me]', err.message);
+    return res.status(500).json({ error: 'Database error' });
+  } finally {
+    await pool.end();
+  }
+}
 
 // POST /api/auth
 // Syncs the authenticated Clerk user into the PostgreSQL User table.
 export default async function handler(req, res) {
+  if (req.method === 'GET') {
+    const action = req.query.action;
+    if (action === 'me') return handleMe(req, res);
+    return res.status(400).json({ error: 'Unknown GET action' });
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

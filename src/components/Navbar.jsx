@@ -5,17 +5,11 @@ import {
   SignedIn, SignedOut,
   useUser, useClerk,
 } from '@clerk/clerk-react';
-
-const ADMIN_EMAILS = [
-  'cristiano.xavier@outlook.com',
-  'cristiano.xavier@hiddenatlas.travel',
-];
+import { useUserCtx } from '../lib/useUserCtx.jsx';
 
 const navLinks = [
   { label: 'Itineraries',     href: '/itineraries' },
-  { label: 'AI Planner',      href: '/ai-planner' },
   { label: 'Custom Planning', href: '/custom' },
-  { label: 'Pricing',         href: '/pricing' },
   { label: 'My Trips',        href: '/my-trips' },
 ];
 
@@ -148,7 +142,7 @@ export default function Navbar() {
   const location = useLocation();
   const isHome = location.pathname === '/';
   const { user } = useUser();
-  const isAdmin = ADMIN_EMAILS.includes(user?.primaryEmailAddress?.emailAddress);
+  const { isAdmin, isDesigner } = useUserCtx();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 60);
@@ -208,7 +202,7 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-            {isAdmin && (
+            {isDesigner && (
               <Link
                 to="/admin"
                 style={{
@@ -219,7 +213,7 @@ export default function Navbar() {
                 onMouseEnter={e => e.target.style.color = isTransparent ? 'white' : '#1B6B65'}
                 onMouseLeave={e => e.target.style.color = isTransparent ? 'rgba(255,255,255,0.85)' : '#4A433A'}
               >
-                Backoffice
+                {isAdmin ? 'Backoffice' : 'Designer Portal'}
               </Link>
             )}
           </nav>
@@ -341,7 +335,7 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-            {isAdmin && (
+            {isDesigner && (
               <Link
                 to="/admin"
                 style={{
@@ -354,7 +348,7 @@ export default function Navbar() {
                   display: 'block',
                 }}
               >
-                Backoffice
+                {isAdmin ? 'Backoffice' : 'Designer Portal'}
               </Link>
             )}
 
