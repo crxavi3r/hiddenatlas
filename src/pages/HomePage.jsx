@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, ChevronDown, Star, Check, MapPin, Lock, BookOpen, Compass } from 'lucide-react';
+import { ArrowRight, ChevronDown, Star, Check, MapPin, Lock, BookOpen, Compass, User } from 'lucide-react';
 import { useUser } from '@clerk/clerk-react';
 import { itineraries, journeyImg } from '../data/itineraries';
 import { usePurchasedSlugs } from '../lib/usePurchasedSlugs';
@@ -77,11 +77,23 @@ const philippinesTimeline = [
    MAIN COMPONENT
 ════════════════════════════════════════ */
 export default function HomePage() {
-  const [heroLoaded, setHeroLoaded] = useState(false);
+  const [heroLoaded,  setHeroLoaded]  = useState(false);
+  const [creators,    setCreators]    = useState([]);
+  const [creatorMap,  setCreatorMap]  = useState({});
   const purchasedSlugs = usePurchasedSlugs();
   const { user } = useUser();
   const isAdmin = ADMIN_EMAILS.includes(user?.primaryEmailAddress?.emailAddress);
   const isPhilippinesPurchased = isAdmin || purchasedSlugs.has('philippines-island-journey');
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/creators?action=list').then(r => r.json()).catch(() => ({ creators: [] })),
+      fetch('/api/itineraries?action=creator-map').then(r => r.json()).catch(() => ({ creators: {} })),
+    ]).then(([crData, mapData]) => {
+      setCreators((crData.creators || []).filter(c => c.isActive && (c.itinerary_count > 0 || c.total_itinerary_count > 0)));
+      setCreatorMap(mapData.creators || {});
+    });
+  }, []);
 
   useSEO({
     title: 'Curated Luxury Travel Itineraries',
@@ -176,8 +188,8 @@ export default function HomePage() {
               fontSize: 'clamp(16px, 1.8vw, 18px)', color: 'rgba(255,255,255,0.72)',
               lineHeight: '1.75', maxWidth: '540px', marginBottom: '36px',
             }}>
-              HiddenAtlas journeys are curated travel routes built from real trips.
-              Each route is structured day by day, so you can simply follow the journey.
+              Premium travel itineraries crafted by expert creators. Each journey is built from a real trip,
+              structured day by day, so you can simply follow it.
             </p>
 
             <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
@@ -195,8 +207,8 @@ export default function HomePage() {
               >
                 Browse Itineraries <ArrowRight size={15} />
               </Link>
-              <Link
-                to="/custom"
+              <a
+                href="#creators"
                 style={{
                   padding: '15px 30px', background: 'rgba(255,255,255,0.1)',
                   color: 'white', border: '1px solid rgba(255,255,255,0.35)',
@@ -214,8 +226,8 @@ export default function HomePage() {
                   e.currentTarget.style.borderColor = 'rgba(255,255,255,0.35)';
                 }}
               >
-                Build My Trip
-              </Link>
+                Meet the Creators
+              </a>
             </div>
 
             <div style={{
@@ -269,6 +281,35 @@ export default function HomePage() {
           <ChevronDown size={16} color="rgba(255,255,255,0.5)" />
         </div>
       </section>
+
+      {/* ══════════════════════════════
+          §0.5  FEATURED CREATORS
+      ══════════════════════════════ */}
+      {creators.length > 0 && (
+        <section id="creators" style={{ padding: 'clamp(56px, 7vw, 96px) 24px', background: '#FAFAF8' }}>
+          <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+            <Reveal>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '44px', flexWrap: 'wrap', gap: '20px' }}>
+                <div>
+                  <span style={T.label}>The people behind the journeys</span>
+                  <h2 style={T.h2}>Meet our creators</h2>
+                </div>
+              </div>
+            </Reveal>
+            <div className="creators-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
+              {creators.map((c, i) => (
+                <Reveal key={c.id} delay={i * 0.07}>
+                  <CreatorCard creator={c} />
+                </Reveal>
+              ))}
+            </div>
+            <style>{`
+              @media (max-width: 900px) { .creators-grid { grid-template-columns: repeat(2, 1fr) !important; } }
+              @media (max-width: 480px) { .creators-grid { grid-template-columns: 1fr !important; } }
+            `}</style>
+          </div>
+        </section>
+      )}
 
       {/* ══════════════════════════════
           §1  EXPLORE DESTINATIONS
@@ -382,14 +423,14 @@ export default function HomePage() {
           <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'stretch' }}>
             {/* Large featured card */}
             <Reveal delay={0} style={{ height: '100%' }}>
-              <ItineraryBigCard it={freeJourneys[0]} />
+              <ItineraryBigCard it={freeJourneys[0]} creator={creatorMap[freeJourneys[0]?.id]} />
             </Reveal>
 
             {/* Stack of 3 smaller */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               {freeJourneys.slice(1, 4).map((it, i) => (
                 <Reveal key={it.id} delay={i * 0.08 + 0.08} style={{ flex: 1 }}>
-                  <ItinerarySmallCard it={it} />
+                  <ItinerarySmallCard it={it} creator={creatorMap[it.id]} />
                 </Reveal>
               ))}
             </div>
@@ -425,7 +466,7 @@ export default function HomePage() {
           <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '24px', marginBottom: '48px' }}>
             {premiumJourneys.map((it, i) => (
               <Reveal key={it.id} delay={i * 0.08}>
-                <CuratedJourneyCard it={it} isPurchased={purchasedSlugs.has(it.id)} />
+                <CuratedJourneyCard it={it} isPurchased={purchasedSlugs.has(it.id)} creator={creatorMap[it.id]} />
               </Reveal>
             ))}
           </div>
@@ -1108,12 +1149,24 @@ function DestinationCard({ it }) {
         }}>
           <ArrowRight size={14} color="white" />
         </div>
+        {/* View itineraries label on hover */}
+        <div style={{
+          position: 'absolute', bottom: '14px', right: '16px',
+          display: 'flex', alignItems: 'center', gap: '4px',
+          fontSize: '10px', fontWeight: '700', letterSpacing: '0.8px',
+          textTransform: 'uppercase', color: 'rgba(255,255,255,0.85)',
+          opacity: hovered ? 1 : 0,
+          transform: hovered ? 'translateY(0)' : 'translateY(4px)',
+          transition: 'opacity 0.3s, transform 0.3s',
+        }}>
+          View itinerary <ArrowRight size={10} />
+        </div>
       </div>
     </Link>
   );
 }
 
-function ItineraryBigCard({ it }) {
+function ItineraryBigCard({ it, creator }) {
   const [hovered, setHovered] = useState(false);
   return (
     <Link
@@ -1170,6 +1223,22 @@ function ItineraryBigCard({ it }) {
               </span>
             ))}
           </div>
+          {creator && (
+            <Link
+              to={`/${creator.slug}`}
+              onClick={e => e.stopPropagation()}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '7px',
+                textDecoration: 'none', marginBottom: '14px',
+              }}
+            >
+              {creator.avatarUrl
+                ? <img src={creator.avatarUrl} alt={creator.name} style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                : <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#EFF6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><User size={12} color="#1B6B65" /></div>
+              }
+              <span style={{ fontSize: '12px', color: '#8C8070' }}>by <span style={{ color: '#1B6B65', fontWeight: '600' }}>{creator.name}</span></span>
+            </Link>
+          )}
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             paddingTop: '16px', borderTop: '1px solid #F4F1EC',
@@ -1191,7 +1260,7 @@ function ItineraryBigCard({ it }) {
   );
 }
 
-function ItinerarySmallCard({ it }) {
+function ItinerarySmallCard({ it, creator }) {
   const [hovered, setHovered] = useState(false);
   return (
     <Link
@@ -1242,6 +1311,11 @@ function ItinerarySmallCard({ it }) {
               </span>
             ))}
           </div>
+          {creator && (
+            <p style={{ fontSize: '11px', color: '#8C8070', marginBottom: '8px' }}>
+              by <span style={{ color: '#1B6B65', fontWeight: '600' }}>{creator.name}</span>
+            </p>
+          )}
           <span style={{
             display: 'flex', alignItems: 'center', gap: '4px',
             fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase',
@@ -1297,7 +1371,66 @@ function TestimonialCard({ t }) {
   );
 }
 
-function CuratedJourneyCard({ it, isPurchased = false }) {
+function CreatorCard({ creator }) {
+  const [hovered, setHovered] = useState(false);
+  const initials = creator.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const bio = creator.bio ? (creator.bio.length > 90 ? creator.bio.slice(0, 87) + '…' : creator.bio) : null;
+  const count = creator.itinerary_count ?? 0;
+  return (
+    <Link
+      to={`/${creator.slug}`}
+      style={{ textDecoration: 'none', display: 'block' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div style={{
+        borderRadius: '10px', background: 'white', border: '1px solid #E8E3DA',
+        padding: '28px 24px', textAlign: 'center',
+        boxShadow: hovered ? '0 12px 40px rgba(28,26,22,0.10)' : '0 2px 12px rgba(28,26,22,0.04)',
+        transform: hovered ? 'translateY(-4px)' : 'none',
+        transition: 'box-shadow 0.3s, transform 0.3s',
+      }}>
+        {creator.avatarUrl
+          ? <img src={creator.avatarUrl} alt={creator.name} style={{ width: '72px', height: '72px', borderRadius: '50%', objectFit: 'cover', margin: '0 auto 14px', display: 'block', border: '2px solid #E8E3DA' }} />
+          : (
+            <div style={{
+              width: '72px', height: '72px', borderRadius: '50%',
+              background: '#EFF6F5', border: '2px solid rgba(27,107,101,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 14px',
+              fontFamily: "'Playfair Display', Georgia, serif",
+              fontSize: '22px', fontWeight: '600', color: '#1B6B65',
+            }}>
+              {initials}
+            </div>
+          )
+        }
+        <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '17px', fontWeight: '600', color: '#1C1A16', marginBottom: '6px' }}>
+          {creator.name}
+        </p>
+        {count > 0 && (
+          <p style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.8px', textTransform: 'uppercase', color: '#C9A96E', marginBottom: '10px' }}>
+            {count} {count === 1 ? 'journey' : 'journeys'}
+          </p>
+        )}
+        {bio && (
+          <p style={{ fontSize: '13px', color: '#6B6156', lineHeight: '1.6', marginBottom: '16px' }}>
+            {bio}
+          </p>
+        )}
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: '4px',
+          fontSize: '11px', fontWeight: '700', letterSpacing: '0.8px', textTransform: 'uppercase',
+          color: hovered ? '#1B6B65' : '#B5AA99', transition: 'color 0.2s',
+        }}>
+          View profile <ArrowRight size={11} />
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+function CuratedJourneyCard({ it, isPurchased = false, creator }) {
   const [hovered, setHovered] = useState(false);
   return (
     <Link
@@ -1387,9 +1520,25 @@ function CuratedJourneyCard({ it, isPurchased = false }) {
               In your library
             </p>
           )}
-          <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.7', flex: 1, marginBottom: '18px' }}>
+          <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.7', flex: 1, marginBottom: '14px' }}>
             {it.shortDescription}
           </p>
+          {creator && (
+            <Link
+              to={`/${creator.slug}`}
+              onClick={e => e.stopPropagation()}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '7px',
+                textDecoration: 'none', marginBottom: '14px',
+              }}
+            >
+              {creator.avatarUrl
+                ? <img src={creator.avatarUrl} alt={creator.name} style={{ width: '20px', height: '20px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                : <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#EFF6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><User size={11} color="#1B6B65" /></div>
+              }
+              <span style={{ fontSize: '12px', color: '#8C8070' }}>by <span style={{ color: '#1B6B65', fontWeight: '600' }}>{creator.name}</span></span>
+            </Link>
+          )}
           <span style={{
             display: 'flex', alignItems: 'center', gap: '5px',
             fontSize: '12px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase',
