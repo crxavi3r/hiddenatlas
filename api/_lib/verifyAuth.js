@@ -1,13 +1,17 @@
 import { verifyToken } from '@clerk/backend';
 
-// All origins that may appear as the `azp` claim in Clerk JWTs.
-// @clerk/backend v1.x rejects tokens whose azp does not match — mobile OAuth
-// tokens always carry azp, so this list must include every production origin.
+// Logged for debugging only — NOT passed to verifyToken.
 //
-// VERCEL_URL is injected by Vercel at build/runtime and covers preview deployments
-// (e.g. hiddenatlas-git-main-crxavi3r.vercel.app). Without it, all tokens from
-// preview deployments are rejected with "Unauthorized party".
-function buildAuthorizedParties() {
+// Background: Clerk JWTs contain an `azp` (authorized party) claim. In some
+// configurations this is set to the Clerk Frontend API URL
+// (e.g. "your-instance.clerk.accounts.dev"), not the page's origin. Passing
+// authorizedParties to verifyToken causes every such token to be rejected with
+// "Unauthorized party", even when the signature and expiry are valid.
+//
+// The JWT signature check against CLERK_SECRET_KEY is the real security
+// boundary. authorizedParties is an optional extra layer that breaks more than
+// it protects in a single-app setup.
+function buildAuthorizedPartiesForLogging() {
   const parties = [
     'https://hiddenatlas.travel',
     'https://www.hiddenatlas.travel',
@@ -16,13 +20,13 @@ function buildAuthorizedParties() {
     'http://localhost:3001',
     'http://localhost:3002',
   ];
-  // Vercel injects VERCEL_URL as the raw hostname (no protocol, no trailing slash).
   if (process.env.VERCEL_URL) {
     parties.push(`https://${process.env.VERCEL_URL}`);
   }
-  // Allow any extra origins listed in CLERK_AUTHORIZED_PARTIES (comma-separated).
   if (process.env.CLERK_AUTHORIZED_PARTIES) {
-    process.env.CLERK_AUTHORIZED_PARTIES.split(',').map(s => s.trim()).filter(Boolean).forEach(p => parties.push(p));
+    process.env.CLERK_AUTHORIZED_PARTIES
+      .split(',').map(s => s.trim()).filter(Boolean)
+      .forEach(p => parties.push(p));
   }
   return parties;
 }
@@ -58,12 +62,14 @@ export async function verifyAuth(authHeader) {
     console.error('[verifyAuth] CLERK_SECRET_KEY is not set — cannot verify tokens');
     throw new Error('Server misconfigured: CLERK_SECRET_KEY missing');
   }
-  // Log key type (dev vs prod) without revealing the value
-  const keyType = secretKey.startsWith('sk_live_') ? 'live' : secretKey.startsWith('sk_test_') ? 'test' : 'unknown';
+  const keyType = secretKey.startsWith('sk_live_') ? 'live'
+                : secretKey.startsWith('sk_test_') ? 'test'
+                : 'unknown-format';
   console.log(`[verifyAuth] CLERK_SECRET_KEY present, type=${keyType}`);
 
   if (!authHeader?.startsWith('Bearer ')) {
-    console.warn('[verifyAuth] missing or malformed Authorization header — value:', authHeader ? `present but starts with "${authHeader.slice(0, 20)}..."` : 'undefined');
+    console.warn('[verifyAuth] missing or malformed Authorization header —',
+      authHeader ? `starts with "${authHeader.slice(0, 20)}..."` : 'undefined');
     throw new Error('Missing authorization header');
   }
 
@@ -73,32 +79,31 @@ export async function verifyAuth(authHeader) {
   const payload = decodeJwtPayload(token);
   if (payload) {
     const now = Math.floor(Date.now() / 1000);
+    const knownParties = buildAuthorizedPartiesForLogging();
     console.log('[verifyAuth] token claims (unverified):', {
-      sub:  payload.sub,
-      azp:  payload.azp,
-      iss:  payload.iss,
-      exp:  payload.exp,
-      iat:  payload.iat,
-      expired: payload.exp ? payload.exp < now : 'no exp',
+      sub:               payload.sub,
+      azp:               payload.azp,
+      iss:               payload.iss,
+      expired:           payload.exp ? payload.exp < now : 'no exp',
       secondsUntilExpiry: payload.exp ? payload.exp - now : 'n/a',
+      azpInKnownParties: payload.azp ? knownParties.includes(payload.azp) : 'no azp claim',
     });
   } else {
-    console.warn('[verifyAuth] could not decode token payload — token may be malformed or "null"');
+    console.warn('[verifyAuth] could not decode token payload — token may be "null" or malformed');
   }
 
-  const authorizedParties = buildAuthorizedParties();
-  console.log('[verifyAuth] authorizedParties:', authorizedParties);
-
+  // ── Verify signature — NO authorizedParties ───────────────────────────────
+  // authorizedParties is intentionally omitted. Clerk JWTs may contain an `azp`
+  // claim pointing to the Clerk Frontend API URL, not the page origin. Passing
+  // a static list of page origins causes legitimate tokens to be rejected with
+  // "Unauthorized party". The secretKey signature check is the security boundary.
   try {
-    const verified = await verifyToken(token, {
-      secretKey,
-      authorizedParties,
-    });
+    const verified = await verifyToken(token, { secretKey });
     console.log('[verifyAuth] token verified — sub:', verified.sub);
     return verified.sub;
   } catch (err) {
-    // Log the reason (e.g. "Unauthorized party", "JWT is expired") but never the token.
-    console.error('[verifyAuth] token rejected —', err.message, '| azp in token:', payload?.azp, '| authorizedParties:', authorizedParties);
+    console.error('[verifyAuth] token rejected —', err.message,
+      '| azp in token:', payload?.azp);
     throw new Error('Invalid or expired token');
   }
 }

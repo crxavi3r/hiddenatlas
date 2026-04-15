@@ -104,7 +104,13 @@ export async function resolveUserCtx(authHeader, pool) {
       isDesigner,
     };
   } catch (err) {
+    // Re-throw as a typed DB error so callers can return 503 instead of 401.
+    // Swallowing this as null caused DB failures to look like auth failures
+    // (both returned 401 "Unauthorized") making the root cause invisible.
     console.error(`[resolveUserCtx] DB error for clerkId=${clerkId}:`, err.message);
-    return null;
+    const dbErr = new Error(`Database error: ${err.message}`);
+    dbErr.isDbError = true;
+    dbErr.status = 503;
+    throw dbErr;
   }
 }

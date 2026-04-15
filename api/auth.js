@@ -26,7 +26,12 @@ async function handleMe(req, res) {
   if (!process.env.DATABASE_URL) {
     return res.status(500).json({ error: 'DATABASE_URL not configured' });
   }
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = new Pool({
+    connectionString:        process.env.DATABASE_URL,
+    connectionTimeoutMillis: 6000,
+    idleTimeoutMillis:       5000,
+    max:                     3,
+  });
   try {
     const ctx = await resolveUserCtx(req.headers.authorization, pool);
     if (!ctx) {
@@ -61,9 +66,13 @@ async function handleMe(req, res) {
     });
   } catch (err) {
     console.error('[api/auth/me]', err.message);
-    return res.status(500).json({ error: 'Database error' });
+    // DB errors are re-thrown by resolveUserCtx with isDbError=true.
+    // Return 503 (not 401) so the client knows it's a transient failure,
+    // not an auth problem.
+    const status = err.isDbError ? 503 : 500;
+    return res.status(status).json({ error: err.isDbError ? 'Service temporarily unavailable' : 'Internal server error' });
   } finally {
-    await pool.end();
+    try { await pool.end(); } catch {}
   }
 }
 
