@@ -111,28 +111,6 @@ export default function Footer() {
             </nav>
           </div>
 
-          {/* Services */}
-          <div>
-            <p style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#6B6156', marginBottom: '20px' }}>
-              Services
-            </p>
-            <nav style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {[
-                ['Custom Trip Planning', '/custom'],
-              ].map(([label, href]) => (
-                <Link
-                  key={href}
-                  to={href}
-                  style={{ fontSize: '14px', color: '#8C8070', transition: 'color 0.2s' }}
-                  onMouseEnter={e => e.target.style.color = '#D4CCBF'}
-                  onMouseLeave={e => e.target.style.color = '#8C8070'}
-                >
-                  {label}
-                </Link>
-              ))}
-            </nav>
-          </div>
-
           {/* Company */}
           <div>
             <p style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#6B6156', marginBottom: '20px' }}>

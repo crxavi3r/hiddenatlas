@@ -917,6 +917,50 @@ const api = useApi();
         </div>
       </section>
 
+      {/* ── Designer contextual CTA ── */}
+      {creator && (
+        <div style={{ background: '#F4F1EC', borderBottom: '1px solid #E8E3DA' }}>
+          <div style={{
+            maxWidth: '1280px', margin: '0 auto', padding: '20px 24px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: '24px', flexWrap: 'wrap',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              {creator.avatarUrl && (
+                <img
+                  src={creator.avatarUrl}
+                  alt={creator.name}
+                  style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+                  onError={e => { e.currentTarget.style.display = 'none'; }}
+                />
+              )}
+              <div>
+                <p style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16', marginBottom: '2px' }}>
+                  Want something more personal?
+                </p>
+                <p style={{ fontSize: '12.5px', color: '#6B6156', lineHeight: '1.5' }}>
+                  This itinerary was designed by {creator.name}. Request a fully tailored version based on your dates, preferences, and travel style.
+                </p>
+              </div>
+            </div>
+            <Link
+              to={`/${creator.slug}`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                padding: '10px 20px', background: '#1B6B65', color: 'white',
+                borderRadius: '4px', fontSize: '12px', fontWeight: '700',
+                letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none',
+                whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#145550'}
+              onMouseLeave={e => e.currentTarget.style.background = '#1B6B65'}
+            >
+              Request custom trip <ArrowRight size={12} />
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Body */}
       <div className="ha-detail-body" style={{ maxWidth: '1280px', margin: '0 auto', padding: '60px 24px' }}>
         <div className="resp-detail-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: '64px', alignItems: 'start' }}>

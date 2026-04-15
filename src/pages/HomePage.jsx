@@ -457,6 +457,48 @@ export default function HomePage() {
       </section>
 
       {/* ══════════════════════════════
+          §1.7  WORK WITH A DESIGNER
+      ══════════════════════════════ */}
+      {creators.length > 0 && (
+        <section style={{ background: '#0E3D39', padding: 'clamp(48px, 6vw, 80px) 24px' }}>
+          <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+            <Reveal>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                gap: '40px', flexWrap: 'wrap',
+              }}>
+                <div style={{ flex: '1 1 420px' }}>
+                  <span style={{ ...T.label, color: '#C9A96E' }}>Custom journeys</span>
+                  <h2 style={{ ...T.h2, color: 'white', marginBottom: '16px' }}>
+                    Work with a travel designer
+                  </h2>
+                  <p style={{ fontSize: '16px', color: 'rgba(255,255,255,0.65)', lineHeight: '1.8', maxWidth: '500px' }}>
+                    Create a trip tailored to your pace, your style, and your people. Work directly with experienced travel designers.
+                  </p>
+                </div>
+                <div style={{ flexShrink: 0 }}>
+                  <Link
+                    to={creators.length === 1 ? `/${creators[0].slug}` : '#creators'}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '8px',
+                      padding: '14px 28px', background: '#C9A96E', color: 'white',
+                      borderRadius: '4px', fontSize: '13px', fontWeight: '700',
+                      letterSpacing: '0.6px', textTransform: 'uppercase', textDecoration: 'none',
+                      transition: 'background 0.2s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#B08D4E'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#C9A96E'}
+                  >
+                    Request a custom trip <ArrowRight size={14} />
+                  </Link>
+                </div>
+              </div>
+            </Reveal>
+          </div>
+        </section>
+      )}
+
+      {/* ══════════════════════════════
           §1.5  PRODUCT CONCEPT
       ══════════════════════════════ */}
       <section style={{ background: '#F4F1EC', padding: 'clamp(48px, 5vw, 72px) 24px' }}>
