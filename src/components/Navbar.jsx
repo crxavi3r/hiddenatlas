@@ -220,26 +220,6 @@ export default function Navbar() {
           {/* Right: CTA + auth */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
 
-            {/* Plan My Trip CTA — goes to designer selection */}
-            <a
-              href="/#creators"
-              className="hidden-mobile"
-              style={{
-                padding: '10px 20px', borderRadius: '4px',
-                fontSize: '13px', fontWeight: '600', letterSpacing: '0.5px',
-                textTransform: 'uppercase', transition: 'all 0.2s',
-                background: isTransparent ? 'rgba(255,255,255,0.15)' : '#1B6B65',
-                color: 'white',
-                border: isTransparent ? '1px solid rgba(255,255,255,0.4)' : '1px solid #1B6B65',
-                textDecoration: 'none',
-                backdropFilter: isTransparent ? 'blur(8px)' : 'none',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = isTransparent ? 'rgba(255,255,255,0.25)' : '#145550'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = isTransparent ? 'rgba(255,255,255,0.15)' : '#1B6B65'; }}
-            >
-              Plan My Trip
-            </a>
-
             {/* ── Auth — desktop ── */}
             <div className="hidden-mobile" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <SignedOut>
@@ -350,28 +330,6 @@ export default function Navbar() {
                 {isAdmin ? 'Backoffice' : 'Designer Portal'}
               </Link>
             )}
-
-            {/* CTA */}
-            <div style={{ marginTop: '32px' }}>
-              <a
-                href="/#creators"
-                style={{
-                  display: 'block',
-                  padding: '15px 24px',
-                  borderRadius: '4px',
-                  background: '#1B6B65',
-                  color: 'white',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  letterSpacing: '0.8px',
-                  textTransform: 'uppercase',
-                  textDecoration: 'none',
-                  textAlign: 'center',
-                }}
-              >
-                Plan My Trip
-              </a>
-            </div>
 
             {/* Auth */}
             <div style={{

@@ -199,8 +199,8 @@ export default function HomePage() {
               >
                 Explore itineraries <ArrowRight size={15} />
               </Link>
-              <a
-                href="#creators"
+              <Link
+                to="/itineraries"
                 style={{
                   padding: '15px 30px', background: 'rgba(255,255,255,0.1)',
                   color: 'white', border: '1px solid rgba(255,255,255,0.35)',
@@ -218,8 +218,8 @@ export default function HomePage() {
                   e.currentTarget.style.borderColor = 'rgba(255,255,255,0.35)';
                 }}
               >
-                Meet our travel designers
-              </a>
+                Browse journeys
+              </Link>
             </div>
 
             <div style={{
@@ -950,7 +950,7 @@ export default function HomePage() {
               <em style={{ fontStyle: 'italic', color: '#1B6B65' }}>next journey.</em>
             </h2>
             <p style={{ ...T.body, maxWidth: '460px', margin: '0 auto 40px' }}>
-              Browse our curated collection or work with a planner to build something entirely your own. Either way, your next trip should be one worth talking about.
+              Every journey in our collection is crafted by someone who has been there. Browse and find one worth talking about.
             </p>
             <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap' }}>
               <Link
@@ -967,20 +967,6 @@ export default function HomePage() {
               >
                 Browse itineraries <ArrowRight size={14} />
               </Link>
-              <a
-                href="#creators"
-                style={{
-                  padding: '16px 34px', background: 'white', color: '#1C1A16',
-                  border: '1px solid #D4CCBF', borderRadius: '4px',
-                  fontSize: '13px', fontWeight: '700',
-                  letterSpacing: '0.8px', textTransform: 'uppercase', textDecoration: 'none',
-                  transition: 'border-color 0.2s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = '#8C8070'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = '#D4CCBF'}
-              >
-                Plan my trip
-              </a>
             </div>
           </Reveal>
         </div>

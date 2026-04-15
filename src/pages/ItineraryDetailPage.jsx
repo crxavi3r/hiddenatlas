@@ -135,8 +135,8 @@ function LockedSidebar({ itinerary, onBuy, purchasing, purchaseError }) {
         >
           Customize This Route <ArrowRight size={13} />
         </Link>
-        <p style={{ fontSize: '12px', color: '#B5AA99', textAlign: 'center', marginTop: '16px' }}>
-          Or <Link to="/custom" style={{ color: '#1B6B65', fontWeight: '600' }}>build a custom trip</Link> from scratch
+        <p style={{ fontSize: '12px', color: '#B5AA99', textAlign: 'center', marginTop: '14px', lineHeight: '1.6' }}>
+          Want something tailored? Work directly with the designer behind each journey.
         </p>
       </div>
     </div>
@@ -1439,8 +1439,8 @@ function FreeSidebar({ itinerary, onDownload }) {
         >
           Customize This Route <ArrowRight size={13} />
         </Link>
-        <p style={{ fontSize: '12px', color: '#B5AA99', textAlign: 'center', marginTop: '16px' }}>
-          Or <Link to="/custom" style={{ color: '#1B6B65', fontWeight: '600' }}>build a custom trip</Link> from scratch
+        <p style={{ fontSize: '12px', color: '#B5AA99', textAlign: 'center', marginTop: '14px', lineHeight: '1.6' }}>
+          Want something tailored? Work directly with the designer behind each journey.
         </p>
       </div>
     </div>

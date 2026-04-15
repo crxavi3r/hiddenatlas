@@ -97,7 +97,6 @@ export default function Footer() {
             <nav style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {[
                 ['Itineraries', '/itineraries'],
-                ['Pricing', '/pricing'],
               ].map(([label, href]) => (
                 <Link
                   key={href}

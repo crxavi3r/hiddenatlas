@@ -347,8 +347,11 @@ export default function ItinerariesPage() {
           }}>
             Don't see your dream destination?
           </h2>
-          <p style={{ fontSize: '16px', color: '#6B6156', lineHeight: '1.7', marginBottom: '32px' }}>
-            Our custom planning service can take you anywhere. Tell us where you want to go and we'll build it from scratch.
+          <p style={{ fontSize: '16px', color: '#6B6156', lineHeight: '1.7', marginBottom: '8px' }}>
+            Want something tailored? Work directly with the designer behind each journey.
+          </p>
+          <p style={{ fontSize: '14px', color: '#8C8070', lineHeight: '1.7', marginBottom: '32px' }}>
+            Tell us where you want to go and we'll build it from scratch.
           </p>
           <a
             href="/custom"
