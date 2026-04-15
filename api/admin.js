@@ -24,8 +24,15 @@ function parseCutoff(from, period) {
 // ── Auth guard ────────────────────────────────────────────────────────────────
 async function verifyAdmin(authHeader, pool) {
   const ctx = await resolveUserCtx(authHeader, pool);
-  if (!ctx) throw Object.assign(new Error('Unauthorized'), { status: 401 });
-  if (!ctx.isAdmin) throw Object.assign(new Error('Forbidden'), { status: 403 });
+  if (!ctx) {
+    console.warn('[api/admin] verifyAdmin — UNAUTHORIZED: resolveUserCtx returned null (missing/invalid token or no user row and no admin email match)');
+    throw Object.assign(new Error('Unauthorized'), { status: 401 });
+  }
+  console.log(`[api/admin] verifyAdmin — userId=${ctx.userId} email=${ctx.email} isAdmin=${ctx.isAdmin} role=${ctx.role}`);
+  if (!ctx.isAdmin) {
+    console.warn(`[api/admin] verifyAdmin — FORBIDDEN: email=${ctx.email} role=${ctx.role} isAdmin=false`);
+    throw Object.assign(new Error('Forbidden'), { status: 403 });
+  }
   return ctx.email;
 }
 
