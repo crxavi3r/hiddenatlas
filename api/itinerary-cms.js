@@ -46,7 +46,7 @@ async function verifyUser(authHeader, pool) {
   const { rows } = await pool.query(
     `SELECT u.email, c.id as "creatorId"
      FROM "User" u
-     LEFT JOIN "Creator" c ON c."userId" = u.id AND c."isActive" = true
+     LEFT JOIN "Creator" c ON c.user_id = u.id AND c.is_active = true
      WHERE u."clerkId" = $1 LIMIT 1`,
     [clerkId]
   );
@@ -190,7 +190,7 @@ async function handleList(pool, ctx) {
 async function handleGet(pool, id, ctx = null) {
   if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
   const { rows } = await pool.query(
-    `SELECT i.*, c.name AS creator_name, c.slug AS creator_slug, c."avatarUrl" AS creator_avatar
+    `SELECT i.*, c.name AS creator_name, c.slug AS creator_slug, c.avatar_url AS creator_avatar
      FROM "Itinerary" i
      LEFT JOIN "Creator" c ON c.id = i."creatorId"
      WHERE i.id = $1 LIMIT 1`,

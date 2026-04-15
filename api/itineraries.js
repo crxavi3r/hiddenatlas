@@ -42,9 +42,9 @@ export default async function handler(req, res) {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
       const { rows } = await pool.query(
-        `SELECT i.slug AS itinerary_slug, c.name, c.slug, c."avatarUrl"
+        `SELECT i.slug AS itinerary_slug, c.name, c.slug, c.avatar_url AS "avatarUrl"
          FROM "Itinerary" i
-         JOIN "Creator" c ON c.id = i."creatorId" AND c."isActive" = true
+         JOIN "Creator" c ON c.id = i."creatorId" AND c.is_active = true
          WHERE i.status = 'published'`
       );
       const creators = {};

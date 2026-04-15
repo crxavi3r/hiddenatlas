@@ -27,7 +27,7 @@ async function resolveUser(authHeader, pool) {
     const { rows } = await pool.query(
       `SELECT u.id, u.email, c.id as "creatorId"
        FROM "User" u
-       LEFT JOIN "Creator" c ON c."userId" = u.id AND c."isActive" = true
+       LEFT JOIN "Creator" c ON c.user_id = u.id AND c.is_active = true
        WHERE u."clerkId" = $1 LIMIT 1`,
       [clerkId]
     );
@@ -106,8 +106,8 @@ export default async function handler(req, res) {
 // ── List all active creators ──────────────────────────────────────────────────
 async function handleList(pool) {
   const { rows } = await pool.query(`
-    SELECT c.id, c.name, c.slug, c."avatarUrl", c.bio, c."isActive",
-           c."userId", c."createdAt",
+    SELECT c.id, c.name, c.slug, c.avatar_url AS "avatarUrl", c.bio, c.is_active AS "isActive",
+           c.user_id AS "userId", c.created_at AS "createdAt",
            COUNT(i.id) FILTER (WHERE i.status = 'published' AND i."isPrivate" = false)::int AS itinerary_count
     FROM "Creator" c
     LEFT JOIN "Itinerary" i ON i."creatorId" = c.id
@@ -120,8 +120,8 @@ async function handleList(pool) {
 // ── Get creator by slug + their published itineraries ─────────────────────────
 async function handleGet(pool, slug) {
   const { rows: creatorRows } = await pool.query(
-    `SELECT id, name, slug, "avatarUrl", bio, "isActive", "createdAt"
-     FROM "Creator" WHERE slug = $1 AND "isActive" = true LIMIT 1`,
+    `SELECT id, name, slug, avatar_url AS "avatarUrl", bio, is_active AS "isActive", created_at AS "createdAt"
+     FROM "Creator" WHERE slug = $1 AND is_active = true LIMIT 1`,
     [slug]
   );
   if (!creatorRows.length) {
@@ -150,7 +150,7 @@ async function handleCreate(pool, body) {
     const err = new Error('name and slug are required'); err.status = 400; throw err;
   }
   const { rows } = await pool.query(
-    `INSERT INTO "Creator" (name, slug, "avatarUrl", bio, "userId", "isActive", "updatedAt")
+    `INSERT INTO "Creator" (name, slug, avatar_url, bio, user_id, is_active, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, NOW())
      RETURNING *`,
     [name, slug, avatarUrl, bio, userId || null, isActive]
@@ -167,15 +167,15 @@ async function handleUpdate(pool, id, body, ctx) {
 
   if (name      !== undefined) { updates.push(`name = $${idx++}`);        values.push(name); }
   if (slug      !== undefined) { updates.push(`slug = $${idx++}`);        values.push(slug); }
-  if (avatarUrl !== undefined) { updates.push(`"avatarUrl" = $${idx++}`); values.push(avatarUrl); }
-  if (bio       !== undefined) { updates.push(`bio = $${idx++}`);         values.push(bio); }
+  if (avatarUrl !== undefined) { updates.push(`avatar_url = $${idx++}`); values.push(avatarUrl); }
+  if (bio       !== undefined) { updates.push(`bio = $${idx++}`);        values.push(bio); }
   // Only admins can re-assign userId
   if (userId !== undefined && ctx.isAdmin) {
-    updates.push(`"userId" = $${idx++}`);
+    updates.push(`user_id = $${idx++}`);
     values.push(userId || null);
   }
   if (isActive  !== undefined && ctx.isAdmin) {
-    updates.push(`"isActive" = $${idx++}`);
+    updates.push(`is_active = $${idx++}`);
     values.push(isActive);
   }
 
@@ -183,7 +183,7 @@ async function handleUpdate(pool, id, body, ctx) {
     const err = new Error('No fields to update'); err.status = 400; throw err;
   }
 
-  updates.push(`"updatedAt" = NOW()`);
+  updates.push(`updated_at = NOW()`);
   values.push(id);
 
   const { rows } = await pool.query(
