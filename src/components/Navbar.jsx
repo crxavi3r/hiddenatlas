@@ -5,7 +5,7 @@ import {
   SignedIn, SignedOut,
   useUser, useClerk,
 } from '@clerk/clerk-react';
-import { useUserCtx } from '../lib/useUserCtx.jsx';
+import { useAccess } from '../lib/useUserCtx.jsx';
 
 const publicLinks = [
   { label: 'Itineraries', href: '/itineraries' },
@@ -14,9 +14,11 @@ const authedLinks = [
   { label: 'My Trips', href: '/my-trips' },
 ];
 
+// ── Desktop account dropdown ───────────────────────────────────────────────────
 function UserAvatar() {
   const { user } = useUser();
   const { signOut, openUserProfile } = useClerk();
+  const { canAccessBackoffice, isAdmin } = useAccess();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -41,6 +43,14 @@ function UserAvatar() {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     fontSize: '13px', fontWeight: '600', fontFamily: "'Inter', system-ui, sans-serif",
     cursor: 'pointer', border: 'none', padding: 0, flexShrink: 0, overflow: 'hidden',
+  };
+
+  const menuItemStyle = {
+    display: 'block', width: '100%', padding: '11px 16px',
+    background: 'none', border: 'none', cursor: 'pointer',
+    fontSize: '13px', fontWeight: '500', color: '#1C1A16',
+    textAlign: 'left', borderBottom: '1px solid #E8E3DA',
+    textDecoration: 'none',
   };
 
   return (
@@ -72,17 +82,25 @@ function UserAvatar() {
           {/* Manage account */}
           <button
             onClick={() => { openUserProfile(); setOpen(false); }}
-            style={{
-              display: 'block', width: '100%', padding: '11px 16px',
-              background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: '13px', fontWeight: '500', color: '#1C1A16',
-              textAlign: 'left', borderBottom: '1px solid #E8E3DA',
-            }}
+            style={menuItemStyle}
             onMouseEnter={e => e.currentTarget.style.background = '#F4F1EC'}
             onMouseLeave={e => e.currentTarget.style.background = 'none'}
           >
             Manage account
           </button>
+
+          {/* Backoffice — visible for admin and designer users */}
+          {canAccessBackoffice && (
+            <Link
+              to="/admin"
+              onClick={() => setOpen(false)}
+              style={menuItemStyle}
+              onMouseEnter={e => e.currentTarget.style.background = '#F4F1EC'}
+              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+            >
+              {isAdmin ? 'Backoffice' : 'Designer Portal'}
+            </Link>
+          )}
 
           {/* Sign out */}
           <button
@@ -104,9 +122,11 @@ function UserAvatar() {
   );
 }
 
+// ── Mobile auth section ────────────────────────────────────────────────────────
 function MobileUserSection({ onClose }) {
   const { user } = useUser();
   const { signOut } = useClerk();
+  const { canAccessBackoffice, isAdmin } = useAccess();
 
   if (!user) return null;
 
@@ -115,20 +135,27 @@ function MobileUserSection({ onClose }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       <span style={{ fontSize: '13px', color: '#8C8070', letterSpacing: '0.2px' }}>{name}</span>
+      {canAccessBackoffice && (
+        <Link
+          to="/admin"
+          onClick={onClose}
+          style={{
+            padding: '14px', borderRadius: '4px',
+            border: '1px solid #1B6B65', background: '#EFF6F5',
+            fontSize: '14px', fontWeight: '600', color: '#1B6B65',
+            textAlign: 'center', textDecoration: 'none', display: 'block',
+          }}
+        >
+          {isAdmin ? 'Backoffice' : 'Designer Portal'}
+        </Link>
+      )}
       <button
         onClick={() => { signOut({ redirectUrl: '/' }); onClose(); }}
         style={{
-          padding: '14px',
-          borderRadius: '4px',
-          border: '1px solid #D4CCBF',
-          background: 'transparent',
-          fontSize: '14px',
-          fontWeight: '600',
-          color: '#1C1A16',
-          cursor: 'pointer',
-          textAlign: 'center',
-          width: '100%',
-          boxSizing: 'border-box',
+          padding: '14px', borderRadius: '4px',
+          border: '1px solid #D4CCBF', background: 'transparent',
+          fontSize: '14px', fontWeight: '600', color: '#1C1A16',
+          cursor: 'pointer', textAlign: 'center', width: '100%', boxSizing: 'border-box',
         }}
       >
         Sign out
@@ -137,13 +164,14 @@ function MobileUserSection({ onClose }) {
   );
 }
 
+// ── Navbar ─────────────────────────────────────────────────────────────────────
 export default function Navbar() {
   const [scrolled,  setScrolled]  = useState(false);
   const [menuOpen,  setMenuOpen]  = useState(false);
   const location = useLocation();
   const isHome = location.pathname === '/';
   const { user } = useUser();
-  const { isAdmin, isDesigner } = useUserCtx();
+  const { canAccessBackoffice, isAdmin } = useAccess();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 60);
@@ -160,6 +188,12 @@ export default function Navbar() {
   }, [menuOpen]);
 
   const isTransparent = isHome && !scrolled && !menuOpen;
+
+  const navLinkStyle = {
+    fontSize: '13.5px', fontWeight: '500', letterSpacing: '0.3px',
+    color: isTransparent ? 'rgba(255,255,255,0.85)' : '#4A433A',
+    textDecoration: 'none', transition: 'color 0.2s', whiteSpace: 'nowrap',
+  };
 
   return (
     <>
@@ -192,25 +226,17 @@ export default function Navbar() {
               <Link
                 key={link.href}
                 to={link.href}
-                style={{
-                  fontSize: '13.5px', fontWeight: '500', letterSpacing: '0.3px',
-                  color: isTransparent ? 'rgba(255,255,255,0.85)' : '#4A433A',
-                  textDecoration: 'none', transition: 'color 0.2s', whiteSpace: 'nowrap',
-                }}
+                style={navLinkStyle}
                 onMouseEnter={e => e.target.style.color = isTransparent ? 'white' : '#1B6B65'}
                 onMouseLeave={e => e.target.style.color = isTransparent ? 'rgba(255,255,255,0.85)' : '#4A433A'}
               >
                 {link.label}
               </Link>
             ))}
-            {isDesigner && (
+            {canAccessBackoffice && (
               <Link
                 to="/admin"
-                style={{
-                  fontSize: '13.5px', fontWeight: '500', letterSpacing: '0.3px',
-                  color: isTransparent ? 'rgba(255,255,255,0.85)' : '#4A433A',
-                  textDecoration: 'none', transition: 'color 0.2s', whiteSpace: 'nowrap',
-                }}
+                style={navLinkStyle}
                 onMouseEnter={e => e.target.style.color = isTransparent ? 'white' : '#1B6B65'}
                 onMouseLeave={e => e.target.style.color = isTransparent ? 'rgba(255,255,255,0.85)' : '#4A433A'}
               >
@@ -219,7 +245,7 @@ export default function Navbar() {
             )}
           </nav>
 
-          {/* Right: CTA + auth */}
+          {/* Right: auth */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
 
             {/* ── Auth — desktop ── */}
@@ -316,7 +342,7 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-            {isDesigner && (
+            {canAccessBackoffice && (
               <Link
                 to="/admin"
                 style={{
@@ -345,29 +371,17 @@ export default function Navbar() {
             }}>
               <SignedOut>
                 <Link to="/sign-in" style={{
-                  display: 'block',
-                  padding: '14px',
-                  borderRadius: '4px',
-                  border: '1px solid #D4CCBF',
-                  background: 'transparent',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  color: '#1C1A16',
-                  textAlign: 'center',
-                  textDecoration: 'none',
+                  display: 'block', padding: '14px', borderRadius: '4px',
+                  border: '1px solid #D4CCBF', background: 'transparent',
+                  fontSize: '14px', fontWeight: '600', color: '#1C1A16',
+                  textAlign: 'center', textDecoration: 'none',
                 }}>
                   Sign in
                 </Link>
                 <Link to="/sign-up" style={{
-                  display: 'block',
-                  padding: '14px',
-                  borderRadius: '4px',
-                  background: '#1C1A16',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  color: 'white',
-                  textAlign: 'center',
-                  textDecoration: 'none',
+                  display: 'block', padding: '14px', borderRadius: '4px',
+                  background: '#1C1A16', fontSize: '14px', fontWeight: '600',
+                  color: 'white', textAlign: 'center', textDecoration: 'none',
                 }}>
                   Create account
                 </Link>

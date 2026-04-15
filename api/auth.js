@@ -26,7 +26,22 @@ async function handleMe(req, res) {
       creatorSlug = rows[0]?.slug ?? null;
     }
 
-    return res.status(200).json({ role: ctx.role, creatorSlug, creatorId: ctx.creatorId, email: ctx.email });
+    console.log('[api/auth/me] resolved ctx:', {
+      userId:    ctx.userId,
+      email:     ctx.email,
+      role:      ctx.role,
+      isAdmin:   ctx.isAdmin,
+      isDesigner: ctx.isDesigner,
+      creatorId: ctx.creatorId,
+    });
+    return res.status(200).json({
+      role:       ctx.role,
+      email:      ctx.email,
+      isAdmin:    ctx.isAdmin,
+      isDesigner: ctx.isDesigner,
+      creatorSlug,
+      creatorId:  ctx.creatorId,
+    });
   } catch (err) {
     console.error('[api/auth/me]', err.message);
     return res.status(500).json({ error: 'Database error' });

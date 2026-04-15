@@ -1,8 +1,27 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { isAdminEmail } from './adminEmails.js';
 
-const DEFAULT = { role: 'user', email: null, isAdmin: false, isDesigner: false, creatorSlug: null, creatorId: null, loading: true };
+// ── Single source of truth for access control ─────────────────────────────────
+// All admin/designer/backoffice visibility in the UI derives from this context.
+// Values of isAdmin and isDesigner are computed server-side in resolveUserCtx.js
+// and returned by /api/auth?action=me — the client does not re-derive them.
+//
+// Admin rules (enforced in api/_lib/resolveUserCtx.js + api/_lib/adminEmails.js):
+//   isAdmin    = role === 'admin' OR email ∈ ADMIN_EMAILS
+//   isDesigner = role === 'designer' OR isAdmin OR has active Creator profile
+//   canAccessBackoffice = isAdmin OR isDesigner
+
+const DEFAULT = {
+  isLoggedIn:          false,
+  isAdmin:             false,
+  isDesigner:          false,
+  canAccessBackoffice: false,
+  role:                'user',
+  email:               null,
+  creatorSlug:         null,
+  creatorId:           null,
+  loading:             true,
+};
 
 const UserCtx = createContext(DEFAULT);
 
@@ -12,38 +31,59 @@ export function UserCtxProvider({ children }) {
 
   useEffect(() => {
     if (!isLoaded) return;
+
     if (!isSignedIn) {
-      setCtx({ role: 'user', email: null, isAdmin: false, isDesigner: false, creatorSlug: null, creatorId: null, loading: false });
+      const next = { ...DEFAULT, loading: false };
+      console.log('[useAccess] signed out', next);
+      setCtx(next);
       return;
     }
+
     getToken()
       .then(token =>
         fetch('/api/auth?action=me', { headers: { Authorization: `Bearer ${token}` } })
           .then(r => (r.ok ? r.json() : null))
           .then(data => {
-            const role    = data?.role ?? 'user';
-            const email   = data?.email ?? null;
-            const isAdmin = role === 'admin' || isAdminEmail(email);
-            setCtx({
-              role,
-              email,
+            if (!data) {
+              const next = { ...DEFAULT, isLoggedIn: true, loading: false };
+              console.warn('[useAccess] api/me returned null or error', next);
+              setCtx(next);
+              return;
+            }
+
+            // Trust server-computed values — do not re-derive on the client.
+            const isAdmin    = data.isAdmin    ?? false;
+            const isDesigner = data.isDesigner ?? false;
+            const next = {
+              isLoggedIn:          true,
               isAdmin,
-              // Designer if: explicit role, admin, OR has an active Creator profile
-              isDesigner:  role === 'designer' || isAdmin || !!data?.creatorSlug,
-              creatorSlug: data?.creatorSlug ?? null,
-              creatorId:   data?.creatorId   ?? null,
-              loading:     false,
-            });
+              isDesigner,
+              canAccessBackoffice: isAdmin || isDesigner,
+              role:                data.role        ?? 'user',
+              email:               data.email       ?? null,
+              creatorSlug:         data.creatorSlug ?? null,
+              creatorId:           data.creatorId   ?? null,
+              loading:             false,
+            };
+            console.log('[useAccess] resolved', next);
+            setCtx(next);
           })
       )
-      .catch(() =>
-        setCtx({ role: 'user', email: null, isAdmin: false, isDesigner: false, creatorSlug: null, creatorId: null, loading: false })
-      );
+      .catch(err => {
+        console.error('[useAccess] fetch error', err);
+        setCtx({ ...DEFAULT, isLoggedIn: true, loading: false });
+      });
   }, [isLoaded, isSignedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <UserCtx.Provider value={ctx}>{children}</UserCtx.Provider>;
 }
 
+// Primary hook — use this everywhere.
+export function useAccess() {
+  return useContext(UserCtx);
+}
+
+// Backward-compat alias — all existing admin pages that import useUserCtx keep working.
 export function useUserCtx() {
   return useContext(UserCtx);
 }
