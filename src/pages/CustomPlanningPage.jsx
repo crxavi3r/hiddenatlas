@@ -165,15 +165,17 @@ export default function CustomPlanningPage() {
   const [designer, setDesigner]   = useState(null);
   const [designers, setDesigners] = useState(null); // null = loading
 
-  // Load a specific designer when ?designer=slug is present
+  // Load a specific designer when ?designer=slug is present.
+  // Depends on the slug string so it re-runs when the URL param changes
+  // (e.g. user picks a designer from the picker or arrives via a direct link).
+  const designerSlug = searchParams.get('designer');
   useEffect(() => {
-    const slug = searchParams.get('designer');
-    if (!slug) return;
-    fetch(`/api/creators?action=get&slug=${encodeURIComponent(slug)}`)
+    if (!designerSlug) { setDesigner(null); return; }
+    fetch(`/api/creators?action=get&slug=${encodeURIComponent(designerSlug)}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data?.creator) setDesigner(data.creator); })
       .catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [designerSlug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch all active designers for the picker
   useEffect(() => {
@@ -290,6 +292,7 @@ export default function CustomPlanningPage() {
         const res = await api.post('/api/checkout?action=custom-session', {
           tierKey: tier.key,
           formData,
+          designerSlug: designer?.slug ?? null,
         });
         const data = await res.json();
         if (!res.ok || !data.url) throw new Error(data.error || 'Failed to start checkout. Please try again.');
@@ -302,7 +305,10 @@ export default function CustomPlanningPage() {
     } else {
       // 13+ review-first flow
       try {
-        const res = await api.post('/api/custom-planning', formData);
+        const res = await api.post('/api/custom-planning', {
+          ...formData,
+          designerSlug: designer?.slug ?? null,
+        });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body.error || 'Something went wrong. Please try again.');
@@ -478,19 +484,34 @@ export default function CustomPlanningPage() {
             Work directly with a travel designer to create a journey tailored to your trip.
           </p>
           {designer ? (
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: '12px',
-              background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.25)',
-              borderRadius: '50px', padding: '8px 20px 8px 8px',
-              backdropFilter: 'blur(8px)',
-            }}>
-              {designer.avatarUrl
-                ? <img src={designer.avatarUrl} alt={designer.name} style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                : <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(27,107,101,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><User size={14} color="white" /></div>
-              }
-              <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.9)', fontWeight: '500' }}>
-                Planning your trip with <strong style={{ fontWeight: '700' }}>{designer.name}</strong>
-              </span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: '12px',
+                background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.25)',
+                borderRadius: '50px', padding: '8px 20px 8px 8px',
+                backdropFilter: 'blur(8px)',
+              }}>
+                {designer.avatarUrl
+                  ? <img src={designer.avatarUrl} alt={designer.name} style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                  : <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(27,107,101,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><User size={14} color="white" /></div>
+                }
+                <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.9)', fontWeight: '500' }}>
+                  Planning your trip with <strong style={{ fontWeight: '700' }}>{designer.name}</strong>
+                </span>
+              </div>
+              <button
+                onClick={() => navigate('/custom', { replace: true })}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: '12px', color: 'rgba(255,255,255,0.45)',
+                  textDecoration: 'underline', padding: '0',
+                  transition: 'color 0.2s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.color = 'rgba(255,255,255,0.75)'}
+                onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.45)'}
+              >
+                Change designer
+              </button>
             </div>
           ) : (
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -569,7 +590,11 @@ export default function CustomPlanningPage() {
                 return (
                   <button
                     key={d.id}
-                    onClick={() => navigate(`/custom?designer=${encodeURIComponent(d.slug)}`)}
+                    onClick={() => {
+                      setDesigner(d); // instant UI — hides the picker immediately
+                      navigate(`/custom?designer=${encodeURIComponent(d.slug)}`, { replace: true });
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
                     style={{
                       background: 'white', border: '1px solid #E8E3DA', borderRadius: '10px',
                       padding: '24px', textAlign: 'left', cursor: 'pointer',

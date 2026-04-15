@@ -32,6 +32,7 @@ export default async function handler(req, res) {
     budget,
     style,
     notes,
+    designerSlug,  // optional — identifies the selected travel designer
   } = req.body || {};
 
   if (!name?.trim() || !email?.trim()) {
@@ -143,6 +144,34 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── Resolve designer email (from DB — never trust frontend data) ─────────────
+  // Must run before pool.end() so we can reuse the open connection.
+  const FALLBACK_EMAIL = 'contact@hiddenatlas.travel';
+  let designerEmail = null;
+  let designerName  = null;
+
+  if (designerSlug?.trim()) {
+    try {
+      const { rows: creatorRows } = await pool.query(
+        `SELECT c.name, u.email
+         FROM "Creator" c
+         LEFT JOIN "User" u ON u.id = c.user_id
+         WHERE c.slug = $1 AND c.is_active = true
+         LIMIT 1`,
+        [designerSlug.trim()]
+      );
+      if (creatorRows.length && creatorRows[0].email) {
+        designerEmail = creatorRows[0].email.trim().toLowerCase();
+        designerName  = creatorRows[0].name;
+        console.log(`[custom-planning] Resolved designer email — slug=${designerSlug} email=${designerEmail}`);
+      } else {
+        console.warn(`[custom-planning] Designer not found or has no email — slug=${designerSlug} — using fallback`);
+      }
+    } catch (err) {
+      console.warn('[custom-planning] Designer email lookup failed:', err.message, '— using fallback');
+    }
+  }
+
   await pool.end().catch(() => {});
 
   // ── Email notifications ────────────────────────────────────────────────────
@@ -161,18 +190,27 @@ export default async function handler(req, res) {
     const travelStyle = Array.isArray(style) && style.length ? style.join(', ') : 'None selected';
     const FROM = 'HiddenAtlas <brief@hiddenatlas.travel>';
 
-    // ── 1) Admin notification ──────────────────────────────────────────────
-    const ADMIN_TO = 'contact@hiddenatlas.travel';
+    // ── 1) Designer notification ───────────────────────────────────────────────
+    // Primary recipient: the selected designer's email.
+    // Fallback: contact@hiddenatlas.travel (if no designer selected or no email on file).
+    // BCC: contact@hiddenatlas.travel when the primary is a designer (platform tracking).
+    const primaryTo  = designerEmail ?? FALLBACK_EMAIL;
+    const isFallback = !designerEmail;
+    const subjectLabel = designerName
+      ? `New custom trip request for ${designerName}`
+      : `New Custom Journey Request – ${destination || 'New Inquiry'}`;
+
     try {
-      console.log(`[custom-planning] Sending admin email from=${FROM} to=${ADMIN_TO}`);
-      const adminResult = await resend.emails.send({
-        from: FROM,
-        to:   [ADMIN_TO],
-        subject: `New Custom Journey Request – ${destination || 'New Inquiry'}`,
+      console.log(`[custom-planning] Sending designer notification from=${FROM} to=${primaryTo} bcc=${isFallback ? 'none' : FALLBACK_EMAIL}`);
+      const emailPayload = {
+        from:    FROM,
+        to:      [primaryTo],
+        subject: subjectLabel,
+        ...(isFallback ? {} : { bcc: [FALLBACK_EMAIL] }),
         html: `
           <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;">
-            <h2 style="color:#1B6B65;margin-bottom:4px;">New Custom Journey Request</h2>
-            <p style="color:#8C8070;font-size:13px;margin-top:0;">Submitted via HiddenAtlas custom planning form</p>
+            <h2 style="color:#1B6B65;margin-bottom:4px;">${designerName ? `New trip request for ${designerName}` : 'New Custom Journey Request'}</h2>
+            <p style="color:#8C8070;font-size:13px;margin-top:0;">Submitted via HiddenAtlas · ${isFallback ? 'No designer selected' : `Designer: ${designerName}`}</p>
             <hr style="border:none;border-top:1px solid #E8E3DA;margin:16px 0;" />
 
             <table style="width:100%;border-collapse:collapse;font-size:14px;">
@@ -210,17 +248,19 @@ export default async function handler(req, res) {
             <p style="color:#B5AA99;font-size:11px;margin-top:16px;">Record id: ${insertedId}</p>
           </div>
         `,
-      });
+      };
+
+      const adminResult = await resend.emails.send(emailPayload);
 
       if (adminResult.error) {
-        emailError = `Admin email — Resend API error: ${JSON.stringify(adminResult.error)}`;
+        emailError = `Designer notification — Resend API error: ${JSON.stringify(adminResult.error)}`;
         console.error(`[custom-planning] ${emailError}`);
       } else {
         adminEmailSent = true;
-        console.log(`[custom-planning] Admin email OK — Resend id=${adminResult.data?.id} request=${insertedId}`);
+        console.log(`[custom-planning] Designer notification OK — Resend id=${adminResult.data?.id} to=${primaryTo} request=${insertedId}`);
       }
     } catch (err) {
-      emailError = `Admin email exception: ${err.message || 'Unknown error'}`;
+      emailError = `Designer notification exception: ${err.message || 'Unknown error'}`;
       console.error('[custom-planning]', emailError);
     }
 
@@ -236,10 +276,10 @@ export default async function handler(req, res) {
           <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;">
             <h2 style="color:#1B6B65;">Hi ${name.split(' ')[0]},</h2>
             <p style="font-size:15px;line-height:1.6;">
-              We've received your travel brief and one of our planners will review it shortly.
+              We've received your travel brief${designerName ? ` for <strong>${designerName}</strong>` : ''} and will review it shortly.
             </p>
             <p style="font-size:15px;line-height:1.6;">
-              We'll reach out within 48 hours to start designing your itinerary.
+              ${designerName ? `${designerName} will` : 'A travel designer will'} be in touch within 48 hours to start planning your trip.
             </p>
             <p style="font-size:15px;line-height:1.6;">
               In the meantime you can explore our curated journeys here:<br/>
