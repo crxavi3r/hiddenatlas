@@ -5,6 +5,12 @@ import { LayoutDashboard, Users, CreditCard, Download, ExternalLink, Inbox, Menu
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useUserCtx } from '../lib/useUserCtx.jsx';
 
+// Must stay in sync with src/components/Navbar.jsx — same list, same logic.
+const HARDCODED_ADMIN_EMAILS = new Set([
+  'cristiano.xavier@hiddenatlas.travel',
+  'cristiano.xavier@outlook.com',
+]);
+
 const NAV = [
   { label: 'Dashboard',       path: '/admin',                   icon: LayoutDashboard, end: true },
   { label: 'Itineraries CMS', path: '/admin/itineraries',        icon: Map },
@@ -77,18 +83,47 @@ function SidebarContent({ onClose, isAdmin, creatorId }) {
 }
 
 export default function AdminPage() {
-  const { isLoaded, isSignedIn } = useUser();
+  const { isLoaded, isSignedIn, user } = useUser();
   const isMobile  = useIsMobile();
   const [menuOpen, setMenuOpen] = useState(false);
-  const { isAdmin, isDesigner, creatorId, loading: ctxLoading } = useUserCtx();
+  const { isAdmin: ctxIsAdmin, isDesigner: ctxIsDesigner, creatorId, loading: ctxLoading } = useUserCtx();
+
+  // Direct email check — same pattern as Navbar, does not depend on API/context.
+  const primaryEmail = (
+    user?.emailAddresses?.find(e => e.id === user.primaryEmailAddressId)?.emailAddress
+    ?? user?.emailAddresses?.[0]?.emailAddress
+    ?? ''
+  ).toLowerCase().trim();
+
+  const isAdmin    = HARDCODED_ADMIN_EMAILS.has(primaryEmail) || ctxIsAdmin;
+  const isDesigner = ctxIsDesigner; // requires active Creator row — context only
+  const canAccessBackoffice = isAdmin || isDesigner;
+
+  // Debug — remove once access is confirmed stable
+  console.log('[AdminPage guard]', {
+    primaryEmail,
+    isAdmin,
+    isDesigner,
+    canAccessBackoffice,
+    ctxIsAdmin,
+    ctxIsDesigner,
+    ctxLoading,
+    isSignedIn,
+  });
 
   if (!isLoaded || ctxLoading) {
     return <div style={{ minHeight: '100vh', background: '#111110', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #1B6B65', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
     </div>;
   }
-  if (!isSignedIn) return <Navigate to="/" replace />;
-  if (!isDesigner) return <Navigate to="/" replace />;
+  if (!isSignedIn) {
+    console.log('[AdminPage guard] redirect → / (not signed in)');
+    return <Navigate to="/" replace />;
+  }
+  if (!canAccessBackoffice) {
+    console.log('[AdminPage guard] redirect → / (canAccessBackoffice=false)', { primaryEmail, isAdmin, isDesigner });
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#F4F1EC' }}>
