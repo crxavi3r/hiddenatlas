@@ -57,8 +57,10 @@ export default function CreatorProfilePage() {
     );
   }
 
-  const freeItineraries    = itineraries.filter(it => it.type === 'free' || it.accessType === 'free');
-  const premiumItineraries = itineraries.filter(it => it.type === 'premium' || (it.type !== 'free' && it.accessType === 'paid'));
+  // Exclude collection/parent itineraries whose child variants are shown instead
+  const leafItineraries    = itineraries.filter(it => !it.isCollection);
+  const freeItineraries    = leafItineraries.filter(it => it.type === 'free' || it.accessType === 'free');
+  const premiumItineraries = leafItineraries.filter(it => it.type === 'premium' || (it.type !== 'free' && it.accessType === 'paid'));
 
   return (
     <div style={{ background: '#FAFAF8', paddingTop: '72px' }}>
@@ -116,7 +118,7 @@ export default function CreatorProfilePage() {
             </p>
           )}
           <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.45)', marginTop: '16px' }}>
-            {itineraries.length} {itineraries.length === 1 ? 'itinerary' : 'itineraries'}
+            {leafItineraries.length} {leafItineraries.length === 1 ? 'itinerary' : 'itineraries'}
           </p>
         </div>
       </section>
@@ -124,7 +126,7 @@ export default function CreatorProfilePage() {
       {/* ── Itineraries ── */}
       <section style={{ maxWidth: '1280px', margin: '0 auto', padding: 'clamp(48px, 7vw, 80px) 24px' }}>
 
-        {itineraries.length === 0 ? (
+        {leafItineraries.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 24px' }}>
             <p style={{ fontSize: '16px', color: '#B5AA99' }}>No published itineraries yet.</p>
             <Link to="/itineraries" style={{ color: '#1B6B65', fontWeight: '600', textDecoration: 'none',

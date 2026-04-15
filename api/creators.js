@@ -141,7 +141,7 @@ async function handleGet(pool, slug) {
 
   const { rows: itineraryRows } = await pool.query(
     `SELECT id, slug, title, subtitle, country, destination, "durationDays",
-            "coverImage", type, "accessType", price, status
+            "coverImage", type, "accessType", price, status, "isCollection"
      FROM "Itinerary"
      WHERE creator_id = $1
        AND status = 'published'
