@@ -3,9 +3,16 @@ import { Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import {
   SignedIn, SignedOut,
-  useUser, useClerk,
+  useUser, useClerk, useAuth,
 } from '@clerk/clerk-react';
 import { useAccess } from '../lib/useUserCtx.jsx';
+
+// Hardcoded admin emails — checked directly against Clerk's user data.
+// This does NOT depend on any API call or context being ready.
+const HARDCODED_ADMIN_EMAILS = new Set([
+  'cristiano.xavier@hiddenatlas.travel',
+  'cristiano.xavier@outlook.com',
+]);
 
 const publicLinks = [
   { label: 'Itineraries', href: '/itineraries' },
@@ -18,9 +25,49 @@ const authedLinks = [
 function UserAvatar() {
   const { user } = useUser();
   const { signOut, openUserProfile } = useClerk();
-  const { canAccessBackoffice, isAdmin } = useAccess();
+  const { getToken } = useAuth();
+  // Context — may be false if the API call failed; we layer a direct check on top.
+  const ctxAccess = useAccess();
+  const [isDesigner, setIsDesigner] = useState(false);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+
+  // Derive admin directly from Clerk's authenticated user data.
+  // This never fails because the email comes from Clerk, not our DB.
+  const primaryEmail = (
+    user?.emailAddresses?.find(e => e.id === user.primaryEmailAddressId)?.emailAddress
+    ?? user?.emailAddresses?.[0]?.emailAddress
+    ?? ''
+  ).toLowerCase().trim();
+
+  const isAdmin = HARDCODED_ADMIN_EMAILS.has(primaryEmail) || ctxAccess.isAdmin;
+  const canAccessBackoffice = isAdmin || isDesigner || ctxAccess.canAccessBackoffice;
+
+  // Check designer status via API (needed for non-admin creators).
+  useEffect(() => {
+    if (!user || isAdmin) return; // admins already have access — skip
+    getToken()
+      .then(token =>
+        fetch('/api/auth?action=me', { headers: { Authorization: `Bearer ${token}` } })
+          .then(r => r.ok ? r.json() : null)
+      )
+      .then(data => setIsDesigner(data?.isDesigner ?? false))
+      .catch(() => {});
+  }, [user?.id, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Debug — remove once access is confirmed stable
+  useEffect(() => {
+    if (!user) return;
+    console.log('[UserAvatar access]', {
+      primaryEmail,
+      isAdmin,
+      isDesigner,
+      canAccessBackoffice,
+      ctxIsAdmin: ctxAccess.isAdmin,
+      ctxIsDesigner: ctxAccess.isDesigner,
+      ctxCanAccessBackoffice: ctxAccess.canAccessBackoffice,
+    });
+  }, [primaryEmail, isAdmin, isDesigner, canAccessBackoffice]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     function handleClick(e) {
@@ -126,7 +173,16 @@ function UserAvatar() {
 function MobileUserSection({ onClose }) {
   const { user } = useUser();
   const { signOut } = useClerk();
-  const { canAccessBackoffice, isAdmin } = useAccess();
+  const ctxAccess = useAccess();
+
+  const primaryEmail = (
+    user?.emailAddresses?.find(e => e.id === user.primaryEmailAddressId)?.emailAddress
+    ?? user?.emailAddresses?.[0]?.emailAddress
+    ?? ''
+  ).toLowerCase().trim();
+
+  const isAdmin = HARDCODED_ADMIN_EMAILS.has(primaryEmail) || ctxAccess.isAdmin;
+  const canAccessBackoffice = isAdmin || ctxAccess.canAccessBackoffice;
 
   if (!user) return null;
 
@@ -171,7 +227,16 @@ export default function Navbar() {
   const location = useLocation();
   const isHome = location.pathname === '/';
   const { user } = useUser();
-  const { canAccessBackoffice, isAdmin } = useAccess();
+  const ctxAccess = useAccess();
+
+  const primaryEmail = (
+    user?.emailAddresses?.find(e => e.id === user.primaryEmailAddressId)?.emailAddress
+    ?? user?.emailAddresses?.[0]?.emailAddress
+    ?? ''
+  ).toLowerCase().trim();
+
+  const isAdmin = HARDCODED_ADMIN_EMAILS.has(primaryEmail) || ctxAccess.isAdmin;
+  const canAccessBackoffice = isAdmin || ctxAccess.canAccessBackoffice;
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 60);
