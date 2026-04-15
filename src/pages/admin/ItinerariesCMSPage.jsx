@@ -248,7 +248,7 @@ export default function ItinerariesCMSPage() {
                         : filter === 'published' ? it.isPublished
                         : /* draft */              !it.isPublished;
         const typeOk    = typeFilter === 'all' ? true : getItineraryType(it) === typeFilter;
-        const creatorOk = !creatorFilter ? true : (it.creatorId === creatorFilter);
+        const creatorOk = !creatorFilter ? true : (it.creator_id === creatorFilter);
         return statusOk && typeOk && creatorOk;
       });
 
