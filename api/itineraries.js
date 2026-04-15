@@ -44,7 +44,7 @@ export default async function handler(req, res) {
       const { rows } = await pool.query(
         `SELECT i.slug AS itinerary_slug, c.name, c.slug, c.avatar_url AS "avatarUrl"
          FROM "Itinerary" i
-         JOIN "Creator" c ON c.id = i."creatorId" AND c.is_active = true
+         JOIN "Creator" c ON c.id = i.creator_id AND c.is_active = true
          WHERE i.status = 'published'`
       );
       const creators = {};

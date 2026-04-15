@@ -110,7 +110,7 @@ async function handleList(pool) {
            c.user_id AS "userId", c.created_at AS "createdAt",
            COUNT(i.id) FILTER (WHERE i.status = 'published' AND i."isPrivate" = false)::int AS itinerary_count
     FROM "Creator" c
-    LEFT JOIN "Itinerary" i ON i."creatorId" = c.id
+    LEFT JOIN "Itinerary" i ON i.creator_id = c.id
     GROUP BY c.id
     ORDER BY c.name ASC
   `);
@@ -133,7 +133,7 @@ async function handleGet(pool, slug) {
     `SELECT id, slug, title, subtitle, country, destination, "durationDays",
             "coverImage", type, "accessType", price, status
      FROM "Itinerary"
-     WHERE "creatorId" = $1
+     WHERE creator_id = $1
        AND status = 'published'
        AND "isPrivate" = false
      ORDER BY "createdAt" DESC`,

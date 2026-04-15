@@ -65,7 +65,7 @@ async function verifyUser(authHeader, pool) {
 async function assertOwnership(pool, itineraryId, ctx) {
   if (ctx.isAdmin) return; // admins bypass ownership
   const { rows } = await pool.query(
-    `SELECT "creatorId" FROM "Itinerary" WHERE id = $1 LIMIT 1`, [itineraryId]
+    `SELECT creator_id AS "creatorId" FROM "Itinerary" WHERE id = $1 LIMIT 1`, [itineraryId]
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
   if (rows[0].creatorId !== ctx.creatorId) {
@@ -166,7 +166,7 @@ function handlePricingOptions() {
 // Admin: all itineraries.  Creator: only itineraries assigned to them.
 // Returns creator name/slug alongside each row for display in the CMS table.
 async function handleList(pool, ctx) {
-  const creatorFilter = ctx.isAdmin ? '' : `WHERE i."creatorId" = $1`;
+  const creatorFilter = ctx.isAdmin ? '' : `WHERE i.creator_id = $1`;
   const params        = ctx.isAdmin ? [] : [ctx.creatorId];
 
   const { rows } = await pool.query(`
@@ -176,7 +176,7 @@ async function handleList(pool, ctx) {
            c.slug  AS creator_slug
     FROM "Itinerary" i
     LEFT JOIN "Purchase" p ON p."itineraryId" = i.id
-    LEFT JOIN "Creator"  c ON c.id = i."creatorId"
+    LEFT JOIN "Creator"  c ON c.id = i.creator_id
     ${creatorFilter}
     GROUP BY i.id, c.name, c.slug
     ORDER BY i."createdAt" DESC
@@ -192,14 +192,14 @@ async function handleGet(pool, id, ctx = null) {
   const { rows } = await pool.query(
     `SELECT i.*, c.name AS creator_name, c.slug AS creator_slug, c.avatar_url AS creator_avatar
      FROM "Itinerary" i
-     LEFT JOIN "Creator" c ON c.id = i."creatorId"
+     LEFT JOIN "Creator" c ON c.id = i.creator_id
      WHERE i.id = $1 LIMIT 1`,
     [id]
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
   const row = rows[0];
   // Non-admin creators can only view their own itineraries
-  if (ctx && !ctx.isAdmin && ctx.creatorId && row.creatorId !== ctx.creatorId) {
+  if (ctx && !ctx.isAdmin && ctx.creatorId && row.creator_id !== ctx.creatorId) {
     throw Object.assign(new Error('Forbidden'), { status: 403 });
   }
   return { itinerary: row };
@@ -246,7 +246,7 @@ async function handleCreate(pool, body, ctx) {
        (title, subtitle, slug, destination, country, region, "durationDays",
         "accessType", price, "stripePriceId", "pricingKey", "coverImage", description,
         type, "isPrivate", "isCollection", status, "isPublished", content, "schemaVersion", "updatedAt",
-        "creatorId")
+        creator_id)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,$16,$17,$18,1,NOW(),$19)
      RETURNING *`,
     [
@@ -318,7 +318,7 @@ async function handleUpdate(pool, id, body, ctx) {
        type            = COALESCE($17, type),
        "isPrivate"     = COALESCE($18::boolean, "isPrivate"),
        "isCollection"  = COALESCE($19::boolean, "isCollection"),
-       "creatorId"     = CASE WHEN $20 THEN $21::text ELSE "creatorId" END,
+       creator_id      = CASE WHEN $20 THEN $21::text ELSE creator_id END,
        "pdfStatus"     = 'stale',
        "updatedAt"     = NOW()
      WHERE id = $1
@@ -391,7 +391,7 @@ async function handleDuplicate(pool, id) {
        (title, subtitle, slug, destination, country, region, "durationDays",
         "accessType", price, "stripePriceId", "coverImage", description, "pdfUrl",
         type, "isPrivate", status, "isPublished", content, "schemaVersion", "updatedAt",
-        "creatorId")
+        creator_id)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'draft',false,$16,$17,NOW(),$18)
      RETURNING *`,
     [
@@ -412,7 +412,7 @@ async function handleDuplicate(pool, id) {
       base.isPrivate ?? false,
       JSON.stringify(base.content ?? {}),
       base.schemaVersion ?? 1,
-      base.creatorId ?? null,
+      base.creator_id ?? null,
     ]
   );
   return { itinerary: rows[0] };
@@ -887,7 +887,7 @@ async function handleDeleteAsset(pool, id, ctx) {
   if (!ctx.isAdmin) {
     // Verify the asset's itinerary belongs to this creator
     const { rows } = await pool.query(
-      `SELECT i."creatorId" FROM "ItineraryAsset" a
+      `SELECT i.creator_id AS "creatorId" FROM "ItineraryAsset" a
        JOIN "Itinerary" i ON i.id = a."itineraryId"
        WHERE a.id = $1 LIMIT 1`,
       [id]
@@ -904,7 +904,7 @@ async function handleToggleAsset(pool, id, ctx) {
   if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
   if (!ctx.isAdmin) {
     const { rows } = await pool.query(
-      `SELECT i."creatorId" FROM "ItineraryAsset" a
+      `SELECT i.creator_id AS "creatorId" FROM "ItineraryAsset" a
        JOIN "Itinerary" i ON i.id = a."itineraryId"
        WHERE a.id = $1 LIMIT 1`,
       [id]
