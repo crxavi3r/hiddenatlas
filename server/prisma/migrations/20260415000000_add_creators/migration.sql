@@ -8,20 +8,21 @@
 
 -- ── Creator ───────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS "Creator" (
-  "id"        TEXT        NOT NULL DEFAULT gen_random_uuid()::text,
-  "name"      TEXT        NOT NULL,
-  "slug"      TEXT        NOT NULL,
-  "avatarUrl" TEXT,
-  "bio"       TEXT,
-  "userId"    TEXT,          -- FK to User.id — links creator profile to a Clerk account
-  "isActive"  BOOLEAN     NOT NULL DEFAULT true,
-  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT "Creator_pkey" PRIMARY KEY ("id")
+  id          TEXT        NOT NULL DEFAULT gen_random_uuid()::text,
+  name        TEXT        NOT NULL,
+  slug        TEXT        NOT NULL,
+  avatar_url  TEXT,
+  bio         TEXT,
+  email       TEXT,
+  user_id     TEXT,          -- FK to User.id — links creator profile to a Clerk account
+  is_active   BOOLEAN     NOT NULL DEFAULT true,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT "Creator_pkey" PRIMARY KEY (id)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "Creator_slug_key"   ON "Creator"("slug");
-CREATE UNIQUE INDEX IF NOT EXISTS "Creator_userId_key" ON "Creator"("userId") WHERE "userId" IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS "Creator_slug_key"    ON "Creator"(slug);
+CREATE UNIQUE INDEX IF NOT EXISTS "Creator_user_id_key" ON "Creator"(user_id) WHERE user_id IS NOT NULL;
 
 -- ── Add creatorId to Itinerary ────────────────────────────────────────────────
 ALTER TABLE "Itinerary"
