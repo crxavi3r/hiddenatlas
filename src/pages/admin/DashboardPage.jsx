@@ -358,6 +358,7 @@ export default function DashboardPage() {
       setApiError(null);
       try {
         const token = await getToken();
+        if (!token) { setApiError('Session expired — please sign in again.'); return; }
         const from = getPeriodFrom(period);
         const res = await fetch(`/api/admin?action=dashboard&period=${period}&from=${encodeURIComponent(from)}`, {
           headers: { Authorization: `Bearer ${token}` },

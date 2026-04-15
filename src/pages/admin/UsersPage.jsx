@@ -34,6 +34,7 @@ export default function UsersPage() {
     setLoading(true);
     try {
       const token = await getToken();
+      if (!token) { setLoading(false); return; }
       const res = await fetch(`/api/admin?action=users&q=${encodeURIComponent(debouncedQ)}&page=${page}`, {
         headers: { Authorization: `Bearer ${token}` },
       });

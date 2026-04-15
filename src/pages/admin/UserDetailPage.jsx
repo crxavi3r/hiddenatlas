@@ -69,6 +69,7 @@ export default function UserDetailPage() {
       setLoading(true);
       try {
         const token = await getToken();
+        if (!token) { setLoading(false); return; }
         const res = await fetch(`/api/admin?action=user&id=${id}`, {
           headers: { Authorization: `Bearer ${token}` },
         });

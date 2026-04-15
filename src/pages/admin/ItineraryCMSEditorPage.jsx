@@ -552,6 +552,7 @@ export default function ItineraryCMSEditorPage() {
     setLoading(true);
     try {
       const token = await getToken();
+      if (!token) { setLoading(false); return; }
       const res   = await fetch(`/api/itinerary-cms?action=get&id=${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });

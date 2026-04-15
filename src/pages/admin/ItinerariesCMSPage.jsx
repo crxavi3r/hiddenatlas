@@ -110,6 +110,7 @@ export default function ItinerariesCMSPage() {
     setLoading(true); setError(null);
     try {
       const token = await getToken();
+      if (!token) { setLoading(false); return; }
       const [cmsRes, creatorsRes] = await Promise.all([
         fetch('/api/itinerary-cms?action=list', { headers: { Authorization: `Bearer ${token}` } }),
         fetch('/api/creators?action=list', { headers: { Authorization: `Bearer ${token}` } }),

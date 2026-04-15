@@ -47,6 +47,7 @@ export default function DownloadsPage() {
     setLoading(true);
     try {
       const token = await getToken();
+      if (!token) { setLoading(false); return; }
       const from = encodeURIComponent(getPeriodFrom(period));
       const res = await fetch(`/api/admin?action=downloads&period=${period}&page=${page}&from=${from}`, {
         headers: { Authorization: `Bearer ${token}` },

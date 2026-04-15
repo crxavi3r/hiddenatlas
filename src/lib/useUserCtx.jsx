@@ -40,8 +40,16 @@ export function UserCtxProvider({ children }) {
     }
 
     getToken()
-      .then(token =>
-        fetch('/api/auth?action=me', { headers: { Authorization: `Bearer ${token}` } })
+      .then(token => {
+        if (!token) {
+          // Clerk session not ready or expired — don't send Bearer null to the API.
+          // This happens during the brief window after sign-in before the session
+          // token is available, or when the session has expired.
+          console.warn('[useAccess] getToken() returned null — skipping api/me fetch');
+          setCtx({ ...DEFAULT, isLoggedIn: true, loading: false });
+          return Promise.resolve();
+        }
+        return fetch('/api/auth?action=me', { headers: { Authorization: `Bearer ${token}` } })
           .then(r => (r.ok ? r.json() : null))
           .then(data => {
             if (!data) {
@@ -67,8 +75,8 @@ export function UserCtxProvider({ children }) {
             };
             console.log('[useAccess] resolved', next);
             setCtx(next);
-          })
-      )
+          });
+      })
       .catch(err => {
         console.error('[useAccess] fetch error', err);
         setCtx({ ...DEFAULT, isLoggedIn: true, loading: false });

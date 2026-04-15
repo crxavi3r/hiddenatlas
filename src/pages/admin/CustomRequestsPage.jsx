@@ -456,6 +456,7 @@ export default function CustomRequestsPage() {
     setLoading(true);
     try {
       const token = await getToken();
+      if (!token) { setLoading(false); return; }
       const res   = await fetch(`/api/admin?action=custom-requests&all=true`, {
         headers: { Authorization: `Bearer ${token}` },
       });
