@@ -1049,7 +1049,8 @@ const api = useApi();
                   // Load day image from day-images/dayN/ subfolder only.
                   // No external URLs. Returns null if folder is empty.
                   const dbDayAsset = dbAssets.find(a => a.assetType === 'day' && a.dayNumber === day.day);
-                  const resolvedImg = dbDayAsset ? dbDayAsset.url : getDayImage(assetSlug, day.day, assetVariant);
+                  // Priority: ItineraryAsset table (blob) → content.days[n].img (CMS) → filesystem
+                  const resolvedImg = dbDayAsset?.url || day.img || getDayImage(assetSlug, day.day, assetVariant);
                   return (
                     <DayEntry
                       key={i}
