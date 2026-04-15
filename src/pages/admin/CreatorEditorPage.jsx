@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, Navigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
+import { useUserCtx } from '../../lib/useUserCtx.jsx';
 import { ArrowLeft, Save, Upload, User, X, ExternalLink, CheckCircle } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
@@ -44,6 +45,7 @@ export default function CreatorEditorPage() {
   const { id }         = useParams();
   const navigate       = useNavigate();
   const { getToken }   = useAuth();
+  const { isAdmin, creatorId, loading: ctxLoading } = useUserCtx();
   const isMobile       = useIsMobile();
   const isNew          = id === 'new';
   const avatarInputRef = useRef(null);
@@ -89,6 +91,12 @@ export default function CreatorEditorPage() {
   }, [id, isNew, getToken, navigate]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Ownership guard — designers can only edit their own profile; admins bypass
+  if (!ctxLoading && !isAdmin) {
+    if (isNew) return <Navigate to="/admin" replace />;
+    if (id !== creatorId) return <Navigate to={creatorId ? `/admin/creators/${creatorId}` : '/admin'} replace />;
+  }
 
   function handleNameChange(name) {
     setForm(f => ({

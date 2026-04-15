@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
+import { useUserCtx } from '../../lib/useUserCtx.jsx';
 import { DollarSign, ShoppingBag, TrendingUp } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
@@ -31,6 +32,7 @@ function fmtDate(ts) {
 }
 
 export default function SalesPage() {
+  const { isAdmin, loading: ctxLoading } = useUserCtx();
   const [period, setPeriod] = useState('30d');
   const [page, setPage]     = useState(1);
   const [data, setData]     = useState(null);
@@ -57,6 +59,8 @@ export default function SalesPage() {
 
   const totalPages = data ? Math.ceil((data.total || 0) / 50) : 1;
   const isMobile = useIsMobile();
+
+  if (!ctxLoading && !isAdmin) return <Navigate to="/admin" replace />;
 
   return (
     <div style={{ padding: isMobile ? '16px' : '28px 32px' }}>

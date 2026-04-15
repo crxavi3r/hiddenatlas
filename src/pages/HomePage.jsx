@@ -90,8 +90,8 @@ export default function HomePage() {
   }, []);
 
   useSEO({
-    title: 'Curated Luxury Travel Itineraries',
-    description: 'Expert-crafted travel itineraries for discerning travelers. Boutique stays, hidden routes, real local knowledge. No tourist traps, no guesswork.',
+    title: 'HiddenAtlas — Travel itineraries designed by people who know the places',
+    description: 'Travel itineraries designed by people who know the places. Real routes, boutique stays, and local knowledge from designers who\'ve actually been there.',
     canonical: 'https://hiddenatlas.travel/',
     ogImage: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1200&q=80',
     schemas: [
@@ -101,7 +101,7 @@ export default function HomePage() {
         name: 'HiddenAtlas',
         url: 'https://hiddenatlas.travel',
         logo: 'https://hiddenatlas.travel/assets/logo-hiddenatlas.svg',
-        description: 'Expert-crafted travel itineraries for discerning travelers. Boutique stays, hidden routes, real local knowledge.',
+        description: 'Travel itineraries designed by people who know the places. Real routes, boutique stays, and local knowledge from designers who\'ve actually been there.',
         contactPoint: {
           '@type': 'ContactPoint',
           email: 'contact@hiddenatlas.travel',

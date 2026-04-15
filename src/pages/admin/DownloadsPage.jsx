@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
+import { Navigate } from 'react-router-dom';
 import { Download } from 'lucide-react';
+import { useUserCtx } from '../../lib/useUserCtx.jsx';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
@@ -34,6 +36,7 @@ function sourceLabel(s) {
 }
 
 export default function DownloadsPage() {
+  const { isAdmin, loading: ctxLoading } = useUserCtx();
   const [period, setPeriod] = useState('30d');
   const [page, setPage]     = useState(1);
   const [data, setData]     = useState(null);
@@ -60,6 +63,8 @@ export default function DownloadsPage() {
 
   const totalPages = data ? Math.ceil((data.total || 0) / 50) : 1;
   const isMobile = useIsMobile();
+
+  if (!ctxLoading && !isAdmin) return <Navigate to="/admin" replace />;
 
   return (
     <div style={{ padding: isMobile ? '16px' : '28px 32px' }}>

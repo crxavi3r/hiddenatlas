@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet, NavLink, Navigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
-import { LayoutDashboard, Users, CreditCard, Download, ExternalLink, Inbox, Menu, X, Map, UserCheck } from 'lucide-react';
+import { LayoutDashboard, Users, CreditCard, Download, ExternalLink, Inbox, Menu, X, Map, UserCheck, User } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useUserCtx } from '../lib/useUserCtx.jsx';
 
@@ -15,12 +15,11 @@ const NAV = [
   { label: 'Custom Requests', path: '/admin/custom-requests',    icon: Inbox },
 ];
 
-const CREATOR_NAV = [
-  { label: 'My Itineraries', path: '/admin/itineraries', icon: Map },
-];
-
-function SidebarContent({ onClose, isAdmin }) {
-  const nav = isAdmin ? NAV : CREATOR_NAV;
+function SidebarContent({ onClose, isAdmin, creatorId }) {
+  const nav = isAdmin ? NAV : [
+    { label: 'My Itineraries', path: '/admin/itineraries',            icon: Map },
+    ...(creatorId ? [{ label: 'My Profile', path: `/admin/creators/${creatorId}`, icon: User }] : []),
+  ];
   return (
     <>
       {/* Brand */}
@@ -81,7 +80,7 @@ export default function AdminPage() {
   const { isLoaded, isSignedIn } = useUser();
   const isMobile  = useIsMobile();
   const [menuOpen, setMenuOpen] = useState(false);
-  const { isAdmin, isDesigner, loading: ctxLoading } = useUserCtx();
+  const { isAdmin, isDesigner, creatorId, loading: ctxLoading } = useUserCtx();
 
   if (!isLoaded || ctxLoading) {
     return <div style={{ minHeight: '100vh', background: '#111110', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -128,7 +127,7 @@ export default function AdminPage() {
             zIndex: 401,
             boxShadow: '4px 0 24px rgba(0,0,0,0.3)',
           }}>
-            <SidebarContent onClose={() => setMenuOpen(false)} isAdmin={isAdmin} />
+            <SidebarContent onClose={() => setMenuOpen(false)} isAdmin={isAdmin} creatorId={creatorId} />
           </aside>
         </>
       )}
@@ -142,7 +141,7 @@ export default function AdminPage() {
           position: 'fixed', top: 0, bottom: 0, left: 0,
           zIndex: 200,
         }}>
-          <SidebarContent onClose={null} isAdmin={isAdmin} />
+          <SidebarContent onClose={null} isAdmin={isAdmin} creatorId={creatorId} />
         </aside>
       )}
 

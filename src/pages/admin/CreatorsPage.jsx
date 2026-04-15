@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
+import { useUserCtx } from '../../lib/useUserCtx.jsx';
 import { Plus, Edit2, Trash2, ExternalLink } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
@@ -39,6 +40,7 @@ function ConfirmModal({ message, onConfirm, onCancel }) {
 }
 
 export default function CreatorsPage() {
+  const { isAdmin, creatorId, loading: ctxLoading } = useUserCtx();
   const { getToken } = useAuth();
   const navigate     = useNavigate();
   const isMobile     = useIsMobile();
@@ -81,6 +83,11 @@ export default function CreatorsPage() {
   const th = { padding: '10px 14px', textAlign: 'left', fontSize: '11px', fontWeight: '600',
     color: '#8C8070', textTransform: 'uppercase', letterSpacing: '0.4px', whiteSpace: 'nowrap' };
   const td = { padding: '12px 14px', fontSize: '13px', color: '#1C1A16', borderTop: '1px solid #F4F1EC' };
+
+  // Designers: redirect to their own creator profile; non-designers: back to /admin
+  if (!ctxLoading && !isAdmin) {
+    return <Navigate to={creatorId ? `/admin/creators/${creatorId}` : '/admin'} replace />;
+  }
 
   return (
     <div style={{ padding: isMobile ? '16px' : '28px 32px' }}>

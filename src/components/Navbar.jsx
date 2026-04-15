@@ -7,9 +7,11 @@ import {
 } from '@clerk/clerk-react';
 import { useUserCtx } from '../lib/useUserCtx.jsx';
 
-const navLinks = [
+const publicLinks = [
   { label: 'Itineraries', href: '/itineraries' },
-  { label: 'My Trips',    href: '/my-trips' },
+];
+const authedLinks = [
+  { label: 'My Trips', href: '/my-trips' },
 ];
 
 function UserAvatar() {
@@ -186,7 +188,7 @@ export default function Navbar() {
 
           {/* Desktop Nav */}
           <nav style={{ display: 'flex', alignItems: 'center', gap: '32px' }} className="hidden-mobile">
-            {navLinks.map(link => (
+            {[...publicLinks, ...(user ? authedLinks : [])].map(link => (
               <Link
                 key={link.href}
                 to={link.href}
@@ -297,7 +299,7 @@ export default function Navbar() {
             gap: '0',
           }}>
             {/* Nav links */}
-            {navLinks.map(link => (
+            {[...publicLinks, ...(user ? authedLinks : [])].map(link => (
               <Link
                 key={link.href}
                 to={link.href}

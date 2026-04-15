@@ -32,7 +32,7 @@ export default function Footer() {
               />
             </Link>
             <p style={{ fontSize: '14px', lineHeight: '1.7', color: '#8C8070', maxWidth: '240px' }}>
-              Curated travel itineraries for people who want extraordinary experiences without the ordinary effort.
+              Travel itineraries designed by people who know the places. Real expertise, real routes, no guesswork.
             </p>
             <p style={{ fontSize: '13px', color: '#6B6156', marginTop: '10px', fontStyle: 'italic' }}>
               Built from real travel experiences.

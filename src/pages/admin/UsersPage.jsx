@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
+import { useUserCtx } from '../../lib/useUserCtx.jsx';
 import { Search, ArrowRight } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
@@ -14,6 +15,8 @@ function fmtDate(ts) {
 }
 
 export default function UsersPage() {
+  const { isAdmin, loading: ctxLoading } = useUserCtx();
+
   const [q, setQ]           = useState('');
   const [debouncedQ, setDQ] = useState('');
   const [page, setPage]     = useState(1);
@@ -46,6 +49,9 @@ export default function UsersPage() {
 
   const totalPages = data ? Math.ceil(data.total / 50) : 1;
   const isMobile = useIsMobile();
+
+  // Guard — after all hooks so Rules of Hooks are respected
+  if (!ctxLoading && !isAdmin) return <Navigate to="/admin" replace />;
 
   return (
     <div style={{ padding: isMobile ? '16px' : '28px 32px' }}>

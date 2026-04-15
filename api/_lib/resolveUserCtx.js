@@ -14,6 +14,7 @@
 //   if (!ctx.isAdmin) return res.status(403).json({ error: 'Admin only' });
 
 import { verifyAuth } from './verifyAuth.js';
+import { isAdminEmail } from './adminEmails.js';
 
 /**
  * @typedef {Object} UserCtx
@@ -54,8 +55,9 @@ export async function resolveUserCtx(authHeader, pool) {
       email,
       role:       role ?? 'user',
       creatorId:  creatorId ?? null,
-      isAdmin:    role === 'admin',
-      isDesigner: role === 'designer' || role === 'admin',
+      isAdmin:    role === 'admin' || isAdminEmail(email),
+      // Designer if: explicit role OR admin OR has an active Creator profile linked
+      isDesigner: role === 'designer' || role === 'admin' || isAdminEmail(email) || creatorId !== null,
     };
   } catch {
     return null;

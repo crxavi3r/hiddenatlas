@@ -26,7 +26,7 @@ async function handleMe(req, res) {
       creatorSlug = rows[0]?.slug ?? null;
     }
 
-    return res.status(200).json({ role: ctx.role, creatorSlug, email: ctx.email });
+    return res.status(200).json({ role: ctx.role, creatorSlug, creatorId: ctx.creatorId, email: ctx.email });
   } catch (err) {
     console.error('[api/auth/me]', err.message);
     return res.status(500).json({ error: 'Database error' });
