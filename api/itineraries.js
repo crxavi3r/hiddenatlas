@@ -93,6 +93,33 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── GET /api/itineraries?action=content&slug= ───────────────────────────────
+  // Public — no auth required. Returns days array from the published itinerary
+  // record in the database. Used by the public detail page so CMS edits appear
+  // without a redeploy. Only published itineraries are returned.
+  if (action === 'content') {
+    if (!slug) return res.status(400).json({ error: 'slug is required' });
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      const { rows } = await pool.query(
+        `SELECT content->'days' AS days
+         FROM   "Itinerary"
+         WHERE  slug = $1
+           AND  status = 'published'
+         LIMIT  1`,
+        [slug]
+      );
+      if (!rows.length) return res.status(404).json({ error: 'not found' });
+      res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60');
+      return res.json({ days: rows[0].days ?? [] });
+    } catch (err) {
+      console.error('[itineraries/content]', err.message);
+      return res.status(500).json({ error: err.message });
+    } finally {
+      await pool.end();
+    }
+  }
+
   // ── All remaining actions require authentication ────────────────────────────
   if (!process.env.CLERK_SECRET_KEY) {
     return res.status(500).json({ error: 'Server misconfigured' });

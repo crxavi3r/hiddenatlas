@@ -353,6 +353,7 @@ const api = useApi();
   const [savedItineraryId, setSavedItineraryId]       = useState(null);
   const [itinerarySaveState, setItinerarySaveState]   = useState('idle'); // 'idle'|'saving'|'saved'|'error'
   const [dbAssets, setDbAssets]                       = useState([]);
+  const [dbDays, setDbDays]                           = useState(null);
 
   const isPremium = itinerary?.isPremium;
 
@@ -398,6 +399,18 @@ const api = useApi();
     schemas: seoSchemas,
   });
   // ─────────────────────────────────────────────────────────────────────────
+
+  // Load published day content from DB — overrides static itineraries.js data.
+  // Falls back silently to static data if the itinerary is not yet in the DB
+  // or is still in draft status.
+  useEffect(() => {
+    const slug = itinerary?.parentId || itinerary?.id;
+    if (!slug) return;
+    fetch(`/api/itineraries?action=content&slug=${encodeURIComponent(slug)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.days?.length) setDbDays(data.days); })
+      .catch(() => {}); // silent — static data remains active
+  }, [itinerary?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load DB-backed assets for this itinerary (blob uploads, manually added URLs)
   useEffect(() => {
@@ -632,8 +645,12 @@ const api = useApi();
   const {
     title, subtitle, country, region, duration, groupSize, price,
     image, coverImage, highlights, description, shortDescription, bestFor, difficulty,
-    days = [], nights, whySpecial, routeOverview, transport,
+    days: staticDays = [], nights, whySpecial, routeOverview, transport,
   } = itinerary;
+
+  // DB days take precedence over static bundle — updated by CMS without redeploy.
+  // staticDays remains the fallback for itineraries not yet published to the DB.
+  const days = dbDays ?? staticDays;
 
   const hasAccess = accessState === 'unlocked';
 
