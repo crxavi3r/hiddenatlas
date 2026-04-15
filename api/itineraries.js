@@ -102,7 +102,7 @@ export default async function handler(req, res) {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
       const { rows } = await pool.query(
-        `SELECT content->'days' AS days
+        `SELECT (content::jsonb)->'days' AS days
          FROM   "Itinerary"
          WHERE  slug = $1
            AND  status = 'published'
