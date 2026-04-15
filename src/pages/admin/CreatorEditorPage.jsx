@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { ArrowLeft, Save, Upload, User, X } from 'lucide-react';
+import { ArrowLeft, Save, Upload, User, X, ExternalLink, CheckCircle } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
@@ -35,6 +35,11 @@ function slugify(name) {
     .replace(/-+/g, '-');
 }
 
+function getInitials(name) {
+  if (!name?.trim()) return null;
+  return name.trim().split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
 export default function CreatorEditorPage() {
   const { id }         = useParams();
   const navigate       = useNavigate();
@@ -42,12 +47,15 @@ export default function CreatorEditorPage() {
   const isMobile       = useIsMobile();
   const isNew          = id === 'new';
   const avatarInputRef = useRef(null);
+  const slugEdited     = useRef(false); // tracks whether slug was manually changed on new creators
 
-  const [loading,   setLoading]   = useState(!isNew);
-  const [saving,    setSaving]    = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [saveMsg,   setSaveMsg]   = useState(null);
-  const [form,      setForm]      = useState({
+  const [loading,     setLoading]     = useState(!isNew);
+  const [saving,      setSaving]      = useState(false);
+  const [uploading,   setUploading]   = useState(false);
+  const [saveMsg,     setSaveMsg]     = useState(null);
+  const [linkedEmail, setLinkedEmail] = useState('');
+  const [stats,       setStats]       = useState({ total: 0, published: 0 });
+  const [form,        setForm]        = useState({
     name: '', slug: '', avatarUrl: '', bio: '', userId: '', isActive: true,
   });
 
@@ -71,6 +79,11 @@ export default function CreatorEditorPage() {
         userId:    creator.userId    || '',
         isActive:  creator.isActive  ?? true,
       });
+      setStats({
+        total:     creator.total_itinerary_count || 0,
+        published: creator.itinerary_count       || 0,
+      });
+      setLinkedEmail(creator.linked_email || '');
     } catch (e) { alert(e.message); navigate('/admin/creators'); }
     finally { setLoading(false); }
   }, [id, isNew, getToken, navigate]);
@@ -81,18 +94,24 @@ export default function CreatorEditorPage() {
     setForm(f => ({
       ...f,
       name,
-      slug: isNew ? slugify(name) : f.slug,
+      // Auto-generate slug from name only when: new creator AND slug not manually edited yet
+      slug: (isNew && !slugEdited.current) ? slugify(name) : f.slug,
     }));
+  }
+
+  function handleSlugChange(value) {
+    if (isNew) slugEdited.current = true; // lock auto-generation once user touches slug
+    setForm(f => ({ ...f, slug: value }));
   }
 
   async function handleAvatarUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    e.target.value = ''; // reset so same file can be re-selected
+    e.target.value = '';
 
     const slug = form.slug.trim();
     if (!slug) {
-      alert('Please enter a slug before uploading an avatar.');
+      alert('Please enter a slug before uploading a profile image.');
       return;
     }
 
@@ -144,10 +163,11 @@ export default function CreatorEditorPage() {
       });
       const json = await res.json();
       if (json.error) throw new Error(json.error);
-      setSaveMsg({ ok: true, text: 'Saved.' });
+      const time = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      setSaveMsg({ ok: true, text: `Saved at ${time}` });
       if (isNew) navigate(`/admin/creators/${json.creator.id}`, { replace: true });
     } catch (e) { setSaveMsg({ ok: false, text: e.message }); }
-    finally { setSaving(false); setTimeout(() => setSaveMsg(null), 4000); }
+    finally { setSaving(false); setTimeout(() => setSaveMsg(null), 5000); }
   }
 
   if (loading) {
@@ -160,63 +180,138 @@ export default function CreatorEditorPage() {
     );
   }
 
+  const initials = getInitials(form.name);
+  const publicUrl = form.slug.trim() ? `https://hiddenatlas.travel/${form.slug.trim()}` : null;
+
   return (
     <div style={{ padding: isMobile ? '16px' : '28px 32px', maxWidth: '640px' }}>
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '28px' }}>
-        <Link to="/admin/creators" style={{ display: 'flex', alignItems: 'center', gap: '5px',
-          color: '#6B6156', textDecoration: 'none', fontSize: '13px' }}>
-          <ArrowLeft size={14} /> Creators
-        </Link>
-        <span style={{ color: '#D8D0C4' }}>›</span>
-        <span style={{ fontSize: '13px', color: '#1C1A16', fontWeight: '500' }}>
-          {isNew ? 'New Creator' : form.name || 'Edit Creator'}
-        </span>
+      {/* ── Header ── */}
+      <div style={{ marginBottom: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
+          <Link to="/admin/creators" style={{ display: 'flex', alignItems: 'center', gap: '5px',
+            color: '#6B6156', textDecoration: 'none', fontSize: '13px' }}>
+            <ArrowLeft size={14} /> Creators
+          </Link>
+          <span style={{ color: '#D8D0C4' }}>›</span>
+          <span style={{ fontSize: '13px', color: '#1C1A16', fontWeight: '500' }}>
+            {isNew ? 'New Creator' : form.name || 'Edit Creator'}
+          </span>
+        </div>
+
+        {/* Summary bar — only for existing creators */}
+        {!isNew && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {/* Active / Inactive badge */}
+            <span style={{
+              fontSize: '11px', fontWeight: '700', letterSpacing: '0.4px', textTransform: 'uppercase',
+              padding: '3px 10px', borderRadius: '10px',
+              background: form.isActive ? '#EFF6F5' : '#F4F1EC',
+              color: form.isActive ? '#1B6B65' : '#8C8070',
+            }}>
+              {form.isActive ? 'Active' : 'Inactive'}
+            </span>
+
+            {/* Itinerary count */}
+            {stats.total > 0 && (
+              <span style={{ fontSize: '12.5px', color: '#6B6156' }}>
+                {stats.total} {stats.total === 1 ? 'itinerary' : 'itineraries'}
+                {stats.published > 0 && stats.published < stats.total
+                  && ` · ${stats.published} published`}
+              </span>
+            )}
+            {stats.total === 0 && (
+              <span style={{ fontSize: '12.5px', color: '#B5AA99' }}>No itineraries yet</span>
+            )}
+
+            {/* View public profile */}
+            {publicUrl && (
+              <a
+                href={publicUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: 'flex', alignItems: 'center', gap: '5px',
+                  fontSize: '12.5px', color: '#1B6B65', textDecoration: 'none', marginLeft: 'auto' }}
+              >
+                <ExternalLink size={12} />
+                View public profile
+              </a>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Form */}
+      {/* ── Profile card ── */}
       <div style={{ ...card, padding: '28px', marginBottom: '20px' }}>
         <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>
           Profile
         </p>
 
+        {/* Name */}
         <div style={fieldStyle}>
           <label style={labelStyle}>Name *</label>
           <input value={form.name} style={inputStyle} placeholder="e.g. Cristiano Xavier"
             onChange={e => handleNameChange(e.target.value)} />
         </div>
 
+        {/* Slug */}
         <div style={fieldStyle}>
           <label style={labelStyle}>Slug *</label>
-          <p style={{ fontSize: '11px', color: '#B5AA99', marginBottom: '6px' }}>
-            Public URL: hiddenatlas.travel/<strong>{form.slug || '...'}</strong>
-          </p>
-          <input value={form.slug} style={{ ...inputStyle, fontFamily: 'monospace' }}
-            placeholder="cristiano-xavier" onChange={e => setForm(f => ({ ...f, slug: e.target.value }))} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '11px', color: '#B5AA99' }}>
+              Public URL:
+            </span>
+            {publicUrl ? (
+              <a
+                href={publicUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: '11px', color: '#1B6B65', textDecoration: 'none',
+                  display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                hiddenatlas.travel/<strong>{form.slug.trim()}</strong>
+                <ExternalLink size={10} />
+              </a>
+            ) : (
+              <span style={{ fontSize: '11px', color: '#B5AA99' }}>
+                hiddenatlas.travel/<strong>{form.slug || '...'}</strong>
+              </span>
+            )}
+          </div>
+          <input
+            value={form.slug}
+            style={{ ...inputStyle, fontFamily: 'monospace' }}
+            placeholder="cristiano-xavier"
+            onChange={e => handleSlugChange(e.target.value)}
+          />
         </div>
 
-        {/* Avatar upload */}
+        {/* Profile image */}
         <div style={fieldStyle}>
-          <label style={labelStyle}>Avatar</label>
+          <label style={labelStyle}>Profile image</label>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
 
-            {/* Preview circle */}
+            {/* Avatar preview / initials */}
             <div style={{
               width: '72px', height: '72px', borderRadius: '50%', flexShrink: 0,
-              border: '2px solid #E8E3DA', background: '#F4F1EC', overflow: 'hidden',
+              border: '2px solid #E8E3DA', background: form.avatarUrl ? '#F4F1EC' : '#EFF6F5',
+              overflow: 'hidden',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               {form.avatarUrl
-                ? <img src={form.avatarUrl} alt="Avatar preview"
+                ? <img src={form.avatarUrl} alt="Profile preview"
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     onError={e => { e.currentTarget.style.display = 'none'; }}
                   />
-                : <User size={28} color="#B5AA99" />
+                : initials
+                  ? <span style={{ fontSize: '22px', fontWeight: '600', color: '#1B6B65', letterSpacing: '-0.5px' }}>
+                      {initials}
+                    </span>
+                  : <User size={28} color="#B5AA99" />
               }
             </div>
 
-            {/* Controls */}
+            {/* Upload controls */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <input
                 ref={avatarInputRef}
@@ -253,7 +348,8 @@ export default function CreatorEditorPage() {
           )}
         </div>
 
-        <div style={fieldStyle}>
+        {/* Bio */}
+        <div style={{ ...fieldStyle, marginBottom: 0 }}>
           <label style={labelStyle}>Bio</label>
           <textarea value={form.bio} style={textareaStyle}
             placeholder="Short bio shown on the creator profile page…"
@@ -261,19 +357,33 @@ export default function CreatorEditorPage() {
         </div>
       </div>
 
+      {/* ── Account link card ── */}
       <div style={{ ...card, padding: '28px', marginBottom: '20px' }}>
         <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '4px' }}>
           Account Link
         </p>
-        <p style={{ fontSize: '12px', color: '#8C8070', marginBottom: '20px' }}>
-          Optional. Links this creator profile to an authenticated HiddenAtlas user account,
-          allowing that user to log in and manage their own itineraries in the CMS.
+        <p style={{ fontSize: '12px', color: '#8C8070', marginBottom: '20px', lineHeight: '1.6' }}>
+          Optional. Links this creator profile to a HiddenAtlas user account.
+          Once linked, that user can log in and manage their own itineraries in the CMS.
         </p>
+
+        {/* Show linked email read-only if populated */}
+        {linkedEmail && (
+          <div style={{ marginBottom: '16px', padding: '10px 14px', background: '#F4F1EC', borderRadius: '6px',
+            display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <CheckCircle size={14} color="#1B6B65" style={{ flexShrink: 0 }} />
+            <div>
+              <p style={{ fontSize: '11px', color: '#6B6156', fontWeight: '600', textTransform: 'uppercase',
+                letterSpacing: '0.4px', marginBottom: '1px' }}>Linked account</p>
+              <p style={{ fontSize: '13px', color: '#1C1A16' }}>{linkedEmail}</p>
+            </div>
+          </div>
+        )}
 
         <div style={fieldStyle}>
           <label style={labelStyle}>User ID</label>
           <p style={{ fontSize: '11px', color: '#B5AA99', marginBottom: '6px' }}>
-            The internal User.id from the Users table (UUID).
+            Internal User.id (UUID) from the Users table.
           </p>
           <input value={form.userId} style={{ ...inputStyle, fontFamily: 'monospace' }}
             placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
@@ -286,19 +396,23 @@ export default function CreatorEditorPage() {
             style={{ width: '15px', height: '15px', accentColor: '#1B6B65' }}
           />
           <label htmlFor="isActive" style={{ fontSize: '13.5px', color: '#4A433A', cursor: 'pointer' }}>
-            Active (visible on public site and creator filter)
+            Active (visible on public site and in creator filters)
           </label>
         </div>
       </div>
 
-      {/* Save row */}
+      {/* ── Save row ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <button onClick={handleSave} disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.7 : 1 }}>
           <Save size={13} />
           {saving ? 'Saving…' : 'Save creator'}
         </button>
         {saveMsg && (
-          <span style={{ fontSize: '13px', color: saveMsg.ok ? '#1B6B65' : '#C0392B' }}>
+          <span style={{
+            display: 'flex', alignItems: 'center', gap: '5px',
+            fontSize: '13px', color: saveMsg.ok ? '#1B6B65' : '#C0392B',
+          }}>
+            {saveMsg.ok && <CheckCircle size={13} />}
             {saveMsg.text}
           </span>
         )}

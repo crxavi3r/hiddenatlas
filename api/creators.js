@@ -115,10 +115,13 @@ async function handleList(pool) {
   const { rows } = await pool.query(`
     SELECT c.id, c.name, c.slug, c.avatar_url AS "avatarUrl", c.bio, c.is_active AS "isActive",
            c.user_id AS "userId", c.created_at AS "createdAt",
-           COUNT(i.id) FILTER (WHERE i.status = 'published' AND i."isPrivate" = false)::int AS itinerary_count
+           COUNT(i.id) FILTER (WHERE i.status = 'published' AND i."isPrivate" = false)::int AS itinerary_count,
+           COUNT(i.id)::int AS total_itinerary_count,
+           u.email AS linked_email
     FROM "Creator" c
     LEFT JOIN "Itinerary" i ON i.creator_id = c.id
-    GROUP BY c.id
+    LEFT JOIN "User" u ON u.id = c.user_id
+    GROUP BY c.id, u.email
     ORDER BY c.name ASC
   `);
   return { creators: rows };
