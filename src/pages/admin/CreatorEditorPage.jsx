@@ -36,6 +36,14 @@ function slugify(name) {
     .replace(/-+/g, '-');
 }
 
+function normalizeSlugInput(value) {
+  return value
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-{2,}/g, '-');
+}
+
 function getInitials(name) {
   if (!name?.trim()) return null;
   return name.trim().split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -48,15 +56,22 @@ export default function CreatorEditorPage() {
   const { isAdmin, creatorId, loading: ctxLoading } = useUserCtx();
   const isMobile       = useIsMobile();
   const isNew          = id === 'new';
-  const avatarInputRef = useRef(null);
-  const slugEdited     = useRef(false); // tracks whether slug was manually changed on new creators
+  const avatarInputRef  = useRef(null);
+  const slugEdited      = useRef(false); // tracks whether slug was manually changed on new creators
+  const userSelectorRef = useRef(null);
+  const slugDebounceRef = useRef(null);
 
   const [loading,     setLoading]     = useState(!isNew);
   const [saving,      setSaving]      = useState(false);
   const [uploading,   setUploading]   = useState(false);
   const [saveMsg,     setSaveMsg]     = useState(null);
-  const [linkedEmail, setLinkedEmail] = useState('');
-  const [stats,       setStats]       = useState({ total: 0, published: 0 });
+  const [linkedUser,    setLinkedUser]    = useState(null); // { name, email } or null
+  const [userQuery,     setUserQuery]     = useState('');
+  const [userResults,   setUserResults]   = useState([]);
+  const [userSearching, setUserSearching] = useState(false);
+  const [dropdownOpen,  setDropdownOpen]  = useState(false);
+  const [slugStatus,    setSlugStatus]    = useState(null); // null | 'checking' | 'available' | 'taken'
+  const [stats,         setStats]         = useState({ total: 0, published: 0 });
   const [form,        setForm]        = useState({
     name: '', slug: '', avatarUrl: '', bio: '', userId: '', isActive: true,
   });
@@ -85,12 +100,22 @@ export default function CreatorEditorPage() {
         total:     creator.total_itinerary_count || 0,
         published: creator.itinerary_count       || 0,
       });
-      setLinkedEmail(creator.linked_email || '');
+      setLinkedUser(creator.linked_email ? { name: null, email: creator.linked_email } : null);
     } catch (e) { alert(e.message); navigate('/admin/creators'); }
     finally { setLoading(false); }
   }, [id, isNew, getToken, navigate]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (userSelectorRef.current && !userSelectorRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Ownership guard — designers can only edit their own profile; admins bypass
   if (!ctxLoading && !isAdmin) {
@@ -98,18 +123,71 @@ export default function CreatorEditorPage() {
     if (id !== creatorId) return <Navigate to={creatorId ? `/admin/creators/${creatorId}` : '/admin'} replace />;
   }
 
+  async function checkSlug(slug) {
+    if (!slug) { setSlugStatus(null); return; }
+    setSlugStatus('checking');
+    try {
+      const token   = await getToken();
+      const idParam = !isNew ? `&id=${encodeURIComponent(id)}` : '';
+      const res     = await fetch(
+        `/api/creators?action=check-slug&slug=${encodeURIComponent(slug)}${idParam}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const json = await res.json();
+      setSlugStatus(json.available ? 'available' : 'taken');
+    } catch {
+      setSlugStatus(null); // fail open — backend is the real guard
+    }
+  }
+
+  function scheduleSlugCheck(slug) {
+    setSlugStatus(null);
+    clearTimeout(slugDebounceRef.current);
+    const trimmed = slug.replace(/^-+|-+$/g, '');
+    if (trimmed) slugDebounceRef.current = setTimeout(() => checkSlug(trimmed), 400);
+  }
+
   function handleNameChange(name) {
-    setForm(f => ({
-      ...f,
-      name,
-      // Auto-generate slug from name only when: new creator AND slug not manually edited yet
-      slug: (isNew && !slugEdited.current) ? slugify(name) : f.slug,
-    }));
+    const autoSlug = (isNew && !slugEdited.current) ? slugify(name) : null;
+    setForm(f => ({ ...f, name, ...(autoSlug !== null ? { slug: autoSlug } : {}) }));
+    if (autoSlug !== null) scheduleSlugCheck(autoSlug);
   }
 
   function handleSlugChange(value) {
-    if (isNew) slugEdited.current = true; // lock auto-generation once user touches slug
-    setForm(f => ({ ...f, slug: value }));
+    if (isNew) slugEdited.current = true;
+    const normalized = normalizeSlugInput(value);
+    setForm(f => ({ ...f, slug: normalized }));
+    scheduleSlugCheck(normalized);
+  }
+
+  async function searchUsers(q) {
+    if (!q.trim()) { setUserResults([]); setDropdownOpen(false); return; }
+    setUserSearching(true);
+    setDropdownOpen(true);
+    try {
+      const token = await getToken();
+      const res   = await fetch(`/api/admin?action=users&q=${encodeURIComponent(q.trim())}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json  = await res.json();
+      setUserResults(json.users || []);
+    } catch { setUserResults([]); }
+    finally { setUserSearching(false); }
+  }
+
+  function selectUser(user) {
+    setForm(f => ({ ...f, userId: user.id }));
+    setLinkedUser({ name: user.name, email: user.email });
+    setUserQuery('');
+    setUserResults([]);
+    setDropdownOpen(false);
+  }
+
+  function clearLinkedUser() {
+    setForm(f => ({ ...f, userId: '' }));
+    setLinkedUser(null);
+    setUserQuery('');
+    setUserResults([]);
   }
 
   async function handleAvatarUpload(e) {
@@ -149,8 +227,13 @@ export default function CreatorEditorPage() {
   }
 
   async function handleSave() {
-    if (!form.name.trim() || !form.slug.trim()) {
+    const cleanSlug = form.slug.replace(/^-+|-+$/g, '').trim();
+    if (!form.name.trim() || !cleanSlug) {
       alert('Name and slug are required.');
+      return;
+    }
+    if (slugStatus === 'taken') {
+      setSaveMsg({ ok: false, text: 'Slug is already in use — pick a different one' });
       return;
     }
     setSaving(true); setSaveMsg(null);
@@ -162,7 +245,7 @@ export default function CreatorEditorPage() {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name:      form.name.trim(),
-          slug:      form.slug.trim(),
+          slug:      cleanSlug,
           avatarUrl: form.avatarUrl || null,
           bio:       form.bio.trim() || null,
           userId:    form.userId.trim() || null,
@@ -188,8 +271,9 @@ export default function CreatorEditorPage() {
     );
   }
 
-  const initials = getInitials(form.name);
-  const publicUrl = form.slug.trim() ? `https://hiddenatlas.travel/${form.slug.trim()}` : null;
+  const initials   = getInitials(form.name);
+  const cleanSlug  = form.slug.replace(/^-+|-+$/g, '').trim();
+  const publicUrl  = cleanSlug ? `https://hiddenatlas.travel/${cleanSlug}` : null;
 
   return (
     <div style={{ padding: isMobile ? '16px' : '28px 32px', maxWidth: '640px' }}>
@@ -277,21 +361,62 @@ export default function CreatorEditorPage() {
                 style={{ fontSize: '11px', color: '#1B6B65', textDecoration: 'none',
                   display: 'flex', alignItems: 'center', gap: '4px' }}
               >
-                hiddenatlas.travel/<strong>{form.slug.trim()}</strong>
+                hiddenatlas.travel/<strong>{cleanSlug}</strong>
                 <ExternalLink size={10} />
               </a>
             ) : (
               <span style={{ fontSize: '11px', color: '#B5AA99' }}>
-                hiddenatlas.travel/<strong>{form.slug || '...'}</strong>
+                hiddenatlas.travel/<strong>...</strong>
               </span>
             )}
           </div>
           <input
             value={form.slug}
-            style={{ ...inputStyle, fontFamily: 'monospace' }}
+            style={{
+              ...inputStyle, fontFamily: 'monospace',
+              ...(slugStatus === 'taken'     && { borderColor: '#E74C3C', background: '#FEF9F8' }),
+              ...(slugStatus === 'available' && { borderColor: '#27AE60' }),
+            }}
             placeholder="cristiano-xavier"
             onChange={e => handleSlugChange(e.target.value)}
           />
+          {slugStatus === 'checking' && (
+            <p style={{ fontSize: '11px', color: '#8C8070', marginTop: '5px',
+              display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%',
+                border: '1.5px solid #D8D0C4', borderTopColor: '#8C8070',
+                animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />
+              Checking…
+            </p>
+          )}
+          {slugStatus === 'available' && (
+            <p style={{ fontSize: '11px', color: '#27AE60', marginTop: '5px',
+              display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <CheckCircle size={11} />
+              Available
+            </p>
+          )}
+          {slugStatus === 'taken' && (
+            <div style={{ marginTop: '6px' }}>
+              <p style={{ fontSize: '11px', color: '#E74C3C', marginBottom: '6px' }}>
+                This slug is already in use
+              </p>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {[`${cleanSlug}-2`, `${cleanSlug}-3`].map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => handleSlugChange(s)}
+                    style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px',
+                      border: '1px solid #E8E3DA', background: 'white', cursor: 'pointer',
+                      color: '#4A433A', fontFamily: 'monospace' }}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Profile image */}
@@ -375,28 +500,104 @@ export default function CreatorEditorPage() {
           Once linked, that user can log in and manage their own itineraries in the CMS.
         </p>
 
-        {/* Show linked email read-only if populated */}
-        {linkedEmail && (
-          <div style={{ marginBottom: '16px', padding: '10px 14px', background: '#F4F1EC', borderRadius: '6px',
-            display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <CheckCircle size={14} color="#1B6B65" style={{ flexShrink: 0 }} />
-            <div>
-              <p style={{ fontSize: '11px', color: '#6B6156', fontWeight: '600', textTransform: 'uppercase',
-                letterSpacing: '0.4px', marginBottom: '1px' }}>Linked account</p>
-              <p style={{ fontSize: '13px', color: '#1C1A16' }}>{linkedEmail}</p>
-            </div>
+        {isAdmin ? (
+          <div style={{ ...fieldStyle }} ref={userSelectorRef}>
+            {form.userId ? (
+              /* ── Linked state ── */
+              <div>
+                <div style={{ padding: '10px 14px', background: '#F4F1EC', borderRadius: '6px',
+                  display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <CheckCircle size={14} color="#1B6B65" style={{ flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: '11px', color: '#6B6156', fontWeight: '600',
+                      textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '1px' }}>
+                      Linked account
+                    </p>
+                    <p style={{ fontSize: '13px', color: '#1C1A16', overflow: 'hidden',
+                      textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {linkedUser?.name
+                        ? `${linkedUser.name} — ${linkedUser.email}`
+                        : linkedUser?.email || form.userId}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearLinkedUser}
+                    style={{ ...btnSecondary, color: '#8C8070', padding: '5px 10px', flexShrink: 0 }}
+                  >
+                    <X size={12} />
+                    Unlink
+                  </button>
+                </div>
+                <p style={{ fontSize: '10.5px', color: '#C5BDB0', marginTop: '5px', fontFamily: 'monospace' }}>
+                  {form.userId}
+                </p>
+              </div>
+            ) : (
+              /* ── Search state ── */
+              <div>
+                <label style={labelStyle}>Search user</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    value={userQuery}
+                    style={{ ...inputStyle, paddingRight: userSearching ? '36px' : '12px' }}
+                    placeholder="Name or email…"
+                    onChange={e => { setUserQuery(e.target.value); searchUsers(e.target.value); }}
+                    onFocus={() => userResults.length > 0 && setDropdownOpen(true)}
+                  />
+                  {userSearching && (
+                    <div style={{ position: 'absolute', right: '10px', top: '50%',
+                      transform: 'translateY(-50%)', width: '14px', height: '14px',
+                      borderRadius: '50%', border: '2px solid #E8E3DA', borderTopColor: '#1B6B65',
+                      animation: 'spin 0.8s linear infinite' }} />
+                  )}
+                  {dropdownOpen && (userResults.length > 0 || (!userSearching && userQuery.trim())) && (
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
+                      background: 'white', border: '1px solid #E8E3DA', borderRadius: '6px',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.08)', marginTop: '4px',
+                      maxHeight: '220px', overflowY: 'auto',
+                    }}>
+                      {userResults.length > 0 ? userResults.map(u => (
+                        <div
+                          key={u.id}
+                          onClick={() => selectUser(u)}
+                          style={{ padding: '9px 14px', cursor: 'pointer',
+                            borderBottom: '1px solid #F4F1EC' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#F9F7F4'}
+                          onMouseLeave={e => e.currentTarget.style.background = ''}
+                        >
+                          <p style={{ fontSize: '13px', color: '#1C1A16', fontWeight: '500' }}>
+                            {u.name}
+                          </p>
+                          <p style={{ fontSize: '11.5px', color: '#6B6156', marginTop: '1px' }}>
+                            {u.email}
+                          </p>
+                        </div>
+                      )) : (
+                        <div style={{ padding: '12px 14px' }}>
+                          <p style={{ fontSize: '13px', color: '#8C8070' }}>No users found.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
+        ) : (
+          linkedUser?.email && (
+            <div style={{ marginBottom: '16px', padding: '10px 14px', background: '#F4F1EC', borderRadius: '6px',
+              display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <CheckCircle size={14} color="#1B6B65" style={{ flexShrink: 0 }} />
+              <div>
+                <p style={{ fontSize: '11px', color: '#6B6156', fontWeight: '600', textTransform: 'uppercase',
+                  letterSpacing: '0.4px', marginBottom: '1px' }}>Linked account</p>
+                <p style={{ fontSize: '13px', color: '#1C1A16' }}>{linkedUser.email}</p>
+              </div>
+            </div>
+          )
         )}
-
-        <div style={fieldStyle}>
-          <label style={labelStyle}>User ID</label>
-          <p style={{ fontSize: '11px', color: '#B5AA99', marginBottom: '6px' }}>
-            Internal User.id (UUID) from the Users table.
-          </p>
-          <input value={form.userId} style={{ ...inputStyle, fontFamily: 'monospace' }}
-            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-            onChange={e => setForm(f => ({ ...f, userId: e.target.value }))} />
-        </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <input type="checkbox" id="isActive" checked={form.isActive}
@@ -411,7 +612,8 @@ export default function CreatorEditorPage() {
 
       {/* ── Save row ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <button onClick={handleSave} disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.7 : 1 }}>
+        <button onClick={handleSave} disabled={saving || slugStatus === 'taken'}
+          style={{ ...btnPrimary, opacity: (saving || slugStatus === 'taken') ? 0.7 : 1 }}>
           <Save size={13} />
           {saving ? 'Saving…' : 'Save creator'}
         </button>

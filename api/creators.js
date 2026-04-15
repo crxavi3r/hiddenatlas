@@ -40,6 +40,12 @@ export default async function handler(req, res) {
         if (!slug) return res.status(400).json({ error: 'slug is required' });
         return res.json(await handleGet(pool, slug));
       }
+      if (action === 'check-slug') {
+        const slug      = req.query.slug;
+        const excludeId = req.query.id ?? null;
+        if (!slug) return res.status(400).json({ error: 'slug is required' });
+        return res.json(await handleCheckSlug(pool, slug, excludeId));
+      }
       return res.status(400).json({ error: 'Unknown GET action' });
     }
 
@@ -128,6 +134,23 @@ async function handleGet(pool, slug) {
   return { creator, itineraries: itineraryRows };
 }
 
+// ── Check slug availability ───────────────────────────────────────────────────
+// Public endpoint — slug values are already in public URLs, no sensitive info.
+// excludeId: omit for new creators; pass creator.id when editing so the
+// current record's own slug is not treated as a conflict.
+async function handleCheckSlug(pool, slug, excludeId) {
+  const { rows } = excludeId
+    ? await pool.query(
+        `SELECT id FROM "Creator" WHERE slug = $1 AND id != $2 LIMIT 1`,
+        [slug, excludeId]
+      )
+    : await pool.query(
+        `SELECT id FROM "Creator" WHERE slug = $1 LIMIT 1`,
+        [slug]
+      );
+  return { available: rows.length === 0 };
+}
+
 // ── Upload avatar → Vercel Blob ───────────────────────────────────────────────
 async function handleUploadAvatar(body) {
   const { slug, filename, data: base64Data } = body;
@@ -166,6 +189,12 @@ async function handleCreate(pool, body) {
   if (!name || !slug) {
     const err = new Error('name and slug are required'); err.status = 400; throw err;
   }
+  const { rows: slugConflict } = await pool.query(
+    `SELECT id FROM "Creator" WHERE slug = $1 LIMIT 1`, [slug]
+  );
+  if (slugConflict.length) {
+    const err = new Error(`Slug "${slug}" is already in use`); err.status = 409; throw err;
+  }
   const { rows } = await pool.query(
     `INSERT INTO "Creator" (name, slug, avatar_url, bio, user_id, is_active, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, NOW())
@@ -198,6 +227,15 @@ async function handleUpdate(pool, id, body, ctx) {
 
   if (!updates.length) {
     const err = new Error('No fields to update'); err.status = 400; throw err;
+  }
+
+  if (slug !== undefined) {
+    const { rows: slugConflict } = await pool.query(
+      `SELECT id FROM "Creator" WHERE slug = $1 AND id != $2 LIMIT 1`, [slug, id]
+    );
+    if (slugConflict.length) {
+      const err = new Error(`Slug "${slug}" is already in use`); err.status = 409; throw err;
+    }
   }
 
   updates.push(`updated_at = NOW()`);
