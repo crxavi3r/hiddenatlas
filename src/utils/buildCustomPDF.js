@@ -34,22 +34,31 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = []) {
     : '';
 
   // ── Resolve raw image URLs — DB assets take priority over content.days.img ─
-  console.log('[buildCustomPDF] injecting day images — days:', (content.days || []).length);
+  // Source values: 'blob' (Vercel Blob upload), 'filesystem' (static public/),
+  // 'manual' (user-entered URL). Only 'blob' URLs need the server-side proxy;
+  // 'filesystem' paths are resolved by the browser via URL resolution.
+  console.log('[buildCustomPDF] injecting day images — days:', (content.days || []).length,
+    '| day assets:', dbAssets.filter(a => a.assetType === 'day').length);
   const days = (content.days || []).map(day => {
-    const dbImgs = dbAssets
-      .filter(a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day))
-      .map(a => a.url)
-      .filter(Boolean);
+    const dayAssets = dbAssets.filter(
+      a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day)
+    );
+    const dbImgs = dayAssets.map(a => a.url).filter(Boolean);
     const imgs = dbImgs.length > 0 ? dbImgs : (day.img ? [day.img] : []);
     if (Number(day.day) === 11) {
       console.log('PDF day 11 image URL', imgs[0] || '(none)');
+      console.log('PDF day 11 image source',
+        dayAssets[0]?.source || (day.img ? 'content.days.img' : '(none)'));
     }
     return { ...day, imgs };
   });
 
   // ── Resolve cover image ─────────────────────────────────────────────────────
+  const heroAsset    = dbAssets.find(a => a.assetType === 'hero');
   const rawCoverImage = itinerary.coverImage || content.hero?.coverImage || '';
   console.log('PDF hero image URL', rawCoverImage || '(none)');
+  console.log('PDF hero image source',
+    heroAsset?.source || (itinerary.coverImage ? 'itinerary.coverImage field' : '(none)'));
 
   // ── Pre-fetch all images as base64 via server-side proxy ───────────────────
   // @react-pdf/renderer cannot reliably fetch remote URLs in a browser context.

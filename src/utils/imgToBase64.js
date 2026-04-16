@@ -22,10 +22,15 @@
 export async function imgToBase64(url) {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url;   // already a data URI — pass through
-  if (!url.startsWith('http')) return url;   // local/bundled asset — pass through
+  if (!url.startsWith('http')) {
+    // Filesystem / relative path — the browser resolves it via URL resolution.
+    // No proxy needed. react-pdf loads it as a static asset.
+    console.log('[imgToBase64] filesystem path — passing through:', url.slice(0, 80));
+    return url;
+  }
 
   const cleanUrl = url.replace(/\?.*/, '');
-  console.log('[imgToBase64] requesting via server proxy:', cleanUrl.slice(0, 100));
+  console.log('[imgToBase64] blob/remote URL — fetching via server proxy:', cleanUrl.slice(0, 100));
 
   try {
     const proxyRes = await fetch(`/api/image-proxy?url=${encodeURIComponent(cleanUrl)}`);
