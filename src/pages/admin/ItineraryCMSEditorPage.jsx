@@ -863,8 +863,32 @@ export default function ItineraryCMSEditorPage() {
     setPdfState('generating');
 
     try {
-      // Fetch fresh assets from DB (don't rely on images tab having been visited)
-      const token       = await getToken();
+      const token = await getToken();
+
+      // ── 1. Fetch fresh itinerary content from DB ───────────────────────────
+      // CRITICAL: do NOT use `form` for content — form.content is the in-memory
+      // editor state that is deliberately never refreshed from the DB response
+      // after save (see handleSave comment). Using form would render a PDF from
+      // stale data while the website shows the up-to-date DB version.
+      console.log('[CMS] PDF generation — fetching fresh itinerary from DB for id:', targetId);
+      const itineRes    = await fetch(`/api/itinerary-cms?action=get&id=${targetId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const itineJson   = await itineRes.json();
+      if (itineJson.error) throw new Error(`Failed to fetch itinerary: ${itineJson.error}`);
+      const freshItinerary = itineJson.itinerary;
+      const freshDays      = freshItinerary.content?.days || [];
+      console.log('[CMS] PDF generation — itinerary loaded | slug:', freshItinerary.slug, '| days:', freshDays.length);
+
+      // Debug Day 11 specifically so divergence is visible in logs
+      const day11 = freshDays.find(d => Number(d.day) === 11);
+      if (day11) {
+        console.log('[CMS] PDF Day 11 from DB:', JSON.stringify({ day: day11.day, title: day11.title, img: day11.img }, null, 2));
+      } else {
+        console.warn('[CMS] PDF generation — Day 11 not found in DB content (total days:', freshDays.length, ')');
+      }
+
+      // ── 2. Fetch fresh assets from DB ─────────────────────────────────────
       console.log('[CMS] PDF generation — fetching fresh assets for id:', targetId);
       const assetsRes   = await fetch(`/api/itinerary-cms?action=assets&id=${targetId}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -873,8 +897,9 @@ export default function ItineraryCMSEditorPage() {
       const freshAssets = assetsJson.assets ?? [];
       console.log('[CMS] PDF generation — assets fetched:', freshAssets.length, '| day assets:', freshAssets.filter(a => a.assetType === 'day').length);
 
+      // ── 3. Generate PDF from fresh DB data ────────────────────────────────
       const { buildCustomPDFBlob } = await import('../../utils/buildCustomPDF');
-      const blob = await buildCustomPDFBlob({ ...form, id: targetId }, freshAssets);
+      const blob = await buildCustomPDFBlob(freshItinerary, freshAssets);
       console.log('[CMS] PDF generation — blob ready, size:', blob.size, 'bytes');
 
       // Convert blob to base64

@@ -48,6 +48,9 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = []) {
       ? dbImgs
       : (day.img ? [day.img] : []);
     console.log(`[buildCustomPDF] day ${day.day} imgs:`, imgs.length, imgs[0]?.slice(0, 50) || '(none)');
+    if (Number(day.day) === 11) {
+      console.log('[buildCustomPDF] Day 11 resolved →', JSON.stringify({ title: day.title, imgs: imgs.length, img0: imgs[0]?.slice(0, 80) || '(none)' }));
+    }
     return { ...day, imgs };
   });
 
