@@ -598,7 +598,9 @@ const api = useApi();
       console.log('[ItineraryDetail] not signed in — proceeding without save');
     }
     console.log('[ItineraryDetail] proceeding with PDF generation (free)');
-    await downloadItineraryPDF(itinerary);
+    // Pass merged days (dbDays ?? staticDays) so the PDF matches what the site shows.
+    // Using bare `itinerary` here would feed the static bundle (old Day 11 title/content).
+    await downloadItineraryPDF({ ...itinerary, days });
   }
 
   // Passed to UnlockedSidebar: save as PREMIUM_JOURNEY then download.
@@ -621,7 +623,8 @@ const api = useApi();
       window.open(pdfUrl, '_blank', 'noopener,noreferrer');
     } else {
       console.log('[ItineraryDetail] generating PDF client-side (premium)');
-      await downloadItineraryPDF(itinerary);
+      // Pass merged days so client-side PDF matches the site — same as the free path.
+      await downloadItineraryPDF({ ...itinerary, days });
     }
   }
 

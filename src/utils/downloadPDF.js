@@ -25,10 +25,17 @@ export async function downloadItineraryPDF(itinerary) {
     ...itinerary,
     coverImage: localCover || itinerary.coverImage,
     mapImage: getMapImage(assetSlug, assetVariant),
-    days: (itinerary.days || []).map(day => ({
-      ...day,
-      imgs: getDayImages(assetSlug, day.day, assetVariant),
-    })),
+    days: (itinerary.days || []).map(day => {
+      // Local filesystem images take priority (high-res originals).
+      // Fall back to day.img (DB/Blob URL) when no local file exists —
+      // this covers days whose images were uploaded via the CMS asset manager.
+      const fsImgs = getDayImages(assetSlug, day.day, assetVariant);
+      const imgs   = fsImgs.length > 0 ? fsImgs : (day.img ? [day.img] : []);
+      if (day.day === 11) {
+        console.log('[download-free] Day 11 →', JSON.stringify({ title: day.title, imgs: imgs.length, img0: imgs[0]?.slice(0, 80) || '(none)' }));
+      }
+      return { ...day, imgs };
+    }),
   };
 
   console.log('[download-free] generating PDF for:', itinerary.title);
