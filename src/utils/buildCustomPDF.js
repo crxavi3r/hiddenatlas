@@ -12,9 +12,10 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = []) {
   console.log('[buildCustomPDF] starting — slug:', itinerary.slug, '| assets:', dbAssets.length);
 
   const { createElement } = await import('react');
-  const [{ pdf }, { default: ItineraryPDF }] = await Promise.all([
+  const [{ pdf }, { default: ItineraryPDF }, { imgToBase64, imgsToBase64 }] = await Promise.all([
     import('@react-pdf/renderer'),
     import('../components/ItineraryPDF'),
+    import('./imgToBase64'),
   ]);
 
   // ── Parse content ───────────────────────────────────────────────────────────
@@ -57,8 +58,29 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = []) {
   // ── Resolve cover image ─────────────────────────────────────────────────────
   // Use the scalar coverImage field first (synced by save), fall back to
   // content.hero.coverImage. Both should be equivalent after a save.
-  const coverImage = itinerary.coverImage || content.hero?.coverImage || '';
-  console.log('[buildCustomPDF] coverImage:', coverImage ? coverImage.slice(0, 60) + '…' : '(none)');
+  const rawCoverImage = itinerary.coverImage || content.hero?.coverImage || '';
+  console.log('[buildCustomPDF] coverImage (raw):', rawCoverImage ? rawCoverImage.slice(0, 60) + '…' : '(none)');
+
+  // ── Pre-fetch all remote images as base64 ──────────────────────────────────
+  // @react-pdf/renderer has known instability with remote URL fetching in browser
+  // context. imgUrl() in ItineraryPDF.jsx also appends ?w=N&q=85 params that work
+  // for Unsplash but break Vercel Blob URLs. Data URIs bypass both issues:
+  // they don't start with "http" so imgUrl() passes them through unchanged.
+  console.log('[buildCustomPDF] pre-fetching images as base64…');
+
+  const [coverImage, daysWithBase64] = await Promise.all([
+    imgToBase64(rawCoverImage),
+    Promise.all(days.map(async day => {
+      const b64Imgs = await imgsToBase64(day.imgs);
+      if (Number(day.day) === 11) {
+        console.log('[buildCustomPDF] Day 11 base64 imgs:', b64Imgs.length,
+          b64Imgs[0] ? b64Imgs[0].slice(0, 40) + '…' : '(none)');
+      }
+      return { ...day, imgs: b64Imgs.length > 0 ? b64Imgs : day.imgs };
+    })),
+  ]);
+
+  console.log('[buildCustomPDF] coverImage after base64:', coverImage ? coverImage.slice(0, 40) + '…' : '(none)');
 
   // ── transport: null means "no transport section" ───────────────────────────
   // An empty array is truthy and would crash TransportPage (transport.routes.map).
@@ -87,7 +109,7 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = []) {
     transport,
     accommodation: [],   // custom itineraries don't use this PDF section
     mapImage:     null,  // no static route map for custom itineraries
-    days,
+    days:         daysWithBase64,
   };
 
   console.log('[buildCustomPDF] resolvedItinerary shape:', {
