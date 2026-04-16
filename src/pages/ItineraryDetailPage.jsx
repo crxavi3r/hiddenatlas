@@ -944,7 +944,7 @@ const api = useApi();
               </div>
             </div>
             <Link
-              to={`/${creator.slug}`}
+              to={`/custom?designer=${encodeURIComponent(creator.slug)}`}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '6px',
                 padding: '10px 20px', background: '#1B6B65', color: 'white',
