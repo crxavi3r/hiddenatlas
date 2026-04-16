@@ -5,6 +5,7 @@ import { Plus, RefreshCw, Eye, Edit2, Copy, Trash2, Globe, EyeOff } from 'lucide
 import { itineraries as STATIC_ITINERARIES } from '../../data/itineraries';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { resolveCoverImage } from '../../lib/resolveCoverImage';
+import { useUserCtx } from '../../lib/useUserCtx.jsx';
 
 // ── Shared style tokens ───────────────────────────────────────────────────────
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
@@ -91,6 +92,7 @@ export default function ItinerariesCMSPage() {
   const { getToken } = useAuth();
   const navigate     = useNavigate();
   const isMobile     = useIsMobile();
+  const { isAdmin }  = useUserCtx();
 
   const [items,          setItems]          = useState([]);
   const [collections,    setCollections]    = useState([]);
@@ -111,19 +113,22 @@ export default function ItinerariesCMSPage() {
     try {
       const token = await getToken();
       if (!token) { setLoading(false); return; }
-      const [cmsRes, creatorsRes] = await Promise.all([
+      // Only admins need the creators list (for the filter dropdown).
+      // Designers always see only their own itineraries — no filter needed.
+      const requests = [
         fetch('/api/itinerary-cms?action=list', { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('/api/creators?action=list', { headers: { Authorization: `Bearer ${token}` } }),
-      ]);
+        ...(isAdmin ? [fetch('/api/creators?action=list', { headers: { Authorization: `Bearer ${token}` } })] : []),
+      ];
+      const [cmsRes, creatorsRes] = await Promise.all(requests);
       const cmsJson      = await cmsRes.json();
-      const creatorsJson = await creatorsRes.json();
+      const creatorsJson = creatorsRes ? await creatorsRes.json() : {};
       if (cmsJson.error) throw new Error(cmsJson.error);
       setItems(cmsJson.itineraries);
       setCollections(cmsJson.collections ?? []);
-      if (!creatorsJson.error) setAllCreators(creatorsJson.creators || []);
+      if (isAdmin && !creatorsJson.error) setAllCreators(creatorsJson.creators || []);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
-  }, [getToken]);
+  }, [getToken, isAdmin]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -292,32 +297,36 @@ export default function ItinerariesCMSPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button
-            onClick={handleSeed}
-            disabled={seeding}
-            style={{ ...btnSecondary, display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <RefreshCw size={12} />
-            {seeding ? 'Seeding…' : 'Seed from static data'}
-          </button>
-          <button
-            onClick={handleBackfillPricing}
-            disabled={backfilling}
-            title="Assign correct Stripe pricing plan to all premium itineraries"
-            style={{ ...btnSecondary, display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <RefreshCw size={12} />
-            {backfilling ? 'Backfilling…' : 'Backfill pricing'}
-          </button>
-          {counts.unpublishedPublic > 0 && (
-            <button
-              onClick={handleBulkPublish}
-              disabled={publishing}
-              style={{ ...btnSecondary, display: 'flex', alignItems: 'center', gap: '6px', color: '#1B6B65', borderColor: '#A8D5D0' }}
-            >
-              <Globe size={12} />
-              {publishing ? 'Publishing…' : `Publish all (${counts.unpublishedPublic})`}
-            </button>
+          {isAdmin && (
+            <>
+              <button
+                onClick={handleSeed}
+                disabled={seeding}
+                style={{ ...btnSecondary, display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <RefreshCw size={12} />
+                {seeding ? 'Seeding…' : 'Seed from static data'}
+              </button>
+              <button
+                onClick={handleBackfillPricing}
+                disabled={backfilling}
+                title="Assign correct Stripe pricing plan to all premium itineraries"
+                style={{ ...btnSecondary, display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <RefreshCw size={12} />
+                {backfilling ? 'Backfilling…' : 'Backfill pricing'}
+              </button>
+              {counts.unpublishedPublic > 0 && (
+                <button
+                  onClick={handleBulkPublish}
+                  disabled={publishing}
+                  style={{ ...btnSecondary, display: 'flex', alignItems: 'center', gap: '6px', color: '#1B6B65', borderColor: '#A8D5D0' }}
+                >
+                  <Globe size={12} />
+                  {publishing ? 'Publishing…' : `Publish all (${counts.unpublishedPublic})`}
+                </button>
+              )}
+            </>
           )}
           <button
             onClick={() => navigate('/admin/itineraries/new')}
@@ -381,8 +390,8 @@ export default function ItinerariesCMSPage() {
         </div>
         )}
 
-        {/* Creator filter — only shown when creators exist */}
-        {filter !== 'collections' && allCreators.length > 0 && (
+        {/* Creator filter — admins see full dropdown; designers see a static label */}
+        {filter !== 'collections' && isAdmin && allCreators.length > 0 && (
           <select
             value={creatorFilter}
             onChange={e => setCreatorFilter(e.target.value)}
@@ -399,6 +408,15 @@ export default function ItinerariesCMSPage() {
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
+        )}
+        {filter !== 'collections' && !isAdmin && (
+          <span style={{
+            padding: '5px 12px', fontSize: '12px', fontWeight: '500',
+            border: '1px solid #E8E3DA', borderRadius: '6px',
+            background: '#EFF6F5', color: '#1B6B65',
+          }}>
+            Your itineraries
+          </span>
         )}
       </div>
 
