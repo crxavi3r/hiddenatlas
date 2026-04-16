@@ -2,30 +2,49 @@
  * buildCustomPDF.js
  *
  * Generates a PDF blob from a DB-backed custom itinerary.
- * Uses the same ItineraryPDF component as standard itineraries but builds the
- * required shape from the Itinerary DB record + ItineraryAsset rows.
  *
- * Returns a Blob — caller decides whether to download or upload.
+ * IMPORTANT — image contract:
+ *   Caller MUST pre-resolve all remote (blob/http) image URLs to base64 data URIs
+ *   before calling this function. Pass the resolved map as `resolvedImages`.
+ *   @react-pdf/renderer cannot reliably fetch remote URLs in a browser context.
+ *
+ *   Filesystem paths (/itineraries/...) are passed through unchanged — the browser
+ *   resolves them via URL resolution to the static public/ files.
+ *
+ *   resolvedImages = { 'https://...blob...': 'data:image/jpeg;base64,...', ... }
  */
 
-export async function buildCustomPDFBlob(itinerary, dbAssets = []) {
-  console.log('[buildCustomPDF] starting — slug:', itinerary.slug, '| assets:', dbAssets.length);
+function resolveImg(url, resolvedImages) {
+  if (!url) return null;
+  // Already a data URI — pass through
+  if (url.startsWith('data:')) return url;
+  // Filesystem path — browser resolves it via URL, no conversion needed
+  if (!url.startsWith('http')) return url;
+  // Remote URL — must be in resolvedImages (pre-fetched server-side)
+  const b64 = resolvedImages[url];
+  if (!b64) {
+    console.error('[buildCustomPDF] no resolved image for URL:', url.slice(0, 80),
+      '— image will be absent from PDF');
+  }
+  return b64 || null;
+}
+
+export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImages = {}) {
+  console.log('[buildCustomPDF] starting — slug:', itinerary.slug,
+    '| assets:', dbAssets.length,
+    '| pre-resolved images:', Object.keys(resolvedImages).length);
 
   const { createElement } = await import('react');
-  const [{ pdf }, { default: ItineraryPDF }, { imgToBase64, imgsToBase64 }] = await Promise.all([
+  const [{ pdf }, { default: ItineraryPDF }] = await Promise.all([
     import('@react-pdf/renderer'),
     import('../components/ItineraryPDF'),
-    import('./imgToBase64'),
   ]);
 
   // ── Parse content ───────────────────────────────────────────────────────────
-  console.log('[buildCustomPDF] parsing content');
   const content = typeof itinerary.content === 'string'
     ? (() => { try { return JSON.parse(itinerary.content); } catch (e) { console.error('[buildCustomPDF] content parse failed:', e); return {}; } })()
     : (itinerary.content ?? {});
 
-  // Admin stores structured data under content.summary and content.tripFacts.
-  // Flat-root fallbacks handle legacy or externally-produced records.
   const summary   = content.summary   || {};
   const tripFacts = content.tripFacts || {};
 
@@ -33,58 +52,39 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = []) {
     ? `${itinerary.durationDays} Day${itinerary.durationDays !== 1 ? 's' : ''}`
     : '';
 
-  // ── Resolve raw image URLs — DB assets take priority over content.days.img ─
-  // Source values: 'blob' (Vercel Blob upload), 'filesystem' (static public/),
-  // 'manual' (user-entered URL). Only 'blob' URLs need the server-side proxy;
-  // 'filesystem' paths are resolved by the browser via URL resolution.
-  console.log('[buildCustomPDF] injecting day images — days:', (content.days || []).length,
-    '| day assets:', dbAssets.filter(a => a.assetType === 'day').length);
+  // ── Resolve day images ──────────────────────────────────────────────────────
+  // Priority: DB assets (ItineraryAsset rows) → inline day.img field.
+  // All remote URLs are looked up in resolvedImages (pre-fetched server-side).
+  // Filesystem paths (/itineraries/...) pass through unchanged.
   const days = (content.days || []).map(day => {
     const dayAssets = dbAssets.filter(
       a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day)
     );
-    const dbImgs = dayAssets.map(a => a.url).filter(Boolean);
-    const imgs = dbImgs.length > 0 ? dbImgs : (day.img ? [day.img] : []);
+    const rawUrls = dayAssets.length > 0
+      ? dayAssets.map(a => a.url).filter(Boolean)
+      : (day.img ? [day.img] : []);
+
+    const imgs = rawUrls.map(u => resolveImg(u, resolvedImages)).filter(Boolean);
+
     if (Number(day.day) === 11) {
-      console.log('PDF day 11 image URL', imgs[0] || '(none)');
-      console.log('PDF day 11 image source',
-        dayAssets[0]?.source || (day.img ? 'content.days.img' : '(none)'));
+      const src = dayAssets[0]?.source || (day.img ? 'content.days.img' : 'none');
+      console.log('PDF day 11 image URL',     rawUrls[0] || '(none)');
+      console.log('PDF day 11 image source',  src);
+      console.log('PDF day 11 base64 exists', imgs.length > 0);
     }
     return { ...day, imgs };
   });
 
   // ── Resolve cover image ─────────────────────────────────────────────────────
-  const heroAsset    = dbAssets.find(a => a.assetType === 'hero');
   const rawCoverImage = itinerary.coverImage || content.hero?.coverImage || '';
-  console.log('PDF hero image URL', rawCoverImage || '(none)');
-  console.log('PDF hero image source',
-    heroAsset?.source || (itinerary.coverImage ? 'itinerary.coverImage field' : '(none)'));
+  const heroAsset     = dbAssets.find(a => a.assetType === 'hero');
+  const coverImage    = resolveImg(rawCoverImage, resolvedImages);
 
-  // ── Pre-fetch all images as base64 via server-side proxy ───────────────────
-  // @react-pdf/renderer cannot reliably fetch remote URLs in a browser context.
-  // The server-side proxy fetches the image using Node.js (no CORS restrictions)
-  // and returns a base64 data URI. Data URIs bypass imgUrl()'s ?w=N&q=85
-  // transformation (they don't start with 'http') and are embedded directly
-  // in the PDF — no network request needed at render time.
-  // NO FALLBACK: if conversion fails, null is passed (image absent) not a broken URL.
-  console.log('[buildCustomPDF] converting images to base64 via server proxy…');
-
-  const [coverImage, daysWithBase64] = await Promise.all([
-    imgToBase64(rawCoverImage),
-    Promise.all(days.map(async day => {
-      const b64Imgs = await imgsToBase64(day.imgs);
-      if (Number(day.day) === 11) {
-        console.log('PDF day 11 base64 exists', b64Imgs.length > 0);
-      }
-      return { ...day, imgs: b64Imgs };
-    })),
-  ]);
-
+  console.log('PDF hero image URL',     rawCoverImage || '(none)');
+  console.log('PDF hero image source',  heroAsset?.source || (itinerary.coverImage ? 'itinerary.coverImage' : '(none)'));
   console.log('PDF hero base64 exists', !!coverImage);
 
-  // ── transport: null means "no transport section" ───────────────────────────
-  // An empty array is truthy and would crash TransportPage (transport.routes.map).
-  // Custom itineraries don't have a transport section — pass null explicitly.
+  // ── transport: null = no transport section ─────────────────────────────────
   const transport = content.transport && typeof content.transport === 'object' && !Array.isArray(content.transport)
     ? content.transport
     : null;
@@ -100,32 +100,18 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = []) {
     nights:       itinerary.durationDays ? itinerary.durationDays - 1 : null,
     groupSize:    tripFacts.groupSize                         || null,
     coverImage,
-    // description: scalar field is derived from summary.shortDescription on save
     description:  itinerary.description || summary.shortDescription || '',
-    // highlights, whySpecial, routeOverview live under content.summary in admin
     highlights:   summary.highlights   || content.highlights   || [],
     whySpecial:   summary.whySpecial   || content.whySpecial   || '',
     routeOverview: summary.routeOverview || content.routeOverview || '',
     transport,
-    accommodation: [],   // custom itineraries don't use this PDF section
-    mapImage:     null,  // no static route map for custom itineraries
-    days:         daysWithBase64,
+    accommodation: [],
+    mapImage:     null,
+    days,
   };
 
-  console.log('[buildCustomPDF] resolvedItinerary shape:', {
-    title:        resolvedItinerary.title,
-    days:         resolvedItinerary.days.length,
-    highlights:   resolvedItinerary.highlights.length,
-    whySpecial:   !!resolvedItinerary.whySpecial,
-    routeOverview: !!resolvedItinerary.routeOverview,
-    transport:    resolvedItinerary.transport,
-    coverImage:   !!resolvedItinerary.coverImage,
-  });
-
   // ── Render PDF ──────────────────────────────────────────────────────────────
-  console.log('[buildCustomPDF] rendering PDF document');
   const doc = createElement(ItineraryPDF, { itinerary: resolvedItinerary });
-
   try {
     const blob = await pdf(doc).toBlob();
     console.log('[buildCustomPDF] PDF blob generated — size:', blob.size, 'bytes');
@@ -137,10 +123,11 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = []) {
 }
 
 /**
- * downloadCustomPDF — generate and trigger browser download
+ * downloadCustomPDF — generate and trigger browser download.
+ * Note: call buildCustomPDFBlob directly if you have pre-resolved images.
  */
 export async function downloadCustomPDF(itinerary, dbAssets = []) {
-  const blob = await buildCustomPDFBlob(itinerary, dbAssets);
+  const blob = await buildCustomPDFBlob(itinerary, dbAssets, {});
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href     = url;

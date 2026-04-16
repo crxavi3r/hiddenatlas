@@ -113,6 +113,7 @@ export default async function handler(req, res) {
       if (action === 'update-pdf-status') { await assertOwnership(pool, id, ctx); return res.json(await handleUpdatePDFStatus(pool, id, body)); }
       if (action === 'ai-generate')       { adminOnly(); return res.json(await handleAIGenerate(pool, body, ctx.email)); }
       if (action === 'backfill-pricing')  { adminOnly(); return res.json(await handleBackfillPricing(pool)); }
+      if (action === 'resolve-images')    return res.json(await handleResolveImages(body));
       return res.status(400).json({ error: 'Unknown POST action' });
     }
   } catch (err) {
@@ -1067,6 +1068,36 @@ const EMPTY_CONTENT = {
   pdfConfig: { showRouteMap: true, showHotels: true },
   seo:       { metaTitle: '', metaDescription: '' },
 };
+
+// ── PDF image resolution ──────────────────────────────────────────────────────
+// Fetches a list of remote image URLs server-side (Node.js, no CORS restrictions)
+// and returns each as a base64 data URI ready for @react-pdf/renderer.
+// Called by the admin PDF generator before rendering so the renderer receives
+// embedded data URIs, not remote URLs it cannot reliably fetch in the browser.
+async function handleResolveImages({ urls = [] }) {
+  const resolved = {};
+  await Promise.all(urls.map(async url => {
+    if (!url || typeof url !== 'string') return;
+    // Strip query params — Vercel Blob ignores them
+    const cleanUrl = url.replace(/\?.*/, '');
+    try {
+      const r = await fetch(cleanUrl);
+      if (!r.ok) {
+        console.error('[resolve-images] fetch failed:', r.status, cleanUrl.slice(0, 80));
+        resolved[url] = null;
+        return;
+      }
+      const buf         = await r.arrayBuffer();
+      const contentType = r.headers.get('content-type') || 'image/jpeg';
+      resolved[url]     = `data:${contentType};base64,${Buffer.from(buf).toString('base64')}`;
+      console.log('[resolve-images] ok —', contentType, Math.round(buf.byteLength / 1024) + 'kb —', cleanUrl.slice(0, 60));
+    } catch (err) {
+      console.error('[resolve-images] exception:', err.message, cleanUrl.slice(0, 80));
+      resolved[url] = null;
+    }
+  }));
+  return { resolved };
+}
 
 function mergeEmptyContent(content) {
   return {

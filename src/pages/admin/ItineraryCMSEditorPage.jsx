@@ -897,9 +897,44 @@ export default function ItineraryCMSEditorPage() {
       const freshAssets = assetsJson.assets ?? [];
       console.log('[CMS] PDF generation — assets fetched:', freshAssets.length, '| day assets:', freshAssets.filter(a => a.assetType === 'day').length);
 
-      // ── 3. Generate PDF from fresh DB data ────────────────────────────────
+      // ── 3. Resolve blob images server-side before rendering ───────────────
+      // @react-pdf/renderer cannot reliably fetch remote URLs in a browser context.
+      // We pre-fetch all blob-source images via the server (Node.js, no CORS) and
+      // pass base64 data URIs to the renderer so it never makes a network request.
+      const freshContent = freshItinerary.content
+        ? (typeof freshItinerary.content === 'string'
+            ? (() => { try { return JSON.parse(freshItinerary.content); } catch { return {}; } })()
+            : freshItinerary.content)
+        : {};
+
+      const coverUrl  = freshItinerary.coverImage || freshContent.hero?.coverImage || '';
+      const urlsToResolve = [
+        coverUrl,
+        // Blob day assets
+        ...freshAssets.filter(a => a.source === 'blob').map(a => a.url),
+        // Inline day.img fields that are remote URLs
+        ...freshDays.filter(d => d.img?.startsWith('http')).map(d => d.img),
+      ].filter((u, i, arr) => u && arr.indexOf(u) === i); // deduplicate + remove empty
+
+      console.log('[CMS] resolving', urlsToResolve.length, 'blob image(s) server-side…');
+      const resolveRes  = await fetch('/api/itinerary-cms?action=resolve-images', {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ urls: urlsToResolve }),
+      });
+      const { resolved: resolvedImages = {} } = await resolveRes.json();
+
+      // Mandatory diagnostic logs
+      console.log('PDF hero image URL',     coverUrl || '(none)');
+      console.log('PDF hero base64 exists', !!resolvedImages[coverUrl]);
+      const day11Asset = freshAssets.find(a => a.assetType === 'day' && Number(a.dayNumber) === 11 && a.source === 'blob');
+      const day11Url   = day11Asset?.url || day11?.img || '';
+      console.log('PDF day 11 image URL',     day11Url || '(none)');
+      console.log('PDF day 11 base64 exists', !!resolvedImages[day11Url]);
+
+      // ── 4. Generate PDF from fresh DB data + pre-resolved images ──────────
       const { buildCustomPDFBlob } = await import('../../utils/buildCustomPDF');
-      const blob = await buildCustomPDFBlob(freshItinerary, freshAssets);
+      const blob = await buildCustomPDFBlob(freshItinerary, freshAssets, resolvedImages);
       console.log('[CMS] PDF generation — blob ready, size:', blob.size, 'bytes');
 
       // Convert blob to base64

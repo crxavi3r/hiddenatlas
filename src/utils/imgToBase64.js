@@ -1,66 +1,58 @@
 /**
  * imgToBase64.js
  *
- * Converts a remote image URL to a base64 data URI via a server-side proxy.
+ * Browser-side image-to-base64 converter for the public download path.
+ * Used by downloadPDF.js (no auth available, must run in browser).
  *
- * WHY SERVER-SIDE:
- *   - @react-pdf/renderer cannot reliably fetch remote images in a browser context
- *   - Vercel Blob URLs served via the browser may be blocked by CORS or CSP
- *   - Server-side fetch (Node.js) has no such restrictions
- *   - Buffer.from(buffer).toString('base64') is the native, reliable conversion path
+ * For the admin PDF generation path, image resolution is done server-side
+ * via api/itinerary-cms?action=resolve-images — see buildCustomPDF.js.
  *
- * DATA URIS IN REACT-PDF:
- *   - data:image/...;base64,... strings don't start with 'http'
- *   - imgUrl() in ItineraryPDF.jsx passes them through unchanged (no ?w=N&q=85)
- *   - The renderer embeds the image directly — no network request at render time
+ * Vercel Blob public URLs support CORS (Access-Control-Allow-Origin: *),
+ * so direct browser fetch works without a proxy.
  *
- * NO SILENT FALLBACK:
- *   - If conversion fails, returns null
- *   - Callers must pass null (no image) rather than a raw URL (grey placeholder)
+ * Filesystem paths (/itineraries/...) are returned unchanged — the browser
+ * resolves them via URL to the static public/ files.
  */
 
 export async function imgToBase64(url) {
   if (!url || typeof url !== 'string') return null;
-  if (url.startsWith('data:')) return url;   // already a data URI — pass through
-  if (!url.startsWith('http')) {
-    // Filesystem / relative path — the browser resolves it via URL resolution.
-    // No proxy needed. react-pdf loads it as a static asset.
-    console.log('[imgToBase64] filesystem path — passing through:', url.slice(0, 80));
-    return url;
-  }
+  if (url.startsWith('data:')) return url;   // already a data URI
+  if (!url.startsWith('http')) return url;   // filesystem path — pass through
 
   const cleanUrl = url.replace(/\?.*/, '');
-  console.log('[imgToBase64] blob/remote URL — fetching via server proxy:', cleanUrl.slice(0, 100));
 
   try {
-    const proxyRes = await fetch(`/api/image-proxy?url=${encodeURIComponent(cleanUrl)}`);
-
-    if (!proxyRes.ok) {
-      let errMsg = `${proxyRes.status}`;
-      try { const body = await proxyRes.json(); errMsg += ` — ${body.error || ''}`; } catch {}
-      console.error('[imgToBase64] proxy returned error:', errMsg, 'url:', cleanUrl.slice(0, 100));
+    const resp = await fetch(cleanUrl);
+    if (!resp.ok) {
+      console.error('resolvePdfImage failed', cleanUrl, resp.status);
       return null;
     }
 
-    const { dataUri } = await proxyRes.json();
-    if (!dataUri) {
-      console.error('[imgToBase64] proxy returned no dataUri for url:', cleanUrl.slice(0, 100));
-      return null;
-    }
+    const arrayBuffer = await resp.arrayBuffer();
+    const contentType = resp.headers.get('content-type') || 'image/jpeg';
 
-    console.log('[imgToBase64] success — url:', cleanUrl.slice(0, 80),
-      '| size:', Math.round(dataUri.length / 1024) + 'kb');
+    // Chunk-based btoa to avoid call-stack limits on large images
+    const bytes     = new Uint8Array(arrayBuffer);
+    let binary      = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    const base64  = btoa(binary);
+    const dataUri = `data:${contentType};base64,${base64}`;
+
+    console.log('resolvePdfImage ok', cleanUrl.slice(0, 80), Math.round(base64.length / 1024) + 'kb');
     return dataUri;
 
   } catch (err) {
-    console.error('[imgToBase64] exception calling proxy:', err.message, 'url:', cleanUrl.slice(0, 100));
+    console.error('resolvePdfImage exception', cleanUrl, err.message);
     return null;
   }
 }
 
 /**
- * Pre-fetch an array of image URLs as base64 data URIs.
- * Filters out nulls (failed fetches). Never returns raw remote URLs.
+ * Convert an array of image URLs to base64 data URIs.
+ * Returns only successfully converted images.
  */
 export async function imgsToBase64(urls) {
   if (!Array.isArray(urls) || urls.length === 0) return [];
