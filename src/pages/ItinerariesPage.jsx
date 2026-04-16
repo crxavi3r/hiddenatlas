@@ -1,9 +1,139 @@
-import { useState, useEffect } from 'react';
-import { Search, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, X, ChevronDown } from 'lucide-react';
 import { itineraries as staticItineraries } from '../data/itineraries';
 import ItineraryCard from '../components/ItineraryCard';
 import { usePurchasedSlugs } from '../lib/usePurchasedSlugs';
 import { useSEO } from '../hooks/useSEO';
+
+// ── Designer select dropdown ──────────────────────────────────────────────────
+function DesignerSelect({ creators, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref             = useRef(null);
+  const selected        = creators.find(c => c.slug === value) ?? null;
+
+  useEffect(() => {
+    function handleOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, []);
+
+  function Avatar({ creator, size = 20 }) {
+    const initials = creator.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    if (creator.avatarUrl) {
+      return (
+        <img
+          src={creator.avatarUrl}
+          alt=""
+          style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1px solid #E8E3DA' }}
+          onError={e => { e.currentTarget.style.display = 'none'; }}
+        />
+      );
+    }
+    return (
+      <div style={{
+        width: size, height: size, borderRadius: '50%', flexShrink: 0,
+        background: '#EFF6F5', border: '1px solid rgba(27,107,101,0.15)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: size <= 20 ? '8px' : '10px', fontWeight: '700', color: '#1B6B65',
+      }}>
+        {initials}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={ref} className="ha-designer-select" style={{ position: 'relative' }}>
+      {/* Trigger */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '8px',
+          padding: '0 10px 0 10px', height: '36px', width: '100%',
+          background: value ? '#EFF6F5' : 'white',
+          border: `1px solid ${value ? '#A8D5D0' : '#E8E3DA'}`,
+          borderRadius: '6px', cursor: 'pointer',
+          fontSize: '13px', fontWeight: '500',
+          color: value ? '#1B6B65' : '#4A433A',
+          transition: 'border-color 0.15s, background 0.15s',
+        }}
+      >
+        {selected
+          ? <Avatar creator={selected} size={20} />
+          : <span style={{ width: 20, height: 20, flexShrink: 0 }} />
+        }
+        <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {selected ? selected.name : 'All designers'}
+        </span>
+        <ChevronDown
+          size={13}
+          style={{ flexShrink: 0, color: '#8C8070',
+            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s',
+          }}
+        />
+      </button>
+
+      {/* Panel */}
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0,
+          background: 'white', border: '1px solid #E8E3DA', borderRadius: '8px',
+          boxShadow: '0 8px 28px rgba(28,26,22,0.10)', zIndex: 200,
+          overflow: 'hidden', minWidth: '200px',
+        }}>
+          {/* All designers */}
+          <button
+            onClick={() => { onChange(''); setOpen(false); }}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+              padding: '10px 14px',
+              background: !value ? '#EFF6F5' : 'white',
+              border: 'none', borderBottom: '1px solid #F4F1EC',
+              cursor: 'pointer', textAlign: 'left',
+              fontSize: '13px', fontWeight: !value ? '600' : '400',
+              color: !value ? '#1B6B65' : '#4A433A',
+            }}
+            onMouseEnter={e => { if (value) e.currentTarget.style.background = '#F9F7F4'; }}
+            onMouseLeave={e => { if (value) e.currentTarget.style.background = 'white'; }}
+          >
+            <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#F4F1EC',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span style={{ fontSize: '11px', color: '#8C8070' }}>✦</span>
+            </div>
+            All designers
+          </button>
+
+          {/* Individual creators */}
+          {creators.map((c, i) => (
+            <button
+              key={c.slug}
+              onClick={() => { onChange(c.slug); setOpen(false); }}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+                padding: '9px 14px',
+                background: value === c.slug ? '#EFF6F5' : 'white',
+                border: 'none',
+                borderBottom: i < creators.length - 1 ? '1px solid #F4F1EC' : 'none',
+                cursor: 'pointer', textAlign: 'left',
+                fontSize: '13px', fontWeight: value === c.slug ? '600' : '400',
+                color: value === c.slug ? '#1B6B65' : '#1C1A16',
+              }}
+              onMouseEnter={e => { if (value !== c.slug) e.currentTarget.style.background = '#F9F7F4'; }}
+              onMouseLeave={e => { if (value !== c.slug) e.currentTarget.style.background = value === c.slug ? '#EFF6F5' : 'white'; }}
+            >
+              <Avatar creator={c} size={24} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {c.name}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ItinerariesPage() {
   const [searchQuery,    setSearchQuery]    = useState('');
@@ -162,62 +292,25 @@ export default function ItinerariesPage() {
         <style>{`
           .ha-search-input { width: 520px; }
           @media (max-width: 600px) { .ha-search-input { width: calc(100vw - 64px); } }
+          .ha-designer-select { width: 220px; }
+          @media (max-width: 600px) { .ha-designer-select { flex: 1; } }
         `}</style>
       </section>
 
-      {/* Creator filter bar — only shown when there are creators with itineraries */}
+      {/* Designer filter bar — scalable dropdown, works at any creator count */}
       {creators.length > 0 && (
-        <div style={{ background: 'white', borderBottom: '1px solid #E8E3DA', overflowX: 'auto' }}>
+        <div style={{ background: 'white', borderBottom: '1px solid #E8E3DA' }}>
           <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 24px',
-            display: 'flex', alignItems: 'center', gap: '8px', minHeight: '52px' }}>
+            display: 'flex', alignItems: 'center', gap: '10px', minHeight: '52px' }}>
             <span style={{ fontSize: '11px', fontWeight: '600', color: '#8C8070',
-              textTransform: 'uppercase', letterSpacing: '0.8px', flexShrink: 0, marginRight: '4px' }}>
-              By designer:
+              textTransform: 'uppercase', letterSpacing: '0.8px', flexShrink: 0 }}>
+              Travel designer
             </span>
-            <button
-              onClick={() => setCreatorFilter('')}
-              style={{
-                padding: '5px 14px', borderRadius: '20px', border: '1px solid',
-                fontSize: '12px', fontWeight: '500', cursor: 'pointer', flexShrink: 0,
-                borderColor: !creatorFilter ? '#1B6B65' : '#E8E3DA',
-                background:  !creatorFilter ? '#EFF6F5' : 'white',
-                color:       !creatorFilter ? '#1B6B65' : '#4A433A',
-              }}
-            >
-              All
-            </button>
-            {creators.map(c => (
-              <button
-                key={c.slug}
-                onClick={() => setCreatorFilter(c.slug === creatorFilter ? '' : c.slug)}
-                style={{
-                  padding: '5px 14px', borderRadius: '20px', border: '1px solid',
-                  fontSize: '12px', fontWeight: '500', cursor: 'pointer', flexShrink: 0,
-                  display: 'flex', alignItems: 'center', gap: '6px',
-                  borderColor: creatorFilter === c.slug ? '#1B6B65' : '#E8E3DA',
-                  background:  creatorFilter === c.slug ? '#EFF6F5' : 'white',
-                  color:       creatorFilter === c.slug ? '#1B6B65' : '#4A433A',
-                }}
-              >
-                {c.avatarUrl && (
-                  <img src={c.avatarUrl} alt={c.name}
-                    style={{ width: '16px', height: '16px', borderRadius: '50%', objectFit: 'cover' }}
-                    onError={e => { e.currentTarget.style.display = 'none'; }}
-                  />
-                )}
-                {c.name}
-              </button>
-            ))}
-            {creatorFilter && (
-              <button
-                onClick={() => setCreatorFilter('')}
-                style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
-                  color: '#8C8070', display: 'flex', alignItems: 'center', gap: '4px',
-                  fontSize: '12px', padding: '4px 8px', flexShrink: 0 }}
-              >
-                <X size={12} /> Clear filter
-              </button>
-            )}
+            <DesignerSelect
+              creators={creators}
+              value={creatorFilter}
+              onChange={setCreatorFilter}
+            />
           </div>
         </div>
       )}
