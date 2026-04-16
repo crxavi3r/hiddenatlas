@@ -758,7 +758,7 @@ function PhilippinesRouteSvgMap() {
   ];
   const CITIES = [
     { name:'Manila',      lon:120.97, lat:14.60, tier:1, dx: 13 },
-    { name:'San Vicente', lon:119.49, lat:10.53, tier:2, dx: 13 },
+    { name:'San Vicente', lon:119.179, lat:10.4125, tier:2, dx: 13 },
     { name:'El Nido',     lon:119.41, lat:11.17, tier:1, dx:-12 },
     { name:'Coron',       lon:120.20, lat:11.99, tier:2, dx: 13 },
     { name:'Boracay',     lon:121.93, lat:11.96, tier:1, dx:-12 },
