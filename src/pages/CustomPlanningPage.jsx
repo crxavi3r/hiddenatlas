@@ -3,7 +3,7 @@ import { useUser } from '@clerk/clerk-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { User } from 'lucide-react';
 import { useApi } from '../lib/api';
-import { Check, ArrowRight, MapPin, Calendar, Users, Heart, Lock } from 'lucide-react';
+import { Check, ArrowRight, MapPin, Calendar, Users, Heart, Lock, Search, LayoutGrid, List } from 'lucide-react';
 import { CUSTOM_TIERS, GROUP_SIZE_OPTIONS, getTierByGroupSize } from '../data/customPricingTiers';
 import { useSEO } from '../hooks/useSEO';
 
@@ -164,6 +164,8 @@ export default function CustomPlanningPage() {
   const [searchParams] = useSearchParams();
   const [designer, setDesigner]   = useState(null);
   const [designers, setDesigners] = useState(null); // null = loading
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode]   = useState('grid'); // 'grid' | 'list'
 
   // Load a specific designer when ?designer=slug is present.
   // Depends on the slug string so it re-runs when the URL param changes
@@ -563,84 +565,236 @@ export default function CustomPlanningPage() {
       {!designer && designers !== null && designers.length > 0 && (
         <section style={{ padding: 'clamp(40px, 6vw, 72px) 24px', background: '#F4F1EC', borderBottom: '1px solid #E8E3DA' }}>
           <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
-            <div style={{ marginBottom: '36px' }}>
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: '8px',
-                fontSize: '10.5px', fontWeight: '700', letterSpacing: '2px',
-                textTransform: 'uppercase', color: '#1B6B65', marginBottom: '10px',
-              }}>
-                <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#1B6B65', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '700', flexShrink: 0 }}>1</span>
-                Choose your travel designer
-              </span>
-              <h2 style={{
-                fontFamily: "'Playfair Display', Georgia, serif",
-                fontSize: 'clamp(22px, 3vw, 32px)', fontWeight: '600', color: '#1C1A16',
-              }}>
-                Who do you want to plan your trip?
-              </h2>
-            </div>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-              gap: '16px',
-            }}>
-              {designers.map(d => {
-                const initials = d.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-                const count = d.itinerary_count || 0;
-                return (
-                  <button
-                    key={d.id}
-                    onClick={() => {
-                      setDesigner(d); // instant UI — hides the picker immediately
-                      navigate(`/custom?designer=${encodeURIComponent(d.slug)}`, { replace: true });
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
+
+            {/* Header row: title + search + view toggle */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: '20px', marginBottom: '28px' }}>
+              <div>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '8px',
+                  fontSize: '10.5px', fontWeight: '700', letterSpacing: '2px',
+                  textTransform: 'uppercase', color: '#1B6B65', marginBottom: '10px',
+                }}>
+                  <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#1B6B65', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '700', flexShrink: 0 }}>1</span>
+                  Choose your travel designer
+                </span>
+                <h2 style={{
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                  fontSize: 'clamp(22px, 3vw, 32px)', fontWeight: '600', color: '#1C1A16',
+                }}>
+                  Who do you want to plan your trip?
+                </h2>
+              </div>
+
+              {/* Controls */}
+              <div className="ha-picker-controls" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexShrink: 0 }}>
+                {/* Search */}
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', display: 'flex' }}>
+                    <Search size={14} color="#8C8070" />
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Search designer..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
                     style={{
-                      background: 'white', border: '1px solid #E8E3DA', borderRadius: '10px',
-                      padding: '24px', textAlign: 'left', cursor: 'pointer',
-                      transition: 'box-shadow 0.25s, transform 0.25s, border-color 0.25s',
-                      display: 'flex', gap: '16px', alignItems: 'flex-start',
+                      padding: '9px 14px 9px 33px',
+                      border: '1px solid #D4CCBF',
+                      borderRadius: '6px',
+                      fontSize: '13.5px', color: '#1C1A16',
+                      background: 'white', outline: 'none',
+                      width: '190px', transition: 'border-color 0.2s',
                     }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.boxShadow = '0 8px 32px rgba(28,26,22,0.10)';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.borderColor = '#1B6B65';
+                    onFocus={e => e.target.style.borderColor = '#1B6B65'}
+                    onBlur={e => e.target.style.borderColor = '#D4CCBF'}
+                  />
+                </div>
+
+                {/* View toggle */}
+                <div style={{ display: 'flex', border: '1px solid #D4CCBF', borderRadius: '6px', overflow: 'hidden', background: 'white' }}>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('grid')}
+                    style={{
+                      padding: '9px 12px', border: 'none',
+                      background: viewMode === 'grid' ? '#1B6B65' : 'transparent',
+                      color: viewMode === 'grid' ? 'white' : '#8C8070',
+                      cursor: 'pointer', display: 'flex', alignItems: 'center',
+                      transition: 'background 0.15s, color 0.15s',
                     }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.boxShadow = 'none';
-                      e.currentTarget.style.transform = 'none';
-                      e.currentTarget.style.borderColor = '#E8E3DA';
-                    }}
+                    title="Grid view"
                   >
-                    {d.avatarUrl
-                      ? <img src={d.avatarUrl} alt={d.name} style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                      : <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#EFF6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: "'Playfair Display', Georgia, serif", fontSize: '16px', fontWeight: '600', color: '#1B6B65' }}>{initials}</div>
-                    }
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '16px', fontWeight: '600', color: '#1C1A16', marginBottom: '3px' }}>{d.name}</p>
-                      {count > 0 && (
-                        <p style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase', color: '#C9A96E', marginBottom: '6px' }}>
-                          {count} {count === 1 ? 'itinerary' : 'itineraries'}
-                        </p>
-                      )}
-                      {d.bio && (
-                        <p style={{ fontSize: '13px', color: '#6B6156', lineHeight: '1.55', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                          {d.bio}
-                        </p>
-                      )}
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '10px', fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase', color: '#1B6B65' }}>
-                        Plan with {d.name.split(' ')[0]} <ArrowRight size={11} />
-                      </span>
-                    </div>
+                    <LayoutGrid size={15} />
                   </button>
-                );
-              })}
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('list')}
+                    style={{
+                      padding: '9px 12px', border: 'none',
+                      borderLeft: '1px solid #D4CCBF',
+                      background: viewMode === 'list' ? '#1B6B65' : 'transparent',
+                      color: viewMode === 'list' ? 'white' : '#8C8070',
+                      cursor: 'pointer', display: 'flex', alignItems: 'center',
+                      transition: 'background 0.15s, color 0.15s',
+                    }}
+                    title="List view"
+                  >
+                    <List size={15} />
+                  </button>
+                </div>
+              </div>
             </div>
+
+            {/* Cards */}
+            {(() => {
+              const filtered = (designers || []).filter(d =>
+                !searchQuery.trim() || d.name.toLowerCase().includes(searchQuery.toLowerCase().trim())
+              );
+
+              if (filtered.length === 0) {
+                return (
+                  <p style={{ fontSize: '15px', color: '#8C8070', textAlign: 'center', padding: '48px 0' }}>
+                    No designers match your search.
+                  </p>
+                );
+              }
+
+              if (viewMode === 'grid') {
+                return (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                    gap: '16px',
+                    alignItems: 'stretch',
+                  }}>
+                    {filtered.map(d => {
+                      const initials = d.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+                      const count = d.itinerary_count || 0;
+                      return (
+                        <button
+                          key={d.id}
+                          onClick={() => {
+                            setDesigner(d);
+                            navigate(`/custom?designer=${encodeURIComponent(d.slug)}`, { replace: true });
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          style={{
+                            background: 'white', border: '1px solid #E8E3DA', borderRadius: '10px',
+                            padding: '24px', textAlign: 'left', cursor: 'pointer',
+                            transition: 'box-shadow 0.25s, transform 0.25s, border-color 0.25s',
+                            display: 'flex', flexDirection: 'column',
+                            width: '100%',
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.boxShadow = '0 8px 32px rgba(28,26,22,0.10)';
+                            e.currentTarget.style.transform = 'translateY(-2px)';
+                            e.currentTarget.style.borderColor = '#1B6B65';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.boxShadow = 'none';
+                            e.currentTarget.style.transform = 'none';
+                            e.currentTarget.style.borderColor = '#E8E3DA';
+                          }}
+                        >
+                          {d.avatarUrl
+                            ? <img src={d.avatarUrl} alt={d.name} style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover', marginBottom: '14px', flexShrink: 0 }} />
+                            : <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#EFF6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '14px', flexShrink: 0, fontFamily: "'Playfair Display', Georgia, serif", fontSize: '18px', fontWeight: '600', color: '#1B6B65' }}>{initials}</div>
+                          }
+                          <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '16px', fontWeight: '600', color: '#1C1A16', marginBottom: '3px' }}>{d.name}</p>
+                          {count > 0 && (
+                            <p style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase', color: '#C9A96E', marginBottom: '8px' }}>
+                              {count} {count === 1 ? 'itinerary' : 'itineraries'}
+                            </p>
+                          )}
+                          {/* Bio — 3-line clamp, flex: 1 pushes CTA to bottom */}
+                          <p style={{
+                            fontSize: '13px', color: '#6B6156', lineHeight: '1.55',
+                            overflow: 'hidden', display: '-webkit-box',
+                            WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
+                            flex: 1,
+                          }}>
+                            {d.bio || ''}
+                          </p>
+                          {/* CTA — pinned to bottom */}
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                            marginTop: '16px',
+                            fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px',
+                            textTransform: 'uppercase', color: '#1B6B65',
+                          }}>
+                            Plan with {d.name.split(' ')[0]} <ArrowRight size={11} />
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              }
+
+              // List view
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {filtered.map(d => {
+                    const initials = d.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+                    const count = d.itinerary_count || 0;
+                    return (
+                      <button
+                        key={d.id}
+                        onClick={() => {
+                          setDesigner(d);
+                          navigate(`/custom?designer=${encodeURIComponent(d.slug)}`, { replace: true });
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        style={{
+                          background: 'white', border: '1px solid #E8E3DA', borderRadius: '10px',
+                          padding: '16px 20px', textAlign: 'left', cursor: 'pointer',
+                          transition: 'box-shadow 0.2s, border-color 0.2s',
+                          display: 'flex', gap: '16px', alignItems: 'center', width: '100%',
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.boxShadow = '0 4px 16px rgba(28,26,22,0.08)';
+                          e.currentTarget.style.borderColor = '#1B6B65';
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.boxShadow = 'none';
+                          e.currentTarget.style.borderColor = '#E8E3DA';
+                        }}
+                      >
+                        {d.avatarUrl
+                          ? <img src={d.avatarUrl} alt={d.name} style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                          : <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#EFF6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: "'Playfair Display', Georgia, serif", fontSize: '16px', fontWeight: '600', color: '#1B6B65' }}>{initials}</div>
+                        }
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap', marginBottom: '3px' }}>
+                            <p style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '16px', fontWeight: '600', color: '#1C1A16' }}>{d.name}</p>
+                            {count > 0 && (
+                              <span style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase', color: '#C9A96E', flexShrink: 0 }}>
+                                {count} {count === 1 ? 'itinerary' : 'itineraries'}
+                              </span>
+                            )}
+                          </div>
+                          {d.bio && (
+                            <p style={{ fontSize: '13px', color: '#6B6156', lineHeight: '1.5', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical' }}>
+                              {d.bio}
+                            </p>
+                          )}
+                        </div>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', flexShrink: 0, fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase', color: '#1B6B65' }}>
+                          Plan with {d.name.split(' ')[0]} <ArrowRight size={11} />
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
           </div>
         </section>
       )}
 
-      {/* Form + Sidebar */}
+      {/* Form + Sidebar — only shown once a designer is chosen (or if no designers to pick from) */}
+      {(designer || (designers !== null && designers.length === 0)) && (
       <section style={{ padding: 'clamp(40px, 6vw, 80px) 24px' }}>
         <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
           <div className="ha-custom-grid">
@@ -1052,6 +1206,7 @@ export default function CustomPlanningPage() {
           </div>
         </div>
       </section>
+      )}
 
       <style>{`
         .ha-custom-grid {
@@ -1091,6 +1246,8 @@ export default function CustomPlanningPage() {
         }
         @media (max-width: 480px) {
           .ha-value-props { grid-template-columns: 1fr; gap: 28px; }
+          .ha-picker-controls { flex-direction: column; align-items: stretch !important; }
+          .ha-picker-controls input { width: 100% !important; }
         }
       `}</style>
     </div>
