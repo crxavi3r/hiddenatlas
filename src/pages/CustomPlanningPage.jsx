@@ -1243,11 +1243,10 @@ export default function CustomPlanningPage() {
           .ha-form-2col > [style*="gridColumn"] { grid-column: 1 / -1; }
           .ha-budget-grid { grid-template-columns: 1fr; }
           #field-phone input { max-width: 100% !important; }
+          .ha-picker-controls { display: none; }
         }
         @media (max-width: 480px) {
           .ha-value-props { grid-template-columns: 1fr; gap: 28px; }
-          .ha-picker-controls { flex-direction: column; align-items: stretch !important; }
-          .ha-picker-controls input { width: 100% !important; }
         }
       `}</style>
     </div>
