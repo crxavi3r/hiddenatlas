@@ -302,7 +302,7 @@ async function handleUpdate(pool, id, body, ctx) {
        type            = COALESCE($17, type),
        "isPrivate"     = COALESCE($18::boolean, "isPrivate"),
        "isCollection"  = COALESCE($19::boolean, "isCollection"),
-       creator_id      = CASE WHEN $20 THEN $21::text ELSE creator_id END,
+       creator_id      = CASE WHEN $20 THEN NULLIF($21, '')::uuid ELSE creator_id END,
        "pdfStatus"     = 'stale',
        "updatedAt"     = NOW()
      WHERE id = $1
