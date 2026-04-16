@@ -44,17 +44,22 @@ export async function downloadItineraryPDF(itinerary) {
     imgToBase64(rawCoverImage),
     Promise.all(rawDays.map(async day => {
       const b64Imgs = await imgsToBase64(day.imgs);
+      // NO FALLBACK: if base64 conversion failed, imgs is empty — renderer gets
+      // no image rather than a broken remote URL that would produce a grey placeholder.
       if (day.day === 11) {
-        console.log('[download-free] Day 11 (base64) →', b64Imgs.length,
-          b64Imgs[0] ? b64Imgs[0].slice(0, 40) + '…' : '(none)');
+        console.log('[download-free] Day 11 base64 exists:', b64Imgs.length > 0,
+          b64Imgs[0] ? b64Imgs[0].slice(0, 40) + '…' : '(none — image will be absent)');
       }
-      return { ...day, imgs: b64Imgs.length > 0 ? b64Imgs : day.imgs };
+      return { ...day, imgs: b64Imgs };
     })),
   ]);
 
+  console.log('[download-free] Hero base64 exists:', !!coverImageB64,
+    coverImageB64 ? coverImageB64.slice(0, 40) + '…' : '(none — cover will be absent)');
+
   const resolvedItinerary = {
     ...itinerary,
-    coverImage: coverImageB64 || rawCoverImage,
+    coverImage: coverImageB64 || null,  // null → CoverPage renders no hero, not a grey placeholder
     mapImage: getMapImage(assetSlug, assetVariant),
     days: daysWithBase64,
   };

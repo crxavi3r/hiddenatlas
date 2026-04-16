@@ -72,15 +72,18 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = []) {
     imgToBase64(rawCoverImage),
     Promise.all(days.map(async day => {
       const b64Imgs = await imgsToBase64(day.imgs);
+      // NO FALLBACK: if base64 conversion failed, imgs is empty — renderer gets
+      // no image rather than a broken remote URL that would produce a grey placeholder.
       if (Number(day.day) === 11) {
-        console.log('[buildCustomPDF] Day 11 base64 imgs:', b64Imgs.length,
-          b64Imgs[0] ? b64Imgs[0].slice(0, 40) + '…' : '(none)');
+        console.log('[buildCustomPDF] Day 11 base64 exists:', b64Imgs.length > 0,
+          b64Imgs[0] ? b64Imgs[0].slice(0, 40) + '…' : '(none — image will be absent)');
       }
-      return { ...day, imgs: b64Imgs.length > 0 ? b64Imgs : day.imgs };
+      return { ...day, imgs: b64Imgs };
     })),
   ]);
 
-  console.log('[buildCustomPDF] coverImage after base64:', coverImage ? coverImage.slice(0, 40) + '…' : '(none)');
+  console.log('[buildCustomPDF] Hero base64 exists:', !!coverImage,
+    coverImage ? coverImage.slice(0, 40) + '…' : '(none — cover will be absent)');
 
   // ── transport: null means "no transport section" ───────────────────────────
   // An empty array is truthy and would crash TransportPage (transport.routes.map).
