@@ -199,27 +199,6 @@ export default function HomePage() {
               >
                 Explore itineraries <ArrowRight size={15} />
               </Link>
-              <Link
-                to="/itineraries"
-                style={{
-                  padding: '15px 30px', background: 'rgba(255,255,255,0.1)',
-                  color: 'white', border: '1px solid rgba(255,255,255,0.35)',
-                  borderRadius: '4px', fontSize: '13px', fontWeight: '700',
-                  letterSpacing: '0.8px', textTransform: 'uppercase',
-                  textDecoration: 'none', backdropFilter: 'blur(8px)',
-                  transition: 'background 0.2s, border-color 0.2s',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.18)';
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.65)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.35)';
-                }}
-              >
-                Browse journeys
-              </Link>
             </div>
 
             <div style={{
@@ -1334,13 +1313,14 @@ function CreatorCard({ creator }) {
   return (
     <Link
       to={`/${creator.slug}`}
-      style={{ textDecoration: 'none', display: 'block' }}
+      style={{ textDecoration: 'none', display: 'flex', height: '100%' }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       <div style={{
         borderRadius: '10px', background: 'white', border: '1px solid #E8E3DA',
         padding: '28px 24px', textAlign: 'center',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%',
         boxShadow: hovered ? '0 12px 40px rgba(28,26,22,0.10)' : '0 2px 12px rgba(28,26,22,0.04)',
         transform: hovered ? 'translateY(-4px)' : 'none',
         transition: 'box-shadow 0.3s, transform 0.3s',
@@ -1377,6 +1357,7 @@ function CreatorCard({ creator }) {
           display: 'inline-flex', alignItems: 'center', gap: '4px',
           fontSize: '11px', fontWeight: '700', letterSpacing: '0.8px', textTransform: 'uppercase',
           color: hovered ? '#1B6B65' : '#B5AA99', transition: 'color 0.2s',
+          marginTop: 'auto',
         }}>
           View profile <ArrowRight size={11} />
         </span>

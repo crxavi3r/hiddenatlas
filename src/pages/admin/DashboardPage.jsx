@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import {
   Eye, Users, Download, ShoppingBag, DollarSign, TrendingUp,
   ArrowRight, Clock,
 } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { useUserCtx } from '../../lib/useUserCtx.jsx';
 
 const PERIODS = [
   { label: 'Today',   value: 'today' },
@@ -350,6 +351,7 @@ export default function DashboardPage() {
   const [apiError, setApiError] = useState(null);
   const { getToken } = useAuth();
   const isMobile = useIsMobile();
+  const { isAdmin, loading: ctxLoading } = useUserCtx();
 
   useEffect(() => {
     let cancelled = false;
@@ -382,6 +384,12 @@ export default function DashboardPage() {
     load();
     return () => { cancelled = true; };
   }, [period, getToken]);
+
+  // Designers have no permission to view dashboard stats — redirect them straight
+  // to their itinerary list. Admins continue to the full dashboard as normal.
+  if (!ctxLoading && !isAdmin) {
+    return <Navigate to="/admin/itineraries" replace />;
+  }
 
   const kpis = data?.kpis;
 

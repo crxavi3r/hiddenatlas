@@ -294,6 +294,8 @@ export default function CreatorEditorPage() {
           bio:       form.bio.trim() || null,
           userId:    form.userId.trim() || null,
           isActive:  form.isActive,
+          // Only send email on creation — it's derived from the linked user account
+          ...(isNew && linkedUser?.email ? { email: linkedUser.email } : {}),
         }),
       });
       const json = await res.json();

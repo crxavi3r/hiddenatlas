@@ -185,7 +185,7 @@ async function handleUploadAvatar(body) {
 
 // ── Create creator ────────────────────────────────────────────────────────────
 async function handleCreate(pool, body) {
-  const { name, slug, avatarUrl = null, bio = null, userId = null, isActive = true } = body;
+  const { name, slug, avatarUrl = null, bio = null, userId = null, isActive = true, email = null } = body;
   if (!name || !slug) {
     const err = new Error('name and slug are required'); err.status = 400; throw err;
   }
@@ -196,11 +196,22 @@ async function handleCreate(pool, body) {
     const err = new Error(`Slug "${slug}" is already in use`); err.status = 409; throw err;
   }
   const { rows } = await pool.query(
-    `INSERT INTO "Creator" (name, slug, avatar_url, bio, user_id, is_active, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, NOW())
+    `INSERT INTO "Creator" (name, slug, avatar_url, bio, user_id, is_active, email, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
      RETURNING *`,
-    [name, slug, avatarUrl, bio, userId || null, isActive]
+    [name, slug, avatarUrl, bio, userId || null, isActive, email || null]
   );
+
+  // When linking to a user, promote their role from 'user' → 'designer'.
+  // Admins and existing designers are left untouched.
+  if (userId) {
+    await pool.query(
+      `UPDATE "User" SET role = 'designer', "updatedAt" = NOW()
+       WHERE id = $1 AND role = 'user'`,
+      [userId]
+    );
+  }
+
   return { creator: rows[0] };
 }
 
