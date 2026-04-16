@@ -58,6 +58,7 @@ export default function CreatorEditorPage() {
   const isNew          = id === 'new';
   const avatarInputRef  = useRef(null);
   const slugEdited      = useRef(false); // tracks whether slug was manually changed on new creators
+  const nameEdited      = useRef(false); // tracks whether name was manually typed by admin
   const userSelectorRef = useRef(null);
   const slugDebounceRef = useRef(null);
 
@@ -123,9 +124,8 @@ export default function CreatorEditorPage() {
     if (id !== creatorId) return <Navigate to={creatorId ? `/admin/creators/${creatorId}` : '/admin'} replace />;
   }
 
-  async function checkSlug(slug) {
-    if (!slug) { setSlugStatus(null); return; }
-    setSlugStatus('checking');
+  async function checkSlugRaw(slug) {
+    if (!slug) return false;
     try {
       const token   = await getToken();
       const idParam = !isNew ? `&id=${encodeURIComponent(id)}` : '';
@@ -134,7 +134,27 @@ export default function CreatorEditorPage() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const json = await res.json();
-      setSlugStatus(json.available ? 'available' : 'taken');
+      return json.available === true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function findAvailableSlug(base) {
+    if (await checkSlugRaw(base)) return base;
+    for (let i = 2; i <= 20; i++) {
+      const candidate = `${base}-${i}`;
+      if (await checkSlugRaw(candidate)) return candidate;
+    }
+    return base; // fallback — backend will catch if still taken
+  }
+
+  async function checkSlug(slug) {
+    if (!slug) { setSlugStatus(null); return; }
+    setSlugStatus('checking');
+    try {
+      const available = await checkSlugRaw(slug);
+      setSlugStatus(available ? 'available' : 'taken');
     } catch {
       setSlugStatus(null); // fail open — backend is the real guard
     }
@@ -148,6 +168,7 @@ export default function CreatorEditorPage() {
   }
 
   function handleNameChange(name) {
+    nameEdited.current = true;
     const autoSlug = (isNew && !slugEdited.current) ? slugify(name) : null;
     setForm(f => ({ ...f, name, ...(autoSlug !== null ? { slug: autoSlug } : {}) }));
     if (autoSlug !== null) scheduleSlugCheck(autoSlug);
@@ -176,11 +197,34 @@ export default function CreatorEditorPage() {
   }
 
   function selectUser(user) {
-    setForm(f => ({ ...f, userId: user.id }));
     setLinkedUser({ name: user.name, email: user.email });
     setUserQuery('');
     setUserResults([]);
     setDropdownOpen(false);
+
+    // Derive best display name from the selected user
+    const displayName = user.name?.trim() ||
+      (user.email?.includes('@') ? user.email.split('@')[0].replace(/[._-]+/g, ' ').trim() : '') ||
+      '';
+
+    const shouldPrefillName = !nameEdited.current && displayName;
+
+    if (shouldPrefillName) {
+      setForm(f => ({ ...f, userId: user.id, name: displayName }));
+
+      if (!slugEdited.current) {
+        const baseSlug = slugify(displayName);
+        setSlugStatus('checking');
+        findAvailableSlug(baseSlug).then(availableSlug => {
+          if (!slugEdited.current) { // guard: admin may have typed during async resolution
+            setForm(f => ({ ...f, slug: availableSlug }));
+            setSlugStatus('available');
+          }
+        });
+      }
+    } else {
+      setForm(f => ({ ...f, userId: user.id }));
+    }
   }
 
   function clearLinkedUser() {
@@ -331,6 +375,127 @@ export default function CreatorEditorPage() {
             )}
           </div>
         )}
+      </div>
+
+      {/* ── Account link card ── */}
+      <div style={{ ...card, padding: '28px', marginBottom: '20px' }}>
+        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '4px' }}>
+          Account Link
+        </p>
+        <p style={{ fontSize: '12px', color: '#8C8070', marginBottom: '20px', lineHeight: '1.6' }}>
+          {isNew
+            ? 'Search and select a user account to link. The name and slug will be pre-filled automatically.'
+            : 'Optional. Links this creator profile to a HiddenAtlas user account. Once linked, that user can log in and manage their own itineraries in the CMS.'}
+        </p>
+
+        {isAdmin ? (
+          <div style={{ ...fieldStyle }} ref={userSelectorRef}>
+            {form.userId ? (
+              /* ── Linked state ── */
+              <div>
+                <div style={{ padding: '10px 14px', background: '#F4F1EC', borderRadius: '6px',
+                  display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <CheckCircle size={14} color="#1B6B65" style={{ flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: '11px', color: '#6B6156', fontWeight: '600',
+                      textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '1px' }}>
+                      Linked account
+                    </p>
+                    <p style={{ fontSize: '13px', color: '#1C1A16', overflow: 'hidden',
+                      textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {linkedUser?.name
+                        ? `${linkedUser.name} — ${linkedUser.email}`
+                        : linkedUser?.email || form.userId}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearLinkedUser}
+                    style={{ ...btnSecondary, color: '#8C8070', padding: '5px 10px', flexShrink: 0 }}
+                  >
+                    <X size={12} />
+                    Unlink
+                  </button>
+                </div>
+                <p style={{ fontSize: '10.5px', color: '#C5BDB0', marginTop: '5px', fontFamily: 'monospace' }}>
+                  {form.userId}
+                </p>
+              </div>
+            ) : (
+              /* ── Search state ── */
+              <div>
+                <label style={labelStyle}>Search user</label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    value={userQuery}
+                    style={{ ...inputStyle, paddingRight: userSearching ? '36px' : '12px' }}
+                    placeholder="Name or email…"
+                    onChange={e => { setUserQuery(e.target.value); searchUsers(e.target.value); }}
+                    onFocus={() => userResults.length > 0 && setDropdownOpen(true)}
+                  />
+                  {userSearching && (
+                    <div style={{ position: 'absolute', right: '10px', top: '50%',
+                      transform: 'translateY(-50%)', width: '14px', height: '14px',
+                      borderRadius: '50%', border: '2px solid #E8E3DA', borderTopColor: '#1B6B65',
+                      animation: 'spin 0.8s linear infinite' }} />
+                  )}
+                  {dropdownOpen && (userResults.length > 0 || (!userSearching && userQuery.trim())) && (
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
+                      background: 'white', border: '1px solid #E8E3DA', borderRadius: '6px',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.08)', marginTop: '4px',
+                      maxHeight: '220px', overflowY: 'auto',
+                    }}>
+                      {userResults.length > 0 ? userResults.map(u => (
+                        <div
+                          key={u.id}
+                          onClick={() => selectUser(u)}
+                          style={{ padding: '9px 14px', cursor: 'pointer',
+                            borderBottom: '1px solid #F4F1EC' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#F9F7F4'}
+                          onMouseLeave={e => e.currentTarget.style.background = ''}
+                        >
+                          <p style={{ fontSize: '13px', color: '#1C1A16', fontWeight: '500' }}>
+                            {u.name}
+                          </p>
+                          <p style={{ fontSize: '11.5px', color: '#6B6156', marginTop: '1px' }}>
+                            {u.email}
+                          </p>
+                        </div>
+                      )) : (
+                        <div style={{ padding: '12px 14px' }}>
+                          <p style={{ fontSize: '13px', color: '#8C8070' }}>No users found.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          linkedUser?.email && (
+            <div style={{ marginBottom: '16px', padding: '10px 14px', background: '#F4F1EC', borderRadius: '6px',
+              display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <CheckCircle size={14} color="#1B6B65" style={{ flexShrink: 0 }} />
+              <div>
+                <p style={{ fontSize: '11px', color: '#6B6156', fontWeight: '600', textTransform: 'uppercase',
+                  letterSpacing: '0.4px', marginBottom: '1px' }}>Linked account</p>
+                <p style={{ fontSize: '13px', color: '#1C1A16' }}>{linkedUser.email}</p>
+              </div>
+            </div>
+          )
+        )}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <input type="checkbox" id="isActive" checked={form.isActive}
+            onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))}
+            style={{ width: '15px', height: '15px', accentColor: '#1B6B65' }}
+          />
+          <label htmlFor="isActive" style={{ fontSize: '13.5px', color: '#4A433A', cursor: 'pointer' }}>
+            Active (visible on public site and in creator filters)
+          </label>
+        </div>
       </div>
 
       {/* ── Profile card ── */}
@@ -487,126 +652,6 @@ export default function CreatorEditorPage() {
           <textarea value={form.bio} style={textareaStyle}
             placeholder="Short bio shown on the creator profile page…"
             onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} />
-        </div>
-      </div>
-
-      {/* ── Account link card ── */}
-      <div style={{ ...card, padding: '28px', marginBottom: '20px' }}>
-        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '4px' }}>
-          Account Link
-        </p>
-        <p style={{ fontSize: '12px', color: '#8C8070', marginBottom: '20px', lineHeight: '1.6' }}>
-          Optional. Links this creator profile to a HiddenAtlas user account.
-          Once linked, that user can log in and manage their own itineraries in the CMS.
-        </p>
-
-        {isAdmin ? (
-          <div style={{ ...fieldStyle }} ref={userSelectorRef}>
-            {form.userId ? (
-              /* ── Linked state ── */
-              <div>
-                <div style={{ padding: '10px 14px', background: '#F4F1EC', borderRadius: '6px',
-                  display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <CheckCircle size={14} color="#1B6B65" style={{ flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: '11px', color: '#6B6156', fontWeight: '600',
-                      textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '1px' }}>
-                      Linked account
-                    </p>
-                    <p style={{ fontSize: '13px', color: '#1C1A16', overflow: 'hidden',
-                      textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {linkedUser?.name
-                        ? `${linkedUser.name} — ${linkedUser.email}`
-                        : linkedUser?.email || form.userId}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={clearLinkedUser}
-                    style={{ ...btnSecondary, color: '#8C8070', padding: '5px 10px', flexShrink: 0 }}
-                  >
-                    <X size={12} />
-                    Unlink
-                  </button>
-                </div>
-                <p style={{ fontSize: '10.5px', color: '#C5BDB0', marginTop: '5px', fontFamily: 'monospace' }}>
-                  {form.userId}
-                </p>
-              </div>
-            ) : (
-              /* ── Search state ── */
-              <div>
-                <label style={labelStyle}>Search user</label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    value={userQuery}
-                    style={{ ...inputStyle, paddingRight: userSearching ? '36px' : '12px' }}
-                    placeholder="Name or email…"
-                    onChange={e => { setUserQuery(e.target.value); searchUsers(e.target.value); }}
-                    onFocus={() => userResults.length > 0 && setDropdownOpen(true)}
-                  />
-                  {userSearching && (
-                    <div style={{ position: 'absolute', right: '10px', top: '50%',
-                      transform: 'translateY(-50%)', width: '14px', height: '14px',
-                      borderRadius: '50%', border: '2px solid #E8E3DA', borderTopColor: '#1B6B65',
-                      animation: 'spin 0.8s linear infinite' }} />
-                  )}
-                  {dropdownOpen && (userResults.length > 0 || (!userSearching && userQuery.trim())) && (
-                    <div style={{
-                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-                      background: 'white', border: '1px solid #E8E3DA', borderRadius: '6px',
-                      boxShadow: '0 4px 16px rgba(0,0,0,0.08)', marginTop: '4px',
-                      maxHeight: '220px', overflowY: 'auto',
-                    }}>
-                      {userResults.length > 0 ? userResults.map(u => (
-                        <div
-                          key={u.id}
-                          onClick={() => selectUser(u)}
-                          style={{ padding: '9px 14px', cursor: 'pointer',
-                            borderBottom: '1px solid #F4F1EC' }}
-                          onMouseEnter={e => e.currentTarget.style.background = '#F9F7F4'}
-                          onMouseLeave={e => e.currentTarget.style.background = ''}
-                        >
-                          <p style={{ fontSize: '13px', color: '#1C1A16', fontWeight: '500' }}>
-                            {u.name}
-                          </p>
-                          <p style={{ fontSize: '11.5px', color: '#6B6156', marginTop: '1px' }}>
-                            {u.email}
-                          </p>
-                        </div>
-                      )) : (
-                        <div style={{ padding: '12px 14px' }}>
-                          <p style={{ fontSize: '13px', color: '#8C8070' }}>No users found.</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          linkedUser?.email && (
-            <div style={{ marginBottom: '16px', padding: '10px 14px', background: '#F4F1EC', borderRadius: '6px',
-              display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <CheckCircle size={14} color="#1B6B65" style={{ flexShrink: 0 }} />
-              <div>
-                <p style={{ fontSize: '11px', color: '#6B6156', fontWeight: '600', textTransform: 'uppercase',
-                  letterSpacing: '0.4px', marginBottom: '1px' }}>Linked account</p>
-                <p style={{ fontSize: '13px', color: '#1C1A16' }}>{linkedUser.email}</p>
-              </div>
-            </div>
-          )
-        )}
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <input type="checkbox" id="isActive" checked={form.isActive}
-            onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))}
-            style={{ width: '15px', height: '15px', accentColor: '#1B6B65' }}
-          />
-          <label htmlFor="isActive" style={{ fontSize: '13.5px', color: '#4A433A', cursor: 'pointer' }}>
-            Active (visible on public site and in creator filters)
-          </label>
         </div>
       </div>
 
