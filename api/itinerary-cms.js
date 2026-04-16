@@ -257,10 +257,13 @@ async function handleUpdate(pool, id, body, ctx) {
     type, isPrivate, isCollection,
   } = body;
 
-  // creatorId: only admins can re-assign; non-admins can't change it
-  const creatorIdParam = ctx.isAdmin && body.creatorId !== undefined
-    ? (body.creatorId || null)
-    : undefined; // undefined = leave unchanged
+  // creatorId is IMMUTABLE after creation — never update it here.
+  // If the payload contains a creatorId, log a warning and discard it.
+  if (body.creatorId !== undefined) {
+    console.warn(
+      `[itinerary-cms/update] BLOCKED: payload contained creatorId="${body.creatorId}" for id=${id} — discarded. creatorId is immutable after creation.`
+    );
+  }
 
   // Defensive parse: body parsers sometimes deliver JSONB fields as strings
   const rawContent = typeof content === 'string'
@@ -302,7 +305,6 @@ async function handleUpdate(pool, id, body, ctx) {
        type            = COALESCE($17, type),
        "isPrivate"     = COALESCE($18::boolean, "isPrivate"),
        "isCollection"  = COALESCE($19::boolean, "isCollection"),
-       creator_id      = CASE WHEN $20 THEN NULLIF($21, '')::uuid ELSE creator_id END,
        "pdfStatus"     = 'stale',
        "updatedAt"     = NOW()
      WHERE id = $1
@@ -327,8 +329,6 @@ async function handleUpdate(pool, id, body, ctx) {
       typeParam,
       isPrivateParam,
       typeof isCollection === 'boolean' ? isCollection : null,
-      creatorIdParam !== undefined, // $20: whether to update creatorId at all
-      creatorIdParam !== undefined ? creatorIdParam : null, // $21: the new value (may be null)
     ]
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });

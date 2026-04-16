@@ -772,6 +772,10 @@ export default function ItineraryCMSEditorPage() {
           ? parseInt(form.durationDays, 10) : null,
         stripePriceId: form.type === 'premium' ? (form.stripePriceId || null) : null,
         pricingKey:    form.type === 'premium' ? (form.pricingKey    || null) : null,
+        // creatorId is immutable after creation — strip it from update payloads.
+        // JSON.stringify omits undefined values, so this effectively removes the field.
+        // On create (!targetId) the form value is preserved so the backend can assign it.
+        ...(targetId ? { creatorId: undefined } : {}),
       };
 
       const res  = await fetch(`/api/itinerary-cms?action=${action}`, {
