@@ -861,14 +861,17 @@ export default function ItineraryCMSEditorPage() {
     try {
       // Fetch fresh assets from DB (don't rely on images tab having been visited)
       const token       = await getToken();
+      console.log('[CMS] PDF generation — fetching fresh assets for id:', targetId);
       const assetsRes   = await fetch(`/api/itinerary-cms?action=assets&id=${targetId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const assetsJson  = await assetsRes.json();
       const freshAssets = assetsJson.assets ?? [];
+      console.log('[CMS] PDF generation — assets fetched:', freshAssets.length, '| day assets:', freshAssets.filter(a => a.assetType === 'day').length);
 
       const { buildCustomPDFBlob } = await import('../../utils/buildCustomPDF');
       const blob = await buildCustomPDFBlob({ ...form, id: targetId }, freshAssets);
+      console.log('[CMS] PDF generation — blob ready, size:', blob.size, 'bytes');
 
       // Convert blob to base64
       const base64 = await new Promise((resolve, reject) => {
@@ -878,6 +881,7 @@ export default function ItineraryCMSEditorPage() {
         reader.readAsDataURL(blob);
       });
 
+      console.log('[CMS] PDF generation — uploading to Vercel Blob via API');
       const res  = await fetch(`/api/itinerary-cms?action=upload-pdf&id=${targetId}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -886,6 +890,7 @@ export default function ItineraryCMSEditorPage() {
       const json = await res.json();
       if (json.error) throw new Error(json.error);
 
+      console.log('[CMS] PDF generation — success, new pdfUrl:', json.pdfUrl);
       setForm(f => ({ ...f, pdfUrl: json.pdfUrl }));
       setPdfState('done');
       setTimeout(() => setPdfState('idle'), 4000);

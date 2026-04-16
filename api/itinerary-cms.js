@@ -625,20 +625,27 @@ async function handleUploadPDF(pool, id, body) {
   if (!base64Data) throw Object.assign(new Error('data (base64) is required'), { status: 400 });
 
   const { rows } = await pool.query(
-    `SELECT slug FROM "Itinerary" WHERE id = $1 LIMIT 1`, [id]
+    `SELECT slug, "pdfUrl" FROM "Itinerary" WHERE id = $1 LIMIT 1`, [id]
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
-  const slug = rows[0].slug;
+  const { slug, pdfUrl: previousPdfUrl } = rows[0];
 
-  const filename = `${slug}-hiddenatlas.pdf`;
-  const blobPath = `itineraries/${slug}/pdf/${filename}`;
-  const buffer   = Buffer.from(base64Data, 'base64');
+  // Use a timestamp in the filename so each generation gets a unique path.
+  // This avoids the Vercel Blob "already exists" error and ensures each new
+  // version has its own URL — no CDN cache collision possible.
+  const timestamp = Date.now();
+  const filename  = `${slug}-hiddenatlas-${timestamp}.pdf`;
+  const blobPath  = `itineraries/${slug}/pdf/${filename}`;
+  const buffer    = Buffer.from(base64Data, 'base64');
+
+  console.log('[upload-pdf] start — slug:', slug, '| path:', blobPath, '| size:', buffer.length, 'bytes');
 
   const result = await blobPut(blobPath, buffer, {
     access: 'public',
     contentType: 'application/pdf',
-    addRandomSuffix: false,
   });
+
+  console.log('[upload-pdf] blob upload success — url:', result.url);
 
   const { rows: updated } = await pool.query(
     `UPDATE "Itinerary"
@@ -646,6 +653,9 @@ async function handleUploadPDF(pool, id, body) {
      WHERE id = $1 RETURNING id, slug, "pdfUrl", "pdfStatus", "pdfGeneratedAt"`,
     [id, result.url]
   );
+
+  console.log('[upload-pdf] DB updated — new pdfUrl saved, pdfError cleared | previous url was:', previousPdfUrl || '(none)');
+
   return { ok: true, pdfUrl: result.url, itinerary: updated[0] };
 }
 
