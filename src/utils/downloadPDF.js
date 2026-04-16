@@ -17,49 +17,37 @@ export async function downloadItineraryPDF(itinerary) {
   // Local cover takes priority over the Unsplash-based coverImage.
   const localCover = getCoverImage(assetSlug);
   const rawCoverImage = localCover || itinerary.coverImage;
+  console.log('PDF hero image URL', rawCoverImage || '(none)');
 
-  // Resolve day images using the same variant logic as the web renderer:
-  //   complete  → root day image only
-  //   essential → essential/ override → root fallback
-  //   short     → short/ override → root fallback
-  // Returns empty array if no image is found; DayPage collapses the image area.
+  // Resolve day images: local filesystem first, fall back to day.img (DB/Blob URL).
   const rawDays = (itinerary.days || []).map(day => {
-    // Local filesystem images take priority (high-res originals).
-    // Fall back to day.img (DB/Blob URL) when no local file exists —
-    // this covers days whose images were uploaded via the CMS asset manager.
     const fsImgs = getDayImages(assetSlug, day.day, assetVariant);
     const imgs   = fsImgs.length > 0 ? fsImgs : (day.img ? [day.img] : []);
     if (day.day === 11) {
-      console.log('[download-free] Day 11 (raw) →', JSON.stringify({ title: day.title, imgs: imgs.length, img0: imgs[0]?.slice(0, 80) || '(none)' }));
+      console.log('PDF day 11 image URL', imgs[0] || '(none)');
     }
     return { ...day, imgs };
   });
 
-  // Pre-fetch all remote images as base64 data URIs before handing to the renderer.
-  // @react-pdf/renderer has instability with remote URL fetching in browser context,
-  // and imgUrl() appends ?w=N&q=85 params that break Vercel Blob URLs.
-  // Data URIs pass through imgUrl() unchanged (don't start with "http").
-  console.log('[download-free] pre-fetching images as base64…');
+  // Convert all images to base64 via server-side proxy.
+  // NO FALLBACK: if conversion fails, null is passed (image absent) not a broken URL.
+  console.log('[download-free] converting images to base64 via server proxy…');
   const [coverImageB64, daysWithBase64] = await Promise.all([
     imgToBase64(rawCoverImage),
     Promise.all(rawDays.map(async day => {
       const b64Imgs = await imgsToBase64(day.imgs);
-      // NO FALLBACK: if base64 conversion failed, imgs is empty — renderer gets
-      // no image rather than a broken remote URL that would produce a grey placeholder.
       if (day.day === 11) {
-        console.log('[download-free] Day 11 base64 exists:', b64Imgs.length > 0,
-          b64Imgs[0] ? b64Imgs[0].slice(0, 40) + '…' : '(none — image will be absent)');
+        console.log('PDF day 11 base64 exists', b64Imgs.length > 0);
       }
       return { ...day, imgs: b64Imgs };
     })),
   ]);
 
-  console.log('[download-free] Hero base64 exists:', !!coverImageB64,
-    coverImageB64 ? coverImageB64.slice(0, 40) + '…' : '(none — cover will be absent)');
+  console.log('PDF hero base64 exists', !!coverImageB64);
 
   const resolvedItinerary = {
     ...itinerary,
-    coverImage: coverImageB64 || null,  // null → CoverPage renders no hero, not a grey placeholder
+    coverImage: coverImageB64 || null,  // null → CoverPage renders no image, no placeholder
     mapImage: getMapImage(assetSlug, assetVariant),
     days: daysWithBase64,
   };

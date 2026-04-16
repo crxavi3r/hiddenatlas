@@ -33,57 +33,45 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = []) {
     ? `${itinerary.durationDays} Day${itinerary.durationDays !== 1 ? 's' : ''}`
     : '';
 
-  // ── Inject DB day images into each day ─────────────────────────────────────
-  // imgs must be plain URL strings — DayPage's imgUrl() helper expects strings.
-  // Passing objects (e.g. { src, filename }) causes imgUrl to return the object
-  // unchanged, which then crashes @react-pdf/renderer with null.props.
-  // Priority: DB assets (ItineraryAsset rows) → inline day.img field.
+  // ── Resolve raw image URLs — DB assets take priority over content.days.img ─
   console.log('[buildCustomPDF] injecting day images — days:', (content.days || []).length);
   const days = (content.days || []).map(day => {
     const dbImgs = dbAssets
       .filter(a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day))
-      .map(a => a.url)          // ← plain URL string, not { src, filename }
+      .map(a => a.url)
       .filter(Boolean);
-    // Fall back to the inline day.img field when no DB asset exists for this day
-    const imgs = dbImgs.length > 0
-      ? dbImgs
-      : (day.img ? [day.img] : []);
-    console.log(`[buildCustomPDF] day ${day.day} imgs:`, imgs.length, imgs[0]?.slice(0, 50) || '(none)');
+    const imgs = dbImgs.length > 0 ? dbImgs : (day.img ? [day.img] : []);
     if (Number(day.day) === 11) {
-      console.log('[buildCustomPDF] Day 11 resolved →', JSON.stringify({ title: day.title, imgs: imgs.length, img0: imgs[0]?.slice(0, 80) || '(none)' }));
+      console.log('PDF day 11 image URL', imgs[0] || '(none)');
     }
     return { ...day, imgs };
   });
 
   // ── Resolve cover image ─────────────────────────────────────────────────────
-  // Use the scalar coverImage field first (synced by save), fall back to
-  // content.hero.coverImage. Both should be equivalent after a save.
   const rawCoverImage = itinerary.coverImage || content.hero?.coverImage || '';
-  console.log('[buildCustomPDF] coverImage (raw):', rawCoverImage ? rawCoverImage.slice(0, 60) + '…' : '(none)');
+  console.log('PDF hero image URL', rawCoverImage || '(none)');
 
-  // ── Pre-fetch all remote images as base64 ──────────────────────────────────
-  // @react-pdf/renderer has known instability with remote URL fetching in browser
-  // context. imgUrl() in ItineraryPDF.jsx also appends ?w=N&q=85 params that work
-  // for Unsplash but break Vercel Blob URLs. Data URIs bypass both issues:
-  // they don't start with "http" so imgUrl() passes them through unchanged.
-  console.log('[buildCustomPDF] pre-fetching images as base64…');
+  // ── Pre-fetch all images as base64 via server-side proxy ───────────────────
+  // @react-pdf/renderer cannot reliably fetch remote URLs in a browser context.
+  // The server-side proxy fetches the image using Node.js (no CORS restrictions)
+  // and returns a base64 data URI. Data URIs bypass imgUrl()'s ?w=N&q=85
+  // transformation (they don't start with 'http') and are embedded directly
+  // in the PDF — no network request needed at render time.
+  // NO FALLBACK: if conversion fails, null is passed (image absent) not a broken URL.
+  console.log('[buildCustomPDF] converting images to base64 via server proxy…');
 
   const [coverImage, daysWithBase64] = await Promise.all([
     imgToBase64(rawCoverImage),
     Promise.all(days.map(async day => {
       const b64Imgs = await imgsToBase64(day.imgs);
-      // NO FALLBACK: if base64 conversion failed, imgs is empty — renderer gets
-      // no image rather than a broken remote URL that would produce a grey placeholder.
       if (Number(day.day) === 11) {
-        console.log('[buildCustomPDF] Day 11 base64 exists:', b64Imgs.length > 0,
-          b64Imgs[0] ? b64Imgs[0].slice(0, 40) + '…' : '(none — image will be absent)');
+        console.log('PDF day 11 base64 exists', b64Imgs.length > 0);
       }
       return { ...day, imgs: b64Imgs };
     })),
   ]);
 
-  console.log('[buildCustomPDF] Hero base64 exists:', !!coverImage,
-    coverImage ? coverImage.slice(0, 40) + '…' : '(none — cover will be absent)');
+  console.log('PDF hero base64 exists', !!coverImage);
 
   // ── transport: null means "no transport section" ───────────────────────────
   // An empty array is truthy and would crash TransportPage (transport.routes.map).
