@@ -848,6 +848,49 @@ export default function ItineraryCMSEditorPage() {
     } catch (e) { alert(e.message); }
   }
 
+  // ── Sync days from static source data ────────────────────────────────────────
+  // For public (non-custom) itineraries. Replaces form.content.days with the days
+  // array from src/data/itineraries.js for the matching slug. Preserves any inline
+  // img fields that were manually set in the DB, so day images are never lost.
+  async function handleSyncDaysFromStatic() {
+    const slug = form.slug;
+    if (!slug) { alert('Slug is required.'); return; }
+    if (!window.confirm(
+      `Replace all day content for "${slug}" with the current source data?\n\nInline day img fields will be preserved. All other day fields (title, desc, bullets, tip, route) will be reset to the source data version.\n\nSave afterwards to persist the change.`
+    )) return;
+
+    try {
+      const { itineraries } = await import('../../data/itineraries.js');
+      const allItems = Array.isArray(itineraries) ? itineraries : Object.values(itineraries || {});
+      const staticIt = allItems.find(it => (it.id || it.slug) === slug);
+      if (!staticIt) {
+        alert(`No static entry found for slug "${slug}". Check src/data/itineraries.js.`);
+        return;
+      }
+      if (!Array.isArray(staticIt.days) || !staticIt.days.length) {
+        alert(`Static entry for "${slug}" has no days array.`);
+        return;
+      }
+
+      // Build a map of existing inline imgs keyed by day number so we can preserve them
+      const existingImgs = {};
+      for (const d of (form.content?.days || [])) {
+        if (d.day && d.img) existingImgs[d.day] = d.img;
+      }
+
+      const newDays = staticIt.days.map(d => ({
+        ...d,
+        // Preserve any manually-set inline img
+        img: existingImgs[d.day] || d.img || null,
+      }));
+
+      setContent('days', newDays);
+      alert(`Days synced from static data (${newDays.length} days). Review the Days tab, then click Save to persist.`);
+    } catch (e) {
+      alert(`Failed to sync: ${e.message}`);
+    }
+  }
+
   // ── Generate + upload PDF ─────────────────────────────────────────────────────
   // silent=true: suppress the alert on failure (used when auto-triggered from Save).
   async function handleGeneratePDF({ silent = false } = {}) {
@@ -865,27 +908,22 @@ export default function ItineraryCMSEditorPage() {
     try {
       const token = await getToken();
 
-      // ── 1. Fetch fresh itinerary content from DB ───────────────────────────
-      // CRITICAL: do NOT use `form` for content — form.content is the in-memory
-      // editor state that is deliberately never refreshed from the DB response
-      // after save (see handleSave comment). Using form would render a PDF from
-      // stale data while the website shows the up-to-date DB version.
-      console.log('[CMS] PDF generation — fetching fresh itinerary from DB for id:', targetId);
-      const itineRes    = await fetch(`/api/itinerary-cms?action=get&id=${targetId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const itineJson   = await itineRes.json();
-      if (itineJson.error) throw new Error(`Failed to fetch itinerary: ${itineJson.error}`);
-      const freshItinerary = itineJson.itinerary;
-      const freshDays      = freshItinerary.content?.days || [];
-      console.log('[CMS] PDF generation — itinerary loaded | slug:', freshItinerary.slug, '| days:', freshDays.length);
+      // ── 1. Use current form state as itinerary source ─────────────────────
+      // form.content is authoritative — it is what the user sees in the editor.
+      // Reading from DB would miss unsaved edits (e.g. AI draft applied but not
+      // yet saved), causing "what you see in editor ≠ what appears in PDF".
+      // After a save, form and DB are in sync; for manual Generate PDF clicks,
+      // the form is the correct source of truth.
+      const freshItinerary = { ...form, id: targetId };
+      const freshDays      = form.content?.days || [];
+      console.log('[CMS] PDF generation — using form state | slug:', form.slug, '| days:', freshDays.length);
 
       // Debug Day 11 specifically so divergence is visible in logs
       const day11 = freshDays.find(d => Number(d.day) === 11);
       if (day11) {
-        console.log('[CMS] PDF Day 11 from DB:', JSON.stringify({ day: day11.day, title: day11.title, img: day11.img }, null, 2));
+        console.log('[CMS] PDF Day 11 from form:', JSON.stringify({ day: day11.day, title: day11.title, img: day11.img }, null, 2));
       } else {
-        console.warn('[CMS] PDF generation — Day 11 not found in DB content (total days:', freshDays.length, ')');
+        console.warn('[CMS] PDF generation — Day 11 not found in form content (total days:', freshDays.length, ')');
       }
 
       // ── 2. Fetch fresh assets from DB ─────────────────────────────────────
@@ -939,7 +977,7 @@ export default function ItineraryCMSEditorPage() {
       console.log('PDF day 11 image URL',     day11Url || '(none)');
       console.log('PDF day 11 base64 exists', !!resolvedImages[day11Url]);
 
-      // ── 4. Generate PDF from fresh DB data + pre-resolved images ──────────
+      // ── 4. Generate PDF from form state + pre-resolved images ────────────
       const { buildCustomPDFBlob } = await import('../../utils/buildCustomPDF');
       const blob = await buildCustomPDFBlob(freshItinerary, freshAssets, resolvedImages);
       console.log('[CMS] PDF generation — blob ready, size:', blob.size, 'bytes');
@@ -1260,6 +1298,13 @@ export default function ItineraryCMSEditorPage() {
             >
               <FileText size={12} />
               {pdfState === 'generating' ? 'Generating…' : pdfState === 'done' ? 'PDF ready!' : pdfState === 'error' ? 'PDF failed' : form.pdfUrl ? 'Regenerate PDF' : 'Generate PDF'}
+            </button>
+          )}
+
+          {/* Sync days from static source — only for non-custom itineraries */}
+          {form.type !== 'custom' && !isNew && (
+            <button onClick={handleSyncDaysFromStatic} style={btnSecondary} title="Reset all day content from src/data/itineraries.js">
+              <Check size={12} /> Sync days
             </button>
           )}
 
