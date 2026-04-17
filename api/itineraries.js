@@ -163,7 +163,7 @@ export default async function handler(req, res) {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
       const { rows } = await pool.query(
-        `SELECT p.id, i."pdfUrl"
+        `SELECT p.id, COALESCE(i.pdf_url, i."pdfUrl") AS "pdfUrl"
          FROM "Purchase" p
          JOIN "Itinerary" i ON i.id = p."itineraryId"
          JOIN "User" u ON u.id = p."userId"
@@ -228,7 +228,7 @@ export default async function handler(req, res) {
            i.title,
            i.description     AS excerpt,
            i."coverImage",
-           i."pdfUrl"
+           COALESCE(i.pdf_url, i."pdfUrl") AS "pdfUrl"
          FROM "Purchase" p
          JOIN "Itinerary" i ON i.id = p."itineraryId"
          WHERE p."userId" = $1

@@ -522,7 +522,7 @@ export default function ItineraryCMSEditorPage() {
     title: '', subtitle: '', slug: '', destination: '', country: '',
     region: '', durationDays: '', type: 'free', isPrivate: false, isCollection: false,
     stripePriceId: '', pricingKey: '',
-    coverImage: '', status: 'draft', pdfUrl: '', pdf_version: 'v1.0', creatorId: '',
+    coverImage: '', status: 'draft', pdfUrl: '', pdf_url: '', pdf_version: 'v1.0', creatorId: '',
     content: { ...EMPTY_CONTENT },
   });
   const [allCreators, setAllCreators] = useState([]);  // for creator selector
@@ -580,6 +580,7 @@ export default function ItineraryCMSEditorPage() {
         stripePriceId: it.stripePriceId || '', pricingKey: it.pricingKey || '',
         coverImage: it.coverImage || '', status: it.status || 'draft',
         pdfUrl: it.pdfUrl || '',
+        pdf_url: it.pdf_url || it.pdfUrl || '',
         pdf_version: it.pdf_version || 'v1.0',
         creatorId: it.creatorId || '',
         content,
@@ -1001,7 +1002,7 @@ export default function ItineraryCMSEditorPage() {
       if (json.error) throw new Error(json.error);
 
       console.log('[CMS] PDF generation — success, new pdfUrl:', json.pdfUrl, '| version:', json.pdfVersion);
-      setForm(f => ({ ...f, pdfUrl: json.pdfUrl, pdf_version: json.pdfVersion || f.pdf_version }));
+      setForm(f => ({ ...f, pdfUrl: json.pdfUrl, pdf_url: json.pdfUrl, pdf_version: json.pdfVersion || f.pdf_version }));
       setPdfState('done');
       setTimeout(() => setPdfState('idle'), 4000);
     } catch (e) {
@@ -1298,8 +1299,21 @@ export default function ItineraryCMSEditorPage() {
               }}
             >
               <FileText size={12} />
-              {pdfState === 'generating' ? 'Generating…' : pdfState === 'done' ? 'PDF ready!' : pdfState === 'error' ? 'PDF failed' : form.pdfUrl ? 'Regenerate PDF' : 'Generate PDF'}
+              {pdfState === 'generating' ? 'Generating…' : pdfState === 'done' ? 'PDF ready!' : pdfState === 'error' ? 'PDF failed' : form.pdf_url || form.pdfUrl ? 'Regenerate PDF' : 'Generate PDF'}
             </button>
+          )}
+
+          {/* View PDF — shown when a generated PDF URL exists */}
+          {(form.pdf_url || form.pdfUrl) && !isNew && (
+            <a
+              href={form.pdf_url || form.pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`pdf_url: ${form.pdf_url || form.pdfUrl}`}
+              style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#1B6B65' }}
+            >
+              <ExternalLink size={12} /> View PDF {form.pdf_version ? `(${form.pdf_version})` : ''}
+            </a>
           )}
 
           {/* Sync days from static source — only for non-custom itineraries */}

@@ -661,14 +661,14 @@ async function handleUploadPDF(pool, id, body) {
 
   const { rows: updated } = await pool.query(
     `UPDATE "Itinerary"
-     SET "pdfUrl" = $2, "pdfStatus" = 'ready', "pdfGeneratedAt" = NOW(),
+     SET "pdfUrl" = $2, pdf_url = $2, "pdfStatus" = 'ready', "pdfGeneratedAt" = NOW(),
          "pdfError" = NULL, pdf_version = $3, "updatedAt" = NOW()
      WHERE id = $1
-     RETURNING id, slug, "pdfUrl", "pdfStatus", "pdfGeneratedAt", pdf_version`,
+     RETURNING id, slug, "pdfUrl", pdf_url, "pdfStatus", "pdfGeneratedAt", pdf_version`,
     [id, result.url, newVersion]
   );
 
-  console.log('[upload-pdf] DB updated — pdfUrl saved, version:', currentVersion, '->', newVersion,
+  console.log('[upload-pdf] DB updated — pdfUrl + pdf_url saved, version:', currentVersion, '->', newVersion,
     '| previous url was:', previousPdfUrl || '(none)');
 
   return { ok: true, pdfUrl: result.url, pdfVersion: newVersion, itinerary: updated[0] };
