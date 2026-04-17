@@ -350,6 +350,7 @@ const api = useApi();
   const [itinerarySaveState, setItinerarySaveState]   = useState('idle'); // 'idle'|'saving'|'saved'|'error'
   const [dbAssets, setDbAssets]                       = useState([]);
   const [dbDays, setDbDays]                           = useState(null);
+  const [dbCoverImage, setDbCoverImage]               = useState(null);
 
   const isPremium = itinerary?.isPremium;
 
@@ -414,7 +415,10 @@ const api = useApi();
     if (!slug) return;
     fetch(`/api/itineraries?action=content&slug=${encodeURIComponent(slug)}`)
       .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.days?.length) setDbDays(data.days); })
+      .then(data => {
+        if (data?.days?.length) setDbDays(data.days);
+        if (data?.coverImage)   setDbCoverImage(data.coverImage);
+      })
       .catch(() => {}); // silent — static data remains active
   }, [itinerary?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -672,9 +676,12 @@ const api = useApi();
   const fsResearch     = getResearchImages(assetSlug, assetVariant);
   const galleryImages  = mergeAssets(fsGallery, dbAssets, 'gallery');
   const researchImages = mergeAssets(fsResearch, dbAssets, 'research');
-  // DB hero > filesystem hero > Unsplash fallback
+  // Priority: Itinerary.coverImage (from DB content endpoint)
+  //         > ItineraryAsset hero (blob upload)
+  //         > filesystem cover (getCoverImage)
+  // The PDF reads Itinerary.coverImage directly; this makes the public page use the same source.
   const dbHero     = dbAssets.find(a => a.assetType === 'hero');
-  const localCover = dbHero ? dbHero.url : getCoverImage(assetSlug);
+  const localCover = dbCoverImage || (dbHero ? dbHero.url : getCoverImage(assetSlug));
   const mapImage   = getMapImage(assetSlug, assetVariant);
 
   // ── Parent chooser page ───────────────────────────────────────────────────

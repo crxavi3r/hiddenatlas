@@ -73,23 +73,32 @@ function catmullPath(lonlats, tension = 0.22) {
 }
 
 // ── City data ─────────────────────────────────────────────────────────────────
+// All five are key island stops (base camps of the itinerary).
+// tier:1 = large gold dot; tier:2 = small teal dot (route stop — not used here).
+// San Vicente: fixed to west-coast Palawan coordinates (lon 119.179, not 119.49).
+// Coron: promoted to tier:1 — it is a multi-day base, not a waypoint.
 const CITIES = [
-  { id: 'manila',       name: 'Manila',      lon: 120.97, lat: 14.60, tier: 1, days: '1',    dayStart: 1,  desc: 'Capital city and gateway to the Philippine archipelago', labelDx: 14,  labelAnchor: 'start' },
-  { id: 'san-vicente',  name: 'San Vicente', lon: 119.49, lat: 10.53, tier: 2, days: '2–3',  dayStart: 2,  desc: 'Long Beach — 14 kilometres of undeveloped Pacific sand',   labelDx: 14,  labelAnchor: 'start' },
-  { id: 'el-nido',      name: 'El Nido',     lon: 119.41, lat: 11.17, tier: 1, days: '4–8',  dayStart: 4,  desc: 'Limestone karst towers and hidden lagoons of Bacuit Bay', labelDx: -12, labelAnchor: 'end'   },
-  { id: 'coron',        name: 'Coron',       lon: 120.20, lat: 11.99, tier: 2, days: '9–11', dayStart: 9,  desc: 'WWII shipwrecks and the cleanest lake in Asia',            labelDx: 14,  labelAnchor: 'start' },
-  { id: 'boracay',      name: 'Boracay',     lon: 121.93, lat: 11.96, tier: 1, days: '12–15',dayStart: 12, desc: 'White Beach and the quiet northern shore',                  labelDx: -12, labelAnchor: 'end'   },
+  { id: 'manila',       name: 'Manila',      lon: 120.97,  lat: 14.60,   tier: 1, days: '1',    dayStart: 1,  desc: 'Capital city and gateway to the Philippine archipelago', labelDx: 14,  labelAnchor: 'start' },
+  { id: 'san-vicente',  name: 'San Vicente', lon: 119.179, lat: 10.4125, tier: 1, days: '2–3',  dayStart: 2,  desc: 'Long Beach — 14 kilometres of undeveloped Pacific sand',   labelDx: 14,  labelAnchor: 'start' },
+  { id: 'el-nido',      name: 'El Nido',     lon: 119.41,  lat: 11.17,   tier: 1, days: '4–8',  dayStart: 4,  desc: 'Limestone karst towers and hidden lagoons of Bacuit Bay', labelDx: -12, labelAnchor: 'end'   },
+  { id: 'coron',        name: 'Coron',       lon: 120.20,  lat: 11.99,   tier: 1, days: '9–11', dayStart: 9,  desc: 'WWII shipwrecks and the cleanest lake in Asia',            labelDx: 14,  labelAnchor: 'start' },
+  { id: 'boracay',      name: 'Boracay',     lon: 121.93,  lat: 11.96,   tier: 1, days: '12–15',dayStart: 12, desc: 'White Beach and the quiet northern shore',                  labelDx: -12, labelAnchor: 'end'   },
 ];
 
-// Route loops back to Manila
+// Route loops back to Manila — straight polyline avoids Catmull-Rom loop at San Vicente
+// (tangent dips south because both neighbours are north of San Vicente)
 const ROUTE_LONLAT = [...CITIES.map(c => [c.lon, c.lat]), [120.97, 14.60]];
-const ROUTE_PATH_D = catmullPath(ROUTE_LONLAT, 0.22);
+const ROUTE_PATH_D = ROUTE_LONLAT.map((ll, i) => {
+  const [x, y] = proj(ll[0], ll[1]);
+  return `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`;
+}).join(' ');
 
-// Approximate cumulative fractions along the full loop
-const STOP_FRACTIONS = [0, 0.40, 0.46, 0.57, 0.96];
+// Cumulative straight-line fractions along the full loop (recalculated after coord fix)
+// Manila→SanVicente≈563, →ElNido≈97, →Coron≈143, →Boracay≈219, →Manila≈347 (total≈1369)
+const STOP_FRACTIONS = [0, 0.41, 0.48, 0.59, 0.75];
 
-// Cities shown with full labels in preview/teaser state
-const PREVIEW_LABELED = new Set(['manila', 'el-nido', 'boracay']);
+// All five are key stops — all show labels in preview/teaser state
+const PREVIEW_LABELED = new Set(['manila', 'san-vicente', 'el-nido', 'coron', 'boracay']);
 
 // ── Tier visual config ────────────────────────────────────────────────────────
 const TIER = {

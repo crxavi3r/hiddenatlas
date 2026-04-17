@@ -924,7 +924,7 @@ export const MANIFESTS = {
   "philippines-island-journey": {
     "slug": "philippines-island-journey",
     "title": "Philippines",
-    "heroFile": null,
+    "heroFile": "cover.jpeg",
     "gallery": {
       "root": [],
       "essential": [],
