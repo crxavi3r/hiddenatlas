@@ -653,7 +653,7 @@ async function handleUploadPDF(pool, id, body) {
   console.log('[upload-pdf] start — slug:', slug, '| path:', blobPath, '| size:', buffer.length, 'bytes');
 
   const result = await blobPut(blobPath, buffer, {
-    access: 'private',
+    access: 'public',
     contentType: 'application/pdf',
   });
 

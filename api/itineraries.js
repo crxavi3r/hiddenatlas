@@ -21,8 +21,8 @@ const { Pool } = pg;
 //   Auth required. Returns purchased premium itineraries for the authenticated user.
 //
 // GET /api/itineraries?action=download&slug=:slug
-//   Auth required + purchase/admin/owner. Streams the PDF binary for the itinerary.
-//   Private blobs are fetched server-side with BLOB_READ_WRITE_TOKEN.
+//   Auth required + purchase/admin/owner. Validates access then streams the PDF.
+//   Blob store is public; security boundary is the auth + purchase check in this endpoint.
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -338,16 +338,10 @@ export default async function handler(req, res) {
         }
       }
 
-      const isPrivate   = it.pdf_url.includes('.private.blob.vercel-storage.com');
-      const blobHeaders = {};
-      if (isPrivate) {
-        if (!process.env.BLOB_READ_WRITE_TOKEN) {
-          return res.status(500).json({ error: 'Server misconfigured' });
-        }
-        blobHeaders.Authorization = `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`;
-      }
-
-      const blobRes = await fetch(it.pdf_url, { headers: blobHeaders });
+      // Blob store is public — fetch directly with no auth headers.
+      // Auth + purchase was already validated above; the URL itself is not guessable
+      // (it contains a timestamp) so the security boundary is this endpoint.
+      const blobRes = await fetch(it.pdf_url);
       if (!blobRes.ok) {
         console.error('[itineraries/download] blob fetch failed:', blobRes.status, it.pdf_url.slice(0, 80));
         return res.status(502).json({ error: 'Failed to retrieve PDF from storage' });
