@@ -1071,27 +1071,43 @@ export default function ItineraryCMSEditorPage() {
 
       // ── 4. Generate PDF from form state + pre-resolved images ────────────
       const { buildCustomPDFBlob } = await import('../../utils/buildCustomPDF');
-      const blob = await buildCustomPDFBlob(freshItinerary, freshAssets, enrichedResolved);
-      console.log('[CMS] PDF generation — blob ready, size:', blob.size, 'bytes');
+      const pdfBlob = await buildCustomPDFBlob(freshItinerary, freshAssets, enrichedResolved);
+      console.log('[CMS] PDF blob ready — size:', pdfBlob.size, 'bytes');
 
-      // Convert blob to base64
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload  = e => resolve(e.target.result.split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
+      // ── 5. Get a scoped client token for direct browser → Vercel Blob upload ─
+      // The token is valid for 5 minutes and scoped to a single pathname.
+      // No PDF binary ever passes through a Vercel Function body.
+      const tokenRes = await fetch(`/api/itinerary-cms?action=upload-pdf-token&id=${targetId}`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
+      if (!tokenRes.ok) {
+        const errText = await tokenRes.text();
+        throw new Error(`Failed to get upload token: ${tokenRes.status} — ${errText.slice(0, 120)}`);
+      }
+      const { token: clientToken, pathname } = await tokenRes.json();
+      console.log('[CMS] upload token received — path:', pathname);
 
-      console.log('[CMS] PDF generation — uploading to Vercel Blob via API');
-      const res  = await fetch(`/api/itinerary-cms?action=upload-pdf&id=${targetId}`, {
-        method: 'POST',
+      // ── 6. Upload PDF directly from browser to Vercel Blob ────────────────
+      // @vercel/blob/client `put` sends the binary straight to Vercel Blob
+      // using the client token — no API function body involved.
+      const { put: blobPutClient } = await import('@vercel/blob/client');
+      const { url: blobUrl } = await blobPutClient(pathname, pdfBlob, {
+        access: 'public',
+        contentType: 'application/pdf',
+        token: clientToken,
+      });
+      console.log('[CMS] blob upload success —', blobUrl);
+
+      // ── 7. Persist URL + increment version in DB (tiny ~100-byte payload) ─
+      const res  = await fetch(`/api/itinerary-cms?action=save-pdf-url&id=${targetId}`, {
+        method:  'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: base64 }),
+        body:    JSON.stringify({ url: blobUrl }),
       });
       const json = await res.json();
       if (json.error) throw new Error(json.error);
 
-      console.log('[CMS] PDF generation — success, new pdfUrl:', json.pdfUrl, '| version:', json.pdfVersion);
+      console.log('[CMS] PDF saved — pdfUrl:', json.pdfUrl, '| version:', json.pdfVersion);
       setForm(f => ({ ...f, pdfUrl: json.pdfUrl, pdf_url: json.pdfUrl, pdf_version: json.pdfVersion || f.pdf_version }));
       setPdfState('done');
       setTimeout(() => setPdfState('idle'), 4000);

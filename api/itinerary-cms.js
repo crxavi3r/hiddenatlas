@@ -17,7 +17,8 @@
 // POST /api/itinerary-cms?action=save-asset
 // POST /api/itinerary-cms?action=delete-asset&id=:assetId
 // POST /api/itinerary-cms?action=toggle-asset&id=:assetId
-// POST /api/itinerary-cms?action=upload-pdf&id=:id    — upload PDF blob → store pdfUrl
+// GET  /api/itinerary-cms?action=upload-pdf-token&id=:id  — returns scoped client token for direct blob upload
+// POST /api/itinerary-cms?action=save-pdf-url&id=:id      — saves blob URL + increments version after client upload
 // POST /api/itinerary-cms?action=ai-generate
 
 import pg                         from 'pg';
@@ -26,6 +27,7 @@ import { existsSync }             from 'fs';
 import { readFile }               from 'fs/promises';
 import path                       from 'path';
 import { put as blobPut }         from '@vercel/blob';
+import { generateClientTokenFromReadWriteToken } from '@vercel/blob/client';
 
 const { Pool } = pg;
 
@@ -91,7 +93,8 @@ export default async function handler(req, res) {
       if (action === 'scan-assets')      { adminOnly(); return res.json(await handleScanAssets(req.query.slug)); }
       if (action === 'ai-history')       { await assertOwnership(pool, id, ctx); return res.json(await handleAIHistory(pool, id)); }
       if (action === 'linked-request')   { adminOnly(); return res.json(await handleLinkedRequest(pool, id)); }
-      if (action === 'pricing-options')  return res.json(handlePricingOptions());
+      if (action === 'pricing-options')   return res.json(handlePricingOptions());
+      if (action === 'upload-pdf-token')  { await assertOwnership(pool, id, ctx); return res.json(await handleUploadPDFToken(pool, id)); }
       return res.status(400).json({ error: 'Unknown GET action' });
     }
 
@@ -109,7 +112,7 @@ export default async function handler(req, res) {
       if (action === 'upload-asset') return res.json(await handleUploadAsset(pool, body, ctx));
       if (action === 'delete-asset') return res.json(await handleDeleteAsset(pool, id, ctx));
       if (action === 'toggle-asset') return res.json(await handleToggleAsset(pool, id, ctx));
-      if (action === 'upload-pdf')        { await assertOwnership(pool, id, ctx); return res.json(await handleUploadPDF(pool, id, body)); }
+      if (action === 'save-pdf-url')      { await assertOwnership(pool, id, ctx); return res.json(await handleSavePdfUrl(pool, id, body)); }
       if (action === 'update-pdf-status') { await assertOwnership(pool, id, ctx); return res.json(await handleUpdatePDFStatus(pool, id, body)); }
       if (action === 'ai-generate')       { adminOnly(); return res.json(await handleAIGenerate(pool, body, ctx.email)); }
       if (action === 'backfill-pricing')  { adminOnly(); return res.json(await handleBackfillPricing(pool)); }
@@ -629,36 +632,50 @@ function nextPdfVersion(current) {
   return `v${match[1]}.${parseInt(match[2], 10) + 1}`;
 }
 
-// ── Upload PDF → Vercel Blob → store pdfUrl ───────────────────────────────────
-async function handleUploadPDF(pool, id, body) {
+// ── Issue a scoped client token for direct browser → Vercel Blob PDF upload ──
+// The client uses this token with @vercel/blob/client `put` to upload the PDF
+// directly from the browser, bypassing the Vercel Function body size limit.
+// Token is scoped to a single specific pathname and expires in 5 minutes.
+async function handleUploadPDFToken(pool, id) {
   if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
-  const { data: base64Data } = body;
-  if (!base64Data) throw Object.assign(new Error('data (base64) is required'), { status: 400 });
 
   const { rows } = await pool.query(
-    `SELECT slug, "pdfUrl", pdf_version FROM "Itinerary" WHERE id = $1 LIMIT 1`, [id]
+    `SELECT slug FROM "Itinerary" WHERE id = $1 LIMIT 1`, [id]
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
-  const { slug, pdfUrl: previousPdfUrl, pdf_version: currentVersion } = rows[0];
+  const { slug } = rows[0];
 
-  // Use a timestamp in the filename so each generation gets a unique path.
-  // This avoids the Vercel Blob "already exists" error and ensures each new
-  // version has its own URL — no CDN cache collision possible.
-  const timestamp  = Date.now();
-  const filename   = `${slug}-hiddenatlas-${timestamp}.pdf`;
-  const blobPath   = `itineraries/${slug}/pdf/${filename}`;
-  const buffer     = Buffer.from(base64Data, 'base64');
-  const newVersion = nextPdfVersion(currentVersion);
+  const timestamp = Date.now();
+  const filename  = `${slug}-hiddenatlas-${timestamp}.pdf`;
+  const pathname  = `itineraries/${slug}/pdf/${filename}`;
 
-  console.log('[upload-pdf] start — slug:', slug, '| path:', blobPath, '| size:', buffer.length, 'bytes');
-
-  const result = await blobPut(blobPath, buffer, {
-    access: 'public',
-    contentType: 'application/pdf',
+  const clientToken = await generateClientTokenFromReadWriteToken({
+    pathname,
+    allowedContentTypes: ['application/pdf'],
+    maximumSizeInBytes: 30 * 1024 * 1024, // 30 MB ceiling
+    validUntil: Date.now() + 5 * 60 * 1000, // 5-minute window
   });
 
-  console.log('[upload-pdf] blob upload success — url:', result.url);
-  console.log('Generated blob url', result.url);
+  console.log('[upload-pdf-token] issued token — slug:', slug, '| path:', pathname);
+  return { token: clientToken, pathname };
+}
+
+// ── Persist blob URL + increment version after a successful client upload ─────
+// Body: { url } — just the blob URL returned by the client-side put().
+// This is the only call that touches the database; the binary never passes
+// through a Vercel Function.
+async function handleSavePdfUrl(pool, id, body) {
+  if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
+  const { url } = body;
+  if (!url) throw Object.assign(new Error('url is required'), { status: 400 });
+
+  const { rows } = await pool.query(
+    `SELECT slug, "pdfUrl" AS previous_url, pdf_version FROM "Itinerary" WHERE id = $1 LIMIT 1`, [id]
+  );
+  if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+  const { slug, previous_url, pdf_version: currentVersion } = rows[0];
+
+  const newVersion = nextPdfVersion(currentVersion);
 
   const { rows: updated } = await pool.query(
     `UPDATE "Itinerary"
@@ -666,14 +683,15 @@ async function handleUploadPDF(pool, id, body) {
          "pdfError" = NULL, pdf_version = $3, "updatedAt" = NOW()
      WHERE id = $1
      RETURNING id, slug, "pdfUrl", pdf_url, "pdfStatus", "pdfGeneratedAt", pdf_version`,
-    [id, result.url, newVersion]
+    [id, url, newVersion]
   );
 
-  console.log('[upload-pdf] DB updated — pdfUrl + pdf_url saved, version:', currentVersion, '->', newVersion,
-    '| previous url was:', previousPdfUrl || '(none)');
-  console.log('Saved pdfUrl in DB', result.url);
+  console.log('[save-pdf-url] DB updated — slug:', slug,
+    '| version:', currentVersion, '->', newVersion,
+    '| url:', url,
+    '| previous:', previous_url || '(none)');
 
-  return { ok: true, pdfUrl: result.url, pdfVersion: newVersion, itinerary: updated[0] };
+  return { ok: true, pdfUrl: url, pdfVersion: newVersion, itinerary: updated[0] };
 }
 
 // ── Update PDF status (called by client on failure to record stale/failed state) ──
