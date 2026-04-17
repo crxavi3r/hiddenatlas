@@ -1348,7 +1348,7 @@ function ClosingPage({ itinerary }) {
 }
 
 function CTAPage({ itinerary }) {
-  const { title, country, isPremium, price, currency } = itinerary;
+  const { title, country, isPremium, price, currency, pdfVersion, pdfDate } = itinerary;
 
   const bullets = [
     'Refined route planning and pacing',
@@ -1394,7 +1394,7 @@ function CTAPage({ itinerary }) {
 
         <Text style={s.ctaFootnote}>
           {title} · {country}{isPremium ? ` · Premium Guide · ${currency ?? 'EUR'}${price ?? ''}` : ' · Free Itinerary'}{'\n'}
-          © HiddenAtlas · hiddenatlas.travel
+          © HiddenAtlas{pdfVersion ? ` · ${pdfVersion}` : ''}{pdfDate ? ` · ${pdfDate}` : ''} · hiddenatlas.travel
         </Text>
       </View>
     </Page>

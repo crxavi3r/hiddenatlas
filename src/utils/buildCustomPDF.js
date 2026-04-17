@@ -14,6 +14,21 @@
  *   resolvedImages = { 'https://...blob...': 'data:image/jpeg;base64,...', ... }
  */
 
+// Mirrors the server-side helper in api/itinerary-cms.js.
+// Computes the version the PDF will carry — one ahead of the current DB value,
+// matching what the server will write to DB after a successful upload.
+function nextPdfVersion(current) {
+  const base  = current || 'v1.0';
+  const match = base.match(/^v(\d+)\.(\d+)$/);
+  if (!match) return 'v1.1';
+  return `v${match[1]}.${parseInt(match[2], 10) + 1}`;
+}
+
+// Formats today as "17 Apr 2026"
+function fmtPdfDate() {
+  return new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 function resolveImg(url, resolvedImages) {
   if (!url) return null;
   // Already a data URI — pass through
@@ -89,6 +104,12 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
     ? content.transport
     : null;
 
+  // ── PDF version + generation date ──────────────────────────────────────────
+  // The PDF shows the version it will carry once uploaded: one ahead of the
+  // current DB value — matching what the server writes after a successful upload.
+  const pdfVersion = nextPdfVersion(itinerary.pdf_version);
+  const pdfDate    = fmtPdfDate();
+
   // ── Build normalised itinerary shape ───────────────────────────────────────
   const resolvedItinerary = {
     id:           itinerary.slug,
@@ -108,6 +129,8 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
     accommodation: [],
     mapImage:     null,
     days,
+    pdfVersion,
+    pdfDate,
   };
 
   // ── Render PDF ──────────────────────────────────────────────────────────────

@@ -522,7 +522,7 @@ export default function ItineraryCMSEditorPage() {
     title: '', subtitle: '', slug: '', destination: '', country: '',
     region: '', durationDays: '', type: 'free', isPrivate: false, isCollection: false,
     stripePriceId: '', pricingKey: '',
-    coverImage: '', status: 'draft', pdfUrl: '', creatorId: '',
+    coverImage: '', status: 'draft', pdfUrl: '', pdf_version: 'v1.0', creatorId: '',
     content: { ...EMPTY_CONTENT },
   });
   const [allCreators, setAllCreators] = useState([]);  // for creator selector
@@ -580,6 +580,7 @@ export default function ItineraryCMSEditorPage() {
         stripePriceId: it.stripePriceId || '', pricingKey: it.pricingKey || '',
         coverImage: it.coverImage || '', status: it.status || 'draft',
         pdfUrl: it.pdfUrl || '',
+        pdf_version: it.pdf_version || 'v1.0',
         creatorId: it.creatorId || '',
         content,
       });
@@ -999,8 +1000,8 @@ export default function ItineraryCMSEditorPage() {
       const json = await res.json();
       if (json.error) throw new Error(json.error);
 
-      console.log('[CMS] PDF generation — success, new pdfUrl:', json.pdfUrl);
-      setForm(f => ({ ...f, pdfUrl: json.pdfUrl }));
+      console.log('[CMS] PDF generation — success, new pdfUrl:', json.pdfUrl, '| version:', json.pdfVersion);
+      setForm(f => ({ ...f, pdfUrl: json.pdfUrl, pdf_version: json.pdfVersion || f.pdf_version }));
       setPdfState('done');
       setTimeout(() => setPdfState('idle'), 4000);
     } catch (e) {
