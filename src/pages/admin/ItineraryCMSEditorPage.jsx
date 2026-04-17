@@ -910,24 +910,31 @@ export default function ItineraryCMSEditorPage() {
       const coverUrl  = freshItinerary.coverImage || freshContent.hero?.coverImage || '';
       const urlsToResolve = [
         coverUrl,
-        // Blob day assets
-        ...freshAssets.filter(a => a.source === 'blob').map(a => a.url),
+        // All asset URLs that are remote — regardless of source tag
+        // (a 'manual' asset with a blob URL still needs server-side resolution)
+        ...freshAssets.filter(a => a.url?.startsWith('http')).map(a => a.url),
         // Inline day.img fields that are remote URLs
         ...freshDays.filter(d => d.img?.startsWith('http')).map(d => d.img),
       ].filter((u, i, arr) => u && arr.indexOf(u) === i); // deduplicate + remove empty
 
-      console.log('[CMS] resolving', urlsToResolve.length, 'blob image(s) server-side…');
+      console.log('[CMS] resolving', urlsToResolve.length, 'remote image(s) server-side…');
       const resolveRes  = await fetch('/api/itinerary-cms?action=resolve-images', {
         method:  'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body:    JSON.stringify({ urls: urlsToResolve }),
       });
-      const { resolved: resolvedImages = {} } = await resolveRes.json();
+      if (!resolveRes.ok) {
+        const errText = await resolveRes.text();
+        console.error('[CMS] resolve-images failed:', resolveRes.status, errText.slice(0, 200));
+      }
+      const resolveJson = resolveRes.ok ? await resolveRes.json() : {};
+      const resolvedImages = resolveJson.resolved ?? {};
 
       // Mandatory diagnostic logs
       console.log('PDF hero image URL',     coverUrl || '(none)');
       console.log('PDF hero base64 exists', !!resolvedImages[coverUrl]);
-      const day11Asset = freshAssets.find(a => a.assetType === 'day' && Number(a.dayNumber) === 11 && a.source === 'blob');
+      // Day 11: check both blob asset AND inline img field
+      const day11Asset = freshAssets.find(a => a.assetType === 'day' && Number(a.dayNumber) === 11);
       const day11Url   = day11Asset?.url || day11?.img || '';
       console.log('PDF day 11 image URL',     day11Url || '(none)');
       console.log('PDF day 11 base64 exists', !!resolvedImages[day11Url]);

@@ -293,7 +293,6 @@ const s = StyleSheet.create({
   // ── Transport page ─────────────────────────────────────────────────────────
   transportPage: {
     backgroundColor: C.white,
-    paddingTop: 36,
   },
   transportBody: {
     paddingHorizontal: 48,
@@ -382,7 +381,6 @@ const s = StyleSheet.create({
   // ── Day pages ──────────────────────────────────────────────────────────────
   dayPage: {
     backgroundColor: C.white,
-    paddingTop: 36,
   },
   dayImg: {
     width: '100%',
@@ -409,6 +407,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 48,
     paddingTop: 22,
     paddingBottom: 24,
+    breakInside: 'avoid',
   },
   dayChip: {
     fontFamily: 'Helvetica-Bold',
@@ -756,17 +755,25 @@ function PhilippinesRouteSvgMap() {
     { coords: [[121.2,12.5],[122.4,11.8],[122.7,11.1],[122.2,10.5],[121.5,10.7],[121.0,11.5],[121.2,12.5]], op: 0.92 },
     { coords: [[120.7,13.4],[121.5,13.0],[121.5,12.4],[121.0,12.2],[120.3,12.6],[120.3,13.1],[120.7,13.4]], op: 0.95 },
   ];
+  // All five are key island stops (base camps of the itinerary, not waypoints).
+  // tier:1 = large gold dot / key island stop
+  // tier:2 = small teal dot / route stop (not used here)
   const CITIES = [
-    { name:'Manila',      lon:120.97, lat:14.60, tier:1, dx: 13 },
-    { name:'San Vicente', lon:119.179, lat:10.4125, tier:2, dx: 13 },
-    { name:'El Nido',     lon:119.41, lat:11.17, tier:1, dx:-12 },
-    { name:'Coron',       lon:120.20, lat:11.99, tier:2, dx: 13 },
-    { name:'Boracay',     lon:121.93, lat:11.96, tier:1, dx:-12 },
+    { name:'Manila',      lon:120.97,  lat:14.60,   tier:1, dx: 13 },
+    { name:'San Vicente', lon:119.179, lat:10.4125, tier:1, dx: 13 },
+    { name:'El Nido',     lon:119.41,  lat:11.17,   tier:1, dx:-12 },
+    { name:'Coron',       lon:120.20,  lat:11.99,   tier:1, dx: 13 },
+    { name:'Boracay',     lon:121.93,  lat:11.96,   tier:1, dx:-12 },
   ];
   const ROUTE_LONLAT = [...CITIES.map(c => [c.lon, c.lat]), [120.97, 14.60]];
 
-  const pts    = CITIES.map(c => ({ ...c, pt: proj(c.lon, c.lat) }));
-  const routeD = _pdfCatmull(ROUTE_LONLAT, proj);
+  const pts = CITIES.map(c => ({ ...c, pt: proj(c.lon, c.lat) }));
+  // Straight-line polyline avoids Catmull-Rom's southward loop at San Vicente
+  // (the tangent at San Vicente dips south because both neighbours are north)
+  const routeD = ROUTE_LONLAT.map((ll, i) => {
+    const [x, y] = proj(ll[0], ll[1]);
+    return `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
 
   return (
     <Svg viewBox={`0 0 ${VW} ${VH}`} width={svgW} height={svgH}>
