@@ -11,8 +11,13 @@
  *   Filesystem paths (/itineraries/...) are passed through unchanged — the browser
  *   resolves them via URL resolution to the static public/ files.
  *
- *   resolvedImages = { 'https://...blob...': 'data:image/jpeg;base64,...', ... }
+ *   resolvedImages = {
+ *     'https://...blob...' : 'data:image/jpeg;base64,...',
+ *     '/itineraries/...'   : 'data:image/jpeg;base64,...',  // pre-resolved filesystem paths
+ *   }
  */
+
+import { getDayImages } from '../lib/itineraryImages.js';
 
 // Mirrors the server-side helper in api/itinerary-cms.js.
 // Computes the version the PDF will carry — one ahead of the current DB value,
@@ -33,15 +38,16 @@ function resolveImg(url, resolvedImages) {
   if (!url) return null;
   // Already a data URI — pass through
   if (url.startsWith('data:')) return url;
-  // Filesystem path — browser resolves it via URL, no conversion needed
-  if (!url.startsWith('http')) return url;
-  // Remote URL — must be in resolvedImages (pre-fetched server-side)
-  const b64 = resolvedImages[url];
-  if (!b64) {
+  // Check resolvedImages first — handles both blob URLs AND pre-resolved filesystem paths
+  if (resolvedImages[url]) return resolvedImages[url];
+  // Remote URL that wasn't pre-resolved — log and skip
+  if (url.startsWith('http')) {
     console.error('[buildCustomPDF] no resolved image for URL:', url.slice(0, 80),
       '— image will be absent from PDF');
+    return null;
   }
-  return b64 || null;
+  // Filesystem path not in resolvedImages — pass through for browser URL resolution
+  return url;
 }
 
 export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImages = {}) {
@@ -68,24 +74,40 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
     : '';
 
   // ── Resolve day images ──────────────────────────────────────────────────────
-  // Priority: DB assets (ItineraryAsset rows) → inline day.img field.
+  // Priority: DB assets (ItineraryAsset rows) → inline day.img field → filesystem manifest.
   // All remote URLs are looked up in resolvedImages (pre-fetched server-side).
   // Filesystem paths (/itineraries/...) pass through unchanged.
   const days = (content.days || []).map(day => {
     const dayAssets = dbAssets.filter(
       a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day)
     );
-    const rawUrls = dayAssets.length > 0
-      ? dayAssets.map(a => a.url).filter(Boolean)
-      : (day.img ? [day.img] : []);
+
+    let rawUrls;
+    if (dayAssets.length > 0) {
+      rawUrls = dayAssets.map(a => a.url).filter(Boolean);
+    } else if (day.img) {
+      rawUrls = [day.img];
+    } else {
+      // No DB asset, no inline img — fall back to filesystem manifest.
+      // getDayImages returns paths like /itineraries/{slug}/day-images/day{N}/file.jpg
+      // that @react-pdf/renderer can fetch as same-origin static files.
+      rawUrls = getDayImages(itinerary.slug, day.day, itinerary.variant);
+      if (rawUrls.length) {
+        console.log(`[buildCustomPDF] Day ${day.day} — filesystem fallback: ${rawUrls[0]}`);
+      } else {
+        console.warn(`[buildCustomPDF] Day ${day.day} — NO images from any source`);
+      }
+    }
 
     const imgs = rawUrls.map(u => resolveImg(u, resolvedImages)).filter(Boolean);
 
+    console.log(`[buildCustomPDF] Day ${day.day}: dbAssets=${dayAssets.length} rawUrls=${rawUrls.length} imgs=${imgs.length}${imgs.length === 0 ? ' ← NO IMAGES' : ''}`);
+
     if (Number(day.day) === 11) {
-      const src = dayAssets[0]?.source || (day.img ? 'content.days.img' : 'none');
+      const src = dayAssets[0]?.source || (day.img ? 'content.days.img' : (rawUrls.length ? 'filesystem' : 'none'));
       console.log('PDF day 11 image URL',     rawUrls[0] || '(none)');
       console.log('PDF day 11 image source',  src);
-      console.log('PDF day 11 base64 exists', imgs.length > 0);
+      console.log('PDF day 11 resolved',      imgs.length > 0 ? imgs[0].slice(0, 60) : '(none)');
     }
     return { ...day, imgs };
   });

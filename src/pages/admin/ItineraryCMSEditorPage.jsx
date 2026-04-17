@@ -893,39 +893,11 @@ export default function ItineraryCMSEditorPage() {
     }
   }
 
-  // ── View PDF (admin preview via protected endpoint) ──────────────────────────
-  // Fetches the PDF via the same auth-gated endpoint the customer uses, then opens
-  // it in a new tab. Works for both public (legacy) and private blobs.
-  async function handleViewPDF() {
-    const token = await getToken();
-    const slug  = form.slug;
-    if (!slug) { alert('No slug — save the itinerary first.'); return; }
-    try {
-      const res = await fetch(`/api/itineraries?action=download&slug=${slug}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        alert(`Could not open PDF: ${err.error || res.status}`);
-        return;
-      }
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const win  = window.open(url, '_blank');
-      // Revoke the object URL after the tab has had time to load the file.
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      if (!win) {
-        // Popup blocked — trigger a download as fallback
-        const a  = document.createElement('a');
-        a.href     = url;
-        a.download = `${slug}-hiddenatlas.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      }
-    } catch (err) {
-      alert(`Could not open PDF: ${err.message}`);
-    }
+  // ── View PDF (open blob URL directly in a new tab) ───────────────────────────
+  function handleViewPDF() {
+    const url = form.pdf_url || form.pdfUrl;
+    if (!url) { alert('No PDF URL — generate a PDF first.'); return; }
+    window.open(url, '_blank');
   }
 
   // ── Generate + upload PDF ─────────────────────────────────────────────────────
@@ -1043,6 +1015,59 @@ export default function ItineraryCMSEditorPage() {
           }
         }
       });
+
+      // ── 3c. Pre-resolve filesystem day images (no blob URL at all) ────────
+      // For days with no DB asset and no inline day.img, buildCustomPDF.js will
+      // call getDayImages to get a filesystem path. Pre-resolve those paths to
+      // base64 here (server-side fetch) so the renderer gets an embedded data URI
+      // rather than making a same-origin browser fetch during PDF rendering.
+      //
+      // Key: relative path (/itineraries/...) — matches what getDayImages returns,
+      //      which is what buildCustomPDF.js uses as the resolvedImages lookup key.
+      const fsUrlsToResolve = [];
+      const fsKeyMap = {};  // absUrl → relPath, so we can re-key the result
+      freshDays.forEach(day => {
+        const dayAsset = freshAssets.find(
+          a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day)
+        );
+        const dayBlobUrl = dayAsset?.url || day.img;
+        if (!dayBlobUrl) {
+          const fsPaths = getFsDayImgs(form.slug, day.day, form.variant);
+          fsPaths.forEach(relPath => {
+            if (!enrichedResolved[relPath]) {
+              const absUrl = window.location.origin + relPath;
+              fsUrlsToResolve.push(absUrl);
+              fsKeyMap[absUrl] = relPath;
+            }
+          });
+        }
+      });
+      if (fsUrlsToResolve.length) {
+        console.log('[CMS] pre-resolving', fsUrlsToResolve.length, 'filesystem day image(s) to base64…');
+        try {
+          const fsResolveRes = await fetch('/api/itinerary-cms?action=resolve-images', {
+            method:  'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ urls: fsUrlsToResolve }),
+          });
+          if (fsResolveRes.ok) {
+            const fsResolveJson = await fsResolveRes.json();
+            for (const [absUrl, relPath] of Object.entries(fsKeyMap)) {
+              const b64 = fsResolveJson.resolved?.[absUrl];
+              if (b64) {
+                enrichedResolved[relPath] = b64;
+                console.log(`[CMS] Day image pre-resolved — ${relPath.slice(0, 60)}`);
+              } else {
+                console.warn(`[CMS] Day image pre-resolve failed — ${relPath.slice(0, 60)} (will use path directly)`);
+              }
+            }
+          } else {
+            console.warn('[CMS] filesystem resolve-images call failed:', fsResolveRes.status);
+          }
+        } catch (fsErr) {
+          console.warn('[CMS] filesystem resolve-images exception:', fsErr.message);
+        }
+      }
 
       // ── 4. Generate PDF from form state + pre-resolved images ────────────
       const { buildCustomPDFBlob } = await import('../../utils/buildCustomPDF');

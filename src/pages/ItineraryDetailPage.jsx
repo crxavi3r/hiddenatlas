@@ -609,7 +609,7 @@ const api = useApi();
 
   // Passed to UnlockedSidebar: save as PREMIUM_JOURNEY then download.
   async function handlePremiumDownload() {
-    console.log('[ItineraryDetail] Download PDF (premium) clicked — isLoaded:', isLoaded, 'isSignedIn:', isSignedIn);
+    console.log('[ItineraryDetail] Download PDF (premium) clicked — pdfUrl:', pdfUrl);
     if (isLoaded && isSignedIn) {
       const tripId = await ensureItinerarySaved('PREMIUM_JOURNEY');
       if (!tripId) {
@@ -621,32 +621,23 @@ const api = useApi();
         metadata:  { source: 'premium_itinerary', destination: itinerary.title },
       }).catch(err => console.warn('[ItineraryDetail] premium audit failed:', err.message));
     }
-    // Download via protected endpoint — server validates auth + purchase,
-    // reads the latest pdf_url directly from DB, and streams from blob storage.
-    // No blob URL is ever exposed in the browser; no stale-cache risk.
-    console.log('Download href used by UI', `/api/itineraries?action=download&slug=${itinerary.id}`);
-    const pdfRes = await api.get(`/api/itineraries?action=download&slug=${itinerary.id}`);
 
-    if (pdfRes.status === 404) {
+    if (!pdfUrl) {
       // No hosted PDF yet — fall back to client-side generation
-      console.log('[ItineraryDetail] no hosted PDF, generating client-side');
+      console.log('[ItineraryDetail] no pdfUrl, generating client-side');
       await downloadItineraryPDF({ ...itinerary, days });
       return;
     }
-    if (!pdfRes.ok) {
-      const errData = await pdfRes.json().catch(() => ({}));
-      throw new Error(errData.error || `PDF download failed (${pdfRes.status})`);
-    }
 
-    const pdfBlob = await pdfRes.blob();
-    const blobUrl = URL.createObjectURL(pdfBlob);
-    const a       = document.createElement('a');
-    a.href        = blobUrl;
-    a.download    = `${(itinerary.title || itinerary.id).replace(/[^a-z0-9]/gi, '-').toLowerCase()}-hiddenatlas.pdf`;
+    // Blob store is public — download directly via a temporary anchor.
+    const filename = `${(itinerary.title || itinerary.id).replace(/[^a-z0-9]/gi, '-').toLowerCase()}-hiddenatlas.pdf`;
+    const a = document.createElement('a');
+    a.href     = pdfUrl;
+    a.download = filename;
+    a.target   = '_blank';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
   }
 
   // Unified buy handler: sign in first if needed, then go to Stripe
