@@ -467,8 +467,44 @@ export default function ItinerariesCMSPage() {
 
 // ── Desktop table ─────────────────────────────────────────────────────────────
 function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, onDelete }) {
+  const [sortKey, setSortKey] = useState(null);  // null | 'pdf_version' | 'updatedAt'
+  const [sortDir, setSortDir] = useState('asc'); // 'asc' | 'desc'
+
   const th = { padding: '10px 14px', textAlign: 'left', fontSize: '11px', fontWeight: '600', color: '#8C8070', textTransform: 'uppercase', letterSpacing: '0.4px', whiteSpace: 'nowrap' };
   const td = { padding: '12px 14px', fontSize: '13px', color: '#1C1A16', borderTop: '1px solid #F4F1EC' };
+
+  function toggleSort(key) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  }
+
+  // Sort items client-side if a sort key is active
+  const sorted = sortKey ? [...items].sort((a, b) => {
+    let av = a[sortKey] ?? '';
+    let bv = b[sortKey] ?? '';
+    if (sortKey === 'pdf_version') {
+      // Parse vX.Y numerically so v1.10 > v1.9
+      const parse = v => { const m = String(v).match(/^v(\d+)\.(\d+)$/); return m ? parseInt(m[1]) * 10000 + parseInt(m[2]) : 0; };
+      av = parse(av); bv = parse(bv);
+    }
+    if (av < bv) return sortDir === 'asc' ? -1 : 1;
+    if (av > bv) return sortDir === 'asc' ?  1 : -1;
+    return 0;
+  }) : items;
+
+  function SortableHeader({ label, colKey, style }) {
+    const active = sortKey === colKey;
+    return (
+      <th
+        onClick={() => toggleSort(colKey)}
+        style={{ ...th, ...style, cursor: 'pointer', userSelect: 'none',
+          color: active ? '#1B6B65' : '#8C8070' }}
+        title={`Sort by ${label}`}
+      >
+        {label}{active ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ' ↕'}
+      </th>
+    );
+  }
 
   return (
     <div style={{ background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA', overflow: 'hidden' }}>
@@ -484,12 +520,13 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
               <th style={{ ...th, textAlign: 'center' }}>Days</th>
               <th style={{ ...th, textAlign: 'right' }}>Price</th>
               <th style={{ ...th, textAlign: 'center' }}>Status</th>
-              <th style={th}>Updated</th>
+              <SortableHeader label="PDF Version" colKey="pdf_version" style={{ textAlign: 'center' }} />
+              <SortableHeader label="Updated" colKey="updatedAt" style={{}} />
               <th style={{ ...th, textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {items.map(it => {
+            {sorted.map(it => {
               const itType = getItineraryType(it);
               return (
               <tr key={it.id}>
@@ -536,6 +573,15 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
                 </td>
                 <td style={{ ...td, textAlign: 'center' }}>
                   <Badge meta={STATUS_META[it.status] ?? STATUS_META.draft} />
+                </td>
+                <td style={{ ...td, textAlign: 'center' }}>
+                  <span style={{
+                    fontFamily: 'monospace', fontSize: '11.5px', fontWeight: '600',
+                    color: '#1B6B65', background: '#EFF6F5',
+                    padding: '2px 8px', borderRadius: '8px', whiteSpace: 'nowrap',
+                  }}>
+                    {it.pdf_version || 'v1.0'}
+                  </span>
                 </td>
                 <td style={{ ...td, color: '#8C8070', whiteSpace: 'nowrap' }}>
                   {fmtDate(it.updatedAt)}

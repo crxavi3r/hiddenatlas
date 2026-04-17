@@ -619,6 +619,16 @@ async function handleBulkPublish(pool) {
   return { ok: true, published: rows.length, items: rows };
 }
 
+// ── PDF version helper ────────────────────────────────────────────────────────
+// Increments the decimal part of a version string (v1.0 → v1.1, v1.9 → v1.10).
+// If current is null/missing, treats it as v1.0 and returns v1.1.
+function nextPdfVersion(current) {
+  const base  = current || 'v1.0';
+  const match = base.match(/^v(\d+)\.(\d+)$/);
+  if (!match) return 'v1.1';
+  return `v${match[1]}.${parseInt(match[2], 10) + 1}`;
+}
+
 // ── Upload PDF → Vercel Blob → store pdfUrl ───────────────────────────────────
 async function handleUploadPDF(pool, id, body) {
   if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
@@ -626,18 +636,19 @@ async function handleUploadPDF(pool, id, body) {
   if (!base64Data) throw Object.assign(new Error('data (base64) is required'), { status: 400 });
 
   const { rows } = await pool.query(
-    `SELECT slug, "pdfUrl" FROM "Itinerary" WHERE id = $1 LIMIT 1`, [id]
+    `SELECT slug, "pdfUrl", pdf_version FROM "Itinerary" WHERE id = $1 LIMIT 1`, [id]
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
-  const { slug, pdfUrl: previousPdfUrl } = rows[0];
+  const { slug, pdfUrl: previousPdfUrl, pdf_version: currentVersion } = rows[0];
 
   // Use a timestamp in the filename so each generation gets a unique path.
   // This avoids the Vercel Blob "already exists" error and ensures each new
   // version has its own URL — no CDN cache collision possible.
-  const timestamp = Date.now();
-  const filename  = `${slug}-hiddenatlas-${timestamp}.pdf`;
-  const blobPath  = `itineraries/${slug}/pdf/${filename}`;
-  const buffer    = Buffer.from(base64Data, 'base64');
+  const timestamp  = Date.now();
+  const filename   = `${slug}-hiddenatlas-${timestamp}.pdf`;
+  const blobPath   = `itineraries/${slug}/pdf/${filename}`;
+  const buffer     = Buffer.from(base64Data, 'base64');
+  const newVersion = nextPdfVersion(currentVersion);
 
   console.log('[upload-pdf] start — slug:', slug, '| path:', blobPath, '| size:', buffer.length, 'bytes');
 
@@ -650,14 +661,17 @@ async function handleUploadPDF(pool, id, body) {
 
   const { rows: updated } = await pool.query(
     `UPDATE "Itinerary"
-     SET "pdfUrl" = $2, "pdfStatus" = 'ready', "pdfGeneratedAt" = NOW(), "pdfError" = NULL, "updatedAt" = NOW()
-     WHERE id = $1 RETURNING id, slug, "pdfUrl", "pdfStatus", "pdfGeneratedAt"`,
-    [id, result.url]
+     SET "pdfUrl" = $2, "pdfStatus" = 'ready', "pdfGeneratedAt" = NOW(),
+         "pdfError" = NULL, pdf_version = $3, "updatedAt" = NOW()
+     WHERE id = $1
+     RETURNING id, slug, "pdfUrl", "pdfStatus", "pdfGeneratedAt", pdf_version`,
+    [id, result.url, newVersion]
   );
 
-  console.log('[upload-pdf] DB updated — new pdfUrl saved, pdfError cleared | previous url was:', previousPdfUrl || '(none)');
+  console.log('[upload-pdf] DB updated — pdfUrl saved, version:', currentVersion, '->', newVersion,
+    '| previous url was:', previousPdfUrl || '(none)');
 
-  return { ok: true, pdfUrl: result.url, itinerary: updated[0] };
+  return { ok: true, pdfUrl: result.url, pdfVersion: newVersion, itinerary: updated[0] };
 }
 
 // ── Update PDF status (called by client on failure to record stale/failed state) ──
