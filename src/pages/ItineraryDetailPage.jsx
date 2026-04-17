@@ -624,8 +624,8 @@ const api = useApi();
     // Download via protected endpoint — server validates auth + purchase,
     // reads the latest pdf_url directly from DB, and streams from blob storage.
     // No blob URL is ever exposed in the browser; no stale-cache risk.
-    console.log('Download href used by UI', `/api/pdf-download?slug=${itinerary.id}`);
-    const pdfRes = await api.get(`/api/pdf-download?slug=${itinerary.id}`);
+    console.log('Download href used by UI', `/api/itineraries?action=download&slug=${itinerary.id}`);
+    const pdfRes = await api.get(`/api/itineraries?action=download&slug=${itinerary.id}`);
 
     if (pdfRes.status === 404) {
       // No hosted PDF yet — fall back to client-side generation

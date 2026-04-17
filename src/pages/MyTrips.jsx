@@ -661,7 +661,7 @@ export default function MyTrips() {
           return Array.isArray(json) ? json : [];
         })
         .catch(err => { console.error('[MyTrips] /api/itineraries?action=my-trips fetch error:', err); return []; }),
-      api.get('/api/custom-requests')
+      api.get('/api/custom')
         .then(r => r.ok ? r.json() : [])
         .catch(() => []),
     ]).then(([trips, bought, requests]) => {

@@ -307,7 +307,7 @@ export default function CustomPlanningPage() {
     } else {
       // 13+ review-first flow
       try {
-        const res = await api.post('/api/custom-planning', {
+        const res = await api.post('/api/custom', {
           ...formData,
           designerSlug: designer?.slug ?? null,
         });

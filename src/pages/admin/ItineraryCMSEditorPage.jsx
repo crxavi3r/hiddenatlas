@@ -901,7 +901,7 @@ export default function ItineraryCMSEditorPage() {
     const slug  = form.slug;
     if (!slug) { alert('No slug — save the itinerary first.'); return; }
     try {
-      const res = await fetch(`/api/pdf-download?slug=${slug}`, {
+      const res = await fetch(`/api/itineraries?action=download&slug=${slug}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {

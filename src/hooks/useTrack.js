@@ -45,7 +45,7 @@ export function useTrack() {
         let token = null;
         try { token = await getToken(); } catch { /* anonymous */ }
 
-        fetch('/api/events', {
+        fetch('/api/trips?action=track', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

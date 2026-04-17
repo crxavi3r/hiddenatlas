@@ -19,6 +19,10 @@ const { Pool } = pg;
 //
 // GET /api/itineraries?action=my-trips
 //   Auth required. Returns purchased premium itineraries for the authenticated user.
+//
+// GET /api/itineraries?action=download&slug=:slug
+//   Auth required + purchase/admin/owner. Streams the PDF binary for the itinerary.
+//   Private blobs are fetched server-side with BLOB_READ_WRITE_TOKEN.
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -284,6 +288,86 @@ export default async function handler(req, res) {
     } catch (err) {
       console.error('[itineraries/custom]', err.message);
       return res.status(500).json({ error: 'Database error' });
+    } finally {
+      await pool.end();
+    }
+  }
+
+  // ── GET /api/itineraries?action=download&slug= ───────────────────────────
+  // Protected: validates auth + purchase (or admin/owner) then streams the PDF.
+  // Reads the latest pdf_url from DB — no stale client-cached URL risk.
+  if (action === 'download') {
+    if (!slug) return res.status(400).json({ error: 'slug is required' });
+    if (!process.env.CLERK_SECRET_KEY) {
+      return res.status(500).json({ error: 'Server misconfigured' });
+    }
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      const ctx = await resolveUserCtx(req.headers.authorization, pool);
+      if (!ctx) return res.status(401).json({ error: 'Unauthorized' });
+
+      const { rows } = await pool.query(
+        `SELECT id, slug, title, type, "userId",
+                COALESCE(pdf_url, "pdfUrl") AS pdf_url
+         FROM   "Itinerary"
+         WHERE  slug = $1
+         LIMIT  1`,
+        [slug]
+      );
+      if (!rows.length) return res.status(404).json({ error: 'Itinerary not found' });
+      const it = rows[0];
+
+      if (!it.pdf_url) {
+        return res.status(404).json({ error: 'No PDF available for this itinerary' });
+      }
+
+      if (!ctx.isAdmin) {
+        const isOwner = Boolean(it.userId && it.userId === ctx.userId);
+        if (!isOwner) {
+          const { rows: purchaseRows } = await pool.query(
+            `SELECT 1 FROM "Purchase"
+             WHERE  "userId"      = $1
+               AND  "itineraryId" = $2
+               AND  (status IS NULL OR status NOT IN ('refunded', 'cancelled', 'chargebacked'))
+             LIMIT  1`,
+            [ctx.userId, it.id]
+          );
+          if (!purchaseRows.length) {
+            return res.status(403).json({ error: 'You do not have access to this PDF' });
+          }
+        }
+      }
+
+      const isPrivate   = it.pdf_url.includes('.private.blob.vercel-storage.com');
+      const blobHeaders = {};
+      if (isPrivate) {
+        if (!process.env.BLOB_READ_WRITE_TOKEN) {
+          return res.status(500).json({ error: 'Server misconfigured' });
+        }
+        blobHeaders.Authorization = `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`;
+      }
+
+      const blobRes = await fetch(it.pdf_url, { headers: blobHeaders });
+      if (!blobRes.ok) {
+        console.error('[itineraries/download] blob fetch failed:', blobRes.status, it.pdf_url.slice(0, 80));
+        return res.status(502).json({ error: 'Failed to retrieve PDF from storage' });
+      }
+
+      const buffer   = Buffer.from(await blobRes.arrayBuffer());
+      const filename = `${it.slug}-hiddenatlas.pdf`;
+      console.log('[itineraries/download] serving —', it.slug,
+        '| userId:', ctx.userId, '| isAdmin:', ctx.isAdmin,
+        '| private:', isPrivate, '| bytes:', buffer.length);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.end(buffer);
+    } catch (err) {
+      if (err.isDbError) return res.status(503).json({ error: 'Database unavailable' });
+      console.error('[itineraries/download]', err.message);
+      return res.status(500).json({ error: 'Internal server error' });
     } finally {
       await pool.end();
     }
