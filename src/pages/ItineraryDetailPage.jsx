@@ -621,15 +621,32 @@ const api = useApi();
         metadata:  { source: 'premium_itinerary', destination: itinerary.title },
       }).catch(err => console.warn('[ItineraryDetail] premium audit failed:', err.message));
     }
-    // Actual file delivery: open hosted PDF or generate client-side
-    if (pdfUrl) {
-      console.log('[ItineraryDetail] opening pdfUrl:', pdfUrl);
-      window.open(pdfUrl, '_blank', 'noopener,noreferrer');
-    } else {
-      console.log('[ItineraryDetail] generating PDF client-side (premium)');
-      // Pass merged days so client-side PDF matches the site — same as the free path.
+    // Download via protected endpoint — server validates auth + purchase,
+    // reads the latest pdf_url directly from DB, and streams from blob storage.
+    // No blob URL is ever exposed in the browser; no stale-cache risk.
+    console.log('Download href used by UI', `/api/pdf-download?slug=${itinerary.id}`);
+    const pdfRes = await api.get(`/api/pdf-download?slug=${itinerary.id}`);
+
+    if (pdfRes.status === 404) {
+      // No hosted PDF yet — fall back to client-side generation
+      console.log('[ItineraryDetail] no hosted PDF, generating client-side');
       await downloadItineraryPDF({ ...itinerary, days });
+      return;
     }
+    if (!pdfRes.ok) {
+      const errData = await pdfRes.json().catch(() => ({}));
+      throw new Error(errData.error || `PDF download failed (${pdfRes.status})`);
+    }
+
+    const pdfBlob = await pdfRes.blob();
+    const blobUrl = URL.createObjectURL(pdfBlob);
+    const a       = document.createElement('a');
+    a.href        = blobUrl;
+    a.download    = `${(itinerary.title || itinerary.id).replace(/[^a-z0-9]/gi, '-').toLowerCase()}-hiddenatlas.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
   }
 
   // Unified buy handler: sign in first if needed, then go to Stripe

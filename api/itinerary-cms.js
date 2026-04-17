@@ -653,11 +653,12 @@ async function handleUploadPDF(pool, id, body) {
   console.log('[upload-pdf] start — slug:', slug, '| path:', blobPath, '| size:', buffer.length, 'bytes');
 
   const result = await blobPut(blobPath, buffer, {
-    access: 'public',
+    access: 'private',
     contentType: 'application/pdf',
   });
 
   console.log('[upload-pdf] blob upload success — url:', result.url);
+  console.log('Generated blob url', result.url);
 
   const { rows: updated } = await pool.query(
     `UPDATE "Itinerary"
@@ -670,6 +671,7 @@ async function handleUploadPDF(pool, id, body) {
 
   console.log('[upload-pdf] DB updated — pdfUrl + pdf_url saved, version:', currentVersion, '->', newVersion,
     '| previous url was:', previousPdfUrl || '(none)');
+  console.log('Saved pdfUrl in DB', result.url);
 
   return { ok: true, pdfUrl: result.url, pdfVersion: newVersion, itinerary: updated[0] };
 }

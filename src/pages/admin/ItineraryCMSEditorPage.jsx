@@ -893,6 +893,41 @@ export default function ItineraryCMSEditorPage() {
     }
   }
 
+  // ── View PDF (admin preview via protected endpoint) ──────────────────────────
+  // Fetches the PDF via the same auth-gated endpoint the customer uses, then opens
+  // it in a new tab. Works for both public (legacy) and private blobs.
+  async function handleViewPDF() {
+    const token = await getToken();
+    const slug  = form.slug;
+    if (!slug) { alert('No slug — save the itinerary first.'); return; }
+    try {
+      const res = await fetch(`/api/pdf-download?slug=${slug}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Could not open PDF: ${err.error || res.status}`);
+        return;
+      }
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const win  = window.open(url, '_blank');
+      // Revoke the object URL after the tab has had time to load the file.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      if (!win) {
+        // Popup blocked — trigger a download as fallback
+        const a  = document.createElement('a');
+        a.href     = url;
+        a.download = `${slug}-hiddenatlas.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+    } catch (err) {
+      alert(`Could not open PDF: ${err.message}`);
+    }
+  }
+
   // ── Generate + upload PDF ─────────────────────────────────────────────────────
   // silent=true: suppress the alert on failure (used when auto-triggered from Save).
   async function handleGeneratePDF({ silent = false } = {}) {
@@ -970,7 +1005,7 @@ export default function ItineraryCMSEditorPage() {
       const resolveJson = resolveRes.ok ? await resolveRes.json() : {};
       const resolvedImages = resolveJson.resolved ?? {};
 
-      // Mandatory diagnostic logs
+      // Diagnostic: blob resolution status
       console.log('PDF hero image URL',     coverUrl || '(none)');
       console.log('PDF hero base64 exists', !!resolvedImages[coverUrl]);
       // Day 11: check both blob asset AND inline img field
@@ -979,9 +1014,39 @@ export default function ItineraryCMSEditorPage() {
       console.log('PDF day 11 image URL',     day11Url || '(none)');
       console.log('PDF day 11 base64 exists', !!resolvedImages[day11Url]);
 
+      // ── 3b. Filesystem fallbacks for failed blob resolutions ─────────────
+      // If a blob URL failed to pre-resolve (network error, expired, CORS),
+      // substitute the corresponding filesystem path so the image still
+      // appears in the PDF. @react-pdf/renderer fetches these paths from
+      // window.location.origin (served from public/ in both dev and prod).
+      const { getDayImages: getFsDayImgs, getCoverImage: getFsCoverImg } =
+        await import('../../lib/itineraryImages');
+      const enrichedResolved = { ...resolvedImages };
+
+      if (coverUrl?.startsWith('http') && !enrichedResolved[coverUrl]) {
+        const fsCover = getFsCoverImg(form.slug);
+        if (fsCover) {
+          console.log('[CMS] hero blob failed — filesystem fallback:', fsCover);
+          enrichedResolved[coverUrl] = fsCover;
+        }
+      }
+      freshDays.forEach(day => {
+        const dayAsset = freshAssets.find(
+          a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day)
+        );
+        const dayBlobUrl = dayAsset?.url || day.img;
+        if (dayBlobUrl?.startsWith('http') && !enrichedResolved[dayBlobUrl]) {
+          const fsImgs = getFsDayImgs(form.slug, day.day, form.variant);
+          if (fsImgs.length) {
+            console.log(`[CMS] Day ${day.day} blob failed — filesystem fallback:`, fsImgs[0]);
+            enrichedResolved[dayBlobUrl] = fsImgs[0];
+          }
+        }
+      });
+
       // ── 4. Generate PDF from form state + pre-resolved images ────────────
       const { buildCustomPDFBlob } = await import('../../utils/buildCustomPDF');
-      const blob = await buildCustomPDFBlob(freshItinerary, freshAssets, resolvedImages);
+      const blob = await buildCustomPDFBlob(freshItinerary, freshAssets, enrichedResolved);
       console.log('[CMS] PDF generation — blob ready, size:', blob.size, 'bytes');
 
       // Convert blob to base64
@@ -1305,15 +1370,14 @@ export default function ItineraryCMSEditorPage() {
 
           {/* View PDF — shown when a generated PDF URL exists */}
           {(form.pdf_url || form.pdfUrl) && !isNew && (
-            <a
-              href={form.pdf_url || form.pdfUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
+              onClick={handleViewPDF}
               title={`pdf_url: ${form.pdf_url || form.pdfUrl}`}
-              style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#1B6B65' }}
+              style={{ ...btnSecondary, display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#1B6B65', cursor: 'pointer' }}
             >
               <ExternalLink size={12} /> View PDF {form.pdf_version ? `(${form.pdf_version})` : ''}
-            </a>
+            </button>
           )}
 
           {/* Sync days from static source — only for non-custom itineraries */}
