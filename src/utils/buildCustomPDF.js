@@ -36,17 +36,34 @@ function fmtPdfDate() {
 
 function resolveImg(url, resolvedImages) {
   if (!url) return null;
-  // Already a data URI — pass through
   if (url.startsWith('data:')) return url;
-  // Check resolvedImages first — handles both blob URLs AND pre-resolved filesystem paths
-  if (resolvedImages[url]) return resolvedImages[url];
-  // Remote URL that wasn't pre-resolved — log and skip
+
+  const direct = resolvedImages[url];
+  if (direct) {
+    // Case 1: blob URL resolved to a base64 data URI — use it directly.
+    if (direct.startsWith('data:')) return direct;
+
+    // Case 2: blob URL failed and step 3b stored a filesystem path as a fallback value.
+    // The CMS pre-resolution (step 3c extension) will have stored the base64 for that
+    // path under the path key — do a second lookup to get the data URI.
+    if (!direct.startsWith('http')) {
+      const preResolved = resolvedImages[direct];
+      if (preResolved && preResolved.startsWith('data:')) return preResolved;
+      // Filesystem path not yet pre-resolved — pass through for browser URL resolution.
+      return direct;
+    }
+    return direct;
+  }
+
+  // HTTP URL with no entry in resolvedImages — should not happen if the caller
+  // correctly pre-resolved all remote URLs.
   if (url.startsWith('http')) {
     console.error('[buildCustomPDF] no resolved image for URL:', url.slice(0, 80),
       '— image will be absent from PDF');
     return null;
   }
-  // Filesystem path not in resolvedImages — pass through for browser URL resolution
+
+  // Filesystem path not in resolvedImages — pass through for browser URL resolution.
   return url;
 }
 
@@ -78,8 +95,9 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
   // All remote URLs are looked up in resolvedImages (pre-fetched server-side).
   // Filesystem paths (/itineraries/...) pass through unchanged.
   const days = (content.days || []).map(day => {
+    // Only active assets — inactive records may have dead/deleted blob URLs.
     const dayAssets = dbAssets.filter(
-      a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day)
+      a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day) && a.active !== false
     );
 
     let rawUrls;

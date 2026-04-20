@@ -980,11 +980,14 @@ export default function ItineraryCMSEditorPage() {
       // Diagnostic: blob resolution status
       console.log('PDF hero image URL',     coverUrl || '(none)');
       console.log('PDF hero base64 exists', !!resolvedImages[coverUrl]);
-      // Day 11: check both blob asset AND inline img field
-      const day11Asset = freshAssets.find(a => a.assetType === 'day' && Number(a.dayNumber) === 11);
+      // Day 11: check active asset URL + resolution result
+      const day11Asset = freshAssets.find(a => a.assetType === 'day' && Number(a.dayNumber) === 11 && a.active !== false);
       const day11Url   = day11Asset?.url || day11?.img || '';
-      console.log('PDF day 11 image URL',     day11Url || '(none)');
-      console.log('PDF day 11 base64 exists', !!resolvedImages[day11Url]);
+      const day11Resolved = resolvedImages[day11Url];
+      console.log('PDF day 11 image URL',      day11Url || '(none)');
+      console.log('PDF day 11 resolved type',  day11Resolved
+        ? (day11Resolved.startsWith('data:') ? `base64(${day11Resolved.length}b)` : `path:${day11Resolved}`)
+        : '(none — will use filesystem fallback)');
 
       // ── 3b. Filesystem fallbacks for failed blob resolutions ─────────────
       // If a blob URL failed to pre-resolve (network error, expired, CORS),
@@ -1004,7 +1007,7 @@ export default function ItineraryCMSEditorPage() {
       }
       freshDays.forEach(day => {
         const dayAsset = freshAssets.find(
-          a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day)
+          a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day) && a.active !== false
         );
         const dayBlobUrl = dayAsset?.url || day.img;
         if (dayBlobUrl?.startsWith('http') && !enrichedResolved[dayBlobUrl]) {
@@ -1028,19 +1031,37 @@ export default function ItineraryCMSEditorPage() {
       const fsKeyMap = {};  // absUrl → relPath, so we can re-key the result
       freshDays.forEach(day => {
         const dayAsset = freshAssets.find(
-          a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day)
+          a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day) && a.active !== false
         );
         const dayBlobUrl = dayAsset?.url || day.img;
+
+        // Collect filesystem paths to pre-resolve for two cases:
+        // 1. No blob URL at all — filesystem is the primary source.
+        // 2. A blob URL exists but step 3b set a filesystem fallback because the blob
+        //    failed to resolve (enrichedResolved[dayBlobUrl] is a relative path, not base64).
+        //    Without this branch, the fallback path would reach @react-pdf/renderer as a raw
+        //    relative URL, which can fail silently in some environments. Pre-resolving it to
+        //    base64 here ensures the renderer always receives an embedded data URI.
+        let fsPaths = [];
         if (!dayBlobUrl) {
-          const fsPaths = getFsDayImgs(form.slug, day.day, form.variant);
-          fsPaths.forEach(relPath => {
-            if (!enrichedResolved[relPath]) {
-              const absUrl = window.location.origin + relPath;
+          fsPaths = getFsDayImgs(form.slug, day.day, form.variant);
+        } else {
+          const fallback = enrichedResolved[dayBlobUrl];
+          // A filesystem path starts with '/' and is not a data URI
+          if (fallback && !fallback.startsWith('data:') && fallback.startsWith('/')) {
+            fsPaths = [fallback];
+          }
+        }
+
+        fsPaths.forEach(relPath => {
+          if (!enrichedResolved[relPath]) {
+            const absUrl = window.location.origin + relPath;
+            if (!fsUrlsToResolve.includes(absUrl)) {
               fsUrlsToResolve.push(absUrl);
               fsKeyMap[absUrl] = relPath;
             }
-          });
-        }
+          }
+        });
       });
       if (fsUrlsToResolve.length) {
         console.log('[CMS] pre-resolving', fsUrlsToResolve.length, 'filesystem day image(s) to base64…');
@@ -1070,6 +1091,34 @@ export default function ItineraryCMSEditorPage() {
       }
 
       // ── 4. Generate PDF from form state + pre-resolved images ────────────
+      // Final diagnostic: show what image source each day resolved to.
+      //   base64(blob)    = blob URL resolved to embedded data URI  ✓
+      //   base64(blob→fs) = blob failed, filesystem fallback pre-resolved to base64  ✓
+      //   base64(fs)      = no blob, filesystem path pre-resolved to base64  ✓
+      //   fs-fallback     = raw relative path (browser fetch — less reliable)  ⚠
+      //   MISSING         = no image found at all  ✗
+      freshDays.forEach(day => {
+        const asset   = freshAssets.find(a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day) && a.active !== false);
+        const blobUrl = asset?.url || day.img;
+        let srcType;
+        if (!blobUrl) {
+          const fsPaths = getFsDayImgs(form.slug, day.day, form.variant);
+          const fsB64   = fsPaths[0] ? enrichedResolved[fsPaths[0]] : null;
+          srcType = fsB64 ? 'base64(fs)' : fsPaths[0] ? `fs-fallback:${fsPaths[0].slice(-30)}` : 'MISSING';
+        } else {
+          const resolved = enrichedResolved[blobUrl];
+          if (resolved?.startsWith('data:')) {
+            srcType = `base64(blob,${resolved.length}b)`;
+          } else if (resolved) {
+            const pathB64 = enrichedResolved[resolved];
+            srcType = pathB64 ? 'base64(blob→fs)' : `fs-fallback:${resolved.slice(-30)}`;
+          } else {
+            srcType = 'MISSING';
+          }
+        }
+        console.log(`[CMS] Day ${String(day.day).padStart(2)} image →`, srcType);
+      });
+
       const { buildCustomPDFBlob } = await import('../../utils/buildCustomPDF');
       const pdfBlob = await buildCustomPDFBlob(freshItinerary, freshAssets, enrichedResolved);
       console.log('[CMS] PDF blob ready — size:', pdfBlob.size, 'bytes');
