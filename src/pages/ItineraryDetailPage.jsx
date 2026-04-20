@@ -470,8 +470,16 @@ const api = useApi();
     if (!itinerary || !isLoaded) return;
     if (!isPremium) { setAccessState('unlocked'); return; }
 
-    // Admins always have full access — no purchase required
-    if (isAdmin) { setAccessState('unlocked'); return; }
+    // Admins always have full access — no purchase required.
+    // Still fetch the current pdfUrl so the download button uses the live blob URL.
+    if (isAdmin) {
+      setAccessState('unlocked');
+      api.get(`/api/itineraries?action=pdf-url&slug=${itinerary.id}`)
+        .then(r => r.ok ? r.json() : {})
+        .then(({ pdfUrl: url }) => { if (url) setPdfUrl(url); })
+        .catch(() => {});
+      return;
+    }
 
     if (!isSignedIn) { setAccessState('locked'); return; }
 
@@ -609,7 +617,10 @@ const api = useApi();
 
   // Passed to UnlockedSidebar: save as PREMIUM_JOURNEY then download.
   async function handlePremiumDownload() {
-    console.log('[ItineraryDetail] Download PDF (premium) clicked — pdfUrl:', pdfUrl);
+    console.log('[ItineraryDetail] Download PDF clicked — slug:', itinerary.id,
+      '| isAdmin:', isAdmin, '| cached pdfUrl:', pdfUrl);
+
+    // ── Audit/save (fire and forget) ────────────────────────────────────────
     if (isLoaded && isSignedIn) {
       const tripId = await ensureItinerarySaved('PREMIUM_JOURNEY');
       if (!tripId) {
@@ -622,17 +633,44 @@ const api = useApi();
       }).catch(err => console.warn('[ItineraryDetail] premium audit failed:', err.message));
     }
 
-    if (!pdfUrl) {
-      // No hosted PDF yet — fall back to client-side generation
-      console.log('[ItineraryDetail] no pdfUrl, generating client-side');
+    // ── Always re-fetch the live pdfUrl at download time ────────────────────
+    // Never rely on page-load state — it may be stale if the PDF was regenerated
+    // while the page was open, or if this is an admin (who bypasses the access check).
+    let freshPdfUrl = null;
+    let freshVersion = null;
+    try {
+      const r = await api.get(`/api/itineraries?action=pdf-url&slug=${itinerary.id}`);
+      if (r.ok) {
+        const data = await r.json();
+        freshPdfUrl  = data.pdfUrl    ?? null;
+        freshVersion = data.pdfVersion ?? null;
+        console.log('[ItineraryDetail] fresh pdfUrl from DB:', freshPdfUrl,
+          '| version:', freshVersion);
+        // Keep local state in sync so UI reflects the latest version
+        if (freshPdfUrl) setPdfUrl(freshPdfUrl);
+      } else {
+        console.warn('[ItineraryDetail] pdf-url fetch returned', r.status);
+      }
+    } catch (e) {
+      console.warn('[ItineraryDetail] pdf-url fetch failed:', e.message);
+    }
+
+    if (!freshPdfUrl) {
+      console.log('[ItineraryDetail] no hosted PDF — generating client-side');
       await downloadItineraryPDF({ ...itinerary, days });
       return;
     }
 
-    // Blob store is public — download directly via a temporary anchor.
-    const filename = `${(itinerary.title || itinerary.id).replace(/[^a-z0-9]/gi, '-').toLowerCase()}-hiddenatlas.pdf`;
-    const a = document.createElement('a');
-    a.href     = pdfUrl;
+    // Append version as cache-buster so the browser never serves a stale binary
+    // from its own HTTP cache even if the filename happens to be reused.
+    const cacheBuster = freshVersion ? `?v=${encodeURIComponent(freshVersion)}` : '';
+    const downloadUrl = `${freshPdfUrl}${cacheBuster}`;
+    const filename    = `${(itinerary.title || itinerary.id).replace(/[^a-z0-9]/gi, '-').toLowerCase()}-hiddenatlas.pdf`;
+
+    console.log('[ItineraryDetail] triggering download — url:', downloadUrl);
+
+    const a    = document.createElement('a');
+    a.href     = downloadUrl;
     a.download = filename;
     a.target   = '_blank';
     document.body.appendChild(a);

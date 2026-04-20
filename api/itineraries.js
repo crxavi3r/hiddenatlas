@@ -7,6 +7,10 @@ const { Pool } = pg;
 // GET /api/itineraries?action=access&slug=:slug
 //   Returns { hasAccess: bool, pdfUrl: string|null }
 //
+// GET /api/itineraries?action=pdf-url&slug=:slug
+//   Auth required. Returns { pdfUrl, pdfVersion, pdfGeneratedAt } — always fresh, no purchase check.
+//   Used at download time by both admin and regular users. Never cached.
+//
 // GET /api/itineraries?action=purchases
 //   Returns { slugs: string[] } — all purchased itinerary slugs for the user
 //
@@ -171,12 +175,52 @@ export default async function handler(req, res) {
          LIMIT 1`,
         [clerkId, slug]
       );
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
       return res.status(200).json({
         hasAccess: rows.length > 0,
         pdfUrl: rows[0]?.pdfUrl ?? null,
       });
     } catch (err) {
       console.error('[itineraries/access] DB error:', err.message);
+      return res.status(500).json({ error: 'Database error' });
+    } finally {
+      await pool.end();
+    }
+  }
+
+  // ── GET /api/itineraries?action=pdf-url&slug= ─────────────────────────────
+  // Single source of truth for the active PDF URL + version.
+  // Auth-only — no purchase check. Works for admins and regular users alike.
+  // Always returns the latest value straight from DB; never cached.
+  if (action === 'pdf-url') {
+    if (!slug) return res.status(400).json({ error: 'slug is required' });
+
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      const { rows } = await pool.query(
+        `SELECT COALESCE(pdf_url, "pdfUrl") AS "pdfUrl",
+                pdf_version                 AS "pdfVersion",
+                "pdfGeneratedAt"
+         FROM   "Itinerary"
+         WHERE  slug = $1
+         LIMIT  1`,
+        [slug]
+      );
+      if (!rows.length) return res.status(404).json({ error: 'Itinerary not found' });
+
+      const { pdfUrl, pdfVersion, pdfGeneratedAt } = rows[0];
+      console.log('[itineraries/pdf-url] slug:', slug,
+        '| pdfUrl:', pdfUrl ? pdfUrl.slice(0, 80) + '…' : '(none)',
+        '| version:', pdfVersion || '(none)');
+
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      return res.status(200).json({
+        pdfUrl:         pdfUrl         ?? null,
+        pdfVersion:     pdfVersion     ?? null,
+        pdfGeneratedAt: pdfGeneratedAt ?? null,
+      });
+    } catch (err) {
+      console.error('[itineraries/pdf-url] DB error:', err.message);
       return res.status(500).json({ error: 'Database error' });
     } finally {
       await pool.end();
