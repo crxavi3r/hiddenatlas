@@ -1090,11 +1090,65 @@ export default function ItineraryCMSEditorPage() {
         }
       }
 
+      // ── 3d. Convert unsupported image formats to JPEG ─────────────────────
+      // @react-pdf/renderer silently fails on WebP, AVIF, HEIC, and other
+      // formats — it reserves the layout space but renders blank pixels.
+      // Use the browser's Canvas API to convert any such format to JPEG
+      // before passing the resolved map to the renderer.
+      //
+      // This runs after ALL resolution steps (3, 3b, 3c) so it covers:
+      //   • Blob images that the server resolved (most common — WebP uploads)
+      //   • Filesystem images pre-resolved in step 3c (should already be JPEG)
+      const PDF_SAFE_MIMES = new Set(['image/jpeg', 'image/jpg', 'image/png']);
+      const formatConversions = Object.entries(enrichedResolved).filter(([, v]) => {
+        if (!v?.startsWith('data:')) return false;
+        const mime = v.match(/^data:([^;,]+)/)?.[1]?.toLowerCase();
+        return mime && !PDF_SAFE_MIMES.has(mime);
+      });
+
+      if (formatConversions.length) {
+        console.warn(`[CMS] ⚠ ${formatConversions.length} image(s) in unsupported format — converting to JPEG for PDF`);
+        await Promise.all(formatConversions.map(([url, dataUri]) => {
+          const mime = dataUri.match(/^data:([^;,]+)/)?.[1] || 'unknown';
+          return new Promise(resolve => {
+            const img = new window.Image();
+            img.onload = () => {
+              try {
+                // Limit dimensions to avoid excessive memory use in the PDF
+                const MAX = 1600;
+                let w = img.naturalWidth, h = img.naturalHeight;
+                if (w > MAX || h > MAX) {
+                  const scale = Math.min(MAX / w, MAX / h);
+                  w = Math.round(w * scale);
+                  h = Math.round(h * scale);
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width  = w;
+                canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                const jpeg = canvas.toDataURL('image/jpeg', 0.92);
+                enrichedResolved[url] = jpeg;
+                console.log(`[CMS] Converted ${mime} → JPEG (${Math.round(jpeg.length / 1024)}kb) —`, url.slice(0, 60));
+              } catch (convErr) {
+                console.error(`[CMS] Canvas conversion failed for ${mime}:`, convErr.message, 'url:', url.slice(0, 60));
+              }
+              resolve();
+            };
+            img.onerror = () => {
+              // Browser can't decode this format (e.g. HEIC in Chrome) —
+              // log it and let the filesystem fallback handle it.
+              console.error(`[CMS] Cannot decode ${mime} for Canvas conversion — url:`, url.slice(0, 60));
+              resolve();
+            };
+            img.src = dataUri;
+          });
+        }));
+      }
+
       // ── 4. Generate PDF from form state + pre-resolved images ────────────
       // Final diagnostic: show what image source each day resolved to.
-      //   base64(blob)    = blob URL resolved to embedded data URI  ✓
-      //   base64(blob→fs) = blob failed, filesystem fallback pre-resolved to base64  ✓
-      //   base64(fs)      = no blob, filesystem path pre-resolved to base64  ✓
+      //   base64/jpeg     = ready for rendering  ✓
+      //   base64/webp     = format conversion ran but failed (will show blank)  ✗
       //   fs-fallback     = raw relative path (browser fetch — less reliable)  ⚠
       //   MISSING         = no image found at all  ✗
       freshDays.forEach(day => {
@@ -1104,19 +1158,23 @@ export default function ItineraryCMSEditorPage() {
         if (!blobUrl) {
           const fsPaths = getFsDayImgs(form.slug, day.day, form.variant);
           const fsB64   = fsPaths[0] ? enrichedResolved[fsPaths[0]] : null;
-          srcType = fsB64 ? 'base64(fs)' : fsPaths[0] ? `fs-fallback:${fsPaths[0].slice(-30)}` : 'MISSING';
+          const fsMime  = fsB64?.match(/^data:([^;,]+)/)?.[1] || '';
+          srcType = fsB64 ? `base64(fs,${fsMime})` : fsPaths[0] ? `fs-fallback:${fsPaths[0].slice(-30)}` : 'MISSING';
         } else {
           const resolved = enrichedResolved[blobUrl];
           if (resolved?.startsWith('data:')) {
-            srcType = `base64(blob,${resolved.length}b)`;
+            const mime = resolved.match(/^data:([^;,]+)/)?.[1] || '?';
+            srcType = `base64(blob,${mime},${Math.round(resolved.length/1024)}kb)`;
           } else if (resolved) {
-            const pathB64 = enrichedResolved[resolved];
-            srcType = pathB64 ? 'base64(blob→fs)' : `fs-fallback:${resolved.slice(-30)}`;
+            const pathB64  = enrichedResolved[resolved];
+            const pathMime = pathB64?.match(/^data:([^;,]+)/)?.[1] || '';
+            srcType = pathB64 ? `base64(blob→fs,${pathMime})` : `fs-fallback:${resolved.slice(-30)}`;
           } else {
             srcType = 'MISSING';
           }
         }
-        console.log(`[CMS] Day ${String(day.day).padStart(2)} image →`, srcType);
+        const marker = srcType.includes('webp') || srcType.includes('MISSING') ? ' ⚠' : ' ✓';
+        console.log(`[CMS] Day ${String(day.day).padStart(2)} image →`, srcType + marker);
       });
 
       const { buildCustomPDFBlob } = await import('../../utils/buildCustomPDF');

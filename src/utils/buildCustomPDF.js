@@ -123,9 +123,24 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
 
     if (Number(day.day) === 11) {
       const src = dayAssets[0]?.source || (day.img ? 'content.days.img' : (rawUrls.length ? 'filesystem' : 'none'));
-      console.log('PDF day 11 image URL',     rawUrls[0] || '(none)');
-      console.log('PDF day 11 image source',  src);
-      console.log('PDF day 11 resolved',      imgs.length > 0 ? imgs[0].slice(0, 60) : '(none)');
+      const img0 = imgs[0] || '';
+      const mime = img0.startsWith('data:')
+        ? (img0.match(/^data:([^;,]+)/)?.[1] || 'data:?')
+        : img0.startsWith('/') ? 'filesystem-path'
+        : img0.startsWith('http') ? 'http-url'
+        : '(none)';
+      console.log('PDF day 11 dbAssets',       dayAssets.length);
+      console.log('PDF day 11 rawUrls',        rawUrls.length, rawUrls[0]?.slice(0, 80) || '(none)');
+      console.log('PDF day 11 image source',   src);
+      console.log('PDF day 11 imgs count',     imgs.length);
+      console.log('PDF day 11 MIME type',      mime);
+      if (mime !== '(none)') {
+        console.log('PDF day 11 src preview',  img0.slice(0, 80));
+      }
+      if (mime.includes('webp') || mime.includes('heic') || mime.includes('avif')) {
+        console.error('PDF day 11 ⚠ UNSUPPORTED FORMAT:', mime,
+          '— @react-pdf/renderer will render blank space! Check step 3d conversion.');
+      }
     }
     return { ...day, imgs };
   });
