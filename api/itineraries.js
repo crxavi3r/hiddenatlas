@@ -11,6 +11,10 @@ const { Pool } = pg;
 //   Auth required. Returns { pdfUrl, pdfVersion, pdfGeneratedAt } — always fresh, no purchase check.
 //   Used at download time by both admin and regular users. Never cached.
 //
+// GET /api/itineraries?action=download&slug=:slug
+//   Auth required. Validates purchase (or admin), fetches PDF from blob storage on the server,
+//   and streams it to the browser with Content-Disposition: attachment. Blob URL never exposed.
+//
 // GET /api/itineraries?action=purchases
 //   Returns { slugs: string[] } — all purchased itinerary slugs for the user
 //
@@ -225,6 +229,97 @@ export default async function handler(req, res) {
     } finally {
       await pool.end();
     }
+  }
+
+  // ── GET /api/itineraries?action=download&slug= ───────────────────────────
+  // Secure PDF proxy. Validates auth + purchase, fetches the blob server-side,
+  // and streams it to the browser as an attachment. The public blob URL is never
+  // sent to the client — only the file bytes reach the browser.
+  if (action === 'download') {
+    if (!slug) return res.status(400).json({ error: 'slug is required' });
+
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    let pdfUrl, filename;
+
+    try {
+      const userCtx = await resolveUserCtx(req.headers.authorization, pool);
+      const isAdmin  = userCtx?.isAdmin  ?? false;
+      const userId   = userCtx?.userId   ?? null;
+
+      // Fetch itinerary title + pdf_url in one query
+      const { rows: itRows } = await pool.query(
+        `SELECT title, COALESCE(pdf_url, "pdfUrl") AS "pdfUrl"
+         FROM   "Itinerary"
+         WHERE  slug = $1
+         LIMIT  1`,
+        [slug]
+      );
+      if (!itRows.length) return res.status(404).json({ error: 'Itinerary not found' });
+
+      pdfUrl   = itRows[0].pdfUrl;
+      filename = `${(itRows[0].title || slug).replace(/[^a-z0-9]/gi, '-').toLowerCase()}-hiddenatlas.pdf`;
+
+      if (!pdfUrl) return res.status(404).json({ error: 'No PDF available for this itinerary' });
+
+      // Non-admin users must have a valid purchase
+      if (!isAdmin) {
+        if (!userId) return res.status(403).json({ error: 'Access denied' });
+        const { rows: purchaseRows } = await pool.query(
+          `SELECT p.id
+           FROM   "Purchase" p
+           JOIN   "Itinerary" i ON i.id = p."itineraryId"
+           WHERE  p."userId" = $1
+             AND  i.slug    = $2
+             AND  (p.status IS NULL OR p.status NOT IN ('refunded','cancelled','chargebacked'))
+           LIMIT 1`,
+          [userId, slug]
+        );
+        if (!purchaseRows.length) return res.status(403).json({ error: 'Access denied' });
+      }
+    } catch (err) {
+      console.error('[itineraries/download] DB error:', err.message);
+      return res.status(500).json({ error: 'Database error' });
+    } finally {
+      // Always close the pool before we start streaming — the stream runs after
+      // the try/finally block and we must not hold the connection open.
+      await pool.end();
+    }
+
+    // ── Fetch blob and stream to client ──────────────────────────────────────
+    console.log('[itineraries/download] streaming PDF for slug:', slug,
+      '| url:', pdfUrl.slice(0, 80) + '…');
+    try {
+      const blobRes = await fetch(pdfUrl);
+      if (!blobRes.ok) {
+        console.error('[itineraries/download] blob fetch failed:', blobRes.status);
+        return res.status(502).json({ error: 'Could not retrieve PDF' });
+      }
+
+      res.setHeader('Content-Type',        'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Cache-Control',       'private, no-store');
+
+      const contentLength = blobRes.headers.get('content-length');
+      if (contentLength) res.setHeader('Content-Length', contentLength);
+
+      // Stream chunks directly to the response — avoids buffering the whole PDF in memory
+      const reader = blobRes.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(Buffer.from(value));
+      }
+      res.end();
+    } catch (err) {
+      console.error('[itineraries/download] stream error:', err.message);
+      // Headers may already be sent — can't send JSON error at this point
+      if (!res.headersSent) {
+        res.status(502).json({ error: 'Stream error' });
+      } else {
+        res.end();
+      }
+    }
+    return;
   }
 
   // ── GET /api/itineraries?action=purchases ─────────────────────────────────

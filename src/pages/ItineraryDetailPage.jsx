@@ -618,7 +618,7 @@ const api = useApi();
   // Passed to UnlockedSidebar: save as PREMIUM_JOURNEY then download.
   async function handlePremiumDownload() {
     console.log('[ItineraryDetail] Download PDF clicked — slug:', itinerary.id,
-      '| isAdmin:', isAdmin, '| cached pdfUrl:', pdfUrl);
+      '| isAdmin:', isAdmin);
 
     // ── Audit/save (fire and forget) ────────────────────────────────────────
     if (isLoaded && isSignedIn) {
@@ -633,49 +633,44 @@ const api = useApi();
       }).catch(err => console.warn('[ItineraryDetail] premium audit failed:', err.message));
     }
 
-    // ── Always re-fetch the live pdfUrl at download time ────────────────────
-    // Never rely on page-load state — it may be stale if the PDF was regenerated
-    // while the page was open, or if this is an admin (who bypasses the access check).
-    let freshPdfUrl = null;
-    let freshVersion = null;
-    try {
-      const r = await api.get(`/api/itineraries?action=pdf-url&slug=${itinerary.id}`);
-      if (r.ok) {
-        const data = await r.json();
-        freshPdfUrl  = data.pdfUrl    ?? null;
-        freshVersion = data.pdfVersion ?? null;
-        console.log('[ItineraryDetail] fresh pdfUrl from DB:', freshPdfUrl,
-          '| version:', freshVersion);
-        // Keep local state in sync so UI reflects the latest version
-        if (freshPdfUrl) setPdfUrl(freshPdfUrl);
-      } else {
-        console.warn('[ItineraryDetail] pdf-url fetch returned', r.status);
-      }
-    } catch (e) {
-      console.warn('[ItineraryDetail] pdf-url fetch failed:', e.message);
-    }
+    // ── Fetch PDF via secure backend proxy ──────────────────────────────────
+    // The server validates auth + purchase and streams the file — the public
+    // blob URL is never sent to the browser.
+    const filename = `${(itinerary.title || itinerary.id).replace(/[^a-z0-9]/gi, '-').toLowerCase()}-hiddenatlas.pdf`;
 
-    if (!freshPdfUrl) {
-      console.log('[ItineraryDetail] no hosted PDF — generating client-side');
+    console.log('[ItineraryDetail] requesting PDF via backend proxy — slug:', itinerary.id);
+    let r;
+    try {
+      r = await api.get(`/api/itineraries?action=download&slug=${itinerary.id}`);
+    } catch (e) {
+      console.warn('[ItineraryDetail] download proxy fetch failed:', e.message,
+        '— falling back to client-side generation');
       await downloadItineraryPDF({ ...itinerary, days });
       return;
     }
 
-    // Append version as cache-buster so the browser never serves a stale binary
-    // from its own HTTP cache even if the filename happens to be reused.
-    const cacheBuster = freshVersion ? `?v=${encodeURIComponent(freshVersion)}` : '';
-    const downloadUrl = `${freshPdfUrl}${cacheBuster}`;
-    const filename    = `${(itinerary.title || itinerary.id).replace(/[^a-z0-9]/gi, '-').toLowerCase()}-hiddenatlas.pdf`;
+    if (r.status === 403) {
+      throw new Error('You do not have access to this itinerary.');
+    }
 
-    console.log('[ItineraryDetail] triggering download — url:', downloadUrl);
+    if (!r.ok) {
+      // 404 = no PDF uploaded yet → generate client-side
+      console.log('[ItineraryDetail] proxy returned', r.status, '— falling back to client-side generation');
+      await downloadItineraryPDF({ ...itinerary, days });
+      return;
+    }
 
-    const a    = document.createElement('a');
-    a.href     = downloadUrl;
-    a.download = filename;
-    a.target   = '_blank';
+    // Blob the response, create an object URL, click it — blob URL stays in memory only,
+    // never visible in the address bar or network panel as a public URL.
+    const blob      = await r.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a         = document.createElement('a');
+    a.href          = objectUrl;
+    a.download      = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
   }
 
   // Unified buy handler: sign in first if needed, then go to Stripe
