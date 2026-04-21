@@ -17,9 +17,25 @@
     "saint-malo-cris.jpeg"
   ],
   "dayImages": {
-    "1": [],
-    "2": [],
-    "3": [],
-    "4": []
+    "1": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "2": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "3": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "4": {
+      "root": [],
+      "essential": [],
+      "short": []
+    }
   }
 }

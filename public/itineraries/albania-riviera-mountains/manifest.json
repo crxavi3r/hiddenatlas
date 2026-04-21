@@ -5,15 +5,55 @@
   "gallery": [],
   "research": [],
   "dayImages": {
-    "1": [],
-    "2": [],
-    "3": [],
-    "4": [],
-    "5": [],
-    "6": [],
-    "7": [],
-    "8": [],
-    "9": [],
-    "10": []
+    "1": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "2": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "3": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "4": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "5": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "6": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "7": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "8": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "9": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "10": {
+      "root": [],
+      "essential": [],
+      "short": []
+    }
   }
 }

@@ -14,11 +14,27 @@
     "IMG_2289.jpg"
   ],
   "dayImages": {
-    "1": [],
-    "2": [],
-    "3": [],
-    "4": [
-      "baths-of-caracalla.jpeg"
-    ]
+    "1": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "2": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "3": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "4": {
+      "root": [
+        "baths-of-caracalla.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    }
   }
 }

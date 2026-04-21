@@ -5,56 +5,122 @@
   "gallery": [],
   "research": [],
   "dayImages": {
-    "1": [
-      "day1.jpg"
-    ],
-    "2": [
-      "day2.jpg"
-    ],
-    "3": [
-      "day3.jpg"
-    ],
-    "4": [
-      "day4.jpg"
-    ],
-    "5": [
-      "day5.jpg"
-    ],
-    "6": [
-      "day7.jpg"
-    ],
-    "7": [
-      "day6.jpeg"
-    ],
-    "8": [
-      "day8.jpg"
-    ],
-    "9": [
-      "day9.jpg"
-    ],
-    "10": [
-      "day10.jpeg"
-    ],
-    "11": [
-      "day11.jpg"
-    ],
-    "12": [
-      "day12.jpg"
-    ],
-    "13": [
-      "day13.jpg"
-    ],
-    "14": [
-      "day14.jpg"
-    ],
-    "15": [
-      "day15.jpg"
-    ],
-    "16": [
-      "day16.jpg"
-    ],
-    "17": [
-      "day17.jpeg"
-    ]
+    "1": {
+      "root": [
+        "day1.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "2": {
+      "root": [
+        "day2.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "3": {
+      "root": [
+        "day3.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "4": {
+      "root": [
+        "day4.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "5": {
+      "root": [
+        "day5.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "6": {
+      "root": [
+        "day7.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "7": {
+      "root": [
+        "day6.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "8": {
+      "root": [
+        "day8.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "9": {
+      "root": [
+        "day9.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "10": {
+      "root": [
+        "day10.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "11": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "12": {
+      "root": [
+        "day12.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "13": {
+      "root": [
+        "day13.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "14": {
+      "root": [
+        "day14.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "15": {
+      "root": [
+        "day15.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "16": {
+      "root": [
+        "day16.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "17": {
+      "root": [
+        "day17.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    }
   }
 }

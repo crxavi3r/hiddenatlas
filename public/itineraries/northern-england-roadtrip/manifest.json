@@ -20,17 +20,33 @@
     "selfie_york.jpg"
   ],
   "dayImages": {
-    "1": [
-      "day1.jpg"
-    ],
-    "2": [
-      "day2.jpg"
-    ],
-    "3": [
-      "day3.jpg"
-    ],
-    "4": [
-      "day4.jpg"
-    ]
+    "1": {
+      "root": [
+        "day1.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "2": {
+      "root": [
+        "day2.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "3": {
+      "root": [
+        "day3.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "4": {
+      "root": [
+        "day4.jpg"
+      ],
+      "essential": [],
+      "short": []
+    }
   }
 }

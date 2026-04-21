@@ -23,29 +23,61 @@
     "beach.jpeg"
   ],
   "dayImages": {
-    "1": [
-      "chefchaouen.jpeg"
-    ],
-    "2": [
-      "Errachidia.jpg"
-    ],
-    "3": [
-      "Aït Benhaddou.jpg"
-    ],
-    "4": [
-      "Ouarzazate.jpg"
-    ],
-    "5": [
-      "Merzouga-quad-dunes.jpg"
-    ],
-    "6": [
-      "marrakech.jpeg"
-    ],
-    "7": [
-      "Oualidia.jpg"
-    ],
-    "8": [
-      "Hassan-II-Mosque.jpg"
-    ]
+    "1": {
+      "root": [
+        "chefchaouen.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "2": {
+      "root": [
+        "Errachidia.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "3": {
+      "root": [
+        "Aït Benhaddou.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "4": {
+      "root": [
+        "Ouarzazate.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "5": {
+      "root": [
+        "Merzouga-quad-dunes.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "6": {
+      "root": [
+        "marrakech.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "7": {
+      "root": [
+        "Oualidia.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "8": {
+      "root": [
+        "Hassan-II-Mosque.jpg"
+      ],
+      "essential": [],
+      "short": []
+    }
   }
 }

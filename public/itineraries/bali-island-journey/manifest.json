@@ -17,35 +17,75 @@
     "selfie-piscina-infinita.jpg"
   ],
   "dayImages": {
-    "1": [
-      "day1.jpeg"
-    ],
-    "2": [
-      "day1.jpeg"
-    ],
-    "3": [
-      "day3.jpeg"
-    ],
-    "4": [
-      "day4.jpeg"
-    ],
-    "5": [
-      "day5.jpg"
-    ],
-    "6": [
-      "day6.jpg"
-    ],
-    "7": [
-      "day7.jpeg"
-    ],
-    "8": [
-      "day6.jpeg"
-    ],
-    "9": [
-      "day9.jpeg"
-    ],
-    "10": [
-      "day10.jpeg"
-    ]
+    "1": {
+      "root": [
+        "day1.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "2": {
+      "root": [
+        "day1.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "3": {
+      "root": [
+        "day3.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "4": {
+      "root": [
+        "day4.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "5": {
+      "root": [
+        "day5.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "6": {
+      "root": [
+        "day6.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "7": {
+      "root": [
+        "day7.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "8": {
+      "root": [
+        "day6.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "9": {
+      "root": [
+        "day9.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "10": {
+      "root": [
+        "day10.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    }
   }
 }

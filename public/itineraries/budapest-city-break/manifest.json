@@ -14,8 +14,20 @@
     "selfie-danube.jpeg"
   ],
   "dayImages": {
-    "1": [],
-    "2": [],
-    "3": []
+    "1": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "2": {
+      "root": [],
+      "essential": [],
+      "short": []
+    },
+    "3": {
+      "root": [],
+      "essential": [],
+      "short": []
+    }
   }
 }

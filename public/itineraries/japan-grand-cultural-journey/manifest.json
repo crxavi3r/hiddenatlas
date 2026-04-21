@@ -29,59 +29,131 @@
     "vanda-veado.jpg"
   ],
   "dayImages": {
-    "1": [
-      "Shinjuku.jpg"
-    ],
-    "2": [
-      "day2.jpg"
-    ],
-    "3": [
-      "Shibuya-Crossing.jpg"
-    ],
-    "4": [
-      "Kanazawa.jpg"
-    ],
-    "5": [
-      "Wajima-Morning-Market.jpeg"
-    ],
-    "6": [
-      "Shirakawa-go.jpeg"
-    ],
-    "7": [
-      "Takayama.jpg"
-    ],
-    "8": [
-      "Hida-Folk-Village.jpg"
-    ],
-    "9": [
-      "Fushimi-Inari.jpg"
-    ],
-    "10": [
-      "Tenryu-ji.jpg"
-    ],
-    "11": [
-      "Nara.jpg"
-    ],
-    "12": [
-      "Kyoto.jpeg"
-    ],
-    "13": [
-      "Osaka.jpeg"
-    ],
-    "14": [
-      "Koyasan.jpg"
-    ],
-    "15": [
-      "Himeji.jpg"
-    ],
-    "16": [
-      "Okayama.jpg"
-    ],
-    "17": [
-      "hakone.jpg"
-    ],
-    "18": [
-      "tokyo.jpg"
-    ]
+    "1": {
+      "root": [
+        "Shinjuku.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "2": {
+      "root": [
+        "day2.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "3": {
+      "root": [
+        "Shibuya-Crossing.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "4": {
+      "root": [
+        "Kanazawa.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "5": {
+      "root": [
+        "Wajima-Morning-Market.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "6": {
+      "root": [
+        "Shirakawa-go.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "7": {
+      "root": [
+        "Takayama.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "8": {
+      "root": [
+        "Hida-Folk-Village.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "9": {
+      "root": [
+        "Fushimi-Inari.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "10": {
+      "root": [
+        "Tenryu-ji.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "11": {
+      "root": [
+        "Nara.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "12": {
+      "root": [
+        "Kyoto.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "13": {
+      "root": [
+        "Osaka.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "14": {
+      "root": [
+        "Koyasan.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "15": {
+      "root": [
+        "Himeji.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "16": {
+      "root": [
+        "Okayama.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "17": {
+      "root": [
+        "hakone.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "18": {
+      "root": [
+        "tokyo.jpg"
+      ],
+      "essential": [],
+      "short": []
+    }
   }
 }
