@@ -109,7 +109,8 @@
       "Bash(find /Users/cristianoxavier/Documents/Projects/HiddenAtlas -path */node_modules -prune -o -name *.sql -type f -print)",
       "Bash(awk '/id: \"philippines-island-journey\"/,/^\\\\s*\\\\},[^}]*$/' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/src/data/itineraries.js)",
       "Bash(awk '/id: \"philippines-island-journey\"/,/^\\\\s*\\\\},?\\\\s*$/' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/src/data/itineraries.js)",
-      "Bash(awk '/^\\\\s+id: \"philippines-island-journey\",/,/^\\\\s+\\\\},\\\\s*$/' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/src/data/itineraries.js)"
+      "Bash(awk '/^\\\\s+id: \"philippines-island-journey\",/,/^\\\\s+\\\\},\\\\s*$/' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/src/data/itineraries.js)",
+      "Bash(mktemp -d)"
     ]
   }
 }

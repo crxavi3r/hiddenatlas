@@ -73,7 +73,7 @@ export const MANIFESTS = {
       }
     },
     "map": {
-      "root": null,
+      "root": [],
       "complete": null,
       "essential": null,
       "short": null
@@ -180,7 +180,7 @@ export const MANIFESTS = {
       }
     },
     "map": {
-      "root": null,
+      "root": [],
       "complete": null,
       "essential": null,
       "short": null
@@ -277,7 +277,7 @@ export const MANIFESTS = {
       }
     },
     "map": {
-      "root": null,
+      "root": [],
       "complete": null,
       "essential": null,
       "short": null
@@ -326,7 +326,7 @@ export const MANIFESTS = {
       }
     },
     "map": {
-      "root": null,
+      "root": [],
       "complete": null,
       "essential": null,
       "short": null
@@ -790,7 +790,7 @@ export const MANIFESTS = {
       }
     },
     "map": {
-      "root": null,
+      "root": [],
       "complete": null,
       "essential": null,
       "short": null
@@ -847,7 +847,7 @@ export const MANIFESTS = {
       }
     },
     "map": {
-      "root": null,
+      "root": [],
       "complete": null,
       "essential": null,
       "short": null
@@ -915,7 +915,7 @@ export const MANIFESTS = {
       }
     },
     "map": {
-      "root": null,
+      "root": [],
       "complete": null,
       "essential": null,
       "short": null
@@ -1057,7 +1057,7 @@ export const MANIFESTS = {
       }
     },
     "map": {
-      "root": null,
+      "root": [],
       "complete": null,
       "essential": null,
       "short": null
@@ -1111,7 +1111,7 @@ export const MANIFESTS = {
       }
     },
     "map": {
-      "root": null,
+      "root": [],
       "complete": null,
       "essential": null,
       "short": null
@@ -1167,7 +1167,7 @@ export const MANIFESTS = {
       }
     },
     "map": {
-      "root": null,
+      "root": [],
       "complete": null,
       "essential": null,
       "short": null
@@ -1221,7 +1221,7 @@ export const MANIFESTS = {
       }
     },
     "map": {
-      "root": null,
+      "root": [],
       "complete": null,
       "essential": null,
       "short": null

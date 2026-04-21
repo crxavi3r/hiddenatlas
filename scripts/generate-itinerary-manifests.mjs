@@ -34,11 +34,21 @@ if (!existsSync(publicDir)) {
   process.exit(0);
 }
 
-// Returns null when the directory does not exist (vs [] for an existing-but-empty dir).
-// This lets resolvers distinguish "no variant folder → fall back to root"
-// from "variant folder exists but empty → explicit suppression, no fallback".
+// lsVariant: used for variant subfolders (essential/, short/).
+// Returns null when the directory does not exist — lets resolvers distinguish
+// "no variant folder → fall back to root" from "variant folder exists but
+// empty → explicit suppression, no fallback".
 function ls(dir, re) {
   if (!existsSync(dir)) return null;
+  return readdirSync(dir).filter(f => re.test(f)).sort();
+}
+
+// lsRoot: used for root/default directories (gallery/, research/, day{N}/).
+// Always returns an array — never null — because root folders have no
+// suppression semantics and may simply be absent on Vercel (git doesn't
+// track empty directories).
+function lsRoot(dir, re) {
+  if (!existsSync(dir)) return [];
   return readdirSync(dir).filter(f => re.test(f)).sort();
 }
 
@@ -76,16 +86,16 @@ for (const slug of slugs) {
 
   // ── Gallery ───────────────────────────────────────────────────────────────
   data.gallery = {
-    root:      ls(path.join(imgDir, 'gallery'), IMAGE_RE),
-    essential: ls(path.join(imgDir, 'gallery', 'essential'), IMAGE_RE),
-    short:     ls(path.join(imgDir, 'gallery', 'short'), IMAGE_RE),
+    root:      lsRoot(path.join(imgDir, 'gallery'), IMAGE_RE),           // [] when absent
+    essential: ls(path.join(imgDir, 'gallery', 'essential'), IMAGE_RE),  // null when absent
+    short:     ls(path.join(imgDir, 'gallery', 'short'), IMAGE_RE),      // null when absent
   };
 
   // ── Research ──────────────────────────────────────────────────────────────
   data.research = {
-    root:          ls(path.join(imgDir, 'research'), IMAGE_RE),
-    essential:     ls(path.join(imgDir, 'research', 'essential'), IMAGE_RE),
-    short:         ls(path.join(imgDir, 'research', 'short'), IMAGE_RE),
+    root:          lsRoot(path.join(imgDir, 'research'), IMAGE_RE),           // [] when absent
+    essential:     ls(path.join(imgDir, 'research', 'essential'), IMAGE_RE),  // null when absent
+    short:         ls(path.join(imgDir, 'research', 'short'), IMAGE_RE),      // null when absent
     hideEssential: hasHideMarker(path.join(imgDir, 'research', 'essential')),
     hideShort:     hasHideMarker(path.join(imgDir, 'research', 'short')),
   };
@@ -99,9 +109,9 @@ for (const slug of slugs) {
       const dayNumber = parseInt(match[1], 10);
       const dayDir    = path.join(dayImagesDir, dayFolder);
       data.dayImages[dayNumber] = {
-        root:      ls(dayDir, IMAGE_RE),
-        essential: ls(path.join(dayDir, 'essential'), IMAGE_RE),
-        short:     ls(path.join(dayDir, 'short'), IMAGE_RE),
+        root:      lsRoot(dayDir, IMAGE_RE),                           // [] when absent
+        essential: ls(path.join(dayDir, 'essential'), IMAGE_RE),       // null when absent
+        short:     ls(path.join(dayDir, 'short'), IMAGE_RE),           // null when absent
       };
     }
   }
@@ -109,7 +119,7 @@ for (const slug of slugs) {
   // ── Maps ──────────────────────────────────────────────────────────────────
   const mapDir = path.join(imgDir, 'map');
   data.map = {
-    root:      ls(mapDir, MAP_RE),
+    root:      lsRoot(mapDir, MAP_RE),
     complete:  ls(path.join(mapDir, 'complete'),  MAP_RE),
     essential: ls(path.join(mapDir, 'essential'), MAP_RE),
     short:     ls(path.join(mapDir, 'short'),     MAP_RE),
