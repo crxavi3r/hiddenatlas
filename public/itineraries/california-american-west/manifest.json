@@ -20,53 +20,137 @@
     "grand-canyon.jpg"
   ],
   "dayImages": {
-    "1": [
-      "day1.jpeg"
-    ],
-    "2": [
-      "day2.jpeg"
-    ],
-    "3": [
-      "day3.jpeg"
-    ],
-    "4": [
-      "day4.jpeg"
-    ],
-    "5": [
-      "day5.jpeg"
-    ],
-    "6": [
-      "day6.jpg"
-    ],
-    "7": [
-      "day7.jpg"
-    ],
-    "8": [
-      "day8.jpg"
-    ],
-    "9": [
-      "day9.jpeg"
-    ],
-    "10": [
-      "day10.jpeg"
-    ],
-    "11": [
-      "day11.jpg"
-    ],
-    "12": [
-      "day12.jpg"
-    ],
-    "13": [
-      "day13.jpg"
-    ],
-    "14": [
-      "day14.jpg"
-    ],
-    "15": [
-      "day15.jpg"
-    ],
-    "16": [
-      "day16.jpg"
-    ]
+    "1": {
+      "root": [
+        "day1.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "2": {
+      "root": [
+        "day2.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "3": {
+      "root": [
+        "day3.jpeg"
+      ],
+      "essential": [
+        "day3-essential.jpg"
+      ],
+      "short": [
+        "short-day3.jpeg"
+      ]
+    },
+    "4": {
+      "root": [
+        "day4.jpeg"
+      ],
+      "essential": [],
+      "short": [
+        "short-day4.jpg"
+      ]
+    },
+    "5": {
+      "root": [
+        "day5.jpeg"
+      ],
+      "essential": [],
+      "short": [
+        "short-day5.jpeg"
+      ]
+    },
+    "6": {
+      "root": [
+        "day6.jpg"
+      ],
+      "essential": [],
+      "short": [
+        "short-day6.jpg"
+      ]
+    },
+    "7": {
+      "root": [
+        "day7.jpg"
+      ],
+      "essential": [],
+      "short": [
+        "day13.jpg"
+      ]
+    },
+    "8": {
+      "root": [
+        "day8.jpg"
+      ],
+      "essential": [],
+      "short": [
+        "day16.jpg"
+      ]
+    },
+    "9": {
+      "root": [
+        "day9.jpeg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "10": {
+      "root": [
+        "day10.jpeg"
+      ],
+      "essential": [
+        "day10-essential.jpg"
+      ],
+      "short": []
+    },
+    "11": {
+      "root": [
+        "day11.jpg"
+      ],
+      "essential": [
+        "day13.jpg"
+      ],
+      "short": []
+    },
+    "12": {
+      "root": [
+        "day12.jpg"
+      ],
+      "essential": [
+        "day16.jpg"
+      ],
+      "short": []
+    },
+    "13": {
+      "root": [
+        "day13.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "14": {
+      "root": [
+        "day14.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "15": {
+      "root": [
+        "day15.jpg"
+      ],
+      "essential": [],
+      "short": []
+    },
+    "16": {
+      "root": [
+        "day16.jpg"
+      ],
+      "essential": [],
+      "short": []
+    }
   }
 }

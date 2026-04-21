@@ -94,6 +94,15 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
   // Priority: DB assets (ItineraryAsset rows) → inline day.img field → filesystem manifest.
   // All remote URLs are looked up in resolvedImages (pre-fetched server-side).
   // Filesystem paths (/itineraries/...) pass through unchanged.
+  //
+  // For variant itineraries (e.g. california-american-west-8-days), assets live in
+  // the parent's content folder. Use parentId as the asset slug when set — this
+  // ensures getDayImages finds the correct manifest and applies the correct
+  // variant override (short/, essential/, etc.).
+  const assetSlug = itinerary.parentId || itinerary.slug;
+  const variant   = itinerary.variant;
+  console.log(`[buildCustomPDF] asset slug: "${assetSlug}", variant: "${variant || 'none'}"`);
+
   const days = (content.days || []).map(day => {
     // Only active assets — inactive records may have dead/deleted blob URLs.
     const dayAssets = dbAssets.filter(
@@ -109,11 +118,11 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
       // No DB asset, no inline img — fall back to filesystem manifest.
       // getDayImages returns paths like /itineraries/{slug}/day-images/day{N}/file.jpg
       // that @react-pdf/renderer can fetch as same-origin static files.
-      rawUrls = getDayImages(itinerary.slug, day.day, itinerary.variant);
+      rawUrls = getDayImages(assetSlug, day.day, variant);
       if (rawUrls.length) {
-        console.log(`[buildCustomPDF] Day ${day.day} — filesystem fallback: ${rawUrls[0]}`);
+        console.log(`[buildCustomPDF] Day ${day.day} — filesystem fallback (${assetSlug}, ${variant || 'root'}): ${rawUrls[0]}`);
       } else {
-        console.warn(`[buildCustomPDF] Day ${day.day} — NO images from any source`);
+        console.warn(`[buildCustomPDF] Day ${day.day} — NO images from any source (assetSlug=${assetSlug}, variant=${variant || 'none'})`);
       }
     }
 
@@ -122,7 +131,7 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
     console.log(`[buildCustomPDF] Day ${day.day}: dbAssets=${dayAssets.length} rawUrls=${rawUrls.length} imgs=${imgs.length}${imgs.length === 0 ? ' ← NO IMAGES' : ''}`);
 
     if (Number(day.day) === 11) {
-      const src = dayAssets[0]?.source || (day.img ? 'content.days.img' : (rawUrls.length ? 'filesystem' : 'none'));
+      const src = dayAssets[0]?.source || (day.img ? 'content.days.img' : (rawUrls.length ? `filesystem(${assetSlug},${variant || 'root'})` : 'none'));
       const img0 = imgs[0] || '';
       const mime = img0.startsWith('data:')
         ? (img0.match(/^data:([^;,]+)/)?.[1] || 'data:?')

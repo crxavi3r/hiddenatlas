@@ -114,14 +114,20 @@ for (const slug of slugs) {
 
   allData[slug] = data;
 
-  // Write per-slug manifest.json (used by the server scan-assets endpoint)
+  // Write per-slug manifest.json (used by the server scan-assets endpoint).
+  // dayImages uses the full variant structure so scan-assets can resolve the
+  // correct image for each itinerary variant (complete / essential / short).
   const serverManifest = {
     slug, title,
     heroFile:  data.heroFile,
     gallery:   data.gallery.root,
     research:  data.research.root,
     dayImages: Object.fromEntries(
-      Object.entries(data.dayImages).map(([n, v]) => [n, v.root])
+      Object.entries(data.dayImages).map(([n, v]) => [n, {
+        root:      v.root,
+        essential: v.essential,
+        short:     v.short,
+      }])
     ),
   };
   mkdirSync(imgDir, { recursive: true });

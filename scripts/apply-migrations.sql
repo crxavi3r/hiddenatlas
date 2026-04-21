@@ -97,6 +97,15 @@ CREATE TABLE IF NOT EXISTS "ItineraryAIGeneration" (
 CREATE INDEX IF NOT EXISTS "ItineraryAIGeneration_itineraryId_idx" ON "ItineraryAIGeneration"("itineraryId");
 CREATE INDEX IF NOT EXISTS "ItineraryAIGeneration_createdAt_idx"   ON "ItineraryAIGeneration"("createdAt");
 
+-- ── 4. variant + parentId on Itinerary ──────────────────────────────────────
+-- variant:  'complete' | 'essential' | 'short' (null = no variant / standalone)
+-- parentId: slug of the parent content folder (e.g. "california-american-west")
+--           Used to resolve filesystem images for child itineraries that share
+--           a parent asset folder.
+ALTER TABLE "Itinerary"
+  ADD COLUMN IF NOT EXISTS "variant"  TEXT,
+  ADD COLUMN IF NOT EXISTS "parentId" TEXT;
+
 -- ── Verify ───────────────────────────────────────────────────────────────────
 SELECT 'ItineraryAsset' AS "table",
        COUNT(*)::text   AS "rows"

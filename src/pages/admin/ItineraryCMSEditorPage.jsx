@@ -523,6 +523,7 @@ export default function ItineraryCMSEditorPage() {
     region: '', durationDays: '', type: 'free', isPrivate: false, isCollection: false,
     stripePriceId: '', pricingKey: '',
     coverImage: '', status: 'draft', pdfUrl: '', pdf_url: '', pdf_version: 'v1.0', creatorId: '',
+    variant: '', parentId: '',
     content: { ...EMPTY_CONTENT },
   });
   const [allCreators, setAllCreators] = useState([]);  // for creator selector
@@ -585,6 +586,8 @@ export default function ItineraryCMSEditorPage() {
         pdf_url: it.pdf_url || it.pdfUrl || '',
         pdf_version: it.pdf_version || 'v1.0',
         creatorId: it.creatorId || '',
+        variant: it.variant || '',
+        parentId: it.parentId || '',
         content,
       });
       savedId.current = it.id;
@@ -649,14 +652,19 @@ export default function ItineraryCMSEditorPage() {
       const dbJson = await dbRes.json();
       const dbAssets = dbJson.error ? [] : (dbJson.assets ?? []);
 
-      // 2. Filesystem scan (by slug)
-      const slug = slugRef.current || form.slug;
+      // 2. Filesystem scan.
+      // For variant itineraries (e.g. california-american-west-8-days), assets live
+      // in the parent's content folder. Use parentId as the asset slug when set.
+      const slug      = slugRef.current || form.slug;
+      const assetSlug = form.parentId || slug;
+      const variant   = form.variant || '';
       let fsAssets = [];
-      if (slug) {
+      if (assetSlug) {
         try {
-          const fsRes  = await fetch(`/api/itinerary-cms?action=scan-assets&slug=${encodeURIComponent(slug)}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          const fsRes  = await fetch(
+            `/api/itinerary-cms?action=scan-assets&slug=${encodeURIComponent(assetSlug)}&assetSlug=${encodeURIComponent(assetSlug)}&variant=${encodeURIComponent(variant)}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
           const fsJson = await fsRes.json();
           if (!fsJson.error) fsAssets = fsJson.assets ?? [];
         } catch { /* no content folder — skip */ }
@@ -1000,8 +1008,14 @@ export default function ItineraryCMSEditorPage() {
         await import('../../lib/itineraryImages');
       const enrichedResolved = { ...resolvedImages };
 
+      // For variant itineraries (e.g. california-american-west-8-days), the assets
+      // live in the parent's content folder. Use parentId as the asset slug when set.
+      const fsAssetSlug = form.parentId || form.slug;
+      const fsVariant   = form.variant || undefined;
+      console.log(`[CMS] filesystem asset slug: "${fsAssetSlug}", variant: "${fsVariant || 'none'}"`);
+
       if (coverUrl?.startsWith('http') && !enrichedResolved[coverUrl]) {
-        const fsCover = getFsCoverImg(form.slug);
+        const fsCover = getFsCoverImg(fsAssetSlug);
         if (fsCover) {
           console.log('[CMS] hero blob failed — filesystem fallback:', fsCover);
           enrichedResolved[coverUrl] = fsCover;
@@ -1013,7 +1027,7 @@ export default function ItineraryCMSEditorPage() {
         );
         const dayBlobUrl = dayAsset?.url || day.img;
         if (dayBlobUrl?.startsWith('http') && !enrichedResolved[dayBlobUrl]) {
-          const fsImgs = getFsDayImgs(form.slug, day.day, form.variant);
+          const fsImgs = getFsDayImgs(fsAssetSlug, day.day, fsVariant);
           if (fsImgs.length) {
             console.log(`[CMS] Day ${day.day} blob failed — filesystem fallback:`, fsImgs[0]);
             enrichedResolved[dayBlobUrl] = fsImgs[0];
@@ -1046,7 +1060,7 @@ export default function ItineraryCMSEditorPage() {
         //    base64 here ensures the renderer always receives an embedded data URI.
         let fsPaths = [];
         if (!dayBlobUrl) {
-          fsPaths = getFsDayImgs(form.slug, day.day, form.variant);
+          fsPaths = getFsDayImgs(fsAssetSlug, day.day, fsVariant);
         } else {
           const fallback = enrichedResolved[dayBlobUrl];
           // A filesystem path starts with '/' and is not a data URI
@@ -1163,7 +1177,7 @@ export default function ItineraryCMSEditorPage() {
         const blobUrl = asset?.url || day.img;
         let srcType;
         if (!blobUrl) {
-          const fsPaths = getFsDayImgs(form.slug, day.day, form.variant);
+          const fsPaths = getFsDayImgs(fsAssetSlug, day.day, fsVariant);
           const fsB64   = fsPaths[0] ? enrichedResolved[fsPaths[0]] : null;
           const fsMime  = fsB64?.match(/^data:([^;,]+)/)?.[1] || '';
           srcType = fsB64 ? `base64(fs,${fsMime})` : fsPaths[0] ? `fs-fallback:${fsPaths[0].slice(-30)}` : 'MISSING';
@@ -1680,6 +1694,24 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
             placeholder="10" min="1" max="60"
             onChange={e => set('durationDays', e.target.value)} />
         </Field>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <Field label="Parent slug" hint="Asset folder slug for variant itineraries. E.g. california-american-west for all USA variants. Leave empty for standalone itineraries.">
+            <input value={form.parentId} style={{ ...inputStyle, fontFamily: 'monospace' }}
+              placeholder="california-american-west"
+              onChange={e => set('parentId', e.target.value)} />
+          </Field>
+          <Field label="Variant" hint="Image variant to resolve for this itinerary. Determines which day-images/dayN/<variant>/ subfolder is used.">
+            <select value={form.variant} style={{ ...inputStyle, maxWidth: '200px' }}
+              onChange={e => set('variant', e.target.value)}>
+              <option value="">None (standalone)</option>
+              <option value="complete">Complete</option>
+              <option value="premium">Premium / Complete</option>
+              <option value="essential">Essential</option>
+              <option value="short">Short</option>
+            </select>
+          </Field>
+        </div>
 
         {creators.length > 0 && (
           <Field label="Travel Designer" hint="Assign this itinerary to a travel designer. Leave empty to show no attribution.">

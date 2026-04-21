@@ -924,7 +924,7 @@ export const MANIFESTS = {
   "philippines-island-journey": {
     "slug": "philippines-island-journey",
     "title": "Philippines",
-    "heroFile": "cover.jpeg",
+    "heroFile": null,
     "gallery": {
       "root": [],
       "essential": [],
@@ -1009,9 +1009,7 @@ export const MANIFESTS = {
         "short": []
       },
       "11": {
-        "root": [
-          "day11.jpg"
-        ],
+        "root": [],
         "essential": [],
         "short": []
       },

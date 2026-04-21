@@ -31,6 +31,13 @@ import { generateClientTokenFromReadWriteToken } from '@vercel/blob/client';
 
 const { Pool } = pg;
 
+// ── Variant normalisation (mirrors src/lib/itineraryImages.js) ────────────────
+function normalizeVariant(v) {
+  if (v === 'essential') return 'essential';
+  if (v === 'short')     return 'short';
+  return 'complete'; // 'premium', 'complete', null, undefined, or unrecognised
+}
+
 // ── Auth guard — admin OR active designer ─────────────────────────────────────
 // Returns { email, isAdmin, creatorId } where creatorId is the Creator.id linked
 // to this user, or null if the user has no creator profile.
@@ -90,7 +97,7 @@ export default async function handler(req, res) {
       if (action === 'list')             return res.json(await handleList(pool, ctx));
       if (action === 'get')              return res.json(await handleGet(pool, id, ctx));
       if (action === 'assets')           { await assertOwnership(pool, id, ctx); return res.json(await handleListAssets(pool, id)); }
-      if (action === 'scan-assets')      { adminOnly(); return res.json(await handleScanAssets(req.query.slug)); }
+      if (action === 'scan-assets')      { adminOnly(); return res.json(await handleScanAssets(req.query.assetSlug || req.query.slug, req.query.variant)); }
       if (action === 'ai-history')       { await assertOwnership(pool, id, ctx); return res.json(await handleAIHistory(pool, id)); }
       if (action === 'linked-request')   { adminOnly(); return res.json(await handleLinkedRequest(pool, id)); }
       if (action === 'pricing-options')   return res.json(handlePricingOptions());
@@ -210,6 +217,8 @@ async function handleCreate(pool, body, ctx) {
     coverImage = '',
     content = {},
     status = 'draft',
+    variant = null,
+    parentId = null,
   } = body;
 
   if (!slug) throw Object.assign(new Error('slug is required'), { status: 400 });
@@ -228,14 +237,16 @@ async function handleCreate(pool, body, ctx) {
   const finalAccessType = finalType === 'free' ? 'free' : 'paid';
   const finalPrivate    = finalType === 'custom' ? true : Boolean(isPrivate);
   const derivedCoverImage = finalContent.hero?.coverImage || coverImage || '';
+  const finalVariant  = ['complete', 'essential', 'short', 'premium'].includes(variant) ? variant : null;
+  const finalParentId = parentId || null;
 
   const { rows } = await pool.query(
     `INSERT INTO "Itinerary"
        (title, subtitle, slug, destination, country, region, "durationDays",
         "accessType", price, "stripePriceId", "pricingKey", "coverImage", description,
         type, "isPrivate", "isCollection", status, "isPublished", content, "schemaVersion", "updatedAt",
-        creator_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,$16,$17,$18,1,NOW(),$19)
+        creator_id, variant, "parentId")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,$16,$17,$18,1,NOW(),$19,$20,$21)
      RETURNING *`,
     [
       title, subtitle, slug, destination, country, region, durationDays,
@@ -246,6 +257,8 @@ async function handleCreate(pool, body, ctx) {
       status, status === 'published',
       JSON.stringify(finalContent),
       creatorId,
+      finalVariant,
+      finalParentId,
     ]
   );
   return { itinerary: rows[0] };
@@ -258,7 +271,7 @@ async function handleUpdate(pool, id, body, ctx) {
   const {
     title, subtitle, slug, destination, country, region, durationDays,
     accessType, stripePriceId, pricingKey, coverImage, content, status,
-    type, isPrivate, isCollection,
+    type, isPrivate, isCollection, variant, parentId,
   } = body;
 
   // creatorId is IMMUTABLE after creation — never update it here.
@@ -289,6 +302,8 @@ async function handleUpdate(pool, id, body, ctx) {
     ? (typeParam === 'free' ? 'free' : 'paid')
     : (accessType ?? null);
 
+  const finalVariant  = ['complete', 'essential', 'short', 'premium'].includes(variant) ? variant : null;
+
   const { rows } = await pool.query(
     `UPDATE "Itinerary" SET
        title           = COALESCE($2, title),
@@ -309,6 +324,8 @@ async function handleUpdate(pool, id, body, ctx) {
        type            = COALESCE($17, type),
        "isPrivate"     = COALESCE($18::boolean, "isPrivate"),
        "isCollection"  = COALESCE($19::boolean, "isCollection"),
+       variant         = COALESCE($20, variant),
+       "parentId"      = COALESCE($21, "parentId"),
        "pdfStatus"     = 'stale',
        "updatedAt"     = NOW()
      WHERE id = $1
@@ -333,6 +350,8 @@ async function handleUpdate(pool, id, body, ctx) {
       typeParam,
       isPrivateParam,
       typeof isCollection === 'boolean' ? isCollection : null,
+      finalVariant,
+      parentId ?? null,
     ]
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
@@ -740,7 +759,9 @@ async function handleListAssets(pool, itineraryId) {
 // Reads public/itineraries/<slug>/manifest.json (committed, tiny — filenames only).
 // Returns static CDN URLs (/itineraries/<slug>/...) — no binary content in bundle.
 // Images are served as static assets by Vercel CDN, not through this function.
-async function handleScanAssets(slug) {
+// slug: the asset folder slug (parentId ?? itinerary.slug)
+// variant: 'complete' | 'essential' | 'short' | undefined
+async function handleScanAssets(slug, variant) {
   if (!slug) throw Object.assign(new Error('slug is required'), { status: 400 });
 
   const manifestPath = path.join(process.cwd(), 'public', 'itineraries', slug, 'manifest.json');
@@ -753,6 +774,7 @@ async function handleScanAssets(slug) {
 
   const base = `/itineraries/${slug}`;
   const assets = [];
+  const v = normalizeVariant(variant);
 
   function altFromFilename(f) { return f.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '); }
 
@@ -782,16 +804,42 @@ async function handleScanAssets(slug) {
     caption: '', source: 'filesystem', active: true, sortOrder: i,
   }));
 
-  // Day images — manifest.dayImages is { "1": [...], "2": [...], ... }
-  for (const [dayKey, files] of Object.entries(manifest.dayImages ?? {})) {
+  // Day images — supports both new variant-aware format { root, essential, short }
+  // and legacy flat array format for backward compatibility.
+  for (const [dayKey, dayData] of Object.entries(manifest.dayImages ?? {})) {
     const dayNumber = parseInt(dayKey, 10);
-    (files ?? []).forEach((file, i) => assets.push({
-      id: null, assetType: 'day',
-      dayNumber,
-      url:     `${base}/day-images/day${dayNumber}/${file}`,
-      alt:     `Day ${dayNumber}`,
-      caption: '', source: 'filesystem', active: true, sortOrder: i,
-    }));
+
+    if (Array.isArray(dayData)) {
+      // Legacy flat format: always root files only
+      dayData.forEach((file, i) => assets.push({
+        id: null, assetType: 'day', dayNumber,
+        url:     `${base}/day-images/day${dayNumber}/${file}`,
+        alt:     `Day ${dayNumber}`,
+        caption: '', source: 'filesystem', active: true, sortOrder: i,
+      }));
+    } else {
+      // New format: resolve variant-specific image (same logic as getDayImage in itineraryImages.js)
+      let files = [];
+      let urlBase = `${base}/day-images/day${dayNumber}`;
+
+      if (v === 'essential' && (dayData.essential ?? []).length > 0) {
+        files = dayData.essential;
+        urlBase += '/essential';
+      } else if (v === 'short' && (dayData.short ?? []).length > 0) {
+        files = dayData.short;
+        urlBase += '/short';
+      } else {
+        // complete, or fallback when no variant override exists
+        files = dayData.root ?? [];
+      }
+
+      files.forEach((file, i) => assets.push({
+        id: null, assetType: 'day', dayNumber,
+        url:     `${urlBase}/${file}`,
+        alt:     `Day ${dayNumber}`,
+        caption: '', source: 'filesystem', active: true, sortOrder: i,
+      }));
+    }
   }
 
   return { assets };
