@@ -17,7 +17,7 @@
  *   }
  */
 
-import { getDayImages } from '../lib/itineraryImages.js';
+import { resolveDayImages } from '../lib/resolveItineraryImages.js';
 
 // Mirrors the server-side helper in api/itinerary-cms.js.
 // Computes the version the PDF will carry — one ahead of the current DB value,
@@ -90,67 +90,33 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
     ? `${itinerary.durationDays} Day${itinerary.durationDays !== 1 ? 's' : ''}`
     : '';
 
-  // ── Resolve day images ──────────────────────────────────────────────────────
-  // Priority: DB assets (ItineraryAsset rows) → inline day.img field → filesystem manifest.
-  // All remote URLs are looked up in resolvedImages (pre-fetched server-side).
-  // Filesystem paths (/itineraries/...) pass through unchanged.
-  //
-  // For variant itineraries (e.g. california-american-west-8-days), assets live in
-  // the parent's content folder. Use parentId as the asset slug when set — this
-  // ensures getDayImages finds the correct manifest and applies the correct
-  // variant override (short/, essential/, etc.).
-  const assetSlug = itinerary.parentId || itinerary.slug;
-  const variant   = itinerary.variant;
-  console.log(`[buildCustomPDF] asset slug: "${assetSlug}", variant: "${variant || 'none'}"`);
+  // ── Resolve day images via shared resolver ─────────────────────────────────
+  // resolveDayImages applies: durationDays filter, variant subfolder resolution,
+  // empty-folder suppression, and DB asset priority. Days with no images are
+  // excluded entirely — this is what prevents ghost days in the PDF.
+  const resolvedDayList = resolveDayImages(itinerary, content.days || [], dbAssets);
 
-  const days = (content.days || []).map(day => {
-    // Only active assets — inactive records may have dead/deleted blob URLs.
-    const dayAssets = dbAssets.filter(
-      a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day) && a.active !== false
-    );
-
-    let rawUrls;
-    if (dayAssets.length > 0) {
-      rawUrls = dayAssets.map(a => a.url).filter(Boolean);
-    } else if (day.img) {
-      rawUrls = [day.img];
-    } else {
-      // No DB asset, no inline img — fall back to filesystem manifest.
-      // getDayImages returns paths like /itineraries/{slug}/day-images/day{N}/file.jpg
-      // that @react-pdf/renderer can fetch as same-origin static files.
-      rawUrls = getDayImages(assetSlug, day.day, variant);
-      if (rawUrls.length) {
-        console.log(`[buildCustomPDF] Day ${day.day} — filesystem fallback (${assetSlug}, ${variant || 'root'}): ${rawUrls[0]}`);
-      } else {
-        console.warn(`[buildCustomPDF] Day ${day.day} — NO images from any source (assetSlug=${assetSlug}, variant=${variant || 'none'})`);
-      }
-    }
-
-    const imgs = rawUrls.map(u => resolveImg(u, resolvedImages)).filter(Boolean);
-
-    console.log(`[buildCustomPDF] Day ${day.day}: dbAssets=${dayAssets.length} rawUrls=${rawUrls.length} imgs=${imgs.length}${imgs.length === 0 ? ' ← NO IMAGES' : ''}`);
+  const days = resolvedDayList.map(day => {
+    // Convert raw URLs → base64 data URIs via the pre-resolved map.
+    // Filesystem paths (/itineraries/...) pass through unchanged.
+    const imgs = day.imgs.map(u => resolveImg(u, resolvedImages)).filter(Boolean);
 
     if (Number(day.day) === 11) {
-      const src = dayAssets[0]?.source || (day.img ? 'content.days.img' : (rawUrls.length ? `filesystem(${assetSlug},${variant || 'root'})` : 'none'));
       const img0 = imgs[0] || '';
       const mime = img0.startsWith('data:')
         ? (img0.match(/^data:([^;,]+)/)?.[1] || 'data:?')
         : img0.startsWith('/') ? 'filesystem-path'
         : img0.startsWith('http') ? 'http-url'
         : '(none)';
-      console.log('PDF day 11 dbAssets',       dayAssets.length);
-      console.log('PDF day 11 rawUrls',        rawUrls.length, rawUrls[0]?.slice(0, 80) || '(none)');
-      console.log('PDF day 11 image source',   src);
-      console.log('PDF day 11 imgs count',     imgs.length);
-      console.log('PDF day 11 MIME type',      mime);
-      if (mime !== '(none)') {
-        console.log('PDF day 11 src preview',  img0.slice(0, 80));
-      }
+      console.log('PDF day 11 imgs count', imgs.length);
+      console.log('PDF day 11 MIME type',  mime);
+      if (mime !== '(none)') console.log('PDF day 11 src preview', img0.slice(0, 80));
       if (mime.includes('webp') || mime.includes('heic') || mime.includes('avif')) {
         console.error('PDF day 11 ⚠ UNSUPPORTED FORMAT:', mime,
           '— @react-pdf/renderer will render blank space! Check step 3d conversion.');
       }
     }
+
     return { ...day, imgs };
   });
 

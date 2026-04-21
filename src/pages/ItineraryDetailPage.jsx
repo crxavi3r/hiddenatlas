@@ -7,7 +7,8 @@ import { itineraries } from '../data/itineraries';
 import { downloadItineraryPDF } from '../utils/downloadPDF';
 import { useSEO } from '../hooks/useSEO';
 import { useApi } from '../lib/api';
-import { getGalleryImages, getResearchImages, getDayImage, getCoverImage, getMapImage } from '../lib/itineraryImages';
+import { getCoverImage, getMapImage } from '../lib/itineraryImages';
+import { resolveDayImages, resolveGalleryImages, resolveResearchImages } from '../lib/resolveItineraryImages';
 import { useTrack } from '../hooks/useTrack';
 import JapanRouteMap from '../components/JapanRouteMap';
 import MoroccoRouteMap from '../components/MoroccoRouteMap';
@@ -15,19 +16,6 @@ import PhilippinesRouteMap from '../components/PhilippinesRouteMap';
 import AmericanWestRouteMap from '../components/AmericanWestRouteMap';
 import AmericanWest12DaysRouteMap from '../components/AmericanWest12DaysRouteMap';
 import AmericanWest8DaysRouteMap from '../components/AmericanWest8DaysRouteMap';
-
-// ─────────────────────────────────────────────────────────────
-// DB + filesystem asset merge
-// DB-sourced assets take priority; filesystem fills the rest.
-// ─────────────────────────────────────────────────────────────
-function mergeAssets(fsImages, dbAssets, type) {
-  const dbOfType = dbAssets
-    .filter(a => a.assetType === type)
-    .map(a => ({ src: a.url, filename: a.alt || a.url.split('/').pop() }));
-  const dbUrls = new Set(dbOfType.map(a => a.src));
-  const fsFiltered = fsImages.filter(img => !dbUrls.has(img.src));
-  return [...dbOfType, ...fsFiltered];
-}
 
 const ROUTE_MAP_COMPONENTS = {
   'japan-grand-cultural-journey': JapanRouteMap,
@@ -408,10 +396,10 @@ const api = useApi();
   }, [itinerary?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load published day content from DB — overrides static itineraries.js data.
-  // Falls back silently to static data if the itinerary is not yet in the DB
-  // or is still in draft status.
+  // Uses the variant's own slug (itinerary.id) so each variant loads its own
+  // day content. Falls back silently to static data on 404 or error.
   useEffect(() => {
-    const slug = itinerary?.parentId || itinerary?.id;
+    const slug = itinerary?.id;
     if (!slug) return;
     fetch(`/api/itineraries?action=content&slug=${encodeURIComponent(slug)}`)
       .then(r => r.ok ? r.json() : null)
@@ -713,17 +701,25 @@ const api = useApi();
   const assetSlug    = itinerary.parentId || itinerary.id;
   const assetVariant = itinerary.variant; // 'premium'|'essential'|'short'|undefined
 
-  const fsGallery      = getGalleryImages(assetSlug, assetVariant);
-  const fsResearch     = getResearchImages(assetSlug, assetVariant);
-  const galleryImages  = mergeAssets(fsGallery, dbAssets, 'gallery');
-  const researchImages = mergeAssets(fsResearch, dbAssets, 'research');
+  // Shared resolvers apply variant resolution, DB merge, and three-state semantics.
+  const galleryImages  = resolveGalleryImages(itinerary, dbAssets);
+  const researchImages = resolveResearchImages(itinerary, dbAssets);
+
   // Priority: Itinerary.coverImage (from DB content endpoint)
   //         > ItineraryAsset hero (blob upload)
   //         > filesystem cover (getCoverImage)
-  // The PDF reads Itinerary.coverImage directly; this makes the public page use the same source.
   const dbHero     = dbAssets.find(a => a.assetType === 'hero');
   const localCover = dbCoverImage || (dbHero ? dbHero.url : getCoverImage(assetSlug));
   const mapImage   = getMapImage(assetSlug, assetVariant);
+
+  // Resolve day images via shared resolver.
+  // Applies: durationDays filter, variant subfolder resolution, empty-folder suppression.
+  // staticDays.length is the ground-truth day count for this variant.
+  const resolvedDays = resolveDayImages(
+    { ...itinerary, durationDays: staticDays.length || itinerary.durationDays || null },
+    days,
+    dbAssets
+  );
 
   // ── Parent chooser page ───────────────────────────────────────────────────
   if (itinerary.isParent && itinerary.childItineraries) {
@@ -1163,23 +1159,18 @@ const api = useApi();
               </h2>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-                {days.map((day, i) => {
+                {resolvedDays.map((day, i) => {
                   // Free itineraries: all unlocked
                   // Premium + no access: blur from day 3 onwards (show 2 as preview)
                   // Premium + access: all unlocked
                   const isLocked = isPremium && !hasAccess && i >= 2;
-                  // Load day image from day-images/dayN/ subfolder only.
-                  // No external URLs. Returns null if folder is empty.
-                  const dbDayAsset = dbAssets.find(a => a.assetType === 'day' && a.dayNumber === day.day);
-                  // Priority: ItineraryAsset table (blob) → content.days[n].img (CMS) → filesystem
-                  const resolvedImg = dbDayAsset?.url || day.img || getDayImage(assetSlug, day.day, assetVariant);
                   return (
                     <DayEntry
-                      key={i}
-                      day={{ ...day, img: resolvedImg }}
+                      key={day.day}
+                      day={{ ...day, img: day.imgs[0] || null }}
                       index={i}
                       isLocked={isLocked}
-                      isLast={i === days.length - 1}
+                      isLast={i === resolvedDays.length - 1}
                     />
                   );
                 })}

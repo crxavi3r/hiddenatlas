@@ -2,10 +2,11 @@ export async function downloadItineraryPDF(itinerary) {
   console.log('[download-free] starting for:', itinerary.id);
 
   const { createElement } = await import('react');
-  const [{ pdf }, { default: ItineraryPDF }, { getDayImages, getCoverImage, getMapImage }, { imgToBase64, imgsToBase64 }] = await Promise.all([
+  const [{ pdf }, { default: ItineraryPDF }, { getCoverImage, getMapImage }, { resolveDayImages }, { imgToBase64, imgsToBase64 }] = await Promise.all([
     import('@react-pdf/renderer'),
     import('../components/ItineraryPDF'),
     import('../lib/itineraryImages'),
+    import('../lib/resolveItineraryImages'),
     import('./imgToBase64'),
   ]);
 
@@ -18,15 +19,9 @@ export async function downloadItineraryPDF(itinerary) {
   const rawCoverImage = localCover || itinerary.coverImage;
   console.log('PDF hero image URL', rawCoverImage || '(none)');
 
-  // Days: filesystem images from manifest, fall back to day.img (blob URL from DB).
-  const rawDays = (itinerary.days || []).map(day => {
-    const fsImgs = getDayImages(assetSlug, day.day, assetVariant);
-    const imgs   = fsImgs.length > 0 ? fsImgs : (day.img ? [day.img] : []);
-    if (day.day === 11) {
-      console.log('PDF day 11 image URL', imgs[0] || '(none)');
-    }
-    return { ...day, imgs };
-  });
+  // Days: shared resolver applies durationDays filter, variant resolution, and
+  // empty-folder suppression. Days with no resolved images are excluded.
+  const rawDays = resolveDayImages(itinerary, itinerary.days || [], []);
 
   // Convert all remote images to base64 (Vercel Blob supports CORS, browser fetch works).
   // Filesystem paths pass through imgToBase64 unchanged.
