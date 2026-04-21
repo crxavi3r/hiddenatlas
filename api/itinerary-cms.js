@@ -1108,6 +1108,24 @@ const EMPTY_CONTENT = {
 // and returns each as a base64 data URI ready for @react-pdf/renderer.
 // Called by the admin PDF generator before rendering so the renderer receives
 // embedded data URIs, not remote URLs it cannot reliably fetch in the browser.
+// Detect image format from magic bytes — do NOT trust the HTTP Content-Type header.
+// Uploaders (iOS, Android, browsers) frequently store WebP or HEIC bytes under a
+// .jpg filename, causing Vercel Blob to serve Content-Type: image/jpeg for a WebP
+// file. If the data URI carries the wrong MIME, step 3d on the client skips the
+// Canvas conversion → @react-pdf/renderer receives WebP bytes labelled as JPEG →
+// blank space in the PDF.
+function detectMimeFromBytes(buf) {
+  const b = new Uint8Array(buf.slice ? buf.slice(0, 16) : buf.buffer.slice(0, 16));
+  if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF)                              return 'image/jpeg';
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47)             return 'image/png';
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+      b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50)           return 'image/webp';
+  // HEIF/HEIC: ftyp box starts at byte 4 ('ftyp' = 0x66 0x74 0x79 0x70)
+  if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70)            return 'image/heic';
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46)                             return 'image/gif';
+  return null; // unknown — fall back to HTTP header
+}
+
 async function handleResolveImages({ urls = [] }) {
   const resolved = {};
   await Promise.all(urls.map(async url => {
@@ -1122,9 +1140,21 @@ async function handleResolveImages({ urls = [] }) {
         return;
       }
       const buf         = await r.arrayBuffer();
-      const contentType = r.headers.get('content-type') || 'image/jpeg';
-      resolved[url]     = `data:${contentType};base64,${Buffer.from(buf).toString('base64')}`;
-      console.log('[resolve-images] ok —', contentType, Math.round(buf.byteLength / 1024) + 'kb —', cleanUrl.slice(0, 60));
+      const headerMime  = (r.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
+      const detectedMime = detectMimeFromBytes(new Uint8Array(buf.slice(0, 16)));
+      const effectiveMime = detectedMime || headerMime;
+
+      if (detectedMime && detectedMime !== headerMime) {
+        // Log clearly — this is the most common silent failure cause
+        console.error(
+          `[resolve-images] MIME MISMATCH — header says "${headerMime}" but magic bytes say "${detectedMime}".`,
+          'Data URI will use detected MIME so client Canvas conversion fires correctly.',
+          'URL:', cleanUrl.slice(0, 80)
+        );
+      }
+
+      resolved[url] = `data:${effectiveMime};base64,${Buffer.from(buf).toString('base64')}`;
+      console.log(`[resolve-images] ok — ${effectiveMime} (header: ${headerMime}) ${Math.round(buf.byteLength / 1024)}kb — ${cleanUrl.slice(0, 60)}`);
     } catch (err) {
       console.error('[resolve-images] exception:', err.message, cleanUrl.slice(0, 80));
       resolved[url] = null;

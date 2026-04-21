@@ -1093,12 +1093,13 @@ export default function ItineraryCMSEditorPage() {
       // ── 3d. Convert unsupported image formats to JPEG ─────────────────────
       // @react-pdf/renderer silently fails on WebP, AVIF, HEIC, and other
       // formats — it reserves the layout space but renders blank pixels.
-      // Use the browser's Canvas API to convert any such format to JPEG
-      // before passing the resolved map to the renderer.
+      // Use the browser's Canvas API to convert any such format to JPEG.
       //
-      // This runs after ALL resolution steps (3, 3b, 3c) so it covers:
-      //   • Blob images that the server resolved (most common — WebP uploads)
-      //   • Filesystem images pre-resolved in step 3c (should already be JPEG)
+      // The server's detectMimeFromBytes() now uses magic bytes rather than
+      // the HTTP Content-Type, so the MIME in the data URI is correct even
+      // for files uploaded with the wrong extension (e.g. WebP bytes as .jpg).
+      //
+      // This runs after ALL resolution steps (3, 3b, 3c).
       const PDF_SAFE_MIMES = new Set(['image/jpeg', 'image/jpg', 'image/png']);
       const formatConversions = Object.entries(enrichedResolved).filter(([, v]) => {
         if (!v?.startsWith('data:')) return false;
@@ -1107,42 +1108,46 @@ export default function ItineraryCMSEditorPage() {
       });
 
       if (formatConversions.length) {
-        console.warn(`[CMS] ⚠ ${formatConversions.length} image(s) in unsupported format — converting to JPEG for PDF`);
+        console.warn(`[CMS] ⚠ ${formatConversions.length} image(s) need Canvas conversion to JPEG`);
         await Promise.all(formatConversions.map(([url, dataUri]) => {
           const mime = dataUri.match(/^data:([^;,]+)/)?.[1] || 'unknown';
+          console.log(`[CMS] Converting ${mime} → JPEG via Canvas — ${url.slice(0, 70)}`);
           return new Promise(resolve => {
             const img = new window.Image();
             img.onload = () => {
+              const nw = img.naturalWidth, nh = img.naturalHeight;
+              if (!nw || !nh) {
+                console.error(`[CMS] Canvas: image decoded with 0 dimensions (${nw}×${nh}) for ${mime} — conversion skipped`);
+                resolve(); return;
+              }
               try {
-                // Limit dimensions to avoid excessive memory use in the PDF
                 const MAX = 1600;
-                let w = img.naturalWidth, h = img.naturalHeight;
-                if (w > MAX || h > MAX) {
-                  const scale = Math.min(MAX / w, MAX / h);
-                  w = Math.round(w * scale);
-                  h = Math.round(h * scale);
-                }
+                const scale = (nw > MAX || nh > MAX) ? Math.min(MAX / nw, MAX / nh) : 1;
+                const w = Math.round(nw * scale), h = Math.round(nh * scale);
                 const canvas = document.createElement('canvas');
-                canvas.width  = w;
-                canvas.height = h;
+                canvas.width = w; canvas.height = h;
                 canvas.getContext('2d').drawImage(img, 0, 0, w, h);
                 const jpeg = canvas.toDataURL('image/jpeg', 0.92);
+                if (!jpeg || jpeg === 'data:,' || jpeg.length < 200) {
+                  console.error(`[CMS] Canvas toDataURL returned empty result for ${mime} — url: ${url.slice(0, 70)}`);
+                  resolve(); return;
+                }
                 enrichedResolved[url] = jpeg;
-                console.log(`[CMS] Converted ${mime} → JPEG (${Math.round(jpeg.length / 1024)}kb) —`, url.slice(0, 60));
+                console.log(`[CMS] ✓ ${mime} → JPEG ${w}×${h} (${Math.round(jpeg.length / 1024)}kb) — ${url.slice(0, 70)}`);
               } catch (convErr) {
-                console.error(`[CMS] Canvas conversion failed for ${mime}:`, convErr.message, 'url:', url.slice(0, 60));
+                console.error(`[CMS] Canvas threw for ${mime}:`, convErr.message, '— url:', url.slice(0, 70));
               }
               resolve();
             };
             img.onerror = () => {
-              // Browser can't decode this format (e.g. HEIC in Chrome) —
-              // log it and let the filesystem fallback handle it.
-              console.error(`[CMS] Cannot decode ${mime} for Canvas conversion — url:`, url.slice(0, 60));
+              console.error(`[CMS] img.onerror — browser cannot decode ${mime} — url: ${url.slice(0, 70)}`);
               resolve();
             };
             img.src = dataUri;
           });
         }));
+      } else {
+        console.log('[CMS] All resolved images are JPEG/PNG — no Canvas conversion needed');
       }
 
       // ── 4. Generate PDF from form state + pre-resolved images ────────────
@@ -1173,9 +1178,23 @@ export default function ItineraryCMSEditorPage() {
             srcType = 'MISSING';
           }
         }
-        const marker = srcType.includes('webp') || srcType.includes('MISSING') ? ' ⚠' : ' ✓';
+        const marker = srcType.includes('webp') || srcType.includes('heic') || srcType.includes('avif') || srcType.includes('MISSING') ? ' ⚠' : ' ✓';
         console.log(`[CMS] Day ${String(day.day).padStart(2)} image →`, srcType + marker);
       });
+
+      // Final proof log for Day 11 specifically — exact MIME + size entering the renderer
+      const d11asset = freshAssets.find(a => a.assetType === 'day' && Number(a.dayNumber) === 11 && a.active !== false);
+      const d11url   = d11asset?.url || day11?.img || '';
+      const d11val   = d11url ? enrichedResolved[d11url] : null;
+      if (d11val?.startsWith('data:')) {
+        const d11mime = d11val.match(/^data:([^;,]+)/)?.[1] || '?';
+        console.log(`[CMS] ▶ Day 11 FINAL — MIME: ${d11mime}, size: ${Math.round(d11val.length / 1024)}kb, url: ${d11url.slice(0, 70)}`);
+        if (!PDF_SAFE_MIMES.has(d11mime)) {
+          console.error(`[CMS] ▶ Day 11 ⚠ UNSUPPORTED MIME "${d11mime}" entering renderer — PDF will be blank! Canvas conversion must have failed.`);
+        }
+      } else {
+        console.warn(`[CMS] ▶ Day 11 FINAL — no data URI found (url="${d11url.slice(0, 70)}", resolved="${String(d11val).slice(0, 60)}")`);
+      }
 
       const { buildCustomPDFBlob } = await import('../../utils/buildCustomPDF');
       const pdfBlob = await buildCustomPDFBlob(freshItinerary, freshAssets, enrichedResolved);
