@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { resolveCoverImage } from '../../lib/resolveCoverImage';
+import { resolveAssetIdentity } from '../../lib/resolveAssetIdentity';
 
 // ── Shared style tokens ───────────────────────────────────────────────────────
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
@@ -653,20 +654,25 @@ export default function ItineraryCMSEditorPage() {
       const dbAssets = dbJson.error ? [] : (dbJson.assets ?? []);
 
       // 2. Filesystem scan.
-      // For variant itineraries (e.g. california-american-west-8-days), assets live
-      // in the parent's content folder. Use parentId as the asset slug when set.
-      const slug      = slugRef.current || form.slug;
-      const assetSlug = form.parentId || slug;
-      const variant   = form.variant || '';
+      // resolveAssetIdentity handles three cases:
+      //   a) DB has parentId/variant set → use them directly
+      //   b) DB fields absent but slug is in static data → look up parentId/variant
+      //   c) Standalone itinerary → use slug as-is
+      const slug = slugRef.current || form.slug;
+      const { assetSlug, variant } = await resolveAssetIdentity(slug, {
+        parentId: form.parentId,
+        variant:  form.variant,
+      });
       let fsAssets = [];
       if (assetSlug) {
         try {
           const fsRes  = await fetch(
-            `/api/itinerary-cms?action=scan-assets&slug=${encodeURIComponent(assetSlug)}&assetSlug=${encodeURIComponent(assetSlug)}&variant=${encodeURIComponent(variant)}`,
+            `/api/itinerary-cms?action=scan-assets&slug=${encodeURIComponent(assetSlug)}&assetSlug=${encodeURIComponent(assetSlug)}&variant=${encodeURIComponent(variant || '')}`,
             { headers: { Authorization: `Bearer ${token}` } }
           );
           const fsJson = await fsRes.json();
           if (!fsJson.error) fsAssets = fsJson.assets ?? [];
+          console.log(`[loadAssets] fs scan → assetSlug="${assetSlug}", variant="${variant || 'none'}", found ${fsAssets.length} assets`);
         } catch { /* no content folder — skip */ }
       }
 
@@ -929,13 +935,20 @@ export default function ItineraryCMSEditorPage() {
 
       // ── 1. Use current form state as itinerary source ─────────────────────
       // form.content is authoritative — it is what the user sees in the editor.
-      // Reading from DB would miss unsaved edits (e.g. AI draft applied but not
-      // yet saved), causing "what you see in editor ≠ what appears in PDF".
-      // After a save, form and DB are in sync; for manual Generate PDF clicks,
-      // the form is the correct source of truth.
-      const freshItinerary = { ...form, id: targetId };
-      const freshDays      = form.content?.days || [];
-      console.log('[CMS] PDF generation — using form state | slug:', form.slug, '| days:', freshDays.length);
+      // Also resolve the asset identity (parentId + variant) so that filesystem
+      // image lookups in buildCustomPDF.js use the correct parent folder, even
+      // for DB records created before those columns were added.
+      const { assetSlug: resolvedAssetSlug, variant: resolvedVariant } =
+        await resolveAssetIdentity(form.slug, { parentId: form.parentId, variant: form.variant });
+
+      const freshItinerary = {
+        ...form,
+        id:       targetId,
+        parentId: form.parentId || (resolvedAssetSlug !== form.slug ? resolvedAssetSlug : ''),
+        variant:  form.variant  || resolvedVariant || '',
+      };
+      const freshDays = form.content?.days || [];
+      console.log('[CMS] PDF generation — slug:', form.slug, '| assetSlug:', resolvedAssetSlug, '| variant:', resolvedVariant || 'none', '| days:', freshDays.length);
 
       // Debug Day 11 specifically so divergence is visible in logs
       const day11 = freshDays.find(d => Number(d.day) === 11);
@@ -1008,10 +1021,10 @@ export default function ItineraryCMSEditorPage() {
         await import('../../lib/itineraryImages');
       const enrichedResolved = { ...resolvedImages };
 
-      // For variant itineraries (e.g. california-american-west-8-days), the assets
-      // live in the parent's content folder. Use parentId as the asset slug when set.
-      const fsAssetSlug = form.parentId || form.slug;
-      const fsVariant   = form.variant || undefined;
+      // resolvedAssetSlug/resolvedVariant were computed in step 1 using
+      // resolveAssetIdentity — reuse them here for consistency.
+      const fsAssetSlug = resolvedAssetSlug;
+      const fsVariant   = resolvedVariant;
       console.log(`[CMS] filesystem asset slug: "${fsAssetSlug}", variant: "${fsVariant || 'none'}"`);
 
       if (coverUrl?.startsWith('http') && !enrichedResolved[coverUrl]) {
