@@ -531,6 +531,8 @@ export default function ItineraryCMSEditorPage() {
   const [assets,       setAssets]       = useState([]);
   const [assetsLoading, setAssetsLoading] = useState(false);
   const [newAsset,     setNewAsset]     = useState({ assetType: 'gallery', source: 'url', dayNumber: 1, url: '', alt: '', caption: '', file: null, filePreview: null });
+  const [lastAdded,    setLastAdded]    = useState([]);
+  const [justAdded,    setJustAdded]    = useState(false);
 
   // AI tab state
   const [aiPrompt,      setAiPrompt]      = useState('');
@@ -1263,6 +1265,19 @@ export default function ItineraryCMSEditorPage() {
   // ── Asset actions ─────────────────────────────────────────────────────────────
   const EMPTY_ASSET = { assetType: 'gallery', source: 'url', dayNumber: 1, url: '', alt: '', caption: '', file: null, filePreview: null };
 
+  function afterAdd(asset) {
+    setLastAdded(prev => [asset, ...prev].slice(0, 4));
+    setJustAdded(true);
+    setTimeout(() => setJustAdded(false), 2000);
+    setNewAsset(prev => {
+      const dayCount = (c('days') || []).length || parseInt(form.durationDays, 10) || 0;
+      const nextDay = prev.assetType === 'day'
+        ? Math.min((prev.dayNumber || 1) + 1, Math.max(dayCount, prev.dayNumber || 1))
+        : 1;
+      return { ...EMPTY_ASSET, assetType: prev.assetType, source: prev.source, dayNumber: nextDay };
+    });
+  }
+
   async function handleAddAsset() {
     const targetId = savedId.current || (isNew ? null : id);
     if (!targetId) { alert('Save the itinerary first.'); return; }
@@ -1304,7 +1319,7 @@ export default function ItineraryCMSEditorPage() {
         ...prev.filter(a => !(a.url === json.asset.url && !a.id)),
         json.asset,
       ]);
-      setNewAsset(EMPTY_ASSET);
+      afterAdd(json.asset);
     } catch (e) { alert(e.message); }
   }
 
@@ -1336,8 +1351,8 @@ export default function ItineraryCMSEditorPage() {
       const json = await res.json();
       if (json.error) throw new Error(json.error);
       setAssets(prev => [...prev, json.asset]);
-      setNewAsset(EMPTY_ASSET);
       if (newAsset.filePreview) URL.revokeObjectURL(newAsset.filePreview);
+      afterAdd(json.asset);
     } catch (e) { alert(e.message); }
   }
 
@@ -1599,6 +1614,8 @@ export default function ItineraryCMSEditorPage() {
             heroImageUrl={c('hero.coverImage') || form.coverImage || ''}
             dayImages={(c('days') || []).reduce((acc, d) => { if (d.img) acc[d.day] = d.img; return acc; }, {})}
             onSetHero={handleHeroCoverImage}
+            lastAdded={lastAdded}
+            justAdded={justAdded}
           />
         )}
         {activeTab === 'ai'       && (
@@ -2017,7 +2034,7 @@ function SectionsTab({ c, setContent }) {
 }
 
 // ── Images ────────────────────────────────────────────────────────────────────
-function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, onDelete, isNew, hasSavedId, dayCount, heroImageUrl, dayImages, onSetHero }) {
+function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, onDelete, isNew, hasSavedId, dayCount, heroImageUrl, dayImages, onSetHero, lastAdded = [], justAdded = false }) {
   const fileInputRef = useRef(null);
 
   if (isNew && !hasSavedId) {
@@ -2168,8 +2185,21 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
 
         {/* Preview */}
         {previewUrl && (
-          <div style={{ height: '120px', borderRadius: '6px', overflow: 'hidden', marginBottom: '16px', background: '#F4F1EC' }}>
+          <div style={{
+            position: 'relative', width: '100%', aspectRatio: '16/9',
+            borderRadius: '8px', overflow: 'hidden', marginBottom: '16px',
+            background: '#F4F1EC', border: '1px solid #E8E3DA',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
+          }}>
             <img src={previewUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <div style={{
+              position: 'absolute', top: '8px', left: '8px',
+              fontSize: '10px', fontWeight: '600', color: 'white',
+              background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)',
+              padding: '3px 8px', borderRadius: '4px',
+            }}>
+              Preview
+            </div>
           </div>
         )}
 
@@ -2189,9 +2219,35 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
           </div>
         </div>
 
-        <button onClick={onAdd} style={btnPrimary}>
-          <ImageIcon size={13} /> Add image
+        <button onClick={onAdd} style={{
+          ...btnPrimary,
+          background: justAdded ? '#157a5a' : undefined,
+          transition: 'background 0.3s',
+        }}>
+          {justAdded ? <Check size={13} /> : <ImageIcon size={13} />}
+          {justAdded ? 'Added!' : 'Add image'}
         </button>
+
+        {/* Recently added */}
+        {lastAdded.length > 0 && (
+          <div style={{ marginTop: '18px', paddingTop: '16px', borderTop: '1px solid #EDE8E0' }}>
+            <p style={{ fontSize: '11px', fontWeight: '600', color: '#B5AA99', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '10px' }}>
+              Recently added
+            </p>
+            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '2px' }}>
+              {lastAdded.map((asset, i) => (
+                <div key={asset.id || i} style={{ flexShrink: 0, width: '84px' }}>
+                  <div style={{ aspectRatio: '4/3', borderRadius: '5px', overflow: 'hidden', background: '#F4F1EC', border: '1px solid #E8E3DA' }}>
+                    <img src={asset.url} alt={asset.alt || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                  <p style={{ fontSize: '10px', color: '#B5AA99', marginTop: '4px', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {asset.assetType === 'day' ? `Day ${asset.dayNumber}` : (ASSET_TYPE_LABELS[asset.assetType] ?? asset.assetType)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Asset list by type ─────────────────────────────────────────────── */}
