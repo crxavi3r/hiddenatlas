@@ -132,7 +132,8 @@ export default async function handler(req, res) {
       if (action === 'scan-assets')      { adminOnly(); return res.json(await handleScanAssets(req.query.assetSlug || req.query.slug, req.query.variant, req.query.durationDays ? parseInt(req.query.durationDays, 10) : null)); }
       if (action === 'ai-history')       { await assertOwnership(pool, id, ctx); return res.json(await handleAIHistory(pool, id)); }
       if (action === 'linked-request')   { adminOnly(); return res.json(await handleLinkedRequest(pool, id)); }
-      if (action === 'pricing-options')   return res.json(handlePricingOptions());
+      if (action === 'pricing-options')    return res.json(handlePricingOptions());
+      if (action === 'migration-status')  { adminOnly(); return res.json(await handleMigrationStatus(pool)); }
       if (action === 'upload-pdf-token')  { await assertOwnership(pool, id, ctx); return res.json(await handleUploadPDFToken(pool, id)); }
       return res.status(400).json({ error: 'Unknown GET action' });
     }
@@ -161,7 +162,7 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('[itinerary-cms]', err);
     const msg = err.message?.includes('does not exist')
-      ? 'Database schema is not up to date. Run: npm run migrate'
+      ? `Database schema is not up to date — ${err.message}`
       : err.message;
     return res.status(err.status ?? 500).json({ error: msg });
   } finally {
@@ -187,6 +188,23 @@ function handlePricingOptions() {
 
   const options = tiers.filter(t => t.stripePriceId);
   return { options };
+}
+
+// ── Migration status (admin diagnostic) ──────────────────────────────────────
+// Returns which migrations are recorded in the _migrations tracking table so
+// admins can compare against the migration folder list to find what's missing.
+async function handleMigrationStatus(pool) {
+  const { rows: tableCheck } = await pool.query(`
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = '_migrations'
+  `);
+  if (!tableCheck.length) {
+    return { migrationTableExists: false, applied: [] };
+  }
+  const { rows } = await pool.query(
+    `SELECT name, "appliedAt" FROM "_migrations" ORDER BY name ASC`
+  );
+  return { migrationTableExists: true, applied: rows, count: rows.length };
 }
 
 // ── List all itineraries (CMS view) ──────────────────────────────────────────
