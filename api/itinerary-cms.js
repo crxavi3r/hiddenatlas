@@ -38,6 +38,38 @@ function normalizeVariant(v) {
   return 'complete'; // 'premium', 'complete', null, undefined, or unrecognised
 }
 
+// ── Shared variant bucket resolver (mirrors resolveVariantBucket in itineraryImages.js) ──
+// Returns { files: string[], sub: string|null }
+//   files — the resolved file list for this variant (may be empty)
+//   sub   — subfolder name ('essential' | 'short' | null for root)
+//
+// Three-state semantics for variant sub-arrays (null = absent, [] = empty, [...] = files):
+//   null  → variant folder does not exist → fall back to root
+//   []    → variant folder exists but is empty → explicit suppression: no image, no fallback
+//   [...] → variant folder has files → use them
+//
+// v must already be normalised via normalizeVariant().
+function resolveVariantBucket(bucket, v) {
+  if (Array.isArray(bucket)) return { files: bucket, sub: null };
+  if (!bucket)               return { files: [],     sub: null };
+
+  if (v === 'essential') {
+    const ess = bucket.essential;
+    if (ess == null)    return { files: bucket.root ?? [], sub: null };
+    if (ess.length > 0) return { files: ess,               sub: 'essential' };
+    return              { files: [],            sub: 'essential' };
+  }
+
+  if (v === 'short') {
+    const sh = bucket.short;
+    if (sh == null)    return { files: bucket.root ?? [], sub: null };
+    if (sh.length > 0) return { files: sh,                sub: 'short' };
+    return             { files: [],             sub: 'short' };
+  }
+
+  return { files: bucket.root ?? [], sub: null };
+}
+
 // ── Auth guard — admin OR active designer ─────────────────────────────────────
 // Returns { email, isAdmin, creatorId } where creatorId is the Creator.id linked
 // to this user, or null if the user has no creator profile.
@@ -97,7 +129,7 @@ export default async function handler(req, res) {
       if (action === 'list')             return res.json(await handleList(pool, ctx));
       if (action === 'get')              return res.json(await handleGet(pool, id, ctx));
       if (action === 'assets')           { await assertOwnership(pool, id, ctx); return res.json(await handleListAssets(pool, id)); }
-      if (action === 'scan-assets')      { adminOnly(); return res.json(await handleScanAssets(req.query.assetSlug || req.query.slug, req.query.variant)); }
+      if (action === 'scan-assets')      { adminOnly(); return res.json(await handleScanAssets(req.query.assetSlug || req.query.slug, req.query.variant, req.query.durationDays ? parseInt(req.query.durationDays, 10) : null)); }
       if (action === 'ai-history')       { await assertOwnership(pool, id, ctx); return res.json(await handleAIHistory(pool, id)); }
       if (action === 'linked-request')   { adminOnly(); return res.json(await handleLinkedRequest(pool, id)); }
       if (action === 'pricing-options')   return res.json(handlePricingOptions());
@@ -759,9 +791,10 @@ async function handleListAssets(pool, itineraryId) {
 // Reads public/itineraries/<slug>/manifest.json (committed, tiny — filenames only).
 // Returns static CDN URLs (/itineraries/<slug>/...) — no binary content in bundle.
 // Images are served as static assets by Vercel CDN, not through this function.
-// slug: the asset folder slug (parentId ?? itinerary.slug)
-// variant: 'complete' | 'essential' | 'short' | undefined
-async function handleScanAssets(slug, variant) {
+// slug:         the asset folder slug (parentId ?? itinerary.slug)
+// variant:      'complete' | 'essential' | 'short' | undefined
+// durationDays: actual day count of the itinerary variant — days beyond this are skipped
+async function handleScanAssets(slug, variant, durationDays = null) {
   if (!slug) throw Object.assign(new Error('slug is required'), { status: 400 });
 
   const manifestPath = path.join(process.cwd(), 'public', 'itineraries', slug, 'manifest.json');
@@ -788,58 +821,88 @@ async function handleScanAssets(slug, variant) {
     });
   }
 
-  // Gallery
-  (manifest.gallery ?? []).forEach((file, i) => assets.push({
-    id: null, assetType: 'gallery',
-    url:     `${base}/gallery/${file}`,
-    alt:     altFromFilename(file),
-    caption: '', source: 'filesystem', active: true, sortOrder: i,
-  }));
+  // Gallery — resolveVariantBucket handles both { root, essential, short } and legacy flat array
+  {
+    const { files, sub } = resolveVariantBucket(manifest.gallery, v);
+    const urlBase = `${base}/gallery${sub ? `/${sub}` : ''}`;
+    console.log(`[scan-assets] gallery: slug="${slug}" variant="${v}" bucket="${sub || 'root'}" files=${files.length}`);
+    files.forEach((file, i) => assets.push({
+      id: null, assetType: 'gallery',
+      url:     `${urlBase}/${file}`,
+      alt:     altFromFilename(file),
+      caption: '', source: 'filesystem', active: true, sortOrder: i,
+    }));
+  }
 
-  // Research
-  (manifest.research ?? []).forEach((file, i) => assets.push({
-    id: null, assetType: 'research',
-    url:     `${base}/research/${file}`,
-    alt:     altFromFilename(file),
-    caption: '', source: 'filesystem', active: true, sortOrder: i,
-  }));
-
-  // Day images — supports both new variant-aware format { root, essential, short }
-  // and legacy flat array format for backward compatibility.
-  for (const [dayKey, dayData] of Object.entries(manifest.dayImages ?? {})) {
-    const dayNumber = parseInt(dayKey, 10);
-
-    if (Array.isArray(dayData)) {
-      // Legacy flat format: always root files only
-      dayData.forEach((file, i) => assets.push({
-        id: null, assetType: 'day', dayNumber,
-        url:     `${base}/day-images/day${dayNumber}/${file}`,
-        alt:     `Day ${dayNumber}`,
+  // Research — same variant resolution but with optional hide-section markers
+  {
+    const r = manifest.research ?? [];
+    if (Array.isArray(r)) {
+      r.forEach((file, i) => assets.push({
+        id: null, assetType: 'research',
+        url:     `${base}/research/${file}`,
+        alt:     altFromFilename(file),
         caption: '', source: 'filesystem', active: true, sortOrder: i,
       }));
     } else {
-      // New format: resolve variant-specific image (same logic as getDayImage in itineraryImages.js)
       let files = [];
-      let urlBase = `${base}/day-images/day${dayNumber}`;
-
-      if (v === 'essential' && (dayData.essential ?? []).length > 0) {
-        files = dayData.essential;
+      let urlBase = `${base}/research`;
+      if (v === 'essential' && !r.hideEssential && (r.essential ?? []).length > 0) {
+        files = r.essential;
         urlBase += '/essential';
-      } else if (v === 'short' && (dayData.short ?? []).length > 0) {
-        files = dayData.short;
+      } else if (v === 'short' && !r.hideShort && (r.short ?? []).length > 0) {
+        files = r.short;
         urlBase += '/short';
       } else {
-        // complete, or fallback when no variant override exists
-        files = dayData.root ?? [];
+        files = r.root ?? [];
       }
-
       files.forEach((file, i) => assets.push({
-        id: null, assetType: 'day', dayNumber,
+        id: null, assetType: 'research',
         url:     `${urlBase}/${file}`,
-        alt:     `Day ${dayNumber}`,
+        alt:     altFromFilename(file),
         caption: '', source: 'filesystem', active: true, sortOrder: i,
       }));
     }
+  }
+
+  // Day images — resolveVariantBucket with three-state null/[]/[files] semantics.
+  // Days beyond durationDays are skipped entirely (they belong to longer variants).
+  console.log(`[scan-assets] days: slug="${slug}" variant="${v}" durationDays=${durationDays ?? 'all'}`);
+  for (const [dayKey, dayData] of Object.entries(manifest.dayImages ?? {})) {
+    const dayNumber = parseInt(dayKey, 10);
+
+    // Hard limit: never return images for days beyond the variant's actual day count
+    if (durationDays != null && dayNumber > durationDays) {
+      console.log(`[scan-assets]   day ${dayNumber}: SKIPPED — beyond durationDays=${durationDays}`);
+      continue;
+    }
+
+    const { files, sub } = resolveVariantBucket(dayData, v);
+
+    // Build a human-readable folder state for the debug log
+    let folderState;
+    if (!dayData || Array.isArray(dayData) || v === 'complete') {
+      folderState = 'root';
+    } else {
+      const vArr = v === 'essential' ? dayData.essential : dayData.short;
+      if (vArr == null)         folderState = `${v}=absent→fallback`;
+      else if (vArr.length > 0) folderState = `${v}=exists(${vArr.length}files)`;
+      else                      folderState = `${v}=empty→suppress`;
+    }
+
+    const resolvedImg = files.length
+      ? `${base}/day-images/day${dayNumber}${sub ? `/${sub}` : ''}/${files[0]}`
+      : null;
+
+    console.log(`[scan-assets]   day ${dayNumber}: folder=${folderState} files=${files.length} resolved=${resolvedImg ?? 'null'}`);
+
+    const urlBase = `${base}/day-images/day${dayNumber}${sub ? `/${sub}` : ''}`;
+    files.forEach((file, i) => assets.push({
+      id: null, assetType: 'day', dayNumber,
+      url:     `${urlBase}/${file}`,
+      alt:     `Day ${dayNumber}`,
+      caption: '', source: 'filesystem', active: true, sortOrder: i,
+    }));
   }
 
   return { assets };

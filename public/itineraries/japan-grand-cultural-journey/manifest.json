@@ -2,158 +2,168 @@
   "slug": "japan-grand-cultural-journey",
   "title": "Japan",
   "heroFile": "cover.jpg",
-  "gallery": [
-    "1.kanazawa.jpg",
-    "Shibuya-Crossing.jpg",
-    "arashiyama.jpg",
-    "dotonburi.jpg",
-    "food.jpg",
-    "food2.jpg",
-    "garden-nation-kyoto.jpg",
-    "hakone.jpg",
-    "kinkaku.jpg",
-    "kurashiki.jpg",
-    "myagawa.jpg",
-    "niio-castle.jpg",
-    "okayama.jpg",
-    "shirakawa-go.jpeg",
-    "shitenno.jpg",
-    "wagyu.jpeg"
-  ],
-  "research": [
-    "cris-florest.jpg",
-    "cris-shirakawa-go.jpg",
-    "cris-temple.jpg",
-    "kyoto-vanda.jpg",
-    "selfie.jpg",
-    "vanda-veado.jpg"
-  ],
+  "gallery": {
+    "root": [
+      "1.kanazawa.jpg",
+      "Shibuya-Crossing.jpg",
+      "arashiyama.jpg",
+      "dotonburi.jpg",
+      "food.jpg",
+      "food2.jpg",
+      "garden-nation-kyoto.jpg",
+      "hakone.jpg",
+      "kinkaku.jpg",
+      "kurashiki.jpg",
+      "myagawa.jpg",
+      "niio-castle.jpg",
+      "okayama.jpg",
+      "shirakawa-go.jpeg",
+      "shitenno.jpg",
+      "wagyu.jpeg"
+    ],
+    "essential": null,
+    "short": null
+  },
+  "research": {
+    "root": [
+      "cris-florest.jpg",
+      "cris-shirakawa-go.jpg",
+      "cris-temple.jpg",
+      "kyoto-vanda.jpg",
+      "selfie.jpg",
+      "vanda-veado.jpg"
+    ],
+    "essential": null,
+    "short": null,
+    "hideEssential": false,
+    "hideShort": false
+  },
   "dayImages": {
     "1": {
       "root": [
         "Shinjuku.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "2": {
       "root": [
         "day2.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "3": {
       "root": [
         "Shibuya-Crossing.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "4": {
       "root": [
         "Kanazawa.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "5": {
       "root": [
         "Wajima-Morning-Market.jpeg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "6": {
       "root": [
         "Shirakawa-go.jpeg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "7": {
       "root": [
         "Takayama.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "8": {
       "root": [
         "Hida-Folk-Village.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "9": {
       "root": [
         "Fushimi-Inari.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "10": {
       "root": [
         "Tenryu-ji.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "11": {
       "root": [
         "Nara.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "12": {
       "root": [
         "Kyoto.jpeg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "13": {
       "root": [
         "Osaka.jpeg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "14": {
       "root": [
         "Koyasan.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "15": {
       "root": [
         "Himeji.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "16": {
       "root": [
         "Okayama.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "17": {
       "root": [
         "hakone.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "18": {
       "root": [
         "tokyo.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     }
   }
 }

@@ -10,73 +10,73 @@ export const MANIFESTS = {
     "heroFile": null,
     "gallery": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "research": {
       "root": [],
-      "essential": [],
-      "short": [],
+      "essential": null,
+      "short": null,
       "hideEssential": false,
       "hideShort": false
     },
     "dayImages": {
       "1": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "2": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "3": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "4": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "5": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "6": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "7": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "8": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "9": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "10": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       }
     },
     "map": {
-      "root": [],
-      "complete": [],
-      "essential": [],
-      "short": []
+      "root": null,
+      "complete": null,
+      "essential": null,
+      "short": null
     }
   },
   "bali-island-journey": {
@@ -93,8 +93,8 @@ export const MANIFESTS = {
         "praia-rocha.png",
         "swing-red-dress.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "research": {
       "root": [
@@ -102,8 +102,8 @@ export const MANIFESTS = {
         "selfie-arrozais.jpg",
         "selfie-piscina-infinita.jpg"
       ],
-      "essential": [],
-      "short": [],
+      "essential": null,
+      "short": null,
       "hideEssential": false,
       "hideShort": false
     },
@@ -112,78 +112,78 @@ export const MANIFESTS = {
         "root": [
           "day1.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "2": {
         "root": [
           "day1.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "3": {
         "root": [
           "day3.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "4": {
         "root": [
           "day4.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "5": {
         "root": [
           "day5.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "6": {
         "root": [
           "day6.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "7": {
         "root": [
           "day7.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "8": {
         "root": [
           "day6.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "9": {
         "root": [
           "day9.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "10": {
         "root": [
           "day10.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       }
     },
     "map": {
-      "root": [],
-      "complete": [],
-      "essential": [],
-      "short": []
+      "root": null,
+      "complete": null,
+      "essential": null,
+      "short": null
     }
   },
   "brazil-coastal-journey": {
@@ -200,8 +200,8 @@ export const MANIFESTS = {
         "catamara.jpg",
         "foto-morro.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "research": {
       "root": [
@@ -209,78 +209,78 @@ export const MANIFESTS = {
         "cris-barco.jpg",
         "cris-praia.jpg"
       ],
-      "essential": [],
-      "short": [],
+      "essential": null,
+      "short": null,
       "hideEssential": false,
       "hideShort": false
     },
     "dayImages": {
       "1": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "2": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "3": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "4": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "5": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "6": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "7": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "8": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "9": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "10": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "11": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "12": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       }
     },
     "map": {
-      "root": [],
-      "complete": [],
-      "essential": [],
-      "short": []
+      "root": null,
+      "complete": null,
+      "essential": null,
+      "short": null
     }
   },
   "budapest-city-break": {
@@ -294,8 +294,8 @@ export const MANIFESTS = {
         "danube.jpeg",
         "street.jpeg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "research": {
       "root": [
@@ -303,33 +303,33 @@ export const MANIFESTS = {
         "selfie-boat.jpeg",
         "selfie-danube.jpeg"
       ],
-      "essential": [],
-      "short": [],
+      "essential": null,
+      "short": null,
       "hideEssential": false,
       "hideShort": false
     },
     "dayImages": {
       "1": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "2": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "3": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       }
     },
     "map": {
-      "root": [],
-      "complete": [],
-      "essential": [],
-      "short": []
+      "root": null,
+      "complete": null,
+      "essential": null,
+      "short": null
     }
   },
   "california-american-west": {
@@ -371,7 +371,7 @@ export const MANIFESTS = {
         "cavalo.jpg",
         "grand-canyon.jpg"
       ],
-      "essential": [],
+      "essential": null,
       "short": [],
       "hideEssential": false,
       "hideShort": false
@@ -381,15 +381,15 @@ export const MANIFESTS = {
         "root": [
           "day1.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "2": {
         "root": [
           "day2.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "3": {
         "root": [
@@ -406,7 +406,7 @@ export const MANIFESTS = {
         "root": [
           "day4.jpeg"
         ],
-        "essential": [],
+        "essential": null,
         "short": [
           "short-day4.jpg"
         ]
@@ -415,7 +415,7 @@ export const MANIFESTS = {
         "root": [
           "day5.jpeg"
         ],
-        "essential": [],
+        "essential": null,
         "short": [
           "short-day5.jpeg"
         ]
@@ -424,7 +424,7 @@ export const MANIFESTS = {
         "root": [
           "day6.jpg"
         ],
-        "essential": [],
+        "essential": null,
         "short": [
           "short-day6.jpg"
         ]
@@ -433,7 +433,7 @@ export const MANIFESTS = {
         "root": [
           "day7.jpg"
         ],
-        "essential": [],
+        "essential": null,
         "short": [
           "day13.jpg"
         ]
@@ -442,7 +442,7 @@ export const MANIFESTS = {
         "root": [
           "day8.jpg"
         ],
-        "essential": [],
+        "essential": null,
         "short": [
           "day16.jpg"
         ]
@@ -451,8 +451,8 @@ export const MANIFESTS = {
         "root": [
           "day9.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "10": {
         "root": [
@@ -461,7 +461,7 @@ export const MANIFESTS = {
         "essential": [
           "day10-essential.jpg"
         ],
-        "short": []
+        "short": null
       },
       "11": {
         "root": [
@@ -470,7 +470,7 @@ export const MANIFESTS = {
         "essential": [
           "day13.jpg"
         ],
-        "short": []
+        "short": null
       },
       "12": {
         "root": [
@@ -479,44 +479,44 @@ export const MANIFESTS = {
         "essential": [
           "day16.jpg"
         ],
-        "short": []
+        "short": null
       },
       "13": {
         "root": [
           "day13.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "14": {
         "root": [
           "day14.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "15": {
         "root": [
           "day15.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "16": {
         "root": [
           "day16.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       }
     },
     "map": {
       "root": [
         "route-map.png"
       ],
-      "complete": [],
-      "essential": [],
-      "short": []
+      "complete": null,
+      "essential": null,
+      "short": null
     }
   },
   "japan-grand-cultural-journey": {
@@ -542,8 +542,8 @@ export const MANIFESTS = {
         "shitenno.jpg",
         "wagyu.jpeg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "research": {
       "root": [
@@ -554,8 +554,8 @@ export const MANIFESTS = {
         "selfie.jpg",
         "vanda-veado.jpg"
       ],
-      "essential": [],
-      "short": [],
+      "essential": null,
+      "short": null,
       "hideEssential": false,
       "hideShort": false
     },
@@ -564,127 +564,127 @@ export const MANIFESTS = {
         "root": [
           "Shinjuku.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "2": {
         "root": [
           "day2.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "3": {
         "root": [
           "Shibuya-Crossing.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "4": {
         "root": [
           "Kanazawa.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "5": {
         "root": [
           "Wajima-Morning-Market.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "6": {
         "root": [
           "Shirakawa-go.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "7": {
         "root": [
           "Takayama.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "8": {
         "root": [
           "Hida-Folk-Village.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "9": {
         "root": [
           "Fushimi-Inari.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "10": {
         "root": [
           "Tenryu-ji.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "11": {
         "root": [
           "Nara.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "12": {
         "root": [
           "Kyoto.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "13": {
         "root": [
           "Osaka.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "14": {
         "root": [
           "Koyasan.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "15": {
         "root": [
           "Himeji.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "16": {
         "root": [
           "Okayama.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "17": {
         "root": [
           "hakone.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "18": {
         "root": [
           "tokyo.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       }
     },
     "map": {
@@ -692,9 +692,9 @@ export const MANIFESTS = {
         "route-map-print.png",
         "route-map.png"
       ],
-      "complete": [],
-      "essential": [],
-      "short": []
+      "complete": null,
+      "essential": null,
+      "short": null
     }
   },
   "morocco-motorcycle-expedition": {
@@ -717,8 +717,8 @@ export const MANIFESTS = {
         "sahar.png",
         "sun-rise.png"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "research": {
       "root": [
@@ -726,8 +726,8 @@ export const MANIFESTS = {
         "20240212_141911.jpg",
         "beach.jpeg"
       ],
-      "essential": [],
-      "short": [],
+      "essential": null,
+      "short": null,
       "hideEssential": false,
       "hideShort": false
     },
@@ -736,64 +736,64 @@ export const MANIFESTS = {
         "root": [
           "chefchaouen.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "2": {
         "root": [
           "Errachidia.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "3": {
         "root": [
           "Aït Benhaddou.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "4": {
         "root": [
           "Ouarzazate.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "5": {
         "root": [
           "Merzouga-quad-dunes.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "6": {
         "root": [
           "marrakech.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "7": {
         "root": [
           "Oualidia.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "8": {
         "root": [
           "Hassan-II-Mosque.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       }
     },
     "map": {
-      "root": [],
-      "complete": [],
-      "essential": [],
-      "short": []
+      "root": null,
+      "complete": null,
+      "essential": null,
+      "short": null
     }
   },
   "normandy-brittany-loire": {
@@ -810,8 +810,8 @@ export const MANIFESTS = {
         "mont-saint-michel-2.png",
         "porto-honfleur.png"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "research": {
       "root": [
@@ -819,38 +819,38 @@ export const MANIFESTS = {
         "chambord-bekas2.jpeg",
         "saint-malo-cris.jpeg"
       ],
-      "essential": [],
-      "short": [],
+      "essential": null,
+      "short": null,
       "hideEssential": false,
       "hideShort": false
     },
     "dayImages": {
       "1": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "2": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "3": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "4": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       }
     },
     "map": {
-      "root": [],
-      "complete": [],
-      "essential": [],
-      "short": []
+      "root": null,
+      "complete": null,
+      "essential": null,
+      "short": null
     }
   },
   "northern-england-roadtrip": {
@@ -870,8 +870,8 @@ export const MANIFESTS = {
         "river.jpg",
         "rocks.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "research": {
       "root": [
@@ -879,8 +879,8 @@ export const MANIFESTS = {
         "selfie_old_castle.jpg",
         "selfie_york.jpg"
       ],
-      "essential": [],
-      "short": [],
+      "essential": null,
+      "short": null,
       "hideEssential": false,
       "hideShort": false
     },
@@ -889,36 +889,36 @@ export const MANIFESTS = {
         "root": [
           "day1.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "2": {
         "root": [
           "day2.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "3": {
         "root": [
           "day3.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "4": {
         "root": [
           "day4.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       }
     },
     "map": {
-      "root": [],
-      "complete": [],
-      "essential": [],
-      "short": []
+      "root": null,
+      "complete": null,
+      "essential": null,
+      "short": null
     }
   },
   "philippines-island-journey": {
@@ -927,13 +927,13 @@ export const MANIFESTS = {
     "heroFile": null,
     "gallery": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "research": {
       "root": [],
-      "essential": [],
-      "short": [],
+      "essential": null,
+      "short": null,
       "hideEssential": false,
       "hideShort": false
     },
@@ -942,125 +942,125 @@ export const MANIFESTS = {
         "root": [
           "day1.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "2": {
         "root": [
           "day2.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "3": {
         "root": [
           "day3.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "4": {
         "root": [
           "day4.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "5": {
         "root": [
           "day5.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "6": {
         "root": [
           "day7.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "7": {
         "root": [
           "day6.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "8": {
         "root": [
           "day8.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "9": {
         "root": [
           "day9.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "10": {
         "root": [
           "day10.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "11": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "12": {
         "root": [
           "day12.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "13": {
         "root": [
           "day13.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "14": {
         "root": [
           "day14.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "15": {
         "root": [
           "day15.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "16": {
         "root": [
           "day16.jpg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "17": {
         "root": [
           "day17.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       }
     },
     "map": {
-      "root": [],
-      "complete": [],
-      "essential": [],
-      "short": []
+      "root": null,
+      "complete": null,
+      "essential": null,
+      "short": null
     }
   },
   "puglia-road-journey": {
@@ -1074,8 +1074,8 @@ export const MANIFESTS = {
         "lecce3.jpg",
         "praca-duomo-lecce.png"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "research": {
       "root": [
@@ -1083,38 +1083,38 @@ export const MANIFESTS = {
         "selfie_alberobelo.jpg",
         "selfie_alberobelo_2.jpg"
       ],
-      "essential": [],
-      "short": [],
+      "essential": null,
+      "short": null,
       "hideEssential": false,
       "hideShort": false
     },
     "dayImages": {
       "1": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "2": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "3": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "4": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       }
     },
     "map": {
-      "root": [],
-      "complete": [],
-      "essential": [],
-      "short": []
+      "root": null,
+      "complete": null,
+      "essential": null,
+      "short": null
     }
   },
   "rome-4-day-city-break": {
@@ -1128,8 +1128,8 @@ export const MANIFESTS = {
         "pantheom.jpg",
         "rome-colosseum-.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "research": {
       "root": [
@@ -1137,40 +1137,40 @@ export const MANIFESTS = {
         "IMG_1476.jpg",
         "IMG_2289.jpg"
       ],
-      "essential": [],
-      "short": [],
+      "essential": null,
+      "short": null,
       "hideEssential": false,
       "hideShort": false
     },
     "dayImages": {
       "1": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "2": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "3": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "4": {
         "root": [
           "baths-of-caracalla.jpeg"
         ],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       }
     },
     "map": {
-      "root": [],
-      "complete": [],
-      "essential": [],
-      "short": []
+      "root": null,
+      "complete": null,
+      "essential": null,
+      "short": null
     }
   },
   "vienna-imperial-journey": {
@@ -1184,8 +1184,8 @@ export const MANIFESTS = {
         "3-ride-school.jpg",
         "Que-ver-en-Viena.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "research": {
       "root": [
@@ -1193,38 +1193,38 @@ export const MANIFESTS = {
         "cris-vanda-street.jpg",
         "cris-vanda.png"
       ],
-      "essential": [],
-      "short": [],
+      "essential": null,
+      "short": null,
       "hideEssential": false,
       "hideShort": false
     },
     "dayImages": {
       "1": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "2": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "3": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       },
       "4": {
         "root": [],
-        "essential": [],
-        "short": []
+        "essential": null,
+        "short": null
       }
     },
     "map": {
-      "root": [],
-      "complete": [],
-      "essential": [],
-      "short": []
+      "root": null,
+      "complete": null,
+      "essential": null,
+      "short": null
     }
   }
 };

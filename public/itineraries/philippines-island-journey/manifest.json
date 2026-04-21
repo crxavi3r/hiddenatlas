@@ -2,125 +2,135 @@
   "slug": "philippines-island-journey",
   "title": "Philippines",
   "heroFile": null,
-  "gallery": [],
-  "research": [],
+  "gallery": {
+    "root": [],
+    "essential": null,
+    "short": null
+  },
+  "research": {
+    "root": [],
+    "essential": null,
+    "short": null,
+    "hideEssential": false,
+    "hideShort": false
+  },
   "dayImages": {
     "1": {
       "root": [
         "day1.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "2": {
       "root": [
         "day2.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "3": {
       "root": [
         "day3.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "4": {
       "root": [
         "day4.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "5": {
       "root": [
         "day5.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "6": {
       "root": [
         "day7.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "7": {
       "root": [
         "day6.jpeg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "8": {
       "root": [
         "day8.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "9": {
       "root": [
         "day9.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "10": {
       "root": [
         "day10.jpeg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "11": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "12": {
       "root": [
         "day12.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "13": {
       "root": [
         "day13.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "14": {
       "root": [
         "day14.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "15": {
       "root": [
         "day15.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "16": {
       "root": [
         "day16.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "17": {
       "root": [
         "day17.jpeg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     }
   }
 }

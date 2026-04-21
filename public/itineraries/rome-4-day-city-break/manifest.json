@@ -2,39 +2,49 @@
   "slug": "rome-4-day-city-break",
   "title": "Rome",
   "heroFile": null,
-  "gallery": [
-    "Italy_Rome_Saint_Peter.jpg",
-    "Trevi-Fountain.jpeg",
-    "pantheom.jpg",
-    "rome-colosseum-.jpg"
-  ],
-  "research": [
-    "IMG_1189.jpg",
-    "IMG_1476.jpg",
-    "IMG_2289.jpg"
-  ],
+  "gallery": {
+    "root": [
+      "Italy_Rome_Saint_Peter.jpg",
+      "Trevi-Fountain.jpeg",
+      "pantheom.jpg",
+      "rome-colosseum-.jpg"
+    ],
+    "essential": null,
+    "short": null
+  },
+  "research": {
+    "root": [
+      "IMG_1189.jpg",
+      "IMG_1476.jpg",
+      "IMG_2289.jpg"
+    ],
+    "essential": null,
+    "short": null,
+    "hideEssential": false,
+    "hideShort": false
+  },
   "dayImages": {
     "1": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "2": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "3": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "4": {
       "root": [
         "baths-of-caracalla.jpeg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     }
   }
 }

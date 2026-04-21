@@ -34,8 +34,11 @@ if (!existsSync(publicDir)) {
   process.exit(0);
 }
 
+// Returns null when the directory does not exist (vs [] for an existing-but-empty dir).
+// This lets resolvers distinguish "no variant folder → fall back to root"
+// from "variant folder exists but empty → explicit suppression, no fallback".
 function ls(dir, re) {
-  if (!existsSync(dir)) return [];
+  if (!existsSync(dir)) return null;
   return readdirSync(dir).filter(f => re.test(f)).sort();
 }
 
@@ -115,13 +118,24 @@ for (const slug of slugs) {
   allData[slug] = data;
 
   // Write per-slug manifest.json (used by the server scan-assets endpoint).
-  // dayImages uses the full variant structure so scan-assets can resolve the
-  // correct image for each itinerary variant (complete / essential / short).
+  // gallery, research, and dayImages all use the full variant structure so
+  // scan-assets can resolve the correct files for each itinerary variant
+  // (complete / essential / short) using the same logic as itineraryImages.js.
   const serverManifest = {
     slug, title,
-    heroFile:  data.heroFile,
-    gallery:   data.gallery.root,
-    research:  data.research.root,
+    heroFile: data.heroFile,
+    gallery: {
+      root:      data.gallery.root,
+      essential: data.gallery.essential,
+      short:     data.gallery.short,
+    },
+    research: {
+      root:          data.research.root,
+      essential:     data.research.essential,
+      short:         data.research.short,
+      hideEssential: data.research.hideEssential,
+      hideShort:     data.research.hideShort,
+    },
     dayImages: Object.fromEntries(
       Object.entries(data.dayImages).map(([n, v]) => [n, {
         root:      v.root,

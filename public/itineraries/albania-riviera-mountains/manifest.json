@@ -2,58 +2,68 @@
   "slug": "albania-riviera-mountains",
   "title": "Albania",
   "heroFile": null,
-  "gallery": [],
-  "research": [],
+  "gallery": {
+    "root": [],
+    "essential": null,
+    "short": null
+  },
+  "research": {
+    "root": [],
+    "essential": null,
+    "short": null,
+    "hideEssential": false,
+    "hideShort": false
+  },
   "dayImages": {
     "1": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "2": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "3": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "4": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "5": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "6": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "7": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "8": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "9": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "10": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     }
   }
 }

@@ -2,51 +2,61 @@
   "slug": "northern-england-roadtrip",
   "title": "Northern England",
   "heroFile": null,
-  "gallery": [
-    "1_old_castle.jpg",
-    "castle_harrypotter.jpg",
-    "castle_town.jpg",
-    "church.jpg",
-    "foto-morro.jpg",
-    "hp_atrio.jpg",
-    "landscape.jpg",
-    "palace.jpg",
-    "river.jpg",
-    "rocks.jpg"
-  ],
-  "research": [
-    "cris_river.jpg",
-    "selfie_old_castle.jpg",
-    "selfie_york.jpg"
-  ],
+  "gallery": {
+    "root": [
+      "1_old_castle.jpg",
+      "castle_harrypotter.jpg",
+      "castle_town.jpg",
+      "church.jpg",
+      "foto-morro.jpg",
+      "hp_atrio.jpg",
+      "landscape.jpg",
+      "palace.jpg",
+      "river.jpg",
+      "rocks.jpg"
+    ],
+    "essential": null,
+    "short": null
+  },
+  "research": {
+    "root": [
+      "cris_river.jpg",
+      "selfie_old_castle.jpg",
+      "selfie_york.jpg"
+    ],
+    "essential": null,
+    "short": null,
+    "hideEssential": false,
+    "hideShort": false
+  },
   "dayImages": {
     "1": {
       "root": [
         "day1.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "2": {
       "root": [
         "day2.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "3": {
       "root": [
         "day3.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "4": {
       "root": [
         "day4.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     }
   }
 }

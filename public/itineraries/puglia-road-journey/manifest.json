@@ -2,37 +2,47 @@
   "slug": "puglia-road-journey",
   "title": "Puglia",
   "heroFile": null,
-  "gallery": [
-    "1_matera.jpeg",
-    "alberobelo-center.png",
-    "lecce3.jpg",
-    "praca-duomo-lecce.png"
-  ],
-  "research": [
-    "matera_cris.jpg",
-    "selfie_alberobelo.jpg",
-    "selfie_alberobelo_2.jpg"
-  ],
+  "gallery": {
+    "root": [
+      "1_matera.jpeg",
+      "alberobelo-center.png",
+      "lecce3.jpg",
+      "praca-duomo-lecce.png"
+    ],
+    "essential": null,
+    "short": null
+  },
+  "research": {
+    "root": [
+      "matera_cris.jpg",
+      "selfie_alberobelo.jpg",
+      "selfie_alberobelo_2.jpg"
+    ],
+    "essential": null,
+    "short": null,
+    "hideEssential": false,
+    "hideShort": false
+  },
   "dayImages": {
     "1": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "2": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "3": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "4": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     }
   }
 }

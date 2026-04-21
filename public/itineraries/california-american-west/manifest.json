@@ -2,37 +2,60 @@
   "slug": "california-american-west",
   "title": null,
   "heroFile": null,
-  "gallery": [
-    "1715789658-yosemite-fall.jpg",
-    "Antelope-Canyon.jpg",
-    "Arizona_Route_66_Road.jpg",
-    "Malibu.jpg",
-    "Pacific-Coast-Highway.jpeg",
-    "cable-cars-downtown-san-francisco.jpg.jpeg",
-    "chateau-montelena.jpg",
-    "grand-canyon-ear.jpg",
-    "hollywood.jpg",
-    "national-park-express-grand-canyon.jpeg"
-  ],
-  "research": [
-    "66.jpg",
-    "cavalo.jpg",
-    "grand-canyon.jpg"
-  ],
+  "gallery": {
+    "root": [
+      "1715789658-yosemite-fall.jpg",
+      "Antelope-Canyon.jpg",
+      "Arizona_Route_66_Road.jpg",
+      "Malibu.jpg",
+      "Pacific-Coast-Highway.jpeg",
+      "cable-cars-downtown-san-francisco.jpg.jpeg",
+      "chateau-montelena.jpg",
+      "grand-canyon-ear.jpg",
+      "hollywood.jpg",
+      "national-park-express-grand-canyon.jpeg"
+    ],
+    "essential": [
+      "1715789658-yosemite-fall.jpg",
+      "Arizona_Route_66_Road.jpg",
+      "Malibu.jpg",
+      "cable-cars-downtown-san-francisco.jpg.jpeg",
+      "grand-canyon-ear.jpg",
+      "hollywood.jpg",
+      "national-park-express-grand-canyon.jpeg"
+    ],
+    "short": [
+      "1-Pacific-Coast-Highway.jpeg",
+      "Malibu.jpg",
+      "cable-cars-downtown-san-francisco.jpg.jpeg",
+      "hollywood.jpg"
+    ]
+  },
+  "research": {
+    "root": [
+      "66.jpg",
+      "cavalo.jpg",
+      "grand-canyon.jpg"
+    ],
+    "essential": null,
+    "short": [],
+    "hideEssential": false,
+    "hideShort": false
+  },
   "dayImages": {
     "1": {
       "root": [
         "day1.jpeg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "2": {
       "root": [
         "day2.jpeg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "3": {
       "root": [
@@ -49,7 +72,7 @@
       "root": [
         "day4.jpeg"
       ],
-      "essential": [],
+      "essential": null,
       "short": [
         "short-day4.jpg"
       ]
@@ -58,7 +81,7 @@
       "root": [
         "day5.jpeg"
       ],
-      "essential": [],
+      "essential": null,
       "short": [
         "short-day5.jpeg"
       ]
@@ -67,7 +90,7 @@
       "root": [
         "day6.jpg"
       ],
-      "essential": [],
+      "essential": null,
       "short": [
         "short-day6.jpg"
       ]
@@ -76,7 +99,7 @@
       "root": [
         "day7.jpg"
       ],
-      "essential": [],
+      "essential": null,
       "short": [
         "day13.jpg"
       ]
@@ -85,7 +108,7 @@
       "root": [
         "day8.jpg"
       ],
-      "essential": [],
+      "essential": null,
       "short": [
         "day16.jpg"
       ]
@@ -94,8 +117,8 @@
       "root": [
         "day9.jpeg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "10": {
       "root": [
@@ -104,7 +127,7 @@
       "essential": [
         "day10-essential.jpg"
       ],
-      "short": []
+      "short": null
     },
     "11": {
       "root": [
@@ -113,7 +136,7 @@
       "essential": [
         "day13.jpg"
       ],
-      "short": []
+      "short": null
     },
     "12": {
       "root": [
@@ -122,35 +145,35 @@
       "essential": [
         "day16.jpg"
       ],
-      "short": []
+      "short": null
     },
     "13": {
       "root": [
         "day13.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "14": {
       "root": [
         "day14.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "15": {
       "root": [
         "day15.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "16": {
       "root": [
         "day16.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     }
   }
 }

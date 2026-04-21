@@ -54,6 +54,53 @@ function toImageList(files, baseUrl) {
 }
 
 /**
+ * Shared variant-aware resolver for gallery and day-image buckets.
+ * Returns { files: string[], sub: string|null }
+ *   files — the resolved file list for this variant (may be empty)
+ *   sub   — subfolder name ('essential' | 'short' | null for root)
+ *
+ * Three-state semantics for variant sub-arrays (null = absent, [] = empty, [...] = files):
+ *   null  → variant folder does not exist → fall back to root
+ *   []    → variant folder exists but is empty → explicit suppression: no image, no fallback
+ *   [...] → variant folder has files → use them
+ *
+ * Handles both new object format { root, essential, short }
+ * and legacy flat array format (treated as root, returns sub: null).
+ *
+ * Resolution order:
+ *   complete  → root files only (no variant subfolder)
+ *   essential → essential array:
+ *               null → fall back to root
+ *               []   → suppress (return empty, no fallback)
+ *               [...] → use essential files
+ *   short     → same pattern for short
+ */
+function resolveVariantBucket(bucket, variant) {
+  const v = normalizeVariant(variant);
+
+  // Legacy flat array — treat as root files with no variant subfolder
+  if (Array.isArray(bucket)) return { files: bucket, sub: null };
+  if (!bucket)               return { files: [],     sub: null };
+
+  if (v === 'essential') {
+    const ess = bucket.essential;              // null | [] | [file, ...]
+    if (ess == null)    return { files: bucket.root ?? [], sub: null };   // absent → fallback
+    if (ess.length > 0) return { files: ess,               sub: 'essential' }; // files → use
+    return              { files: [],            sub: 'essential' };            // empty → suppress
+  }
+
+  if (v === 'short') {
+    const sh = bucket.short;
+    if (sh == null)    return { files: bucket.root ?? [], sub: null };
+    if (sh.length > 0) return { files: sh,                sub: 'short' };
+    return             { files: [],             sub: 'short' };
+  }
+
+  // complete: root only
+  return { files: bucket.root ?? [], sub: null };
+}
+
+/**
  * Pick the preferred map filename from a list.
  * Prefers route-map.png, avoids -print variants, falls back to first file.
  * Returns a full URL string or null.
@@ -83,23 +130,9 @@ function pickMapUrl(files, baseUrl) {
 export function getGalleryImages(slug, variant) {
   const manifest = MANIFESTS[slug];
   if (!manifest) return [];
-  const v    = normalizeVariant(variant);
   const base = `/itineraries/${slug}/gallery`;
-
-  if (v === 'essential') {
-    const overrides = manifest.gallery.essential ?? [];
-    if (overrides.length) return toImageList(overrides, `${base}/essential`);
-    return toImageList(manifest.gallery.root, base);
-  }
-
-  if (v === 'short') {
-    const overrides = manifest.gallery.short ?? [];
-    if (overrides.length) return toImageList(overrides, `${base}/short`);
-    return toImageList(manifest.gallery.root, base);
-  }
-
-  // complete: root only
-  return toImageList(manifest.gallery.root, base);
+  const { files, sub } = resolveVariantBucket(manifest.gallery, variant);
+  return toImageList(files, sub ? `${base}/${sub}` : base);
 }
 
 /**
@@ -164,24 +197,10 @@ export function getDayImage(slug, dayNumber, variant) {
   if (!manifest) return null;
   const dayData = manifest.dayImages[dayNumber];
   if (!dayData) return null;
-  const v    = normalizeVariant(variant);
   const base = `/itineraries/${slug}/day-images/day${dayNumber}`;
-
-  if (v === 'essential') {
-    const files = dayData.essential ?? [];
-    if (files.length) return `${base}/essential/${files[0]}`;
-    // fall through to root
-  }
-
-  if (v === 'short') {
-    const files = dayData.short ?? [];
-    if (files.length) return `${base}/short/${files[0]}`;
-    // fall through to root
-  }
-
-  // complete, or root fallback for essential/short
-  const rootFiles = dayData.root ?? [];
-  return rootFiles.length ? `${base}/${rootFiles[0]}` : null;
+  const { files, sub } = resolveVariantBucket(dayData, variant);
+  if (!files.length) return null;
+  return `${sub ? `${base}/${sub}` : base}/${files[0]}`;
 }
 
 /**
@@ -198,23 +217,10 @@ export function getDayImages(slug, dayNumber, variant) {
   if (!manifest) return [];
   const dayData = manifest.dayImages[dayNumber];
   if (!dayData) return [];
-  const v    = normalizeVariant(variant);
   const base = `/itineraries/${slug}/day-images/day${dayNumber}`;
-
-  if (v === 'essential') {
-    const files = dayData.essential ?? [];
-    if (files.length) return files.slice(0, 2).map(f => `${base}/essential/${f}`);
-    // fall through to root
-  }
-
-  if (v === 'short') {
-    const files = dayData.short ?? [];
-    if (files.length) return files.slice(0, 2).map(f => `${base}/short/${f}`);
-    // fall through to root
-  }
-
-  // complete, or root fallback
-  return (dayData.root ?? []).slice(0, 2).map(f => `${base}/${f}`);
+  const { files, sub } = resolveVariantBucket(dayData, variant);
+  const urlBase = sub ? `${base}/${sub}` : base;
+  return files.slice(0, 2).map(f => `${urlBase}/${f}`);
 }
 
 /**

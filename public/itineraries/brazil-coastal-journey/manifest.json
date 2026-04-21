@@ -2,80 +2,90 @@
   "slug": "brazil-coastal-journey",
   "title": "Brazil",
   "heroFile": null,
-  "gallery": [
-    "angra-2.jpg",
-    "angra.jpg",
-    "buzios-night.jpg",
-    "cabo-frio.jpg",
-    "cascata.png",
-    "catamara.jpg",
-    "foto-morro.jpg"
-  ],
-  "research": [
-    "barco-2.jpg",
-    "cris-barco.jpg",
-    "cris-praia.jpg"
-  ],
+  "gallery": {
+    "root": [
+      "angra-2.jpg",
+      "angra.jpg",
+      "buzios-night.jpg",
+      "cabo-frio.jpg",
+      "cascata.png",
+      "catamara.jpg",
+      "foto-morro.jpg"
+    ],
+    "essential": null,
+    "short": null
+  },
+  "research": {
+    "root": [
+      "barco-2.jpg",
+      "cris-barco.jpg",
+      "cris-praia.jpg"
+    ],
+    "essential": null,
+    "short": null,
+    "hideEssential": false,
+    "hideShort": false
+  },
   "dayImages": {
     "1": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "2": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "3": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "4": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "5": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "6": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "7": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "8": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "9": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "10": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "11": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "12": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     }
   }
 }

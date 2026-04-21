@@ -2,37 +2,47 @@
   "slug": "vienna-imperial-journey",
   "title": "Vienna",
   "heroFile": null,
-  "gallery": [
-    "1-Graben_Viena.jpg",
-    "2-escola.png",
-    "3-ride-school.jpg",
-    "Que-ver-en-Viena.jpg"
-  ],
-  "research": [
-    "cris-comer.png",
-    "cris-vanda-street.jpg",
-    "cris-vanda.png"
-  ],
+  "gallery": {
+    "root": [
+      "1-Graben_Viena.jpg",
+      "2-escola.png",
+      "3-ride-school.jpg",
+      "Que-ver-en-Viena.jpg"
+    ],
+    "essential": null,
+    "short": null
+  },
+  "research": {
+    "root": [
+      "cris-comer.png",
+      "cris-vanda-street.jpg",
+      "cris-vanda.png"
+    ],
+    "essential": null,
+    "short": null,
+    "hideEssential": false,
+    "hideShort": false
+  },
   "dayImages": {
     "1": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "2": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "3": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "4": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     }
   }
 }

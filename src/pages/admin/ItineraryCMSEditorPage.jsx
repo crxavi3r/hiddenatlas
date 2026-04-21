@@ -667,7 +667,7 @@ export default function ItineraryCMSEditorPage() {
       if (assetSlug) {
         try {
           const fsRes  = await fetch(
-            `/api/itinerary-cms?action=scan-assets&slug=${encodeURIComponent(assetSlug)}&assetSlug=${encodeURIComponent(assetSlug)}&variant=${encodeURIComponent(variant || '')}`,
+            `/api/itinerary-cms?action=scan-assets&slug=${encodeURIComponent(assetSlug)}&assetSlug=${encodeURIComponent(assetSlug)}&variant=${encodeURIComponent(variant || '')}&durationDays=${encodeURIComponent(form.durationDays || '')}`,
             { headers: { Authorization: `Bearer ${token}` } }
           );
           const fsJson = await fsRes.json();

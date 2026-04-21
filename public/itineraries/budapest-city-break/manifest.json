@@ -2,32 +2,42 @@
   "slug": "budapest-city-break",
   "title": "Budapest",
   "heroFile": null,
-  "gallery": [
-    "castle.jpeg",
-    "castle2.jpeg",
-    "danube.jpeg",
-    "street.jpeg"
-  ],
-  "research": [
-    "couple-castle.jpeg",
-    "selfie-boat.jpeg",
-    "selfie-danube.jpeg"
-  ],
+  "gallery": {
+    "root": [
+      "castle.jpeg",
+      "castle2.jpeg",
+      "danube.jpeg",
+      "street.jpeg"
+    ],
+    "essential": null,
+    "short": null
+  },
+  "research": {
+    "root": [
+      "couple-castle.jpeg",
+      "selfie-boat.jpeg",
+      "selfie-danube.jpeg"
+    ],
+    "essential": null,
+    "short": null,
+    "hideEssential": false,
+    "hideShort": false
+  },
   "dayImages": {
     "1": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "2": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "3": {
       "root": [],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     }
   }
 }

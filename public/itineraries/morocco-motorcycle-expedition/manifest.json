@@ -2,82 +2,92 @@
   "slug": "morocco-motorcycle-expedition",
   "title": "Morocco Motorcycle Expedition",
   "heroFile": "cover.jpg",
-  "gallery": [
-    "20240213_075323.jpg",
-    "20240214_101727.jpg",
-    "IMG_1467.jpg",
-    "IMG_1577.jpg",
-    "IMG_1692.jpg",
-    "IMG_1709.jpg",
-    "IMG_20240214_104318.jpg",
-    "chefchaouen.png",
-    "marraquexe-capa.jpg",
-    "moto-2.png",
-    "moto.png",
-    "sahar.png",
-    "sun-rise.png"
-  ],
-  "research": [
-    "20240212_131501.jpg",
-    "20240212_141911.jpg",
-    "beach.jpeg"
-  ],
+  "gallery": {
+    "root": [
+      "20240213_075323.jpg",
+      "20240214_101727.jpg",
+      "IMG_1467.jpg",
+      "IMG_1577.jpg",
+      "IMG_1692.jpg",
+      "IMG_1709.jpg",
+      "IMG_20240214_104318.jpg",
+      "chefchaouen.png",
+      "marraquexe-capa.jpg",
+      "moto-2.png",
+      "moto.png",
+      "sahar.png",
+      "sun-rise.png"
+    ],
+    "essential": null,
+    "short": null
+  },
+  "research": {
+    "root": [
+      "20240212_131501.jpg",
+      "20240212_141911.jpg",
+      "beach.jpeg"
+    ],
+    "essential": null,
+    "short": null,
+    "hideEssential": false,
+    "hideShort": false
+  },
   "dayImages": {
     "1": {
       "root": [
         "chefchaouen.jpeg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "2": {
       "root": [
         "Errachidia.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "3": {
       "root": [
         "Aït Benhaddou.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "4": {
       "root": [
         "Ouarzazate.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "5": {
       "root": [
         "Merzouga-quad-dunes.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "6": {
       "root": [
         "marrakech.jpeg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "7": {
       "root": [
         "Oualidia.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     },
     "8": {
       "root": [
         "Hassan-II-Mosque.jpg"
       ],
-      "essential": [],
-      "short": []
+      "essential": null,
+      "short": null
     }
   }
 }
