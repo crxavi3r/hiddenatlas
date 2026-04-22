@@ -372,7 +372,11 @@ export const MANIFESTS = {
         "grand-canyon.jpg"
       ],
       "essential": null,
-      "short": [],
+      "short": [
+        "IMG_5444.JPG",
+        "IMG_5765.JPG",
+        "santamonica.JPG"
+      ],
       "hideEssential": false,
       "hideShort": false
     },
@@ -452,7 +456,7 @@ export const MANIFESTS = {
           "day9.jpeg"
         ],
         "essential": null,
-        "short": null
+        "short": []
       },
       "10": {
         "root": [
@@ -461,7 +465,7 @@ export const MANIFESTS = {
         "essential": [
           "day10-essential.jpg"
         ],
-        "short": null
+        "short": []
       },
       "11": {
         "root": [
@@ -470,7 +474,7 @@ export const MANIFESTS = {
         "essential": [
           "day13.jpg"
         ],
-        "short": null
+        "short": []
       },
       "12": {
         "root": [
@@ -479,35 +483,35 @@ export const MANIFESTS = {
         "essential": [
           "day16.jpg"
         ],
-        "short": null
+        "short": []
       },
       "13": {
         "root": [
           "day13.jpg"
         ],
-        "essential": null,
-        "short": null
+        "essential": [],
+        "short": []
       },
       "14": {
         "root": [
           "day14.jpg"
         ],
-        "essential": null,
-        "short": null
+        "essential": [],
+        "short": []
       },
       "15": {
         "root": [
           "day15.jpg"
         ],
-        "essential": null,
-        "short": null
+        "essential": [],
+        "short": []
       },
       "16": {
         "root": [
           "day16.jpg"
         ],
-        "essential": null,
-        "short": null
+        "essential": [],
+        "short": []
       }
     },
     "map": {

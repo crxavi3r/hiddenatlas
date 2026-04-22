@@ -1,13 +1,22 @@
 /**
  * generate-itinerary-manifests.mjs
  *
- * Reads public/itineraries/<slug>/ (image files already copied there) and:
- *   1. Writes public/itineraries/<slug>/manifest.json   — used by the server-side
+ * Reads content/itineraries/<slug>/ for file discovery (canonical source — preserves
+ * empty variant folders which encode suppression semantics) and:
+ *   1. Syncs any missing image files content/ → public/ so served URLs resolve.
+ *   2. Writes public/itineraries/<slug>/manifest.json   — used by the server-side
  *      scan-assets endpoint (small JSON, committed to git)
- *   2. Writes src/lib/itineraryManifests.js             — imported by itineraryImages.js
+ *   3. Writes src/lib/itineraryManifests.js             — imported by itineraryImages.js
  *      so the browser can resolve static CDN URLs without import.meta.glob
  *
- * Captures the full variant structure used by California American West:
+ * Why content/ not public/ for discovery:
+ *   Git does not track empty directories. An intentionally-empty variant subfolder
+ *   (e.g. day9/short/ with no files = "suppress day 9 for short variant") survives
+ *   in content/ but is lost in public/ after a fresh clone. Discovering from content/
+ *   preserves the three-state semantics: null (absent) / [] (empty = suppress) / [...files].
+ *   public/ is still the serving location; URLs always point there.
+ *
+ * Variant structure captured:
  *   gallery/essential/, gallery/short/
  *   research/essential/, research/short/, research/essential/_hide, research/short/_hide
  *   day-images/day{N}/essential/, day-images/day{N}/short/
@@ -17,14 +26,14 @@
  * Auto: called as `prebuild` in package.json before every Vite build
  */
 
-import { readdirSync, existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
+import { readdirSync, existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, statSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root       = path.join(__dirname, '..');
 const publicDir  = path.join(root, 'public', 'itineraries');
-const contentDir = path.join(root, 'content', 'itineraries'); // optional metadata source
+const contentDir = path.join(root, 'content', 'itineraries');
 
 const IMAGE_RE  = /\.(jpg|jpeg|png|webp|gif|avif|JPG|JPEG|PNG|WEBP|GIF|AVIF)$/;
 const MAP_RE    = /\.(jpg|jpeg|png|webp|svg|JPG|JPEG|PNG|WEBP|SVG)$/;
@@ -34,19 +43,17 @@ if (!existsSync(publicDir)) {
   process.exit(0);
 }
 
-// lsVariant: used for variant subfolders (essential/, short/).
-// Returns null when the directory does not exist — lets resolvers distinguish
-// "no variant folder → fall back to root" from "variant folder exists but
-// empty → explicit suppression, no fallback".
+// ── ls / lsRoot ───────────────────────────────────────────────────────────────
+// ls: for variant subfolders (essential/, short/).
+//   null  → directory does not exist → resolvers fall back to root
+//   []    → directory exists but has no matching files → explicit suppression
+//   [...] → files present → use them
 function ls(dir, re) {
   if (!existsSync(dir)) return null;
   return readdirSync(dir).filter(f => re.test(f)).sort();
 }
 
-// lsRoot: used for root/default directories (gallery/, research/, day{N}/).
-// Always returns an array — never null — because root folders have no
-// suppression semantics and may simply be absent on Vercel (git doesn't
-// track empty directories).
+// lsRoot: for root/default directories — always an array, never null.
 function lsRoot(dir, re) {
   if (!existsSync(dir)) return [];
   return readdirSync(dir).filter(f => re.test(f)).sort();
@@ -57,12 +64,49 @@ function hasHideMarker(dir) {
   return readdirSync(dir).includes('_hide');
 }
 
-const slugs    = readdirSync(publicDir).filter(f => !f.startsWith('.') && !f.endsWith('.json'));
-const allData  = {};
+// ── Sync: copy image files missing from public/ ───────────────────────────────
+// Recurses through srcDir. For each image file present in src but absent in dst,
+// copies it. Creates destination directories as needed.
+// Skips directories that exist only in dst (public-only additions are fine).
+let syncCount = 0;
+function syncImages(srcDir, dstDir, re) {
+  if (!existsSync(srcDir)) return;
+  mkdirSync(dstDir, { recursive: true });
+  for (const entry of readdirSync(srcDir)) {
+    if (entry.startsWith('.') || entry === '_hide') continue;
+    const src = path.join(srcDir, entry);
+    const dst = path.join(dstDir, entry);
+    const st  = statSync(src);
+    if (st.isDirectory()) {
+      syncImages(src, dst, re);
+    } else if (re.test(entry) && !existsSync(dst)) {
+      copyFileSync(src, dst);
+      console.log(`  [sync] ${src.replace(root + '/', '')} → ${dst.replace(root + '/', '')}`);
+      syncCount++;
+    }
+  }
+}
+
+// ── Main loop ─────────────────────────────────────────────────────────────────
+const slugs   = readdirSync(publicDir).filter(f => !f.startsWith('.') && !f.endsWith('.json'));
+const allData = {};
 
 for (const slug of slugs) {
-  const imgDir = path.join(publicDir, slug);
-  const srcDir = path.join(contentDir, slug); // may not exist on Vercel
+  const imgDir = path.join(publicDir, slug);   // served URLs always point here
+  const srcDir = path.join(contentDir, slug);  // file discovery source
+
+  const hasContentDir = existsSync(srcDir);
+  const discoverDir   = hasContentDir ? srcDir : imgDir;
+
+  console.log(`  ${slug}: discovery from ${hasContentDir ? 'content/' : 'public/'}`);
+
+  // 1. Sync image files content/ → public/ so URLs resolve
+  if (hasContentDir) {
+    syncImages(path.join(srcDir, 'gallery'),    path.join(imgDir, 'gallery'),    IMAGE_RE);
+    syncImages(path.join(srcDir, 'research'),   path.join(imgDir, 'research'),   IMAGE_RE);
+    syncImages(path.join(srcDir, 'day-images'), path.join(imgDir, 'day-images'), IMAGE_RE);
+    syncImages(path.join(srcDir, 'map'),        path.join(imgDir, 'map'),        MAP_RE);
+  }
 
   // Optional title from editorial metadata
   let title = null;
@@ -74,7 +118,6 @@ for (const slug of slugs) {
   const data = { slug, title, heroFile: null, gallery: {}, research: {}, dayImages: {}, map: {} };
 
   // ── Hero ──────────────────────────────────────────────────────────────────
-  // Check itinerary.json heroImage field, fallback to cover.jpg
   let heroFilename = 'cover.jpg';
   try {
     const meta = JSON.parse(readFileSync(path.join(srcDir, 'itinerary.json'), 'utf8'));
@@ -84,24 +127,24 @@ for (const slug of slugs) {
     data.heroFile = heroFilename;
   }
 
-  // ── Gallery ───────────────────────────────────────────────────────────────
+  // ── Gallery — discovered from content/, URLs point to public/ ─────────────
   data.gallery = {
-    root:      lsRoot(path.join(imgDir, 'gallery'), IMAGE_RE),           // [] when absent
-    essential: ls(path.join(imgDir, 'gallery', 'essential'), IMAGE_RE),  // null when absent
-    short:     ls(path.join(imgDir, 'gallery', 'short'), IMAGE_RE),      // null when absent
+    root:      lsRoot(path.join(discoverDir, 'gallery'), IMAGE_RE),
+    essential: ls(path.join(discoverDir, 'gallery', 'essential'), IMAGE_RE),
+    short:     ls(path.join(discoverDir, 'gallery', 'short'), IMAGE_RE),
   };
 
-  // ── Research ──────────────────────────────────────────────────────────────
+  // ── Research — discovered from content/, URLs point to public/ ────────────
   data.research = {
-    root:          lsRoot(path.join(imgDir, 'research'), IMAGE_RE),           // [] when absent
-    essential:     ls(path.join(imgDir, 'research', 'essential'), IMAGE_RE),  // null when absent
-    short:         ls(path.join(imgDir, 'research', 'short'), IMAGE_RE),      // null when absent
-    hideEssential: hasHideMarker(path.join(imgDir, 'research', 'essential')),
-    hideShort:     hasHideMarker(path.join(imgDir, 'research', 'short')),
+    root:          lsRoot(path.join(discoverDir, 'research'), IMAGE_RE),
+    essential:     ls(path.join(discoverDir, 'research', 'essential'), IMAGE_RE),
+    short:         ls(path.join(discoverDir, 'research', 'short'), IMAGE_RE),
+    hideEssential: hasHideMarker(path.join(discoverDir, 'research', 'essential')),
+    hideShort:     hasHideMarker(path.join(discoverDir, 'research', 'short')),
   };
 
-  // ── Day images ────────────────────────────────────────────────────────────
-  const dayImagesDir = path.join(imgDir, 'day-images');
+  // ── Day images — discovered from content/, URLs point to public/ ──────────
+  const dayImagesDir = path.join(discoverDir, 'day-images');
   if (existsSync(dayImagesDir)) {
     for (const dayFolder of readdirSync(dayImagesDir).sort()) {
       const match = dayFolder.match(/^day(\d+)$/i);
@@ -109,14 +152,14 @@ for (const slug of slugs) {
       const dayNumber = parseInt(match[1], 10);
       const dayDir    = path.join(dayImagesDir, dayFolder);
       data.dayImages[dayNumber] = {
-        root:      lsRoot(dayDir, IMAGE_RE),                           // [] when absent
-        essential: ls(path.join(dayDir, 'essential'), IMAGE_RE),       // null when absent
-        short:     ls(path.join(dayDir, 'short'), IMAGE_RE),           // null when absent
+        root:      lsRoot(dayDir, IMAGE_RE),
+        essential: ls(path.join(dayDir, 'essential'), IMAGE_RE),
+        short:     ls(path.join(dayDir, 'short'), IMAGE_RE),
       };
     }
   }
 
-  // ── Maps ──────────────────────────────────────────────────────────────────
+  // ── Maps — public/ is fine (maps are always in sync) ──────────────────────
   const mapDir = path.join(imgDir, 'map');
   data.map = {
     root:      lsRoot(mapDir, MAP_RE),
@@ -127,10 +170,7 @@ for (const slug of slugs) {
 
   allData[slug] = data;
 
-  // Write per-slug manifest.json (used by the server scan-assets endpoint).
-  // gallery, research, and dayImages all use the full variant structure so
-  // scan-assets can resolve the correct files for each itinerary variant
-  // (complete / essential / short) using the same logic as itineraryImages.js.
+  // Write per-slug manifest.json
   const serverManifest = {
     slug, title,
     heroFile: data.heroFile,
@@ -160,10 +200,10 @@ for (const slug of slugs) {
   const total = data.gallery.root.length + data.research.root.length
     + Object.values(data.dayImages).reduce((s, v) => s + v.root.length, 0)
     + (data.heroFile ? 1 : 0);
-  console.log(`  ${slug}: ${total} root images`);
+  console.log(`    → ${total} root images`);
 }
 
-// Write src/lib/itineraryManifests.js (imported by itineraryImages.js)
+// Write src/lib/itineraryManifests.js
 const jsLines = [
   '// AUTO-GENERATED by scripts/generate-itinerary-manifests.mjs',
   '// Do not edit manually. Run `node scripts/generate-itinerary-manifests.mjs` to regenerate.',
@@ -176,5 +216,6 @@ const jsLines = [
 const jsPath = path.join(root, 'src', 'lib', 'itineraryManifests.js');
 writeFileSync(jsPath, jsLines.join('\n'));
 
-console.log(`\n✓ ${slugs.length} manifests → public/itineraries/<slug>/manifest.json`);
+if (syncCount > 0) console.log(`\n✓ ${syncCount} image(s) synced content/ → public/`);
+console.log(`✓ ${slugs.length} manifests → public/itineraries/<slug>/manifest.json`);
 console.log(`✓ src/lib/itineraryManifests.js updated`);
