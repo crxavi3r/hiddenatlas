@@ -8,6 +8,7 @@ import {
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { resolveCoverImage } from '../../lib/resolveCoverImage';
 import { resolveAssetIdentity } from '../../lib/resolveAssetIdentity';
+import { resolveGalleryImages, resolveDayImages, resolveResearchImages } from '../../lib/resolveItineraryImages';
 
 // ── Shared style tokens ───────────────────────────────────────────────────────
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
@@ -593,9 +594,17 @@ export default function ItineraryCMSEditorPage() {
       });
       savedId.current = it.id;
       slugRef.current = it.slug || '';
+      // Fire asset loading with the freshly-fetched identity — does NOT wait on form
+      // state (which won't be visible in the closure until the next render).
+      loadAssets({
+        slug:        it.slug        || '',
+        parentId:    it.parentId    || '',
+        variant:     it.variant     || '',
+        durationDays: it.durationDays ?? '',
+      });
     } catch (e) { alert(e.message); navigate('/admin/itineraries'); }
     finally { setLoading(false); }
-  }, [id, isNew, getToken, navigate]);
+  }, [id, isNew, getToken, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
@@ -639,7 +648,10 @@ export default function ItineraryCMSEditorPage() {
     }
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function loadAssets() {
+  // overrides — explicit identity values supplied by load() right after the DB fetch,
+  // before React has batched the setForm() update into a re-render.
+  // When absent, falls back to slugRef / form state (fine when Images tab is opened later).
+  async function loadAssets(overrides = {}) {
     const targetId = savedId.current || id;
     if (!targetId) return;
     setAssetsLoading(true);
@@ -654,38 +666,36 @@ export default function ItineraryCMSEditorPage() {
       if (dbJson.error) console.error('[loadAssets] DB assets error:', dbJson.error);
       const dbAssets = dbJson.error ? [] : (dbJson.assets ?? []);
 
-      // 2. Resolve identity — same helper used by buildCustomPDF and public page
-      const slug = slugRef.current || form.slug;
-      const { assetSlug, variant } = await resolveAssetIdentity(slug, {
-        parentId: form.parentId,
-        variant:  form.variant,
-      });
+      // 2. Resolve identity.
+      // Prefer explicit overrides (supplied by load() before React batches setForm)
+      // then fall back to slugRef / form state (fine when Images tab is opened later).
+      const slug     = overrides.slug     !== undefined ? overrides.slug     : (slugRef.current || form.slug);
+      const parentId = overrides.parentId !== undefined ? overrides.parentId : (form.parentId || '');
+      const variant  = overrides.variant  !== undefined ? overrides.variant  : (form.variant  || '');
+      const duration = overrides.durationDays !== undefined ? overrides.durationDays : form.durationDays;
+
+      const { assetSlug, variant: resolvedVariant } = await resolveAssetIdentity(slug, { parentId, variant });
 
       console.log(
-        `[loadAssets] slug="${slug}" assetSlug="${assetSlug}" variant="${variant || 'none'}"` +
-        ` durationDays=${form.durationDays || 'unlimited'} parentId="${form.parentId || ''}"`
+        `[loadAssets] slug="${slug}" → assetSlug="${assetSlug}" variant="${resolvedVariant || 'none'}"` +
+        ` durationDays=${duration || 'unlimited'} parentId="${parentId}"`
       );
 
-      // 3. Use the EXACT same client-side resolver as the public page and PDF.
-      //    Pass empty dbAssets so each resolver returns only filesystem assets
-      //    (DB assets are already fetched above and merged below).
+      // 3. Use the EXACT same resolvers as the public page — no separate implementation.
       const fsAssets = [];
       if (assetSlug) {
-        const { resolveGalleryImages, resolveDayImages, resolveResearchImages } =
-          await import('../../lib/resolveItineraryImages.js');
-
         const itineraryId = {
           slug:         assetSlug,
           parentId:     '',
-          variant:      variant || null,
-          durationDays: form.durationDays ? parseInt(form.durationDays, 10) : null,
+          variant:      resolvedVariant || null,
+          durationDays: duration ? parseInt(duration, 10) : null,
         };
 
         const dbUrls = new Set(dbAssets.map(a => a.url));
 
         // Gallery
         const galleryImgs = resolveGalleryImages(itineraryId, []);
-        console.log(`[loadAssets] gallery fs: ${galleryImgs.length} images`);
+        console.log(`[loadAssets] gallery fs=${galleryImgs.length}`);
         galleryImgs.forEach(({ src, filename }, i) => {
           if (!dbUrls.has(src))
             fsAssets.push({ id: null, assetType: 'gallery', url: src, alt: filename, source: 'filesystem', active: true, sortOrder: i });
@@ -693,18 +703,17 @@ export default function ItineraryCMSEditorPage() {
 
         // Research
         const researchImgs = resolveResearchImages(itineraryId, []);
-        console.log(`[loadAssets] research fs: ${researchImgs.length} images`);
+        console.log(`[loadAssets] research fs=${researchImgs.length}`);
         researchImgs.forEach(({ src, filename }, i) => {
           if (!dbUrls.has(src))
             fsAssets.push({ id: null, assetType: 'research', url: src, alt: filename, source: 'filesystem', active: true, sortOrder: i });
         });
 
-        // Day images — generate synthetic days 1..durationDays so we don't depend on
-        // content.days being populated; empty-folder suppression drops days with no images
+        // Day images — synthetic days 1..durationDays; empty-folder suppression drops days with no images
         const limit = itineraryId.durationDays || 30;
         const syntheticDays = Array.from({ length: limit }, (_, i) => ({ day: i + 1 }));
         const resolvedDays = resolveDayImages(itineraryId, syntheticDays, []);
-        console.log(`[loadAssets] day images fs: ${resolvedDays.length} days resolved`);
+        console.log(`[loadAssets] day images fs=${resolvedDays.length} days`);
         resolvedDays.forEach(day => {
           day.imgs.forEach((imgUrl, i) => {
             if (!dbUrls.has(imgUrl))
@@ -712,7 +721,7 @@ export default function ItineraryCMSEditorPage() {
           });
         });
       } else {
-        console.warn('[loadAssets] assetSlug is empty — filesystem scan skipped');
+        console.warn('[loadAssets] assetSlug is empty — filesystem scan skipped. slug was:', slug);
       }
 
       console.log(`[loadAssets] DB=${dbAssets.length} fs(new)=${fsAssets.length} total=${dbAssets.length + fsAssets.length}`);
