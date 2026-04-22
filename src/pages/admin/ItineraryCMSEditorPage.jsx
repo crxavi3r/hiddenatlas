@@ -660,6 +660,14 @@ export default function ItineraryCMSEditorPage() {
       if (dbJson.error) console.error('[loadAssets] DB assets error:', dbJson.error);
       const dbAssets = dbJson.error ? [] : (dbJson.assets ?? []);
 
+      console.log('DB ASSETS', dbAssets.map(a => ({
+        id: a.id,
+        type: a.assetType,
+        source: a.source,
+        dayNumber: a.dayNumber,
+        url: a.url,
+      })));
+
       // 2. Resolve identity.
       // Prefer explicit overrides (supplied by load() before React batches setForm)
       // then fall back to slugRef / form state (fine when Images tab is opened later).
@@ -669,6 +677,16 @@ export default function ItineraryCMSEditorPage() {
       const duration = overrides.durationDays !== undefined ? overrides.durationDays : form.durationDays;
 
       const { assetSlug, variant: resolvedVariant } = resolveAssetIdentity(slug, { parentId, variant });
+
+      console.log('ITINERARY DEBUG', {
+        slug,
+        parentId,
+        variant,
+        resolvedAssetSlug: assetSlug,
+        resolvedVariant: resolvedVariant || null,
+        durationDays: duration || null,
+        overridesProvided: Object.keys(overrides),
+      });
 
       console.log(
         `[loadAssets] slug="${slug}" → assetSlug="${assetSlug}" variant="${resolvedVariant || 'none'}"` +
@@ -731,7 +749,15 @@ export default function ItineraryCMSEditorPage() {
         ` fsResearch=${fsResearch}` +
         ` merged=${dbAssets.length + fsAssets.length}`
       );
-      setAssets([...dbAssets, ...fsAssets]);
+      const mergedAssets = [...dbAssets, ...fsAssets];
+      console.log('MERGED ASSETS', mergedAssets.map(a => ({
+        type: a.assetType,
+        source: a.source,
+        dayNumber: a.dayNumber ?? null,
+        url: a.url,
+        id: a.id ?? null,
+      })));
+      setAssets(mergedAssets);
     } catch (e) { console.error('[loadAssets] unexpected error:', e); }
     finally { setAssetsLoading(false); }
   }
@@ -1275,6 +1301,14 @@ export default function ItineraryCMSEditorPage() {
       } else {
         console.warn(`[CMS] ▶ Day 11 FINAL — no data URI found (url="${d11url.slice(0, 70)}", resolved="${String(d11val).slice(0, 60)}")`);
       }
+
+      console.log('PDF ASSETS INPUT', freshAssets.map(a => ({
+        type: a.assetType,
+        source: a.source,
+        dayNumber: a.dayNumber ?? null,
+        url: a.url,
+        active: a.active,
+      })));
 
       const { buildCustomPDFBlob } = await import('../../utils/buildCustomPDF');
       const pdfBlob = await buildCustomPDFBlob(freshItinerary, freshAssets, enrichedResolved);
@@ -2132,6 +2166,8 @@ function SectionsTab({ c, setContent }) {
 // ── Images ────────────────────────────────────────────────────────────────────
 function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, onDelete, isNew, hasSavedId, dayCount, heroImageUrl, dayImages, onSetHero, lastAdded = [], justAdded = false }) {
   const fileInputRef = useRef(null);
+
+  console.log('IMAGES TAB INPUT', assets);
 
   if (isNew && !hasSavedId) {
     return (
