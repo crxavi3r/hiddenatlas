@@ -654,41 +654,69 @@ export default function ItineraryCMSEditorPage() {
       if (dbJson.error) console.error('[loadAssets] DB assets error:', dbJson.error);
       const dbAssets = dbJson.error ? [] : (dbJson.assets ?? []);
 
-      // 2. Filesystem scan.
-      // resolveAssetIdentity handles three cases:
-      //   a) DB has parentId/variant set → use them directly
-      //   b) DB fields absent but slug is in static data → look up parentId/variant
-      //   c) Standalone itinerary → use slug as-is
+      // 2. Resolve identity — same helper used by buildCustomPDF and public page
       const slug = slugRef.current || form.slug;
       const { assetSlug, variant } = await resolveAssetIdentity(slug, {
         parentId: form.parentId,
         variant:  form.variant,
       });
-      let fsAssets = [];
+
+      console.log(
+        `[loadAssets] slug="${slug}" assetSlug="${assetSlug}" variant="${variant || 'none'}"` +
+        ` durationDays=${form.durationDays || 'unlimited'} parentId="${form.parentId || ''}"`
+      );
+
+      // 3. Use the EXACT same client-side resolver as the public page and PDF.
+      //    Pass empty dbAssets so each resolver returns only filesystem assets
+      //    (DB assets are already fetched above and merged below).
+      const fsAssets = [];
       if (assetSlug) {
-        try {
-          const fsRes  = await fetch(
-            `/api/itinerary-cms?action=scan-assets&slug=${encodeURIComponent(assetSlug)}&assetSlug=${encodeURIComponent(assetSlug)}&variant=${encodeURIComponent(variant || '')}&durationDays=${encodeURIComponent(form.durationDays || '')}`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          const fsJson = await fsRes.json();
-          if (fsJson.error) {
-            console.error(`[loadAssets] scan-assets error: ${fsJson.error}`);
-          } else {
-            fsAssets = fsJson.assets ?? [];
-          }
-          console.log(`[loadAssets] fs scan → assetSlug="${assetSlug}", variant="${variant || 'none'}", found ${fsAssets.length} assets`);
-        } catch (e) { console.error('[loadAssets] scan-assets fetch failed:', e); }
+        const { resolveGalleryImages, resolveDayImages, resolveResearchImages } =
+          await import('../../lib/resolveItineraryImages.js');
+
+        const itineraryId = {
+          slug:         assetSlug,
+          parentId:     '',
+          variant:      variant || null,
+          durationDays: form.durationDays ? parseInt(form.durationDays, 10) : null,
+        };
+
+        const dbUrls = new Set(dbAssets.map(a => a.url));
+
+        // Gallery
+        const galleryImgs = resolveGalleryImages(itineraryId, []);
+        console.log(`[loadAssets] gallery fs: ${galleryImgs.length} images`);
+        galleryImgs.forEach(({ src, filename }, i) => {
+          if (!dbUrls.has(src))
+            fsAssets.push({ id: null, assetType: 'gallery', url: src, alt: filename, source: 'filesystem', active: true, sortOrder: i });
+        });
+
+        // Research
+        const researchImgs = resolveResearchImages(itineraryId, []);
+        console.log(`[loadAssets] research fs: ${researchImgs.length} images`);
+        researchImgs.forEach(({ src, filename }, i) => {
+          if (!dbUrls.has(src))
+            fsAssets.push({ id: null, assetType: 'research', url: src, alt: filename, source: 'filesystem', active: true, sortOrder: i });
+        });
+
+        // Day images — generate synthetic days 1..durationDays so we don't depend on
+        // content.days being populated; empty-folder suppression drops days with no images
+        const limit = itineraryId.durationDays || 30;
+        const syntheticDays = Array.from({ length: limit }, (_, i) => ({ day: i + 1 }));
+        const resolvedDays = resolveDayImages(itineraryId, syntheticDays, []);
+        console.log(`[loadAssets] day images fs: ${resolvedDays.length} days resolved`);
+        resolvedDays.forEach(day => {
+          day.imgs.forEach((imgUrl, i) => {
+            if (!dbUrls.has(imgUrl))
+              fsAssets.push({ id: null, assetType: 'day', dayNumber: day.day, url: imgUrl, alt: `Day ${day.day} image ${i + 1}`, source: 'filesystem', active: true, sortOrder: i });
+          });
+        });
       } else {
         console.warn('[loadAssets] assetSlug is empty — filesystem scan skipped');
       }
 
-      // 3. Merge: FS assets whose URL already exists in DB are excluded (no dupes)
-      const dbUrls = new Set(dbAssets.map(a => a.url));
-      const newFsAssets = fsAssets.filter(a => !dbUrls.has(a.url));
-
-      console.log(`[loadAssets] DB=${dbAssets.length} fs=${fsAssets.length} merged=${dbAssets.length + newFsAssets.length}`);
-      setAssets([...dbAssets, ...newFsAssets]);
+      console.log(`[loadAssets] DB=${dbAssets.length} fs(new)=${fsAssets.length} total=${dbAssets.length + fsAssets.length}`);
+      setAssets([...dbAssets, ...fsAssets]);
     } catch (e) { console.error('[loadAssets] unexpected error:', e); }
     finally { setAssetsLoading(false); }
   }
