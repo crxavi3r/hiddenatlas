@@ -129,7 +129,7 @@ export default async function handler(req, res) {
       if (action === 'list')             return res.json(await handleList(pool, ctx));
       if (action === 'get')              return res.json(await handleGet(pool, id, ctx));
       if (action === 'assets')           { await assertOwnership(pool, id, ctx); return res.json(await handleListAssets(pool, id)); }
-      if (action === 'scan-assets')      { adminOnly(); return res.json(await handleScanAssets(req.query.assetSlug || req.query.slug, req.query.variant, req.query.durationDays ? parseInt(req.query.durationDays, 10) : null)); }
+      if (action === 'scan-assets')      { return res.json(await handleScanAssets(req.query.assetSlug || req.query.slug, req.query.variant, req.query.durationDays ? parseInt(req.query.durationDays, 10) : null)); }
       if (action === 'ai-history')       { await assertOwnership(pool, id, ctx); return res.json(await handleAIHistory(pool, id)); }
       if (action === 'linked-request')   { adminOnly(); return res.json(await handleLinkedRequest(pool, id)); }
       if (action === 'pricing-options')    return res.json(handlePricingOptions());

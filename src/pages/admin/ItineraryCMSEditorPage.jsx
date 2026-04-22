@@ -651,6 +651,7 @@ export default function ItineraryCMSEditorPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const dbJson = await dbRes.json();
+      if (dbJson.error) console.error('[loadAssets] DB assets error:', dbJson.error);
       const dbAssets = dbJson.error ? [] : (dbJson.assets ?? []);
 
       // 2. Filesystem scan.
@@ -671,17 +672,24 @@ export default function ItineraryCMSEditorPage() {
             { headers: { Authorization: `Bearer ${token}` } }
           );
           const fsJson = await fsRes.json();
-          if (!fsJson.error) fsAssets = fsJson.assets ?? [];
+          if (fsJson.error) {
+            console.error(`[loadAssets] scan-assets error: ${fsJson.error}`);
+          } else {
+            fsAssets = fsJson.assets ?? [];
+          }
           console.log(`[loadAssets] fs scan → assetSlug="${assetSlug}", variant="${variant || 'none'}", found ${fsAssets.length} assets`);
-        } catch { /* no content folder — skip */ }
+        } catch (e) { console.error('[loadAssets] scan-assets fetch failed:', e); }
+      } else {
+        console.warn('[loadAssets] assetSlug is empty — filesystem scan skipped');
       }
 
       // 3. Merge: FS assets whose URL already exists in DB are excluded (no dupes)
       const dbUrls = new Set(dbAssets.map(a => a.url));
       const newFsAssets = fsAssets.filter(a => !dbUrls.has(a.url));
 
+      console.log(`[loadAssets] DB=${dbAssets.length} fs=${fsAssets.length} merged=${dbAssets.length + newFsAssets.length}`);
       setAssets([...dbAssets, ...newFsAssets]);
-    } catch { /* silent */ }
+    } catch (e) { console.error('[loadAssets] unexpected error:', e); }
     finally { setAssetsLoading(false); }
   }
 
