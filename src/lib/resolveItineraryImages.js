@@ -136,11 +136,17 @@ export function resolveGalleryImages(itinerary, dbAssets = []) {
     .map(a => ({ src: a.url, filename: a.alt || a.url.split('/').pop() }));
 
   const dbUrls = new Set(dbGallery.map(a => a.src));
-  return [...dbGallery, ...fsImages.filter(img => !dbUrls.has(img.src))];
+  const merged = [...dbGallery, ...fsImages.filter(img => !dbUrls.has(img.src))];
+  console.log(
+    `[resolveGalleryImages] assetSlug="${assetSlug}" variant="${variant || 'none'}"` +
+    ` → db=${dbGallery.length} fs=${fsImages.length} total=${merged.length}`
+  );
+  return merged;
 }
 
 /**
  * Resolve research images, applying variant resolution and DB merge.
+ * Three-state: null→fallback to root, []→suppress, files→use.
  *
  * @param {Object} itinerary
  * @param {Array}  [dbAssets]
@@ -155,7 +161,12 @@ export function resolveResearchImages(itinerary, dbAssets = []) {
     .map(a => ({ src: a.url, filename: a.alt || a.url.split('/').pop() }));
 
   const dbUrls = new Set(dbResearch.map(a => a.src));
-  return [...dbResearch, ...fsImages.filter(img => !dbUrls.has(img.src))];
+  const merged = [...dbResearch, ...fsImages.filter(img => !dbUrls.has(img.src))];
+  console.log(
+    `[resolveResearchImages] assetSlug="${assetSlug}" variant="${variant || 'none'}"` +
+    ` → db=${dbResearch.length} fs=${fsImages.length} total=${merged.length}`
+  );
+  return merged;
 }
 
 /**

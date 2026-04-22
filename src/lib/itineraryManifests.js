@@ -16,9 +16,7 @@ export const MANIFESTS = {
     "research": {
       "root": [],
       "essential": null,
-      "short": null,
-      "hideEssential": false,
-      "hideShort": false
+      "short": null
     },
     "dayImages": {
       "1": {
@@ -103,9 +101,7 @@ export const MANIFESTS = {
         "selfie-piscina-infinita.jpg"
       ],
       "essential": null,
-      "short": null,
-      "hideEssential": false,
-      "hideShort": false
+      "short": null
     },
     "dayImages": {
       "1": {
@@ -210,9 +206,7 @@ export const MANIFESTS = {
         "cris-praia.jpg"
       ],
       "essential": null,
-      "short": null,
-      "hideEssential": false,
-      "hideShort": false
+      "short": null
     },
     "dayImages": {
       "1": {
@@ -304,9 +298,7 @@ export const MANIFESTS = {
         "selfie-danube.jpeg"
       ],
       "essential": null,
-      "short": null,
-      "hideEssential": false,
-      "hideShort": false
+      "short": null
     },
     "dayImages": {
       "1": {
@@ -376,9 +368,7 @@ export const MANIFESTS = {
         "IMG_5444.JPG",
         "IMG_5765.JPG",
         "santamonica.JPG"
-      ],
-      "hideEssential": false,
-      "hideShort": false
+      ]
     },
     "dayImages": {
       "1": {
@@ -559,9 +549,7 @@ export const MANIFESTS = {
         "vanda-veado.jpg"
       ],
       "essential": null,
-      "short": null,
-      "hideEssential": false,
-      "hideShort": false
+      "short": null
     },
     "dayImages": {
       "1": {
@@ -731,9 +719,7 @@ export const MANIFESTS = {
         "beach.jpeg"
       ],
       "essential": null,
-      "short": null,
-      "hideEssential": false,
-      "hideShort": false
+      "short": null
     },
     "dayImages": {
       "1": {
@@ -824,9 +810,7 @@ export const MANIFESTS = {
         "saint-malo-cris.jpeg"
       ],
       "essential": null,
-      "short": null,
-      "hideEssential": false,
-      "hideShort": false
+      "short": null
     },
     "dayImages": {
       "1": {
@@ -884,9 +868,7 @@ export const MANIFESTS = {
         "selfie_york.jpg"
       ],
       "essential": null,
-      "short": null,
-      "hideEssential": false,
-      "hideShort": false
+      "short": null
     },
     "dayImages": {
       "1": {
@@ -937,9 +919,7 @@ export const MANIFESTS = {
     "research": {
       "root": [],
       "essential": null,
-      "short": null,
-      "hideEssential": false,
-      "hideShort": false
+      "short": null
     },
     "dayImages": {
       "1": {
@@ -1088,9 +1068,7 @@ export const MANIFESTS = {
         "selfie_alberobelo_2.jpg"
       ],
       "essential": null,
-      "short": null,
-      "hideEssential": false,
-      "hideShort": false
+      "short": null
     },
     "dayImages": {
       "1": {
@@ -1142,9 +1120,7 @@ export const MANIFESTS = {
         "IMG_2289.jpg"
       ],
       "essential": null,
-      "short": null,
-      "hideEssential": false,
-      "hideShort": false
+      "short": null
     },
     "dayImages": {
       "1": {
@@ -1198,9 +1174,7 @@ export const MANIFESTS = {
         "cris-vanda.png"
       ],
       "essential": null,
-      "short": null,
-      "hideEssential": false,
-      "hideShort": false
+      "short": null
     },
     "dayImages": {
       "1": {

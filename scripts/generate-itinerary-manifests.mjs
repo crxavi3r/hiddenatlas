@@ -18,7 +18,7 @@
  *
  * Variant structure captured:
  *   gallery/essential/, gallery/short/
- *   research/essential/, research/short/, research/essential/_hide, research/short/_hide
+ *   research/essential/, research/short/
  *   day-images/day{N}/essential/, day-images/day{N}/short/
  *   map/complete/, map/essential/, map/short/, root map/
  *
@@ -57,11 +57,6 @@ function ls(dir, re) {
 function lsRoot(dir, re) {
   if (!existsSync(dir)) return [];
   return readdirSync(dir).filter(f => re.test(f)).sort();
-}
-
-function hasHideMarker(dir) {
-  if (!existsSync(dir)) return false;
-  return readdirSync(dir).includes('_hide');
 }
 
 // ── Sync: copy image files missing from public/ ───────────────────────────────
@@ -135,12 +130,11 @@ for (const slug of slugs) {
   };
 
   // ── Research — discovered from content/, URLs point to public/ ────────────
+  // Three-state: null (absent) → fallback to root, [] (empty) → suppress, [...] → use
   data.research = {
-    root:          lsRoot(path.join(discoverDir, 'research'), IMAGE_RE),
-    essential:     ls(path.join(discoverDir, 'research', 'essential'), IMAGE_RE),
-    short:         ls(path.join(discoverDir, 'research', 'short'), IMAGE_RE),
-    hideEssential: hasHideMarker(path.join(discoverDir, 'research', 'essential')),
-    hideShort:     hasHideMarker(path.join(discoverDir, 'research', 'short')),
+    root:      lsRoot(path.join(discoverDir, 'research'), IMAGE_RE),
+    essential: ls(path.join(discoverDir, 'research', 'essential'), IMAGE_RE),
+    short:     ls(path.join(discoverDir, 'research', 'short'), IMAGE_RE),
   };
 
   // ── Day images — discovered from content/, URLs point to public/ ──────────
@@ -180,11 +174,9 @@ for (const slug of slugs) {
       short:     data.gallery.short,
     },
     research: {
-      root:          data.research.root,
-      essential:     data.research.essential,
-      short:         data.research.short,
-      hideEssential: data.research.hideEssential,
-      hideShort:     data.research.hideShort,
+      root:      data.research.root,
+      essential: data.research.essential,
+      short:     data.research.short,
     },
     dayImages: Object.fromEntries(
       Object.entries(data.dayImages).map(([n, v]) => [n, {
