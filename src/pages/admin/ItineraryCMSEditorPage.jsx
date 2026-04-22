@@ -627,12 +627,6 @@ export default function ItineraryCMSEditorPage() {
     }).catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Load assets eagerly so hero/day pickers have data on all tabs ────────────
-  useEffect(() => {
-    if (isNew || !id) return;
-    loadAssets();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   // ── Reload assets when Images tab opens (picks up any external changes) ──────
   useEffect(() => {
     if (activeTab !== 'images' || isNew || !id) return;
@@ -674,7 +668,7 @@ export default function ItineraryCMSEditorPage() {
       const variant  = overrides.variant  !== undefined ? overrides.variant  : (form.variant  || '');
       const duration = overrides.durationDays !== undefined ? overrides.durationDays : form.durationDays;
 
-      const { assetSlug, variant: resolvedVariant } = await resolveAssetIdentity(slug, { parentId, variant });
+      const { assetSlug, variant: resolvedVariant } = resolveAssetIdentity(slug, { parentId, variant });
 
       console.log(
         `[loadAssets] slug="${slug}" → assetSlug="${assetSlug}" variant="${resolvedVariant || 'none'}"` +
@@ -996,7 +990,7 @@ export default function ItineraryCMSEditorPage() {
       // image lookups in buildCustomPDF.js use the correct parent folder, even
       // for DB records created before those columns were added.
       const { assetSlug: resolvedAssetSlug, variant: resolvedVariant } =
-        await resolveAssetIdentity(form.slug, { parentId: form.parentId, variant: form.variant });
+        resolveAssetIdentity(form.slug, { parentId: form.parentId, variant: form.variant });
 
       const freshItinerary = {
         ...form,

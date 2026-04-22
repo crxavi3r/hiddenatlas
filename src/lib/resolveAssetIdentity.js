@@ -16,9 +16,14 @@
  *
  * @param {string} slug       - The itinerary slug (from DB or URL)
  * @param {object} [dbFields] - { parentId?: string, variant?: string } from DB/form
- * @returns {Promise<{ assetSlug: string, variant: string|undefined }>}
+ * @returns {{ assetSlug: string, variant: string|undefined }}
  */
-export async function resolveAssetIdentity(slug, dbFields = {}) {
+
+import { itineraries } from '../data/itineraries.js';
+
+const _all = Array.isArray(itineraries) ? itineraries : Object.values(itineraries ?? {});
+
+export function resolveAssetIdentity(slug, dbFields = {}) {
   const { parentId, variant } = dbFields;
 
   // 1. Explicit parentId from DB — only short-circuit when the folder slug is known.
@@ -35,19 +40,13 @@ export async function resolveAssetIdentity(slug, dbFields = {}) {
 
   // 2. Static data lookup — catches records where parentId was not saved to DB
   //    (e.g. created before the column was added, or where only variant was stored).
-  try {
-    const { itineraries } = await import('../data/itineraries.js');
-    const all   = Array.isArray(itineraries) ? itineraries : Object.values(itineraries ?? {});
-    const found = all.find(it => (it.id || it.slug) === slug);
-    if (found) {
-      const assetSlug = found.parentId || found.id || slug;
-      // DB variant takes precedence when set; fall back to static variant
-      const resolvedVariant = variant || found.variant || undefined;
-      console.log(`[resolveAssetIdentity] static lookup: slug="${slug}" → assetSlug="${assetSlug}", variant="${resolvedVariant || 'none'}"`);
-      return { assetSlug, variant: resolvedVariant };
-    }
-  } catch (e) {
-    console.warn('[resolveAssetIdentity] static data lookup failed:', e.message);
+  const found = _all.find(it => (it.id || it.slug) === slug);
+  if (found) {
+    const assetSlug = found.parentId || found.id || slug;
+    // DB variant takes precedence when set; fall back to static variant
+    const resolvedVariant = variant || found.variant || undefined;
+    console.log(`[resolveAssetIdentity] static lookup: slug="${slug}" → assetSlug="${assetSlug}", variant="${resolvedVariant || 'none'}"`);
+    return { assetSlug, variant: resolvedVariant };
   }
 
   // 3. Fallback — standalone itinerary with no parent
