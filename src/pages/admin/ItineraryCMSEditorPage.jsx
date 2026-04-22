@@ -724,7 +724,19 @@ export default function ItineraryCMSEditorPage() {
         console.warn('[loadAssets] assetSlug is empty — filesystem scan skipped. slug was:', slug);
       }
 
-      console.log(`[loadAssets] DB=${dbAssets.length} fs(new)=${fsAssets.length} total=${dbAssets.length + fsAssets.length}`);
+      const fsGallery   = fsAssets.filter(a => a.assetType === 'gallery').length;
+      const fsResearch  = fsAssets.filter(a => a.assetType === 'research').length;
+      const fsDayImages = fsAssets.filter(a => a.assetType === 'day').length;
+      const fsHero      = fsAssets.filter(a => a.assetType === 'hero').length;
+      console.log(
+        `[loadAssets] COUNTS for "${assetSlug}":` +
+        ` dbAssets=${dbAssets.length}` +
+        ` fsHero=${fsHero}` +
+        ` fsGallery=${fsGallery}` +
+        ` fsDayImages=${fsDayImages}` +
+        ` fsResearch=${fsResearch}` +
+        ` merged=${dbAssets.length + fsAssets.length}`
+      );
       setAssets([...dbAssets, ...fsAssets]);
     } catch (e) { console.error('[loadAssets] unexpected error:', e); }
     finally { setAssetsLoading(false); }

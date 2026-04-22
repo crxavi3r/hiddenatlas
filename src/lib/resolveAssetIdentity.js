@@ -21,23 +21,28 @@
 export async function resolveAssetIdentity(slug, dbFields = {}) {
   const { parentId, variant } = dbFields;
 
-  // 1. Explicit DB fields — trust them when present
-  if (parentId || variant) {
-    console.log(`[resolveAssetIdentity] DB fields: slug="${slug}" → assetSlug="${parentId || slug}", variant="${variant || 'none'}"`);
+  // 1. Explicit parentId from DB — only short-circuit when the folder slug is known.
+  //    Never short-circuit on variant alone: variant without parentId would return the wrong
+  //    assetSlug (e.g. 'california-american-west-8-days' instead of 'california-american-west'),
+  //    causing all manifest lookups to fail.
+  if (parentId) {
+    console.log(`[resolveAssetIdentity] DB parentId: slug="${slug}" → assetSlug="${parentId}", variant="${variant || 'none'}"`);
     return {
-      assetSlug: parentId || slug,
-      variant:   variant  || undefined,
+      assetSlug: parentId,
+      variant:   variant || undefined,
     };
   }
 
-  // 2. Static data lookup — needed for records that pre-date the parentId/variant columns
+  // 2. Static data lookup — catches records where parentId was not saved to DB
+  //    (e.g. created before the column was added, or where only variant was stored).
   try {
     const { itineraries } = await import('../data/itineraries.js');
     const all   = Array.isArray(itineraries) ? itineraries : Object.values(itineraries ?? {});
     const found = all.find(it => (it.id || it.slug) === slug);
     if (found) {
       const assetSlug = found.parentId || found.id || slug;
-      const resolvedVariant = found.variant || undefined;
+      // DB variant takes precedence when set; fall back to static variant
+      const resolvedVariant = variant || found.variant || undefined;
       console.log(`[resolveAssetIdentity] static lookup: slug="${slug}" → assetSlug="${assetSlug}", variant="${resolvedVariant || 'none'}"`);
       return { assetSlug, variant: resolvedVariant };
     }
@@ -45,7 +50,7 @@ export async function resolveAssetIdentity(slug, dbFields = {}) {
     console.warn('[resolveAssetIdentity] static data lookup failed:', e.message);
   }
 
-  // 3. Fallback — standalone itinerary with no variant
-  console.log(`[resolveAssetIdentity] fallback: slug="${slug}" → assetSlug="${slug}", variant=none`);
-  return { assetSlug: slug, variant: undefined };
+  // 3. Fallback — standalone itinerary with no parent
+  console.log(`[resolveAssetIdentity] fallback: slug="${slug}" → assetSlug="${slug}", variant="${variant || 'none'}"`);
+  return { assetSlug: slug, variant: variant || undefined };
 }
