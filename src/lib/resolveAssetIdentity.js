@@ -23,14 +23,16 @@ import { itineraries } from '../data/itineraries.js';
 
 const _all = Array.isArray(itineraries) ? itineraries : Object.values(itineraries ?? {});
 
+const _isUUID = s => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+
 export function resolveAssetIdentity(slug, dbFields = {}) {
   const { parentId, variant } = dbFields;
 
-  // 1. Explicit parentId from DB — only short-circuit when the folder slug is known.
-  //    Never short-circuit on variant alone: variant without parentId would return the wrong
-  //    assetSlug (e.g. 'california-american-west-8-days' instead of 'california-american-west'),
-  //    causing all manifest lookups to fail.
-  if (parentId) {
+  // 1. Explicit parentId from DB — only use when it is already a slug.
+  //    DB stores parentId as a UUID (row id); filesystem folders use slug.
+  //    When parentId is a UUID, fall through to the static-data lookup so that
+  //    found.parentId (which is always a slug) is used instead.
+  if (parentId && !_isUUID(parentId)) {
     console.log(`[resolveAssetIdentity] DB parentId: slug="${slug}" → assetSlug="${parentId}", variant="${variant || 'none'}"`);
     return {
       assetSlug: parentId,
