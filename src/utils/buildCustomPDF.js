@@ -169,8 +169,10 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
   });
 
   // ── Resolve cover image ─────────────────────────────────────────────────────
-  const rawCoverImage = itinerary.coverImage || content.hero?.coverImage || '';
+  // Priority: itinerary.coverImage (scalar DB) > content.hero.coverImage (JSONB DB)
+  //           > DB hero asset URL > FS fallback (handled by resolveImg).
   const heroAsset     = dbAssets.find(a => a.assetType === 'hero');
+  const rawCoverImage = itinerary.coverImage || content.hero?.coverImage || heroAsset?.url || '';
   const coverImage    = toAbsoluteUrl(resolveImg(rawCoverImage, resolvedImages));
 
   console.log('PDF hero image URL',     rawCoverImage || '(none)');

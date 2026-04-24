@@ -173,12 +173,23 @@ function DayCard({ day, index, total, onChange, onDelete, onMove, assets, onUplo
     onChange({ ...day, [field]: val });
   }
 
-  // Resolve the effective day image: DB/FS asset first (priority), then inline day.img.
-  // This keeps DaysTab in sync with ImagesTab and PDF (which use the same priority order).
-  const effectiveDayImg =
-    assets?.find(a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day) && a.active !== false)?.url
-    || day.img
-    || '';
+  // Priority: DB asset (has id) > inline day.img (DB state) > FS asset (resolver fallback).
+  // Resolver (filesystem, no id) must NEVER override DB state.
+  const dbDayAsset = assets?.find(
+    a => a.id && a.assetType === 'day' && Number(a.dayNumber) === Number(day.day) && a.active !== false
+  )?.url ?? null;
+  const fsDayAsset = assets?.find(
+    a => !a.id && a.assetType === 'day' && Number(a.dayNumber) === Number(day.day) && a.active !== false
+  )?.url ?? null;
+  const effectiveDayImg = dbDayAsset ?? day.img ?? fsDayAsset ?? '';
+
+  console.log('DAY IMAGE DEBUG', {
+    day: day.day,
+    db: dbDayAsset,
+    inline: day.img || null,
+    resolved: fsDayAsset,
+    final: effectiveDayImg,
+  });
 
   function updBullet(i, val) {
     const b = [...(day.bullets || [])];
@@ -1412,8 +1423,8 @@ export default function ItineraryCMSEditorPage() {
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 2000);
 
-    // Keep form.content.days[N].img in sync when a day asset is added from Images tab.
-    // This ensures DaysTab immediately reflects the image chosen in ImagesTab.
+    // Sync DB state when assets are added from Images tab.
+    // DB state (form fields) is the single source of truth — resolver is read-only fallback.
     if (asset.assetType === 'day' && asset.dayNumber != null) {
       setForm(f => {
         const days = [...(f.content?.days || [])];
@@ -1423,6 +1434,11 @@ export default function ItineraryCMSEditorPage() {
         updated[idx] = { ...updated[idx], img: asset.url };
         return { ...f, content: { ...f.content, days: updated } };
       });
+    }
+
+    // Hero asset added from Images tab → update cover image (keeps all tabs in sync).
+    if (asset.assetType === 'hero') {
+      handleHeroCoverImage(asset.url);
     }
 
     setNewAsset(prev => {
@@ -1761,21 +1777,27 @@ export default function ItineraryCMSEditorPage() {
         {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} />}
         {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} />}
         {activeTab === 'images'   && (() => {
-          // Build dayImages map for "usedAs" badges — merge day.img (content JSONB) with
-          // DB/FS day assets so existing itineraries show correct badges even before
-          // day.img has been backfilled by afterAdd.
+          // Build dayImages map for "usedAs" badges.
+          // Priority: DB asset (has id) > day.img (DB state) > FS asset (resolver fallback).
           const contentDayImages = (c('days') || []).reduce((acc, d) => {
             if (d.img) acc[d.day] = d.img;
             return acc;
           }, {});
-          const assetDayImages = assets
-            .filter(a => a.assetType === 'day' && a.dayNumber != null && a.active !== false)
+          // Separate DB assets (real id) from FS assets (no id) — resolver must not override DB.
+          const dbAssetDayImages = assets
+            .filter(a => a.id && a.assetType === 'day' && a.dayNumber != null && a.active !== false)
             .reduce((acc, a) => {
               if (!acc[a.dayNumber]) acc[a.dayNumber] = a.url;
               return acc;
             }, {});
-          // content (day.img) takes priority — it reflects the user's last explicit choice
-          const mergedDayImages = { ...assetDayImages, ...contentDayImages };
+          const fsAssetDayImages = assets
+            .filter(a => !a.id && a.assetType === 'day' && a.dayNumber != null && a.active !== false)
+            .reduce((acc, a) => {
+              if (!acc[a.dayNumber]) acc[a.dayNumber] = a.url;
+              return acc;
+            }, {});
+          // Merge: FS fills gaps, day.img overrides FS, DB asset overrides both.
+          const mergedDayImages = { ...fsAssetDayImages, ...contentDayImages, ...dbAssetDayImages };
           return (
             <ImagesTab
               assets={assets} loading={assetsLoading}
