@@ -374,8 +374,8 @@ async function handleUpdate(pool, id, body, ctx) {
        type            = COALESCE($17, type),
        "isPrivate"     = COALESCE($18::boolean, "isPrivate"),
        "isCollection"  = COALESCE($19::boolean, "isCollection"),
-       variant         = COALESCE($20, variant),
-       "parentId"      = COALESCE($21, "parentId"),
+       variant         = $20,
+       "parentId"      = $21,
        "pdfStatus"     = 'stale',
        "updatedAt"     = NOW()
      WHERE id = $1
@@ -401,7 +401,7 @@ async function handleUpdate(pool, id, body, ctx) {
       isPrivateParam,
       typeof isCollection === 'boolean' ? isCollection : null,
       finalVariant,
-      parentId ?? null,
+      parentId || null,
     ]
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });

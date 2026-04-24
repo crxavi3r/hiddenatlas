@@ -859,6 +859,23 @@ export default function ItineraryCMSEditorPage() {
         days: Array.isArray(form.content?.days) ? form.content.days : [],
       };
 
+      // Normalize parentId and variant — empty string must become null before writing to DB.
+      // Empty string '' passes through ?? but fails the FK constraint; use || to catch it.
+      const normalizedParentId = form.parentId && form.parentId.trim() ? form.parentId.trim() : null;
+      // If no parent, variant has no meaning — force it to null for standalone itineraries.
+      const normalizedVariant  = normalizedParentId
+        ? (['complete', 'essential', 'short', 'premium'].includes(form.variant) ? form.variant : null)
+        : null;
+
+      const slug = form.slug;
+      console.log("SAVE ITINERARY PARENT DEBUG", {
+        slug,
+        parentId: normalizedParentId,
+        parentSlug: normalizedParentId,
+        variant: normalizedVariant,
+        isCollection: form.isCollection,
+      });
+
       const payload = {
         ...form,
         content: contentToSave,
@@ -867,6 +884,8 @@ export default function ItineraryCMSEditorPage() {
           ? parseInt(form.durationDays, 10) : null,
         stripePriceId: form.type === 'premium' ? (form.stripePriceId || null) : null,
         pricingKey:    form.type === 'premium' ? (form.pricingKey    || null) : null,
+        parentId: normalizedParentId,
+        variant:  normalizedVariant,
         // creatorId is immutable after creation — strip it from update payloads.
         // JSON.stringify omits undefined values, so this effectively removes the field.
         // On create (!targetId) the form value is preserved so the backend can assign it.
