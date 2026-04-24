@@ -718,11 +718,23 @@ async function handleUploadPDFToken(pool, id) {
   const filename  = `${slug}-hiddenatlas-${timestamp}.pdf`;
   const pathname  = `itineraries/${slug}/pdf/${filename}`;
 
+  console.log('PDF BLOB UPLOAD DEBUG', {
+    slug,
+    pathname,
+    hasBlobToken: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+    environment: process.env.VERCEL_ENV,
+  });
+
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    throw Object.assign(new Error('BLOB_READ_WRITE_TOKEN is not configured'), { status: 503 });
+  }
+
   const clientToken = await generateClientTokenFromReadWriteToken({
     pathname,
     allowedContentTypes: ['application/pdf'],
     maximumSizeInBytes: 30 * 1024 * 1024, // 30 MB ceiling
     validUntil: Date.now() + 5 * 60 * 1000, // 5-minute window
+    allowOverwrite: true,
   });
 
   console.log('[upload-pdf-token] issued token — slug:', slug, '| path:', pathname);

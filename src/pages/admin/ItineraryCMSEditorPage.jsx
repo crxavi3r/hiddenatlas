@@ -630,6 +630,7 @@ export default function ItineraryCMSEditorPage() {
   const [linkedRequest, setLinkedRequest] = useState(null);
 
   const [pdfState,       setPdfState]       = useState('idle'); // idle | generating | done | error
+  const [pdfSilentFail,  setPdfSilentFail]  = useState(null);  // non-modal warning after auto-PDF failure
   const [pricingOptions, setPricingOptions] = useState([]);    // loaded from ITINERARY_PRICING_OPTIONS
 
   const savedId       = useRef(null);  // set after first create
@@ -1421,27 +1422,22 @@ export default function ItineraryCMSEditorPage() {
       const pdfBlob = await buildCustomPDFBlob(freshItinerary, freshAssets, enrichedResolved);
       console.log('[CMS] PDF blob ready — size:', pdfBlob.size, 'bytes');
 
-      // ── 5. Get a scoped client token for direct browser → Vercel Blob upload ─
-      // The token is valid for 5 minutes and scoped to a single pathname.
-      // No PDF binary ever passes through a Vercel Function body.
-      const tokenRes = await fetch(`/api/itinerary-cms?action=upload-pdf-token&id=${targetId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!tokenRes.ok) {
-        const errText = await tokenRes.text();
-        throw new Error(`Failed to get upload token: ${tokenRes.status} — ${errText.slice(0, 120)}`);
-      }
-      const { token: clientToken, pathname } = await tokenRes.json();
-      console.log('[CMS] upload token received — path:', pathname);
+      // ── 5. Build upload pathname (timestamp keeps filenames unique) ──────────
+      const uploadTimestamp = Date.now();
+      const uploadFilename  = `${form.slug}-hiddenatlas-${uploadTimestamp}.pdf`;
+      const pathname        = `itineraries/${form.slug}/pdf/${uploadFilename}`;
+      console.log('[CMS] PDF upload path:', pathname);
 
-      // ── 6. Upload PDF directly from browser to Vercel Blob ────────────────
-      // @vercel/blob/client `put` sends the binary straight to Vercel Blob
-      // using the client token — no API function body involved.
-      const { put: blobPutClient } = await import('@vercel/blob/client');
-      const { url: blobUrl } = await blobPutClient(pathname, pdfBlob, {
-        access: 'public',
-        contentType: 'application/pdf',
-        token: clientToken,
+      // ── 6. Upload PDF via /api/blob (server-side token exchange) ─────────────
+      // @vercel/blob/client `upload()` sends a token-generation request to our
+      // /api/blob route (which uses BLOB_READ_WRITE_TOKEN server-side), then
+      // streams the binary directly to Vercel Blob — the PDF bytes never pass
+      // through a Vercel Function body, so there is no 4.5 MB limit.
+      const { upload: blobUpload } = await import('@vercel/blob/client');
+      const { url: blobUrl } = await blobUpload(pathname, pdfBlob, {
+        access:          'public',
+        handleUploadUrl: '/api/blob',
+        headers:         { Authorization: `Bearer ${token}` },
       });
       console.log('[CMS] blob upload success —', blobUrl);
 
@@ -1460,7 +1456,13 @@ export default function ItineraryCMSEditorPage() {
       setTimeout(() => setPdfState('idle'), 4000);
     } catch (e) {
       console.error('[CMS] PDF generation failed:', e.message);
-      if (!silent) alert(`PDF generation failed: ${e.message}`);
+      if (silent) {
+        // Content was already saved — show a non-blocking banner instead of an alert
+        setPdfSilentFail('Content saved, but PDF generation/upload failed. Try "Generate PDF" manually.');
+        setTimeout(() => setPdfSilentFail(null), 8000);
+      } else {
+        alert(`PDF generation failed: ${e.message}`);
+      }
       setPdfState('error');
       setTimeout(() => setPdfState('idle'), 4000);
 
@@ -1832,6 +1834,28 @@ export default function ItineraryCMSEditorPage() {
         </div>
       </div>
 
+      {/* PDF silent-failure warning — shown when auto-PDF after save fails */}
+      {pdfSilentFail && (
+        <div style={{
+          margin: '0 24px 0',
+          padding: '10px 16px',
+          background: '#FFF8EC',
+          border: '1px solid #E8C96E',
+          borderRadius: '6px',
+          fontSize: '13px',
+          color: '#7A5A00',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <span>{pdfSilentFail}</span>
+          <button
+            onClick={() => setPdfSilentFail(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7A5A00', fontSize: '16px', lineHeight: 1, padding: '0 0 0 12px' }}
+          >×</button>
+        </div>
+      )}
+
       <div style={{ padding: isMobile ? '0' : '24px 32px' }}>
 
         {/* ── Tab nav ── */}
@@ -1934,22 +1958,32 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
             onChange={e => set('durationDays', e.target.value)} />
         </Field>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-          <Field label="Parent slug" hint="Asset folder slug for variant itineraries. E.g. california-american-west for all USA variants. Leave empty for standalone itineraries.">
-            <input value={form.parentId} style={{ ...inputStyle, fontFamily: 'monospace' }}
-              placeholder="california-american-west"
-              onChange={e => set('parentId', e.target.value)} />
-          </Field>
-          <Field label="Variant" hint="Image variant to resolve for this itinerary. Determines which day-images/dayN/<variant>/ subfolder is used.">
-            <select value={form.variant} style={{ ...inputStyle, maxWidth: '200px' }}
-              onChange={e => set('variant', e.target.value)}>
-              <option value="">None (standalone)</option>
-              <option value="complete">Complete</option>
-              <option value="premium">Premium / Complete</option>
-              <option value="essential">Essential</option>
-              <option value="short">Short</option>
-            </select>
-          </Field>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px', marginBottom: '18px', alignItems: 'start' }}>
+          <label style={labelStyle}>Parent slug</label>
+          <label style={labelStyle}>Variant</label>
+          <p style={{ fontSize: '11px', color: '#B5AA99', marginBottom: '6px' }}>
+            Asset folder slug for variant itineraries. E.g. california-american-west for all USA variants. Leave empty for standalone itineraries.
+          </p>
+          <p style={{ fontSize: '11px', color: '#B5AA99', marginBottom: '6px' }}>
+            {'Image variant to resolve for this itinerary. Determines which day-images/dayN/<variant>/ subfolder is used.'}
+          </p>
+          <input
+            value={form.parentId}
+            style={{ ...inputStyle, fontFamily: 'monospace' }}
+            placeholder="california-american-west"
+            onChange={e => set('parentId', e.target.value)}
+          />
+          <select
+            value={form.variant}
+            style={inputStyle}
+            onChange={e => set('variant', e.target.value)}
+          >
+            <option value="">None (standalone)</option>
+            <option value="complete">Complete</option>
+            <option value="premium">Premium / Complete</option>
+            <option value="essential">Essential</option>
+            <option value="short">Short</option>
+          </select>
         </div>
 
         {creators.length > 0 && (
