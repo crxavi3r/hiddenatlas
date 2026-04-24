@@ -40,8 +40,8 @@ function getAssetId(itinerary) {
   const assetSlug =
     itinerary.parentId  ||
     itinerary.parentSlug ||
-    itinerary.id        ||
     itinerary.slug      ||
+    itinerary.id        ||
     '';
   const variant = itinerary.variant || undefined;
   return { assetSlug, variant };
@@ -105,13 +105,13 @@ export function resolveDayImages(itinerary, contentDays = [], dbAssets = []) {
         : `suppressed/absent(${assetSlug},${variant || 'root'})`;
     }
 
-    // ── 3. Empty-folder suppression — exclude day entirely ────────────────────
+    // Include day regardless of image availability — text content must always render.
+    // Days with no images render text-only; the DayPage component handles imgs=[] gracefully.
     if (imgs.length === 0) {
-      console.log(`[resolveDayImages]   day ${dayNumber}: EXCLUDED — no images [${imgSource}]`);
-      continue;
+      console.log(`[resolveDayImages]   day ${dayNumber}: no images [${imgSource}] — included text-only`);
+    } else {
+      console.log(`[resolveDayImages]   day ${dayNumber}: OK — ${imgSource}`);
     }
-
-    console.log(`[resolveDayImages]   day ${dayNumber}: OK — ${imgSource}`);
     resolved.push({ ...day, imgs: imgs.slice(0, 2) });
   }
 
