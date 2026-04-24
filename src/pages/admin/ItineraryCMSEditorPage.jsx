@@ -166,29 +166,20 @@ function CheckboxGroup({ label, options, value = [], onChange }) {
 }
 
 // ── Day card ──────────────────────────────────────────────────────────────────
-function DayCard({ day, index, total, onChange, onDelete, onMove, assets, onUpload }) {
+function DayCard({ day, index, total, onChange, onDelete, onMove, assets, resolvedDayImage, onUpload }) {
   const [open, setOpen] = useState(index === 0);
 
   function upd(field, val) {
     onChange({ ...day, [field]: val });
   }
 
-  // Priority: DB asset (has id) > inline day.img (DB state) > FS asset (resolver fallback).
-  // Resolver (filesystem, no id) must NEVER override DB state.
-  const dbDayAsset = assets?.find(
-    a => a.id && a.assetType === 'day' && Number(a.dayNumber) === Number(day.day) && a.active !== false
-  )?.url ?? null;
-  const fsDayAsset = assets?.find(
-    a => !a.id && a.assetType === 'day' && Number(a.dayNumber) === Number(day.day) && a.active !== false
-  )?.url ?? null;
-  const effectiveDayImg = dbDayAsset ?? day.img ?? fsDayAsset ?? '';
-
+  // resolvedDayImage comes from the shared dayImages map computed in the parent.
+  // It already applies priority: DB asset > day.img > FS asset.
+  // assets is still passed for the image library browser inside ImagePicker.
   console.log('DAY IMAGE DEBUG', {
     day: day.day,
-    db: dbDayAsset,
+    resolvedDayImage: resolvedDayImage || null,
     inline: day.img || null,
-    resolved: fsDayAsset,
-    final: effectiveDayImg,
   });
 
   function updBullet(i, val) {
@@ -243,7 +234,7 @@ function DayCard({ day, index, total, onChange, onDelete, onMove, assets, onUplo
 
           <ImagePicker
             label="Day Image"
-            value={effectiveDayImg}
+            value={resolvedDayImage}
             onChange={url => upd('img', url)}
             assets={assets}
             onUpload={onUpload ? (file) => onUpload(file, 'day', day.day) : null}
@@ -1658,6 +1649,21 @@ export default function ItineraryCMSEditorPage() {
   const isPublished  = form.status === 'published';
   const sidebarWidth = isMobile ? '100%' : '260px';
 
+  // ── Shared day image map — single source of truth for DaysTab, ImagesTab, and PDF ──
+  // Priority (highest → lowest): DB asset (has id) > day.img (inline DB state) > FS asset (resolver)
+  // Computed once here; passed as a prop to both tabs so they always agree.
+  const _dbDay = {}, _inlineDay = {}, _fsDay = {};
+  for (const a of assets) {
+    if (a.assetType !== 'day' || a.dayNumber == null || a.active === false) continue;
+    if (a.id)  { if (!_dbDay[a.dayNumber]) _dbDay[a.dayNumber] = a.url; }
+    else       { if (!_fsDay[a.dayNumber]) _fsDay[a.dayNumber] = a.url; }
+  }
+  for (const d of (form.content?.days || [])) {
+    if (d.img) _inlineDay[d.day] = d.img;
+  }
+  // Spread: FS fills gaps, day.img overrides FS, DB asset overrides both
+  const dayImages = { ..._fsDay, ..._inlineDay, ..._dbDay };
+
   return (
     <div style={{ padding: isMobile ? '16px' : '0' }}>
 
@@ -1774,45 +1780,22 @@ export default function ItineraryCMSEditorPage() {
         {/* ── Tab panels ── */}
         {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} creators={allCreators} />}
         {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} onCoverImageChange={handleHeroCoverImage} />}
-        {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} />}
+        {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} dayImages={dayImages} />}
         {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} />}
-        {activeTab === 'images'   && (() => {
-          // Build dayImages map for "usedAs" badges.
-          // Priority: DB asset (has id) > day.img (DB state) > FS asset (resolver fallback).
-          const contentDayImages = (c('days') || []).reduce((acc, d) => {
-            if (d.img) acc[d.day] = d.img;
-            return acc;
-          }, {});
-          // Separate DB assets (real id) from FS assets (no id) — resolver must not override DB.
-          const dbAssetDayImages = assets
-            .filter(a => a.id && a.assetType === 'day' && a.dayNumber != null && a.active !== false)
-            .reduce((acc, a) => {
-              if (!acc[a.dayNumber]) acc[a.dayNumber] = a.url;
-              return acc;
-            }, {});
-          const fsAssetDayImages = assets
-            .filter(a => !a.id && a.assetType === 'day' && a.dayNumber != null && a.active !== false)
-            .reduce((acc, a) => {
-              if (!acc[a.dayNumber]) acc[a.dayNumber] = a.url;
-              return acc;
-            }, {});
-          // Merge: FS fills gaps, day.img overrides FS, DB asset overrides both.
-          const mergedDayImages = { ...fsAssetDayImages, ...contentDayImages, ...dbAssetDayImages };
-          return (
-            <ImagesTab
-              assets={assets} loading={assetsLoading}
-              newAsset={newAsset} setNewAsset={setNewAsset}
-              onAdd={handleAddAsset} onToggle={handleToggleAsset} onDelete={handleDeleteAsset}
-              isNew={isNew} hasSavedId={!!savedId.current}
-              dayCount={(c('days') || []).length || parseInt(form.durationDays, 10) || 0}
-              heroImageUrl={c('hero.coverImage') || form.coverImage || ''}
-              dayImages={mergedDayImages}
-              onSetHero={handleHeroCoverImage}
-              lastAdded={lastAdded}
-              justAdded={justAdded}
-            />
-          );
-        })()}
+        {activeTab === 'images'   && (
+          <ImagesTab
+            assets={assets} loading={assetsLoading}
+            newAsset={newAsset} setNewAsset={setNewAsset}
+            onAdd={handleAddAsset} onToggle={handleToggleAsset} onDelete={handleDeleteAsset}
+            isNew={isNew} hasSavedId={!!savedId.current}
+            dayCount={(c('days') || []).length || parseInt(form.durationDays, 10) || 0}
+            heroImageUrl={c('hero.coverImage') || form.coverImage || ''}
+            dayImages={dayImages}
+            onSetHero={handleHeroCoverImage}
+            lastAdded={lastAdded}
+            justAdded={justAdded}
+          />
+        )}
         {activeTab === 'ai'       && (
           <AITab
             prompt={aiPrompt} setPrompt={setAiPrompt}
@@ -2164,7 +2147,7 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
 }
 
 // ── Days ──────────────────────────────────────────────────────────────────────
-function DaysTab({ c, addDay, updateDay, deleteDay, moveDay, assets, onUpload }) {
+function DaysTab({ c, addDay, updateDay, deleteDay, moveDay, assets, onUpload, dayImages }) {
   const days = c('days') || [];
   return (
     <div>
@@ -2188,6 +2171,7 @@ function DaysTab({ c, addDay, updateDay, deleteDay, moveDay, assets, onUpload })
             onDelete={() => deleteDay(i)}
             onMove={(idx, dir) => moveDay(idx, dir)}
             assets={assets}
+            resolvedDayImage={dayImages?.[day.day] || ''}
             onUpload={onUpload}
           />
         ))
