@@ -172,6 +172,14 @@ function DayCard({ day, index, total, onChange, onDelete, onMove, assets, onUplo
   function upd(field, val) {
     onChange({ ...day, [field]: val });
   }
+
+  // Resolve the effective day image: DB/FS asset first (priority), then inline day.img.
+  // This keeps DaysTab in sync with ImagesTab and PDF (which use the same priority order).
+  const effectiveDayImg =
+    assets?.find(a => a.assetType === 'day' && Number(a.dayNumber) === Number(day.day) && a.active !== false)?.url
+    || day.img
+    || '';
+
   function updBullet(i, val) {
     const b = [...(day.bullets || [])];
     b[i] = val;
@@ -224,7 +232,7 @@ function DayCard({ day, index, total, onChange, onDelete, onMove, assets, onUplo
 
           <ImagePicker
             label="Day Image"
-            value={day.img || ''}
+            value={effectiveDayImg}
             onChange={url => upd('img', url)}
             assets={assets}
             onUpload={onUpload ? (file) => onUpload(file, 'day', day.day) : null}
@@ -1403,6 +1411,20 @@ export default function ItineraryCMSEditorPage() {
     setLastAdded(prev => [asset, ...prev].slice(0, 4));
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 2000);
+
+    // Keep form.content.days[N].img in sync when a day asset is added from Images tab.
+    // This ensures DaysTab immediately reflects the image chosen in ImagesTab.
+    if (asset.assetType === 'day' && asset.dayNumber != null) {
+      setForm(f => {
+        const days = [...(f.content?.days || [])];
+        const idx = days.findIndex(d => Number(d.day) === Number(asset.dayNumber));
+        if (idx === -1) return f;
+        const updated = [...days];
+        updated[idx] = { ...updated[idx], img: asset.url };
+        return { ...f, content: { ...f.content, days: updated } };
+      });
+    }
+
     setNewAsset(prev => {
       const dayCount = (c('days') || []).length || parseInt(form.durationDays, 10) || 0;
       const nextDay = prev.assetType === 'day'
@@ -1738,20 +1760,37 @@ export default function ItineraryCMSEditorPage() {
         {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} onCoverImageChange={handleHeroCoverImage} />}
         {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} />}
         {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} />}
-        {activeTab === 'images'   && (
-          <ImagesTab
-            assets={assets} loading={assetsLoading}
-            newAsset={newAsset} setNewAsset={setNewAsset}
-            onAdd={handleAddAsset} onToggle={handleToggleAsset} onDelete={handleDeleteAsset}
-            isNew={isNew} hasSavedId={!!savedId.current}
-            dayCount={(c('days') || []).length || parseInt(form.durationDays, 10) || 0}
-            heroImageUrl={c('hero.coverImage') || form.coverImage || ''}
-            dayImages={(c('days') || []).reduce((acc, d) => { if (d.img) acc[d.day] = d.img; return acc; }, {})}
-            onSetHero={handleHeroCoverImage}
-            lastAdded={lastAdded}
-            justAdded={justAdded}
-          />
-        )}
+        {activeTab === 'images'   && (() => {
+          // Build dayImages map for "usedAs" badges — merge day.img (content JSONB) with
+          // DB/FS day assets so existing itineraries show correct badges even before
+          // day.img has been backfilled by afterAdd.
+          const contentDayImages = (c('days') || []).reduce((acc, d) => {
+            if (d.img) acc[d.day] = d.img;
+            return acc;
+          }, {});
+          const assetDayImages = assets
+            .filter(a => a.assetType === 'day' && a.dayNumber != null && a.active !== false)
+            .reduce((acc, a) => {
+              if (!acc[a.dayNumber]) acc[a.dayNumber] = a.url;
+              return acc;
+            }, {});
+          // content (day.img) takes priority — it reflects the user's last explicit choice
+          const mergedDayImages = { ...assetDayImages, ...contentDayImages };
+          return (
+            <ImagesTab
+              assets={assets} loading={assetsLoading}
+              newAsset={newAsset} setNewAsset={setNewAsset}
+              onAdd={handleAddAsset} onToggle={handleToggleAsset} onDelete={handleDeleteAsset}
+              isNew={isNew} hasSavedId={!!savedId.current}
+              dayCount={(c('days') || []).length || parseInt(form.durationDays, 10) || 0}
+              heroImageUrl={c('hero.coverImage') || form.coverImage || ''}
+              dayImages={mergedDayImages}
+              onSetHero={handleHeroCoverImage}
+              lastAdded={lastAdded}
+              justAdded={justAdded}
+            />
+          );
+        })()}
         {activeTab === 'ai'       && (
           <AITab
             prompt={aiPrompt} setPrompt={setAiPrompt}
