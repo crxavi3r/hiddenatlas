@@ -35,8 +35,8 @@ const root       = path.join(__dirname, '..');
 const publicDir  = path.join(root, 'public', 'itineraries');
 const contentDir = path.join(root, 'content', 'itineraries');
 
-const IMAGE_RE  = /\.(jpg|jpeg|png|webp|gif|avif|JPG|JPEG|PNG|WEBP|GIF|AVIF)$/;
-const MAP_RE    = /\.(jpg|jpeg|png|webp|svg|JPG|JPEG|PNG|WEBP|SVG)$/;
+const IMAGE_RE  = /\.(jpg|jpeg|png|webp|gif|avif)$/i;
+const MAP_RE    = /\.(jpg|jpeg|png|webp|svg)$/i;
 
 if (!existsSync(publicDir)) {
   console.warn('[manifests] public/itineraries/ does not exist — nothing to do');
@@ -45,18 +45,51 @@ if (!existsSync(publicDir)) {
 
 // ── ls / lsRoot ───────────────────────────────────────────────────────────────
 // ls: for variant subfolders (essential/, short/).
-//   null  → directory does not exist → resolvers fall back to root
-//   []    → directory exists but has no matching files → explicit suppression
+//   null  → directory does not exist in content/ → resolvers fall back to root
+//   []    → directory exists in content/ but has no matching files → explicit suppression
 //   [...] → files present → use them
-function ls(dir, re) {
-  if (!existsSync(dir)) return null;
-  return readdirSync(dir).filter(f => re.test(f)).sort();
+//
+// Three-state semantics are anchored on content/ existence (so empty folders that
+// encode "suppress" survive). Actual file lists are read from public/ (the canonical
+// serving location) so that files added only to public/ are never missed.
+function ls(contentVariantDir, publicVariantDir, re, label) {
+  const contentExists = existsSync(contentVariantDir);
+  if (!contentExists) {
+    if (label) console.log(`  [RAW FS READ] ${label}: ABSENT (${contentVariantDir}) → null`);
+    return null;
+  }
+  // Variant folder exists in content/ — read files from public/ (served location)
+  const readDir = existsSync(publicVariantDir) ? publicVariantDir : contentVariantDir;
+  const rawFiles = readdirSync(readDir).filter(f => !f.startsWith('.'));
+  const filtered = rawFiles.filter(f => re.test(f)).sort();
+  if (label) {
+    console.log(`  [RAW FS READ] ${label}:`);
+    console.log(`    path:     ${readDir}`);
+    console.log(`    exists:   true`);
+    console.log(`    raw:      [${rawFiles.join(', ')}]`);
+    console.log(`    filtered: [${filtered.join(', ')}]`);
+  }
+  return filtered;
 }
 
 // lsRoot: for root/default directories — always an array, never null.
-function lsRoot(dir, re) {
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir).filter(f => re.test(f)).sort();
+// Reads from public/ first (canonical serving location), falls back to content/.
+function lsRoot(contentDir, publicDir, re, label) {
+  const readDir = existsSync(publicDir) ? publicDir : (existsSync(contentDir) ? contentDir : null);
+  if (!readDir) {
+    if (label) console.log(`  [RAW FS READ] ${label}: ABSENT → []`);
+    return [];
+  }
+  const rawFiles = readdirSync(readDir).filter(f => !f.startsWith('.'));
+  const filtered = rawFiles.filter(f => re.test(f)).sort();
+  if (label) {
+    console.log(`  [RAW FS READ] ${label}:`);
+    console.log(`    path:     ${readDir}`);
+    console.log(`    exists:   true`);
+    console.log(`    raw:      [${rawFiles.join(', ')}]`);
+    console.log(`    filtered: [${filtered.join(', ')}]`);
+  }
+  return filtered;
 }
 
 // ── Sync: copy image files missing from public/ ───────────────────────────────
@@ -88,12 +121,16 @@ const allData = {};
 
 for (const slug of slugs) {
   const imgDir = path.join(publicDir, slug);   // served URLs always point here
-  const srcDir = path.join(contentDir, slug);  // file discovery source
+  const srcDir = path.join(contentDir, slug);  // used for variant-folder existence (three-state semantics)
 
   const hasContentDir = existsSync(srcDir);
+  // discoverDir is only used to locate day-image subfolders; file lists come from public/
   const discoverDir   = hasContentDir ? srcDir : imgDir;
 
-  console.log(`  ${slug}: discovery from ${hasContentDir ? 'content/' : 'public/'}`);
+  // verbose=true for the slug we want to diagnose
+  const verbose = (slug === 'california-american-west');
+  if (verbose) console.log(`\n=== MANIFEST BUILD: ${slug} ===`);
+  else         console.log(`  ${slug}: discovery from ${hasContentDir ? 'content/' : 'public/'}`);
 
   // 1. Sync image files content/ → public/ so URLs resolve
   if (hasContentDir) {
@@ -122,44 +159,63 @@ for (const slug of slugs) {
     data.heroFile = heroFilename;
   }
 
-  // ── Gallery — discovered from content/, URLs point to public/ ─────────────
+  // ── Gallery — three-state anchored on content/, files read from public/ ───
+  if (verbose) console.log('\n--- GALLERY RAW FS READ ---');
   data.gallery = {
-    root:      lsRoot(path.join(discoverDir, 'gallery'), IMAGE_RE),
-    essential: ls(path.join(discoverDir, 'gallery', 'essential'), IMAGE_RE),
-    short:     ls(path.join(discoverDir, 'gallery', 'short'), IMAGE_RE),
+    root:      lsRoot(path.join(srcDir, 'gallery'),            path.join(imgDir, 'gallery'),            IMAGE_RE, verbose ? 'gallery root'      : null),
+    essential: ls(    path.join(srcDir, 'gallery', 'essential'), path.join(imgDir, 'gallery', 'essential'), IMAGE_RE, verbose ? 'gallery essential' : null),
+    short:     ls(    path.join(srcDir, 'gallery', 'short'),     path.join(imgDir, 'gallery', 'short'),     IMAGE_RE, verbose ? 'gallery short'     : null),
   };
+  if (verbose) console.log('  FILTERED FILES RESULT (gallery):', JSON.stringify(data.gallery));
 
-  // ── Research — discovered from content/, URLs point to public/ ────────────
-  // Three-state: null (absent) → fallback to root, [] (empty) → suppress, [...] → use
+  // ── Research — three-state: null (absent) → fallback to root, [] → suppress ─
+  if (verbose) console.log('\n--- RESEARCH RAW FS READ ---');
   data.research = {
-    root:      lsRoot(path.join(discoverDir, 'research'), IMAGE_RE),
-    essential: ls(path.join(discoverDir, 'research', 'essential'), IMAGE_RE),
-    short:     ls(path.join(discoverDir, 'research', 'short'), IMAGE_RE),
+    root:      lsRoot(path.join(srcDir, 'research'),            path.join(imgDir, 'research'),            IMAGE_RE, verbose ? 'research root'      : null),
+    essential: ls(    path.join(srcDir, 'research', 'essential'), path.join(imgDir, 'research', 'essential'), IMAGE_RE, verbose ? 'research essential' : null),
+    short:     ls(    path.join(srcDir, 'research', 'short'),     path.join(imgDir, 'research', 'short'),     IMAGE_RE, verbose ? 'research short'     : null),
   };
+  if (verbose) console.log('  FILTERED FILES RESULT (research):', JSON.stringify(data.research));
 
-  // ── Day images — discovered from content/, URLs point to public/ ──────────
-  const dayImagesDir = path.join(discoverDir, 'day-images');
+  // ── Day images ─────────────────────────────────────────────────────────────
+  // Three-state for each day's variant subfolder.
+  // Discovery uses content/ day-images folder list (to catch intentionally empty subfolders);
+  // actual file lists come from public/ (canonical serving location).
+  const contentDayImagesDir = path.join(srcDir,    'day-images');
+  const publicDayImagesDir  = path.join(imgDir,    'day-images');
+  const dayImagesDir = existsSync(contentDayImagesDir) ? contentDayImagesDir : publicDayImagesDir;
+
   if (existsSync(dayImagesDir)) {
     for (const dayFolder of readdirSync(dayImagesDir).sort()) {
       const match = dayFolder.match(/^day(\d+)$/i);
       if (!match) continue;
       const dayNumber = parseInt(match[1], 10);
-      const dayDir    = path.join(dayImagesDir, dayFolder);
+      const cDayDir   = path.join(contentDayImagesDir, dayFolder);
+      const pDayDir   = path.join(publicDayImagesDir,  dayFolder);
+      const isVerboseDay = verbose && (dayNumber === 1 || dayNumber === 8);
+      if (isVerboseDay) console.log(`\n--- DAY ${dayNumber} RAW FS READ ---`);
       data.dayImages[dayNumber] = {
-        root:      lsRoot(dayDir, IMAGE_RE),
-        essential: ls(path.join(dayDir, 'essential'), IMAGE_RE),
-        short:     ls(path.join(dayDir, 'short'), IMAGE_RE),
+        root:      lsRoot(cDayDir,                        pDayDir,                        IMAGE_RE, isVerboseDay ? `day${dayNumber} root`      : null),
+        essential: ls(    path.join(cDayDir, 'essential'), path.join(pDayDir, 'essential'), IMAGE_RE, isVerboseDay ? `day${dayNumber} essential` : null),
+        short:     ls(    path.join(cDayDir, 'short'),     path.join(pDayDir, 'short'),     IMAGE_RE, isVerboseDay ? `day${dayNumber} short`     : null),
       };
+      if (isVerboseDay) {
+        const d = data.dayImages[dayNumber];
+        const chosen = d.short?.length ? `short: [${d.short.join(', ')}]`
+          : d.short === null           ? `root fallback: [${d.root.join(', ')}]`
+          :                              `SUPPRESSED (short=[])`;
+        console.log(`  FINAL CHOSEN PATH / URL FOR DAY ${dayNumber}: /itineraries/${slug}/day-images/day${dayNumber}/${chosen}`);
+      }
     }
   }
 
   // ── Maps — public/ is fine (maps are always in sync) ──────────────────────
   const mapDir = path.join(imgDir, 'map');
   data.map = {
-    root:      lsRoot(mapDir, MAP_RE),
-    complete:  ls(path.join(mapDir, 'complete'),  MAP_RE),
-    essential: ls(path.join(mapDir, 'essential'), MAP_RE),
-    short:     ls(path.join(mapDir, 'short'),     MAP_RE),
+    root:      lsRoot(path.join(srcDir, 'map'),            mapDir,                      MAP_RE, null),
+    complete:  ls(    path.join(srcDir, 'map', 'complete'), path.join(mapDir, 'complete'), MAP_RE, null),
+    essential: ls(    path.join(srcDir, 'map', 'essential'), path.join(mapDir, 'essential'), MAP_RE, null),
+    short:     ls(    path.join(srcDir, 'map', 'short'),     path.join(mapDir, 'short'),     MAP_RE, null),
   };
 
   allData[slug] = data;

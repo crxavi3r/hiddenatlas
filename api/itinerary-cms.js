@@ -816,12 +816,21 @@ async function handleScanAssets(slug, variant, durationDays = null) {
   if (!slug) throw Object.assign(new Error('slug is required'), { status: 400 });
 
   const manifestPath = path.join(process.cwd(), 'public', 'itineraries', slug, 'manifest.json');
-  if (!existsSync(manifestPath)) return { assets: [] };
+  const manifestExists = existsSync(manifestPath);
+  console.log(`[scan-assets] slug="${slug}" variant="${variant || 'none'}" durationDays=${durationDays ?? 'all'}`);
+  console.log(`[scan-assets] manifestPath="${manifestPath}" exists=${manifestExists} cwd="${process.cwd()}"`);
+  if (!manifestExists) {
+    console.warn(`[scan-assets] manifest NOT FOUND — returning empty assets`);
+    return { assets: [] };
+  }
 
   let manifest;
   try {
     manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-  } catch { return { assets: [] }; }
+  } catch (e) {
+    console.error(`[scan-assets] failed to parse manifest: ${e.message}`);
+    return { assets: [] };
+  }
 
   const base = `/itineraries/${slug}`;
   const assets = [];
@@ -841,9 +850,14 @@ async function handleScanAssets(slug, variant, durationDays = null) {
 
   // Gallery — resolveVariantBucket handles both { root, essential, short } and legacy flat array
   {
-    const { files, sub } = resolveVariantBucket(manifest.gallery, v);
+    const g = manifest.gallery;
+    console.log(`[scan-assets] GALLERY RAW FS READ: slug="${slug}" variant="${v}"`);
+    console.log(`[scan-assets]   manifest.gallery.root      = [${(Array.isArray(g) ? g : g?.root ?? []).join(', ')}]`);
+    console.log(`[scan-assets]   manifest.gallery.essential = ${JSON.stringify(g?.essential ?? null)}`);
+    console.log(`[scan-assets]   manifest.gallery.short     = ${JSON.stringify(g?.short ?? null)}`);
+    const { files, sub } = resolveVariantBucket(g, v);
     const urlBase = `${base}/gallery${sub ? `/${sub}` : ''}`;
-    console.log(`[scan-assets] gallery: slug="${slug}" variant="${v}" bucket="${sub || 'root'}" files=${files.length}`);
+    console.log(`[scan-assets]   FILTERED FILES RESULT (gallery): bucket="${sub || 'root'}" files=${files.length} → [${files.join(', ')}]`);
     files.forEach((file, i) => assets.push({
       id: null, assetType: 'gallery',
       url:     `${urlBase}/${file}`,
@@ -852,40 +866,26 @@ async function handleScanAssets(slug, variant, durationDays = null) {
     }));
   }
 
-  // Research — same variant resolution but with optional hide-section markers
+  // Research — uses resolveVariantBucket (three-state: null→fallback, []→suppress, files→use)
   {
-    const r = manifest.research ?? [];
-    if (Array.isArray(r)) {
-      r.forEach((file, i) => assets.push({
-        id: null, assetType: 'research',
-        url:     `${base}/research/${file}`,
-        alt:     altFromFilename(file),
-        caption: '', source: 'filesystem', active: true, sortOrder: i,
-      }));
-    } else {
-      let files = [];
-      let urlBase = `${base}/research`;
-      if (v === 'essential' && !r.hideEssential && (r.essential ?? []).length > 0) {
-        files = r.essential;
-        urlBase += '/essential';
-      } else if (v === 'short' && !r.hideShort && (r.short ?? []).length > 0) {
-        files = r.short;
-        urlBase += '/short';
-      } else {
-        files = r.root ?? [];
-      }
-      files.forEach((file, i) => assets.push({
-        id: null, assetType: 'research',
-        url:     `${urlBase}/${file}`,
-        alt:     altFromFilename(file),
-        caption: '', source: 'filesystem', active: true, sortOrder: i,
-      }));
-    }
+    const r = manifest.research;
+    console.log(`[scan-assets] RESEARCH RAW FS READ: slug="${slug}" variant="${v}"`);
+    console.log(`[scan-assets]   manifest.research.root      = [${(Array.isArray(r) ? r : r?.root ?? []).join(', ')}]`);
+    console.log(`[scan-assets]   manifest.research.essential = ${JSON.stringify(r?.essential ?? null)}`);
+    console.log(`[scan-assets]   manifest.research.short     = ${JSON.stringify(r?.short ?? null)}`);
+    const { files, sub } = resolveVariantBucket(r ?? [], v);
+    const urlBase = `${base}/research${sub ? `/${sub}` : ''}`;
+    console.log(`[scan-assets]   FILTERED FILES RESULT (research): bucket="${sub || 'root'}" files=${files.length} → [${files.join(', ')}]`);
+    files.forEach((file, i) => assets.push({
+      id: null, assetType: 'research',
+      url:     `${urlBase}/${file}`,
+      alt:     altFromFilename(file),
+      caption: '', source: 'filesystem', active: true, sortOrder: i,
+    }));
   }
 
   // Day images — resolveVariantBucket with three-state null/[]/[files] semantics.
   // Days beyond durationDays are skipped entirely (they belong to longer variants).
-  console.log(`[scan-assets] days: slug="${slug}" variant="${v}" durationDays=${durationDays ?? 'all'}`);
   for (const [dayKey, dayData] of Object.entries(manifest.dayImages ?? {})) {
     const dayNumber = parseInt(dayKey, 10);
 
@@ -893,6 +893,14 @@ async function handleScanAssets(slug, variant, durationDays = null) {
     if (durationDays != null && dayNumber > durationDays) {
       console.log(`[scan-assets]   day ${dayNumber}: SKIPPED — beyond durationDays=${durationDays}`);
       continue;
+    }
+
+    const isVerboseDay = (dayNumber === 1 || dayNumber === 8);
+    if (isVerboseDay) {
+      console.log(`[scan-assets] DAY ${dayNumber} RAW FS READ: slug="${slug}" variant="${v}"`);
+      console.log(`[scan-assets]   manifest.dayImages[${dayNumber}].root      = ${JSON.stringify(dayData?.root ?? [])}`);
+      console.log(`[scan-assets]   manifest.dayImages[${dayNumber}].essential = ${JSON.stringify(dayData?.essential ?? null)}`);
+      console.log(`[scan-assets]   manifest.dayImages[${dayNumber}].short     = ${JSON.stringify(dayData?.short ?? null)}`);
     }
 
     const { files, sub } = resolveVariantBucket(dayData, v);
@@ -912,7 +920,12 @@ async function handleScanAssets(slug, variant, durationDays = null) {
       ? `${base}/day-images/day${dayNumber}${sub ? `/${sub}` : ''}/${files[0]}`
       : null;
 
-    console.log(`[scan-assets]   day ${dayNumber}: folder=${folderState} files=${files.length} resolved=${resolvedImg ?? 'null'}`);
+    if (isVerboseDay) {
+      console.log(`[scan-assets]   FILTERED FILES RESULT (day ${dayNumber}): folder=${folderState} files=${files.length} → [${files.join(', ')}]`);
+      console.log(`[scan-assets]   FINAL CHOSEN PATH / URL FOR DAY ${dayNumber}: ${resolvedImg ?? 'null (excluded)'}`);
+    } else {
+      console.log(`[scan-assets]   day ${dayNumber}: folder=${folderState} files=${files.length} resolved=${resolvedImg ?? 'null'}`);
+    }
 
     const urlBase = `${base}/day-images/day${dayNumber}${sub ? `/${sub}` : ''}`;
     files.forEach((file, i) => assets.push({
