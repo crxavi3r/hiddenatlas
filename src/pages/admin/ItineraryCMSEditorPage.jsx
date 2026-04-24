@@ -347,7 +347,7 @@ function FAQEditor({ faq = [], onChange }) {
 const ASSET_TYPES = ['hero', 'gallery', 'day', 'research', 'manual'];
 const ASSET_TYPE_LABELS = { hero: 'Hero', gallery: 'Gallery', day: 'Day Images', research: 'Research', ai_suggested: 'AI Suggested', manual: 'Manual' };
 
-function AssetRow({ asset, onToggle, onDelete, usedAs, onSetHero }) {
+function AssetRow({ asset, onToggle, onDelete, usedAs, onSetHero, onPreview }) {
   const isFilesystem = !asset.id;
   return (
     <div style={{
@@ -356,7 +356,10 @@ function AssetRow({ asset, onToggle, onDelete, usedAs, onSetHero }) {
       border: '1px solid #E8E3DA', borderRadius: '8px', marginBottom: '8px',
       opacity: asset.active ? 1 : 0.55,
     }}>
-      <div style={{ width: '72px', height: '48px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0, background: '#F4F1EC' }}>
+      <div
+        onClick={onPreview}
+        title="Click to preview"
+        style={{ width: '72px', height: '48px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0, background: '#F4F1EC', cursor: 'zoom-in' }}>
         <img src={asset.url} alt={asset.alt || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -394,6 +397,78 @@ function AssetRow({ asset, onToggle, onDelete, usedAs, onSetHero }) {
             <Trash2 size={13} />
           </button>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── Image Lightbox ────────────────────────────────────────────────────────────
+function ImageLightbox({ assets, index, onClose }) {
+  const [current, setCurrent] = useState(index);
+
+  useEffect(() => {
+    function handleKey(e) {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowRight') setCurrent(c => Math.min(c + 1, assets.length - 1));
+      if (e.key === 'ArrowLeft')  setCurrent(c => Math.max(c - 1, 0));
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [assets.length, onClose]);
+
+  const asset = assets[current];
+  if (!asset) return null;
+  const label = asset.alt || asset.caption || asset.url?.split('/').pop() || '';
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}
+    >
+      {/* Close */}
+      <button
+        onClick={onClose}
+        style={{ position: 'absolute', top: '20px', right: '24px', background: 'rgba(255,255,255,0.12)', border: 'none', color: 'white', width: '38px', height: '38px', borderRadius: '50%', cursor: 'pointer', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
+      >✕</button>
+
+      {/* Prev */}
+      {current > 0 && (
+        <button
+          onClick={e => { e.stopPropagation(); setCurrent(c => c - 1); }}
+          style={{ position: 'absolute', left: '20px', background: 'rgba(255,255,255,0.12)', border: 'none', color: 'white', width: '46px', height: '46px', borderRadius: '50%', cursor: 'pointer', fontSize: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >‹</button>
+      )}
+
+      {/* Image + meta */}
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', maxWidth: '90vw' }}
+      >
+        <img
+          src={asset.url}
+          alt={label}
+          style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: '12px', display: 'block' }}
+        />
+        <div style={{ textAlign: 'center' }}>
+          {label && (
+            <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '13px', marginBottom: '4px', maxWidth: '80vw', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {label}
+            </p>
+          )}
+          {assets.length > 1 && (
+            <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '11px' }}>
+              {current + 1} / {assets.length} · ← → to navigate · ESC to close
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Next */}
+      {current < assets.length - 1 && (
+        <button
+          onClick={e => { e.stopPropagation(); setCurrent(c => c + 1); }}
+          style={{ position: 'absolute', right: '20px', background: 'rgba(255,255,255,0.12)', border: 'none', color: 'white', width: '46px', height: '46px', borderRadius: '50%', cursor: 'pointer', fontSize: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >›</button>
       )}
     </div>
   );
@@ -2233,6 +2308,7 @@ function SectionsTab({ c, setContent }) {
 // ── Images ────────────────────────────────────────────────────────────────────
 function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, onDelete, isNew, hasSavedId, dayCount, heroImageUrl, dayImages, onSetHero, lastAdded = [], justAdded = false }) {
   const fileInputRef = useRef(null);
+  const [lightbox, setLightbox] = useState(null); // { assets: [], index: 0 }
 
   console.log('IMAGES TAB INPUT', assets);
 
@@ -2277,8 +2353,20 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
     return acc;
   }, {});
 
+  // Flat ordered list of all displayed assets for lightbox navigation
+  const allDisplayed = ASSET_TYPES.flatMap(type =>
+    [...(grouped[type] || [])].sort((a, b) => type === 'day' ? (a.dayNumber ?? 0) - (b.dayNumber ?? 0) : 0)
+  );
+
+  function openLightbox(assetList, index) {
+    setLightbox({ assets: assetList, index });
+  }
+
   return (
     <div>
+      {lightbox && (
+        <ImageLightbox assets={lightbox.assets} index={lightbox.index} onClose={() => setLightbox(null)} />
+      )}
       {/* ── Add Image ──────────────────────────────────────────────────────── */}
       <div style={sectionCard}>
         <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>Add Image</p>
@@ -2436,7 +2524,10 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
             <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '2px' }}>
               {lastAdded.map((asset, i) => (
                 <div key={asset.id || i} style={{ flexShrink: 0, width: '84px' }}>
-                  <div style={{ aspectRatio: '4/3', borderRadius: '5px', overflow: 'hidden', background: '#F4F1EC', border: '1px solid #E8E3DA' }}>
+                  <div
+                    onClick={() => openLightbox(lastAdded, i)}
+                    title="Click to preview"
+                    style={{ aspectRatio: '4/3', borderRadius: '5px', overflow: 'hidden', background: '#F4F1EC', border: '1px solid #E8E3DA', cursor: 'zoom-in' }}>
                     <img src={asset.url} alt={asset.alt || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </div>
                   <p style={{ fontSize: '10px', color: '#B5AA99', marginTop: '4px', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -2464,7 +2555,7 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
             </p>
             {[...grouped[type]]
               .sort((a, b) => type === 'day' ? (a.dayNumber ?? 0) - (b.dayNumber ?? 0) : 0)
-              .map((asset, i) => {
+              .map((asset, i, sortedList) => {
                 // Compute usage badge for this asset
                 let usedAs = null;
                 if (heroImageUrl && asset.url === heroImageUrl) usedAs = 'Hero';
@@ -2480,6 +2571,7 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
                     onDelete={onDelete}
                     usedAs={usedAs}
                     onSetHero={onSetHero && !usedAs ? onSetHero : null}
+                    onPreview={() => openLightbox(sortedList, i)}
                   />
                 );
               })}
