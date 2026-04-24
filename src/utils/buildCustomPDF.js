@@ -17,7 +17,7 @@
  *   }
  */
 
-import { resolveDayImages } from '../lib/resolveItineraryImages.js';
+import { resolveDayImages, resolveCoverImage } from '../lib/resolveItineraryImages.js';
 
 // Mirrors the server-side helper in api/itinerary-cms.js.
 // Computes the version the PDF will carry — one ahead of the current DB value,
@@ -169,13 +169,28 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
   });
 
   // ── Resolve cover image ─────────────────────────────────────────────────────
-  // Priority: itinerary.coverImage (scalar DB) > content.hero.coverImage (JSONB DB)
-  //           > DB hero asset URL > FS fallback (handled by resolveImg).
-  const heroAsset     = dbAssets.find(a => a.assetType === 'hero');
-  const rawCoverImage = itinerary.coverImage || content.hero?.coverImage || heroAsset?.url || '';
-  const coverImage    = toAbsoluteUrl(resolveImg(rawCoverImage, resolvedImages));
+  // Use unified resolver (same priority chain as the website):
+  //   itinerary.coverImage (scalar DB / blob URL)
+  //   → content.hero.coverImage (JSONB fallback, merged below)
+  //   → DB hero asset URL
+  //   → filesystem manifest
+  const heroAsset = dbAssets.find(a => a.assetType === 'hero');
+  const rawCoverImage = resolveCoverImage(
+    { ...itinerary, coverImage: itinerary.coverImage || content.hero?.coverImage },
+    dbAssets
+  );
+  let coverImage = toAbsoluteUrl(resolveImg(rawCoverImage, resolvedImages));
 
-  console.log('PDF hero image URL',     rawCoverImage || '(none)');
+  // Fallback: if hero still missing, use first resolved day image
+  if (!coverImage && days.length > 0) {
+    const firstWithImg = days.find(d => d.imgs.length > 0);
+    if (firstWithImg) {
+      coverImage = firstWithImg.imgs[0];
+      console.log('[PDF] hero fallback to day image:', coverImage?.slice(0, 80));
+    }
+  }
+
+  console.log('[PDF] heroImage:',       rawCoverImage || '(none)');
   console.log('PDF hero image source',  heroAsset?.source || (itinerary.coverImage ? 'itinerary.coverImage' : '(none)'));
   console.log('PDF hero base64 exists', !!coverImage);
 

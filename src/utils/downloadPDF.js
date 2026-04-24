@@ -2,7 +2,7 @@ export async function downloadItineraryPDF(itinerary) {
   console.log('[download-free] starting for:', itinerary.id);
 
   const { createElement } = await import('react');
-  const [{ pdf }, { default: ItineraryPDF }, { getCoverImage, getMapImage }, { resolveDayImages }, { imgToBase64, imgsToBase64 }] = await Promise.all([
+  const [{ pdf }, { default: ItineraryPDF }, { getMapImage, getGalleryImages }, { resolveDayImages, resolveCoverImage }, { imgToBase64, imgsToBase64 }] = await Promise.all([
     import('@react-pdf/renderer'),
     import('../components/ItineraryPDF'),
     import('../lib/itineraryImages'),
@@ -13,11 +13,10 @@ export async function downloadItineraryPDF(itinerary) {
   const assetSlug    = itinerary.parentId || itinerary.id;
   const assetVariant = itinerary.variant;
 
-  // Cover: filesystem takes priority (resolves to static public/ file via browser URL).
-  // Falls back to itinerary.coverImage (may be a blob URL).
-  const localCover    = getCoverImage(assetSlug);
-  const rawCoverImage = localCover || itinerary.coverImage;
-  console.log('PDF hero image URL', rawCoverImage || '(none)');
+  // Cover: unified resolver — same priority chain as the website.
+  // Priority: itinerary.coverImage (blob URL) → filesystem manifest
+  const rawCoverImage = resolveCoverImage(itinerary, []);
+  console.log('[PDF] heroImage:', rawCoverImage || '(none)');
 
   // Days: shared resolver applies durationDays filter, variant resolution, and
   // empty-folder suppression. Days with no resolved images are excluded.
@@ -36,11 +35,21 @@ export async function downloadItineraryPDF(itinerary) {
     })),
   ]);
 
-  console.log('PDF hero base64 exists', !!coverImageB64);
+  // Fallback: if hero failed to resolve, use first gallery image
+  let finalCoverImage = coverImageB64;
+  if (!finalCoverImage) {
+    const gallery = getGalleryImages(assetSlug, assetVariant);
+    if (gallery.length > 0) {
+      finalCoverImage = await imgToBase64(gallery[0].src);
+      console.log('[PDF] hero fallback to gallery[0]:', gallery[0].src);
+    }
+  }
+
+  console.log('PDF hero base64 exists', !!finalCoverImage);
 
   const resolvedItinerary = {
     ...itinerary,
-    coverImage: coverImageB64 || null,
+    coverImage: finalCoverImage || null,
     mapImage:   getMapImage(assetSlug, assetVariant),
     days:       daysWithBase64,
   };
