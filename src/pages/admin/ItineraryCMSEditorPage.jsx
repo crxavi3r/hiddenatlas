@@ -433,9 +433,9 @@ function ImagePicker({ value, onChange, assets = [], onUpload, assetType = 'gall
 
       {/* Thumbnail */}
       {localValue ? (
-        <div style={{ width: '100%', aspectRatio: '16/9', minHeight: '220px', maxHeight: '360px', borderRadius: '12px', overflow: 'hidden', marginBottom: '8px', background: '#F4F1EC' }}>
+        <div style={{ width: '100%', maxWidth: '980px', margin: '0 auto 8px', background: '#F4EFE8', borderRadius: '14px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <img src={localValue} alt="Selected"
-            style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', display: 'block' }}
+            style={{ width: '100%', maxHeight: '420px', objectFit: 'contain', objectPosition: 'center', display: 'block', borderRadius: '14px' }}
             onError={e => { e.currentTarget.style.display = 'none'; }} />
         </div>
       ) : (
