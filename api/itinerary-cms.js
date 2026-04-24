@@ -139,6 +139,13 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
+      // PDF upload uses raw binary body (Content-Type: application/pdf) — dispatch
+      // before reading req.body so the stream is still available to readRawBody().
+      if (action === 'upload-pdf') {
+        await assertOwnership(pool, id, ctx);
+        return res.json(await handleUploadPDF(pool, id, req));
+      }
+
       const body = req.body ?? {};
       if (action === 'create')       return res.json(await handleCreate(pool, body, ctx));
       if (action === 'update')       { await assertOwnership(pool, id, ctx); return res.json(await handleUpdate(pool, id, body, ctx)); }
@@ -699,6 +706,83 @@ function nextPdfVersion(current) {
   const match = base.match(/^v(\d+)\.(\d+)$/);
   if (!match) return 'v1.1';
   return `v${match[1]}.${parseInt(match[2], 10) + 1}`;
+}
+
+// ── Collect the raw request body into a Buffer ─────────────────────────────────
+// Used for non-JSON POST bodies (e.g. application/pdf).
+// Vercel does NOT auto-parse these content types, so req is still readable.
+function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', chunk => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    req.on('end',  ()    => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+// ── Server-side PDF upload ─────────────────────────────────────────────────────
+// The browser generates the PDF blob and POSTs it here as application/pdf.
+// We upload directly to Vercel Blob using BLOB_READ_WRITE_TOKEN (server-side only)
+// and persist the resulting URL + an incremented version to the DB.
+async function handleUploadPDF(pool, id, req) {
+  if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
+
+  console.log('PDF BLOB UPLOAD DEBUG', {
+    hasBlobToken: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+    environment:  process.env.VERCEL_ENV,
+  });
+
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    throw Object.assign(new Error('BLOB_READ_WRITE_TOKEN is not configured'), { status: 503 });
+  }
+
+  const { rows } = await pool.query(
+    `SELECT slug, pdf_version FROM "Itinerary" WHERE id = $1 LIMIT 1`, [id]
+  );
+  if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+  const { slug, pdf_version: currentVersion } = rows[0];
+
+  const timestamp = Date.now();
+  const filename  = `${slug}-hiddenatlas-${timestamp}.pdf`;
+  const pathname  = `itineraries/${slug}/pdf/${filename}`;
+
+  console.log('PDF BLOB UPLOAD DEBUG', {
+    slug,
+    pathname,
+    hasBlobToken: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+    environment:  process.env.VERCEL_ENV,
+  });
+
+  // Read the raw PDF binary from the request stream.
+  // Content-Type: application/pdf is not auto-parsed by Vercel, so req is unread.
+  const pdfBuffer = await readRawBody(req);
+  if (!pdfBuffer.length) {
+    throw Object.assign(new Error('PDF body is empty'), { status: 400 });
+  }
+  console.log('[upload-pdf] received', pdfBuffer.length, 'bytes — slug:', slug);
+
+  // Upload to Vercel Blob server-side. No client token involved.
+  const blob = await blobPut(pathname, pdfBuffer, {
+    access:         'public',
+    contentType:    'application/pdf',
+    addRandomSuffix: false,
+    allowOverwrite:  true,
+    token:           process.env.BLOB_READ_WRITE_TOKEN,
+  });
+
+  // Persist URL and increment version in one shot.
+  const newVersion = nextPdfVersion(currentVersion);
+  await pool.query(
+    `UPDATE "Itinerary"
+     SET "pdfUrl" = $2, pdf_url = $2, "pdfStatus" = 'ready', "pdfGeneratedAt" = NOW(),
+         "pdfError" = NULL, pdf_version = $3, "updatedAt" = NOW()
+     WHERE id = $1`,
+    [id, blob.url, newVersion]
+  );
+
+  console.log('[upload-pdf] done — slug:', slug,
+    '| version:', currentVersion, '->', newVersion, '| url:', blob.url);
+  return { ok: true, url: blob.url, pdfVersion: newVersion };
 }
 
 // ── Issue a scoped client token for direct browser → Vercel Blob PDF upload ──

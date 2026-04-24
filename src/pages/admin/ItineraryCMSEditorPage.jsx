@@ -1422,36 +1422,32 @@ export default function ItineraryCMSEditorPage() {
       const pdfBlob = await buildCustomPDFBlob(freshItinerary, freshAssets, enrichedResolved);
       console.log('[CMS] PDF blob ready — size:', pdfBlob.size, 'bytes');
 
-      // ── 5. Build upload pathname (timestamp keeps filenames unique) ──────────
-      const uploadTimestamp = Date.now();
-      const uploadFilename  = `${form.slug}-hiddenatlas-${uploadTimestamp}.pdf`;
-      const pathname        = `itineraries/${form.slug}/pdf/${uploadFilename}`;
-      console.log('[CMS] PDF upload path:', pathname);
+      // ── 5. POST PDF binary to our API — server uploads to Vercel Blob ──────────
+      // The browser never PUTs to Vercel Blob directly. The API uses
+      // BLOB_READ_WRITE_TOKEN server-side to upload, then saves the URL to DB.
+      console.log('[CMS] Sending PDF to server — size:', pdfBlob.size, 'bytes');
+      const uploadRes = await fetch(
+        `/api/itinerary-cms?action=upload-pdf&id=${targetId}`,
+        {
+          method:  'POST',
+          headers: {
+            Authorization:  `Bearer ${token}`,
+            'Content-Type': 'application/pdf',
+          },
+          body: pdfBlob,
+        }
+      );
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text();
+        throw new Error(`PDF upload failed: ${uploadRes.status} — ${errText.slice(0, 200)}`);
+      }
+      const uploadJson = await uploadRes.json();
+      if (uploadJson.error) throw new Error(uploadJson.error);
 
-      // ── 6. Upload PDF via /api/blob (server-side token exchange) ─────────────
-      // @vercel/blob/client `upload()` sends a token-generation request to our
-      // /api/blob route (which uses BLOB_READ_WRITE_TOKEN server-side), then
-      // streams the binary directly to Vercel Blob — the PDF bytes never pass
-      // through a Vercel Function body, so there is no 4.5 MB limit.
-      const { upload: blobUpload } = await import('@vercel/blob/client');
-      const { url: blobUrl } = await blobUpload(pathname, pdfBlob, {
-        access:          'public',
-        handleUploadUrl: '/api/blob',
-        headers:         { Authorization: `Bearer ${token}` },
-      });
-      console.log('[CMS] blob upload success —', blobUrl);
+      const { url: blobUrl, pdfVersion } = uploadJson;
+      console.log('[CMS] PDF uploaded —', blobUrl, '| version:', pdfVersion);
 
-      // ── 7. Persist URL + increment version in DB (tiny ~100-byte payload) ─
-      const res  = await fetch(`/api/itinerary-cms?action=save-pdf-url&id=${targetId}`, {
-        method:  'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ url: blobUrl }),
-      });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-
-      console.log('[CMS] PDF saved — pdfUrl:', json.pdfUrl, '| version:', json.pdfVersion);
-      setForm(f => ({ ...f, pdfUrl: json.pdfUrl, pdf_url: json.pdfUrl, pdf_version: json.pdfVersion || f.pdf_version }));
+      setForm(f => ({ ...f, pdfUrl: blobUrl, pdf_url: blobUrl, pdf_version: pdfVersion || f.pdf_version }));
       setPdfState('done');
       setTimeout(() => setPdfState('idle'), 4000);
     } catch (e) {
