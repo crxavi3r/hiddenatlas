@@ -1018,11 +1018,14 @@ export default function ItineraryCMSEditorPage() {
       const { assetSlug: resolvedAssetSlug, variant: resolvedVariant } =
         resolveAssetIdentity(form.slug, { parentId: form.parentId, variant: form.variant });
 
+      // parentId must be the resolved SLUG (e.g. "california-american-west"), never the DB UUID.
+      // form.parentId from the DB is a UUID — passing it to buildCustomPDF would cause
+      // getAssetId() → assetSlug = UUID → MANIFESTS[UUID] = undefined → all days excluded.
       const freshItinerary = {
         ...form,
         id:       targetId,
-        parentId: form.parentId || (resolvedAssetSlug !== form.slug ? resolvedAssetSlug : ''),
-        variant:  form.variant  || resolvedVariant || '',
+        parentId: resolvedAssetSlug !== form.slug ? resolvedAssetSlug : '',
+        variant:  resolvedVariant || '',
       };
       const freshDays = form.content?.days || [];
       console.log('[CMS] PDF generation — slug:', form.slug, '| assetSlug:', resolvedAssetSlug, '| variant:', resolvedVariant || 'none', '| days:', freshDays.length);

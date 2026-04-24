@@ -90,11 +90,33 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
     ? `${itinerary.durationDays} Day${itinerary.durationDays !== 1 ? 's' : ''}`
     : '';
 
+  // ── Diagnostic: log what the PDF received ──────────────────────────────────
+  console.log('PDF ITINERARY INPUT', {
+    slug:         itinerary.slug,
+    variant:      itinerary.variant,
+    parentId:     itinerary.parentId,
+    parentSlug:   itinerary.parentSlug,
+    durationDays: itinerary.durationDays,
+    daysCount:    content.days?.length,
+  });
+  console.log('PDF DAY INPUT', (content.days || []).map(day => ({
+    dayNumber:        day.day ?? day.dayNumber,
+    title:            day.title,
+    img:              day.img || null,
+    imageUrl:         day.imageUrl || null,
+    image:            day.image    || null,
+    resolvedImageUrl: day.resolvedImageUrl || null,
+  })));
+
   // ── Resolve day images via shared resolver ─────────────────────────────────
   // resolveDayImages applies: durationDays filter, variant subfolder resolution,
   // empty-folder suppression, and DB asset priority. Days with no images are
   // excluded entirely — this is what prevents ghost days in the PDF.
   const resolvedDayList = resolveDayImages(itinerary, content.days || [], dbAssets);
+  console.log('PDF RESOLVED DAYS', resolvedDayList.map(d => ({
+    dayNumber: d.day,
+    imgs:      d.imgs,
+  })));
 
   const days = resolvedDayList.map(day => {
     // Convert raw URLs → base64 data URIs via the pre-resolved map.
