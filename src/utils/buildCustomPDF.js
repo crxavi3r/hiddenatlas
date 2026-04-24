@@ -34,6 +34,13 @@ function fmtPdfDate() {
   return new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function toAbsoluteUrl(url) {
+  if (!url) return null;
+  if (url.startsWith('data:')) return url;
+  if (url.startsWith('http')) return url;
+  return `https://hiddenatlas.travel${url.startsWith('/') ? url : `/${url}`}`;
+}
+
 function resolveImg(url, resolvedImages) {
   if (!url) return null;
   if (url.startsWith('data:')) return url;
@@ -139,13 +146,16 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
       }
     }
 
-    return { ...day, imgs };
+    // Normalize relative filesystem paths → absolute URLs for React PDF <Image>
+    const absoluteImgs = imgs.map(toAbsoluteUrl).filter(Boolean);
+
+    return { ...day, imgs: absoluteImgs };
   });
 
   // ── Resolve cover image ─────────────────────────────────────────────────────
   const rawCoverImage = itinerary.coverImage || content.hero?.coverImage || '';
   const heroAsset     = dbAssets.find(a => a.assetType === 'hero');
-  const coverImage    = resolveImg(rawCoverImage, resolvedImages);
+  const coverImage    = toAbsoluteUrl(resolveImg(rawCoverImage, resolvedImages));
 
   console.log('PDF hero image URL',     rawCoverImage || '(none)');
   console.log('PDF hero image source',  heroAsset?.source || (itinerary.coverImage ? 'itinerary.coverImage' : '(none)'));
@@ -186,6 +196,23 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
   };
 
   // ── Render PDF ──────────────────────────────────────────────────────────────
+  console.log('PDF DEBUG - ITINERARY', {
+    slug:         resolvedItinerary.id,
+    title:        resolvedItinerary.title,
+    variant:      itinerary.variant,
+    parentId:     itinerary.parentId,
+    parentSlug:   itinerary.parentSlug,
+    durationDays: itinerary.durationDays,
+    daysCount:    resolvedItinerary.days?.length,
+    coverImage:   resolvedItinerary.coverImage ? resolvedItinerary.coverImage.slice(0, 80) : null,
+  });
+  console.log('PDF DEBUG - DAYS', resolvedItinerary.days?.map(day => ({
+    dayNumber: day.day,
+    title:     day.title,
+    imgsCount: day.imgs?.length,
+    img0:      day.imgs?.[0]?.slice(0, 80) || null,
+  })));
+
   const doc = createElement(ItineraryPDF, { itinerary: resolvedItinerary });
   try {
     const blob = await pdf(doc).toBlob();
