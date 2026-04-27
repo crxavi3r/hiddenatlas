@@ -48,7 +48,7 @@ const iconBtn = {
 
 const TABS = [
   { key: 'basics',   label: 'Basics' },
-  { key: 'hero',     label: 'Hero & Summary' },
+  { key: 'hero',     label: 'Overview' },
   { key: 'days',     label: 'Days' },
   { key: 'sections', label: 'Sections' },
   { key: 'images',   label: 'Images' },
@@ -65,8 +65,10 @@ const EMPTY_CONTENT = {
   seo:       { metaTitle: '', metaDescription: '' },
 };
 
-const DIFFICULTIES = ['Easy', 'Easy to Moderate', 'Moderate', 'Moderate to Challenging', 'Challenging'];
+const DIFFICULTIES     = ['Easy', 'Easy to Moderate', 'Moderate', 'Moderate to Challenging', 'Challenging'];
 const BEST_FOR_OPTIONS = ['Couples', 'Families', 'Friend Groups', 'Adventurers', 'Solo'];
+const GROUP_SIZES      = ['1–2 people', '2–4 people', '4–6 people', '6+'];
+const CATEGORIES       = ['City Break', 'Road Trip', 'Island Journey', 'Nature & Adventure', 'Cultural Journey'];
 
 function slugify(title) {
   return title.toLowerCase()
@@ -87,9 +89,10 @@ function Field({ label, hint, children }) {
   );
 }
 
-function ArrayEditor({ label, hint, value = [], onChange, placeholder = 'Add item…', multiline = false }) {
+function ArrayEditor({ label, hint, value = [], onChange, placeholder = 'Add item…', multiline = false, maxItems }) {
   const [newItem, setNewItem] = useState('');
-  const arr = Array.isArray(value) ? value : [];
+  const arr   = Array.isArray(value) ? value : [];
+  const atMax = maxItems != null && arr.length >= maxItems;
 
   return (
     <Field label={label} hint={hint}>
@@ -113,26 +116,31 @@ function ArrayEditor({ label, hint, value = [], onChange, placeholder = 'Add ite
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: '6px' }}>
-        {multiline ? (
-          <textarea
-            value={newItem} placeholder={placeholder} rows={2}
-            style={{ ...textareaStyle, minHeight: '52px', flex: 1 }}
-            onChange={e => setNewItem(e.target.value)}
-          />
-        ) : (
-          <input value={newItem} placeholder={placeholder} style={{ ...inputStyle, flex: 1 }}
-            onChange={e => setNewItem(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (newItem.trim()) { onChange([...arr, newItem.trim()]); setNewItem(''); } } }}
-          />
-        )}
-        <button
-          onClick={() => { if (newItem.trim()) { onChange([...arr, newItem.trim()]); setNewItem(''); } }}
-          style={{ ...btnGhost, whiteSpace: 'nowrap' }}
-        >
-          <Plus size={12} /> Add
-        </button>
-      </div>
+      {!atMax && (
+        <div style={{ display: 'flex', gap: '6px' }}>
+          {multiline ? (
+            <textarea
+              value={newItem} placeholder={placeholder} rows={2}
+              style={{ ...textareaStyle, minHeight: '52px', flex: 1 }}
+              onChange={e => setNewItem(e.target.value)}
+            />
+          ) : (
+            <input value={newItem} placeholder={placeholder} style={{ ...inputStyle, flex: 1 }}
+              onChange={e => setNewItem(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (newItem.trim()) { onChange([...arr, newItem.trim()]); setNewItem(''); } } }}
+            />
+          )}
+          <button
+            onClick={() => { if (newItem.trim()) { onChange([...arr, newItem.trim()]); setNewItem(''); } }}
+            style={{ ...btnGhost, whiteSpace: 'nowrap' }}
+          >
+            <Plus size={12} /> Add
+          </button>
+        </div>
+      )}
+      {atMax && (
+        <p style={{ fontSize: '11.5px', color: '#B5AA99', margin: '4px 0 0' }}>Maximum {maxItems} highlights reached.</p>
+      )}
     </Field>
   );
 }
@@ -476,7 +484,7 @@ function ImageLightbox({ assets, index, onClose }) {
 }
 
 // ── Image Picker — shared library browser + inline upload ─────────────────────
-function ImagePicker({ value, onChange, assets = [], onUpload, assetType = 'gallery', dayNumber, label, hint }) {
+function ImagePicker({ value, onChange, assets = [], onUpload, assetType = 'gallery', dayNumber, label, hint, aspectRatio }) {
   const [open, setOpen]           = useState(false);
   const [uploading, setUploading] = useState(false);
   const [localValue, setLocalValue] = useState(value);
@@ -509,14 +517,24 @@ function ImagePicker({ value, onChange, assets = [], onUpload, assetType = 'gall
 
       {/* Thumbnail */}
       {localValue ? (
-        <div style={{ width: '100%', maxWidth: '980px', margin: '0 auto 8px', background: '#F4EFE8', borderRadius: '14px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <img src={localValue} alt="Selected"
-            style={{ width: '100%', maxHeight: '420px', objectFit: 'contain', objectPosition: 'center', display: 'block', borderRadius: '14px' }}
-            onError={e => { e.currentTarget.style.display = 'none'; }} />
-        </div>
+        aspectRatio ? (
+          <div style={{ width: '100%', aspectRatio, margin: '0 0 8px', background: '#F4EFE8', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
+            <img src={localValue} alt="Selected"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', display: 'block' }}
+              onError={e => { e.currentTarget.style.display = 'none'; }} />
+          </div>
+        ) : (
+          <div style={{ width: '100%', maxWidth: '980px', margin: '0 auto 8px', background: '#F4EFE8', borderRadius: '14px', overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <img src={localValue} alt="Selected"
+              style={{ width: '100%', maxHeight: '420px', objectFit: 'contain', objectPosition: 'center', display: 'block', borderRadius: '14px' }}
+              onError={e => { e.currentTarget.style.display = 'none'; }} />
+          </div>
+        )
       ) : (
         <div style={{
-          height: '80px', borderRadius: '8px', border: '2px dashed #E8E3DA',
+          height: aspectRatio ? undefined : '80px',
+          aspectRatio: aspectRatio || undefined,
+          borderRadius: '8px', border: '2px dashed #E8E3DA',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: '#FAFAF8', color: '#B5AA99', fontSize: '13px', marginBottom: '8px',
         }}>
@@ -2815,98 +2833,180 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
   );
 }
 
-// ── Hero & Summary ────────────────────────────────────────────────────────────
+// ── Overview Tab (formerly Hero & Summary) ────────────────────────────────────
 function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) {
+  const coverUrl   = resolveCoverImage(c('hero.coverImage'), form.slug) || '';
+  const tagline    = c('hero.tagline')        || '';
+  const highlights = c('summary.highlights') || [];
+  const isPremium  = form.type === 'premium';
+
   return (
-    <div style={{ maxWidth: '720px' }}>
-      <div style={sectionCard}>
-        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>Hero</p>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '24px', alignItems: 'start' }}>
 
-        <ImagePicker
-          label="Cover Image"
-          hint="Select from the shared library, upload a new file, or use a URL from the library."
-          value={resolveCoverImage(c('hero.coverImage'), form.slug) || ''}
-          onChange={url => onCoverImageChange(url)}
-          assets={assets}
-          onUpload={onUpload ? (file) => onUpload(file, 'hero') : null}
-          assetType="hero"
-        />
+      {/* ── Left: form fields ─────────────────────────────────────────────── */}
+      <div style={{ minWidth: 0 }}>
 
-        <Field label="Tagline">
-          <input value={c('hero.tagline') || ''} style={inputStyle}
-            placeholder="e.g. Temples, rice terraces and volcanic island life"
-            onChange={e => setContent('hero.tagline', e.target.value)} />
-        </Field>
-      </div>
+        {/* Cover Image */}
+        <div style={sectionCard}>
+          <ImagePicker
+            label="Cover Image"
+            hint="Upload or select from the library. Displayed at 16:9 on the website and in the PDF."
+            value={coverUrl}
+            onChange={url => onCoverImageChange(url)}
+            assets={assets}
+            onUpload={onUpload ? (file) => onUpload(file, 'hero') : null}
+            assetType="hero"
+            aspectRatio="16/9"
+          />
+        </div>
 
-      <div style={sectionCard}>
-        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>Summary</p>
+        {/* Details */}
+        <div style={sectionCard}>
+          <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>Details</p>
 
-        <Field label="Short Description" hint="50–100 words. Used in cards and page intro.">
-          <textarea value={c('summary.shortDescription') || ''} style={{ ...textareaStyle, minHeight: '100px' }}
-            placeholder="Lead paragraph for the itinerary…"
-            onChange={e => setContent('summary.shortDescription', e.target.value)} />
-        </Field>
-
-        <Field label="Why This Journey Is Special" hint="150–250 words. The editorial voice section.">
-          <textarea value={c('summary.whySpecial') || ''} style={{ ...textareaStyle, minHeight: '130px' }}
-            placeholder="What makes this route distinct…"
-            onChange={e => setContent('summary.whySpecial', e.target.value)} />
-        </Field>
-
-        <Field label="Route Overview" hint="Format: City A → City B → City C">
-          <input value={c('summary.routeOverview') || ''} style={inputStyle}
-            placeholder="Seminyak → Ubud → Batur → Amed → Nusa Penida"
-            onChange={e => setContent('summary.routeOverview', e.target.value)} />
-        </Field>
-
-        <ArrayEditor
-          label="Highlights"
-          hint="6 key bullet points shown on the itinerary page."
-          value={c('summary.highlights') || []}
-          onChange={v => setContent('summary.highlights', v)}
-          placeholder="Add highlight…"
-        />
-
-        <ArrayEditor
-          label="What's Included (paid only)"
-          hint="Shown on the purchase CTA. Leave empty for free itineraries."
-          value={c('summary.included') || []}
-          onChange={v => setContent('summary.included', v)}
-          placeholder="Add included item…"
-        />
-      </div>
-
-      <div style={sectionCard}>
-        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>Trip Facts</p>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-          <Field label="Group Size">
-            <input value={c('tripFacts.groupSize') || ''} style={inputStyle}
-              placeholder="e.g. 2–6 people"
-              onChange={e => setContent('tripFacts.groupSize', e.target.value)} />
+          <Field label="One-line description" hint="A short sentence that captures the essence of this itinerary.">
+            <input value={tagline} style={inputStyle}
+              placeholder="London for the first time, done properly"
+              onChange={e => setContent('hero.tagline', e.target.value)} />
           </Field>
-          <Field label="Category">
-            <input value={c('tripFacts.category') || ''} style={inputStyle}
-              placeholder="e.g. Island Journey"
-              onChange={e => setContent('tripFacts.category', e.target.value)} />
+
+          <Field label="Short Description" hint="Shown in cards and at the top of the itinerary page (50–100 words).">
+            <textarea value={c('summary.shortDescription') || ''} style={{ ...textareaStyle, minHeight: '100px' }}
+              placeholder="Lead paragraph for the itinerary…"
+              onChange={e => setContent('summary.shortDescription', e.target.value)} />
+          </Field>
+
+          <Field label="What makes this itinerary worth it" hint="Explain what makes this route different or special (150–250 words).">
+            <textarea value={c('summary.whySpecial') || ''} style={{ ...textareaStyle, minHeight: '130px' }}
+              placeholder="What makes this route distinct…"
+              onChange={e => setContent('summary.whySpecial', e.target.value)} />
+          </Field>
+
+          <Field label="Route" hint="The main route of this itinerary.">
+            <input value={c('summary.routeOverview') || ''} style={inputStyle}
+              placeholder="London → Oxford → Bath"
+              onChange={e => setContent('summary.routeOverview', e.target.value)} />
           </Field>
         </div>
 
-        <Field label="Difficulty">
-          <select value={c('tripFacts.difficulty') || 'Moderate'} style={inputStyle}
-            onChange={e => setContent('tripFacts.difficulty', e.target.value)}>
-            {DIFFICULTIES.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
-        </Field>
+        {/* Highlights */}
+        <div style={sectionCard}>
+          <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>
+            Highlights{highlights.length > 0 ? ` · ${highlights.length}/6` : ''}
+          </p>
 
-        <CheckboxGroup
-          label="Best For"
-          options={BEST_FOR_OPTIONS}
-          value={c('tripFacts.bestFor') || []}
-          onChange={v => setContent('tripFacts.bestFor', v)}
-        />
+          <ArrayEditor
+            hint="Up to 6 key bullet points shown on the itinerary page."
+            value={highlights}
+            onChange={v => setContent('summary.highlights', v)}
+            placeholder="Add a key highlight…"
+            maxItems={6}
+          />
+
+          {isPremium && (
+            <div style={{ borderTop: '1px solid #F0EDE8', paddingTop: '18px', marginTop: '4px' }}>
+              <ArrayEditor
+                label="What's included"
+                hint="Shown in the purchase section."
+                value={c('summary.included') || []}
+                onChange={v => setContent('summary.included', v)}
+                placeholder="Add included item…"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Trip Facts */}
+        <div style={sectionCard}>
+          <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>Trip Facts</p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <Field label="Group Size">
+              <select value={c('tripFacts.groupSize') || ''} style={{ ...inputStyle, cursor: 'pointer' }}
+                onChange={e => setContent('tripFacts.groupSize', e.target.value)}>
+                <option value="">Select…</option>
+                {GROUP_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </Field>
+            <Field label="Category">
+              <select value={c('tripFacts.category') || ''} style={{ ...inputStyle, cursor: 'pointer' }}
+                onChange={e => setContent('tripFacts.category', e.target.value)}>
+                <option value="">Select…</option>
+                {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              </select>
+            </Field>
+          </div>
+
+          <Field label="Difficulty">
+            <select value={c('tripFacts.difficulty') || 'Moderate'} style={{ ...inputStyle, cursor: 'pointer' }}
+              onChange={e => setContent('tripFacts.difficulty', e.target.value)}>
+              {DIFFICULTIES.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </Field>
+
+          <CheckboxGroup
+            label="Best For"
+            options={BEST_FOR_OPTIONS}
+            value={c('tripFacts.bestFor') || []}
+            onChange={v => setContent('tripFacts.bestFor', v)}
+          />
+        </div>
       </div>
+
+      {/* ── Right: live preview ───────────────────────────────────────────── */}
+      <div style={{ position: 'sticky', top: '80px' }}>
+        <p style={{ fontSize: '10.5px', fontWeight: '700', color: '#9A8E80', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '10px' }}>
+          Live Preview
+        </p>
+        <div style={{ ...card, overflow: 'hidden' }}>
+          {/* Cover */}
+          <div style={{ width: '100%', aspectRatio: '16/9', background: '#EDE8E0', overflow: 'hidden', position: 'relative' }}>
+            {coverUrl ? (
+              <img src={coverUrl} alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                onError={e => { e.currentTarget.style.opacity = '0.3'; }}
+              />
+            ) : (
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '6px' }}>
+                <ImageIcon size={24} color="#C8C0B5" />
+                <span style={{ fontSize: '11px', color: '#C8C0B5' }}>No cover image</span>
+              </div>
+            )}
+          </div>
+          {/* Card body */}
+          <div style={{ padding: '14px 16px 18px' }}>
+            {(form.destination || form.durationDays) && (
+              <p style={{ fontSize: '11px', color: '#9A8E80', marginBottom: '6px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                {form.destination && <span>{form.destination}</span>}
+                {form.destination && form.durationDays && <span style={{ color: '#D0C8BE' }}>·</span>}
+                {form.durationDays && <span>{form.durationDays} days</span>}
+              </p>
+            )}
+            <p style={{ fontSize: '15px', fontWeight: '700', color: '#1C1A16', lineHeight: '1.35', marginBottom: tagline ? '6px' : 0, fontFamily: 'Georgia, serif' }}>
+              {form.title || <span style={{ color: '#C8C0B5' }}>Untitled itinerary</span>}
+            </p>
+            {tagline && (
+              <p style={{ fontSize: '12px', color: '#6B6156', lineHeight: '1.5', marginBottom: highlights.length > 0 ? '10px' : 0 }}>
+                {tagline}
+              </p>
+            )}
+            {highlights.length > 0 && (
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                {highlights.slice(0, 4).map((h, i) => (
+                  <li key={i} style={{ fontSize: '11.5px', color: '#6B6156', lineHeight: '1.5', display: 'flex', gap: '7px', alignItems: 'flex-start' }}>
+                    <span style={{ color: '#1B6B65', fontWeight: '700', flexShrink: 0, marginTop: '1px' }}>·</span>
+                    <span>{h}</span>
+                  </li>
+                ))}
+                {highlights.length > 4 && (
+                  <li style={{ fontSize: '11px', color: '#B5AA99', paddingLeft: '14px' }}>+{highlights.length - 4} more</li>
+                )}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }
