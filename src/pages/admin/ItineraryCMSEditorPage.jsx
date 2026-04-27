@@ -665,6 +665,7 @@ export default function ItineraryCMSEditorPage() {
   const [pdfSilentFail,  setPdfSilentFail]  = useState(null);  // non-modal warning after auto-PDF failure
   const [pricingOptions, setPricingOptions] = useState([]);    // loaded from ITINERARY_PRICING_OPTIONS
   const [trimConfirm,    setTrimConfirm]    = useState(null);  // { targetCount, daysToRemove }
+  const [slugOverride,   setSlugOverride]   = useState(false); // admin: unlocked slug editing
 
   const savedId       = useRef(null);  // set after first create
   const slugRef       = useRef('');   // set after load, used by loadAssets for FS scan
@@ -924,11 +925,24 @@ export default function ItineraryCMSEditorPage() {
   }
 
   // ── Slug auto-generation ──────────────────────────────────────────────────────
+  // Auto-slug ONLY while the itinerary has never been saved to the DB.
+  // Once savedId is set (or we opened an existing record), the slug is frozen
+  // so that title edits never silently break existing public URLs.
   function handleTitleChange(value) {
+    const unsaved = isNew && !savedId.current;
     setForm(f => ({
       ...f, title: value,
-      slug: f.slug === '' || f.slug === slugify(f.title) ? slugify(value) : f.slug,
+      slug: unsaved ? slugify(value) : f.slug,
     }));
+  }
+
+  // Admin-only: unlock slug editing after confirming the risk.
+  function handleSlugOverride() {
+    const current = slugRef.current || form.slug;
+    const warning = current
+      ? `Changing the slug will break all existing links to /${current}.\n\nContinue?`
+      : 'Are you sure you want to edit the slug?';
+    if (window.confirm(warning)) setSlugOverride(true);
   }
 
   // ── Content helpers ───────────────────────────────────────────────────────────
@@ -2576,7 +2590,9 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
               <div style={{ ...inputStyle, background: '#F5F2EE', color: '#9A8E80', cursor: 'default', fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {form.slug || '—'}
               </div>
-              <span style={{ fontSize: '11px', color: '#B5AA99', whiteSpace: 'nowrap' }}>auto-generated</span>
+              <span style={{ fontSize: '11px', color: '#B5AA99', whiteSpace: 'nowrap' }}>
+                {(isNew && !savedId.current) ? 'auto-generated' : 'locked'}
+              </span>
             </div>
           </Field>
         )}
@@ -2797,8 +2813,19 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
             <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #E8E3DA' }}>
 
               <Field label="Slug *" hint="Changing this after publishing breaks existing links.">
-                <input value={form.slug} style={{ ...inputStyle, fontFamily: 'monospace' }}
-                  placeholder="london-in-4-days" onChange={e => set('slug', e.target.value)} />
+                {(!isNew || savedId.current) && !slugOverride ? (
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div style={{ ...inputStyle, background: '#F5F2EE', color: '#6B6156', fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'default' }}>
+                      {form.slug || '—'}
+                    </div>
+                    <button type="button" onClick={handleSlugOverride} style={{ ...btnGhost, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      Override
+                    </button>
+                  </div>
+                ) : (
+                  <input value={form.slug} style={{ ...inputStyle, fontFamily: 'monospace' }}
+                    placeholder="london-in-4-days" onChange={e => set('slug', e.target.value)} />
+                )}
               </Field>
 
               <Field label="Itinerary structure">
