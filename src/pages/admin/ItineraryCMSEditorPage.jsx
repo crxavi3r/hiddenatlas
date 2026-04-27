@@ -485,10 +485,11 @@ function ImageLightbox({ assets, index, onClose }) {
 
 // ── Image Picker — shared library browser + inline upload ─────────────────────
 function ImagePicker({ value, onChange, assets = [], onUpload, assetType = 'gallery', dayNumber, label, hint, aspectRatio }) {
-  const [open, setOpen]           = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [open, setOpen]             = useState(false);
+  const [uploading, setUploading]   = useState(false);
+  const [uploadError, setUploadError] = useState(null);
   const [localValue, setLocalValue] = useState(value);
-  const fileRef                   = useRef(null);
+  const fileRef                     = useRef(null);
 
   // Sync when parent propagates a new value (e.g. initial load or external change)
   useEffect(() => { setLocalValue(value); }, [value]);
@@ -499,11 +500,12 @@ function ImagePicker({ value, onChange, assets = [], onUpload, assetType = 'gall
     const file = e.target.files[0];
     if (!file || !onUpload) return;
     setUploading(true);
+    setUploadError(null);
     try {
       const url = await onUpload(file, assetType, dayNumber);
       if (url) { setLocalValue(url); onChange(url); setOpen(false); }
     } catch (err) {
-      alert(err.message || 'Upload failed.');
+      setUploadError(err.message || 'Upload failed.');
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -559,6 +561,9 @@ function ImagePicker({ value, onChange, assets = [], onUpload, assetType = 'gall
           </button>
         )}
       </div>
+      {uploadError && (
+        <p style={{ fontSize: '12px', color: '#C0392B', margin: '6px 0 0', lineHeight: '1.4' }}>{uploadError}</p>
+      )}
       <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
 
       {/* Library grid */}
@@ -1699,11 +1704,61 @@ export default function ItineraryCMSEditorPage() {
   }
 
   // ── Upload from any picker (hero/day) — adds to shared assets[] ──────────────
+  // Auto-create a draft if the itinerary hasn't been saved yet.
+  // Called before any upload that requires a DB id.
+  async function createDraftIfNeeded() {
+    const existing = savedId.current || (isNew ? null : id);
+    if (existing) return existing;
+
+    const title = form.title?.trim() || 'Untitled Itinerary';
+    const slug  = slugRef.current || form.slug || slugify(title);
+    if (!slug) throw new Error('Add a title first so we can create a draft.');
+
+    const token = await getToken();
+    const autoPayload = {
+      title, slug, status: 'draft',
+      subtitle: form.subtitle || '', destination: form.destination || '',
+      country: form.country || '', region: form.region || '',
+      durationDays: form.durationDays ? parseInt(form.durationDays, 10) : null,
+      type: form.type || 'free',
+      isPrivate: form.isPrivate ?? false,
+      isCollection: form.isCollection ?? false,
+      creatorId: form.creatorId || null,
+      content: form.content ?? EMPTY_CONTENT,
+    };
+
+    const res = await fetch('/api/itinerary-cms?action=create', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(autoPayload),
+    });
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+
+    savedId.current  = json.itinerary.id;
+    slugRef.current  = json.itinerary.slug || slug;
+    setForm(f => ({ ...f, slug: json.itinerary.slug || f.slug, title: json.itinerary.title || f.title }));
+    navigate(`/admin/itineraries/${json.itinerary.id}`, { replace: true });
+    return json.itinerary.id;
+  }
+
   async function uploadAssetFromPicker(file, assetType, dayNumber) {
-    const targetId = savedId.current || (isNew ? null : id);
-    if (!targetId) { alert('Save the itinerary first before uploading images.'); return null; }
+    let targetId = savedId.current || (isNew ? null : id);
+
+    if (!targetId) {
+      setSaveMsg({ ok: true, text: 'Creating draft…' });
+      try {
+        targetId = await createDraftIfNeeded();
+        setSaveMsg({ ok: true, text: 'Draft created. Uploading image…' });
+      } catch (e) {
+        setSaveMsg({ ok: false, text: e.message });
+        setTimeout(() => setSaveMsg(null), 4000);
+        throw e;
+      }
+    }
+
     const slug = slugRef.current || form.slug;
-    if (!slug) { alert('Slug is required to upload images.'); return null; }
+    if (!slug) throw new Error('Slug is required to upload images.');
 
     const base64 = await new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -1730,6 +1785,8 @@ export default function ItineraryCMSEditorPage() {
     const json = await res.json();
     if (json.error) throw new Error(json.error);
     setAssets(prev => [...prev, json.asset]);
+    setSaveMsg({ ok: true, text: assetType === 'hero' ? 'Cover image uploaded.' : 'Image uploaded.' });
+    setTimeout(() => setSaveMsg(null), 3000);
     return json.asset.url;
   }
 
@@ -2839,6 +2896,8 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
   const tagline    = c('hero.tagline')        || '';
   const highlights = c('summary.highlights') || [];
   const isPremium  = form.type === 'premium';
+  const [previewImgError, setPreviewImgError] = useState(false);
+  useEffect(() => { setPreviewImgError(false); }, [coverUrl]);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '24px', alignItems: 'start' }}>
@@ -2864,7 +2923,7 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
         <div style={sectionCard}>
           <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>Details</p>
 
-          <Field label="One-line description" hint="A short sentence that captures the essence of this itinerary.">
+          <Field label="Single sentence description" hint="A short sentence that captures the essence of this itinerary.">
             <input value={tagline} style={inputStyle}
               placeholder="London for the first time, done properly"
               onChange={e => setContent('hero.tagline', e.target.value)} />
@@ -2953,26 +3012,31 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
         </div>
       </div>
 
-      {/* ── Right: live preview ───────────────────────────────────────────── */}
+      {/* ── Right: preview ───────────────────────────────────────────────── */}
       <div style={{ position: 'sticky', top: '80px' }}>
         <p style={{ fontSize: '10.5px', fontWeight: '700', color: '#9A8E80', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '10px' }}>
-          Live Preview
+          Preview
         </p>
         <div style={{ ...card, overflow: 'hidden' }}>
-          {/* Cover */}
-          <div style={{ width: '100%', aspectRatio: '16/9', background: '#EDE8E0', overflow: 'hidden', position: 'relative' }}>
-            {coverUrl ? (
-              <img src={coverUrl} alt=""
+          {/* Cover image */}
+          <div style={{ width: '100%', aspectRatio: '16/9', overflow: 'hidden', position: 'relative', background: 'linear-gradient(135deg, #F0ECE4 0%, #E8E3DB 100%)' }}>
+            {coverUrl && !previewImgError ? (
+              <img
+                src={coverUrl}
+                alt=""
                 style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                onError={e => { e.currentTarget.style.opacity = '0.3'; }}
+                onError={() => setPreviewImgError(true)}
               />
             ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '6px' }}>
-                <ImageIcon size={24} color="#C8C0B5" />
-                <span style={{ fontSize: '11px', color: '#C8C0B5' }}>No cover image</span>
+              <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <ImageIcon size={16} color="#C8C0B5" />
+                </div>
+                <span style={{ fontSize: '11px', color: '#B5AA99', letterSpacing: '0.2px' }}>Cover image preview</span>
               </div>
             )}
           </div>
+
           {/* Card body */}
           <div style={{ padding: '14px 16px 18px' }}>
             {(form.destination || form.durationDays) && (
@@ -2982,12 +3046,16 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
                 {form.durationDays && <span>{form.durationDays} days</span>}
               </p>
             )}
-            <p style={{ fontSize: '15px', fontWeight: '700', color: '#1C1A16', lineHeight: '1.35', marginBottom: tagline ? '6px' : 0, fontFamily: 'Georgia, serif' }}>
-              {form.title || <span style={{ color: '#C8C0B5' }}>Untitled itinerary</span>}
+            <p style={{ fontSize: '15px', fontWeight: '700', color: form.title ? '#1C1A16' : '#D0C8BE', lineHeight: '1.35', marginBottom: tagline ? '6px' : 0, fontFamily: 'Georgia, serif' }}>
+              {form.title || 'Itinerary title'}
             </p>
-            {tagline && (
+            {tagline ? (
               <p style={{ fontSize: '12px', color: '#6B6156', lineHeight: '1.5', marginBottom: highlights.length > 0 ? '10px' : 0 }}>
                 {tagline}
+              </p>
+            ) : (
+              <p style={{ fontSize: '12px', color: '#D0C8BE', lineHeight: '1.5', marginBottom: highlights.length > 0 ? '10px' : 0, fontStyle: 'italic' }}>
+                Single sentence description
               </p>
             )}
             {highlights.length > 0 && (
