@@ -333,11 +333,11 @@ async function handleCreate(pool, body, ctx) {
 
   const { rows } = await pool.query(
     `INSERT INTO "Itinerary"
-       (title, subtitle, slug, destination, country, region, "durationDays",
+       (id, title, subtitle, slug, destination, country, region, "durationDays",
         "accessType", price, "stripePriceId", "pricingKey", "coverImage", description,
         type, "isPrivate", "isCollection", status, "isPublished", content, "schemaVersion", "updatedAt",
         creator_id, variant, "parentId")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,$16,$17,$18,1,NOW(),$19,$20,$21)
+     VALUES (gen_random_uuid()::text,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,$16,$17,$18,1,NOW(),$19,$20,$21)
      RETURNING *`,
     [
       title, subtitle, slug, destination, country, region, durationDays,

@@ -1733,7 +1733,10 @@ export default function ItineraryCMSEditorPage() {
       body: JSON.stringify(autoPayload),
     });
     const json = await res.json();
-    if (json.error) throw new Error(json.error);
+    if (json.error) {
+      console.error('[createDraftIfNeeded] backend error:', json.error);
+      throw new Error('Could not create draft. Please check the required fields and try again.');
+    }
 
     savedId.current  = json.itinerary.id;
     slugRef.current  = json.itinerary.slug || slug;
