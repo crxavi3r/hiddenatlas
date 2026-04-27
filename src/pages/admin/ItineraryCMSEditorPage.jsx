@@ -660,6 +660,7 @@ export default function ItineraryCMSEditorPage() {
   const [pdfState,       setPdfState]       = useState('idle'); // idle | generating | done | error
   const [pdfSilentFail,  setPdfSilentFail]  = useState(null);  // non-modal warning after auto-PDF failure
   const [pricingOptions, setPricingOptions] = useState([]);    // loaded from ITINERARY_PRICING_OPTIONS
+  const [trimConfirm,    setTrimConfirm]    = useState(null);  // { targetCount, daysToRemove }
 
   const savedId       = useRef(null);  // set after first create
   const slugRef       = useRef('');   // set after load, used by loadAssets for FS scan
@@ -966,6 +967,32 @@ export default function ItineraryCMSEditorPage() {
     [days[index], days[swap]] = [days[swap], days[index]];
     setContent('days', days.map((d, i) => ({ ...d, day: i + 1 })));
   }
+
+  // ── Sync days with durationDays ───────────────────────────────────────────────
+  useEffect(() => {
+    if (loading) return;
+    const n = parseInt(form.durationDays, 10);
+    if (!n || n < 1 || n > 60) return;
+    const days = form.content?.days || [];
+    if (n === days.length) return;
+    if (n > days.length) {
+      const next = [...days];
+      for (let i = days.length + 1; i <= n; i++) {
+        next.push({ day: i, title: '', desc: '', bullets: [], img: '', tip: '' });
+      }
+      setContent('days', next);
+    } else {
+      const surplus = days.slice(n);
+      const hasContent = surplus.some(d =>
+        d.title?.trim() || d.desc?.trim() || d.bullets?.some(b => b?.trim())
+      );
+      if (hasContent) {
+        setTrimConfirm({ targetCount: n, daysToRemove: surplus });
+      } else {
+        setContent('days', days.slice(0, n));
+      }
+    }
+  }, [form.durationDays, loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Save ──────────────────────────────────────────────────────────────────────
   async function handleSave() {
@@ -2016,7 +2043,7 @@ export default function ItineraryCMSEditorPage() {
         {/* ── Tab panels ── */}
         {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} creators={allCreators} isAdmin={isAdmin} myCreatorId={myCreatorId} dayCount={(form.content?.days || []).length} currentId={savedId.current || (isNew ? null : id)} />}
         {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} onCoverImageChange={handleHeroCoverImage} />}
-        {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} dayImages={dayImages} />}
+        {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} dayImages={dayImages} durationDays={form.durationDays} />}
         {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} />}
         {activeTab === 'images'   && (
           <ImagesTab
@@ -2041,6 +2068,51 @@ export default function ItineraryCMSEditorPage() {
           />
         )}
       </div>
+
+      {/* ── Trim confirm modal ── */}
+      {trimConfirm && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+        }}>
+          <div style={{
+            background: 'white', borderRadius: '12px', padding: '28px',
+            maxWidth: '400px', width: '100%', boxShadow: '0 8px 40px rgba(0,0,0,0.2)',
+          }}>
+            <p style={{ fontWeight: '700', fontSize: '15px', color: '#1C1A16', marginBottom: '10px' }}>
+              Remove {trimConfirm.daysToRemove.length} day{trimConfirm.daysToRemove.length > 1 ? 's' : ''} with content?
+            </p>
+            <p style={{ fontSize: '13px', color: '#6B6156', marginBottom: '14px' }}>
+              These days already have content and would be removed:
+            </p>
+            <ul style={{ fontSize: '13px', color: '#4A433A', marginBottom: '20px', paddingLeft: '18px', lineHeight: '1.8' }}>
+              {trimConfirm.daysToRemove.map(d => (
+                <li key={d.day}>Day {d.day}{d.title ? `: ${d.title}` : ''}</li>
+              ))}
+            </ul>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setForm(f => ({ ...f, durationDays: String((f.content?.days || []).length) }));
+                  setTrimConfirm(null);
+                }}
+                style={btnGhost}
+              >
+                Keep all days
+              </button>
+              <button
+                onClick={() => {
+                  setContent('days', (form.content?.days || []).slice(0, trimConfirm.targetCount));
+                  setTrimConfirm(null);
+                }}
+                style={{ ...btnPrimary, background: '#C0392B', borderColor: '#C0392B' }}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3142,7 +3214,6 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
   const tagline    = c('hero.tagline')        || '';
   const highlights = c('summary.highlights') || [];
   const isPremium  = form.type === 'premium';
-  const autoRoute  = computeRoute(c('days') || []);
 
   return (
     <div style={{ maxWidth: '720px' }}>
@@ -3207,14 +3278,6 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
               onChange={e => setContent('summary.shortDescription', e.target.value)} />
           </Field>
 
-          <Field label="Route" hint="Automatically generated from your itinerary days.">
-            <input
-              value={autoRoute}
-              readOnly
-              placeholder="Will be generated from itinerary days"
-              style={{ ...inputStyle, background: '#FAFAF8', color: autoRoute ? '#4A433A' : '#B5AA99', cursor: 'default' }}
-            />
-          </Field>
         </div>
 
         {/* Highlights */}
@@ -3243,7 +3306,7 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
         <div style={sectionCard}>
           <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>Trip Facts</p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
             <Field label="Group Size">
               <select value={c('tripFacts.groupSize') || ''} style={{ ...inputStyle, cursor: 'pointer' }}
                 onChange={e => setContent('tripFacts.groupSize', e.target.value)}>
@@ -3251,12 +3314,13 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
                 {GROUP_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </Field>
-            <Field label="Category" hint="Used for navigation and SEO.">
+            <Field label="Category">
               <select value={c('tripFacts.category') || ''} style={{ ...inputStyle, cursor: 'pointer' }}
                 onChange={e => setContent('tripFacts.category', e.target.value)}>
                 <option value="">Choose category…</option>
                 {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
               </select>
+              <p style={{ fontSize: '11px', color: '#B5AA99', marginTop: '4px' }}>Used for navigation and SEO.</p>
             </Field>
           </div>
 
@@ -3281,35 +3345,57 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
 }
 
 // ── Days ──────────────────────────────────────────────────────────────────────
-function DaysTab({ c, addDay, updateDay, deleteDay, moveDay, assets, onUpload, dayImages }) {
-  const days = c('days') || [];
+function DaysTab({ c, addDay, updateDay, deleteDay, moveDay, assets, onUpload, dayImages, durationDays }) {
+  const days     = c('days') || [];
+  const hasDays  = days.length > 0;
+  const route    = computeRoute(days);
+  const hasDuration = !!(durationDays && parseInt(durationDays, 10) > 0);
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-        <p style={{ fontSize: '13px', color: '#6B6156' }}>
-          {days.length} day{days.length !== 1 ? 's' : ''}
-        </p>
-        <button onClick={addDay} style={btnPrimary}>
+      {/* Route preview header */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        marginBottom: '16px', gap: '12px',
+      }}>
+        <div style={{ fontSize: '13px', color: '#6B6156', minWidth: 0 }}>
+          {route ? (
+            <span>
+              <span style={{ fontWeight: '600', color: '#1B6B65' }}>Route:</span>{' '}
+              <span style={{ color: '#4A433A' }}>{route}</span>
+            </span>
+          ) : hasDays ? (
+            <span style={{ color: '#B5AA99' }}>Route will appear once days have locations.</span>
+          ) : (
+            <span style={{ color: '#B5AA99' }}>
+              {hasDuration ? `${parseInt(durationDays, 10)} days planned` : 'No days yet'}
+            </span>
+          )}
+        </div>
+        <button onClick={addDay} style={{ ...btnPrimary, flexShrink: 0 }}>
           <Plus size={13} /> Add day
         </button>
       </div>
-      {days.length === 0 ? (
+
+      {!hasDays && (
         <div style={{ ...sectionCard, textAlign: 'center', padding: '48px', color: '#B5AA99' }}>
-          No days yet. Click "Add day" to start building the itinerary.
+          {hasDuration
+            ? 'Days are being prepared…'
+            : 'Set the trip duration in Basics to create the day plan.'}
         </div>
-      ) : (
-        days.map((day, i) => (
-          <DayCard
-            key={i} day={day} index={i} total={days.length}
-            onChange={updated => updateDay(i, updated)}
-            onDelete={() => deleteDay(i)}
-            onMove={(idx, dir) => moveDay(idx, dir)}
-            assets={assets}
-            resolvedDayImage={dayImages?.[day.day] || ''}
-            onUpload={onUpload}
-          />
-        ))
       )}
+
+      {days.map((day, i) => (
+        <DayCard
+          key={i} day={day} index={i} total={days.length}
+          onChange={updated => updateDay(i, updated)}
+          onDelete={() => deleteDay(i)}
+          onMove={(idx, dir) => moveDay(idx, dir)}
+          assets={assets}
+          resolvedDayImage={dayImages?.[day.day] || ''}
+          onUpload={onUpload}
+        />
+      ))}
     </div>
   );
 }
