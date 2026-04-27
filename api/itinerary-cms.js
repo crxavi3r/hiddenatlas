@@ -133,6 +133,7 @@ export default async function handler(req, res) {
       if (action === 'ai-history')       { await assertOwnership(pool, id, ctx); return res.json(await handleAIHistory(pool, id)); }
       if (action === 'linked-request')   { adminOnly(); return res.json(await handleLinkedRequest(pool, id)); }
       if (action === 'pricing-options')    return res.json(handlePricingOptions());
+      if (action === 'search-parents')    return res.json(await handleSearchParents(pool, req.query.q || '', req.query.id || null));
       if (action === 'migration-status')  { adminOnly(); return res.json(await handleMigrationStatus(pool)); }
       if (action === 'upload-pdf-token')  { await assertOwnership(pool, id, ctx); return res.json(await handleUploadPDFToken(pool, id)); }
       return res.status(400).json({ error: 'Unknown GET action' });
@@ -212,6 +213,24 @@ async function handleMigrationStatus(pool) {
     `SELECT name, "appliedAt" FROM "_migrations" ORDER BY name ASC`
   );
   return { migrationTableExists: true, applied: rows, count: rows.length };
+}
+
+// ── Search itineraries for parent picker ─────────────────────────────────────
+// Accessible to all authenticated CMS users (admin + designer).
+// Returns minimal fields — title, slug, destination — for the relationship picker.
+async function handleSearchParents(pool, q = '', excludeId = null) {
+  const search = q.trim() ? `%${q.trim()}%` : '%';
+  const params = excludeId ? [search, excludeId] : [search];
+  const { rows } = await pool.query(
+    `SELECT id, slug, title, destination, country
+     FROM "Itinerary"
+     WHERE (title ILIKE $1 OR destination ILIKE $1 OR slug ILIKE $1)
+       ${excludeId ? 'AND id != $2' : ''}
+     ORDER BY title ASC
+     LIMIT 25`,
+    params
+  );
+  return { itineraries: rows };
 }
 
 // ── List all itineraries (CMS view) ──────────────────────────────────────────

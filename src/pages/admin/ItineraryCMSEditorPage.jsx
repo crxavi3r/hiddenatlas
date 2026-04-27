@@ -612,9 +612,10 @@ export default function ItineraryCMSEditorPage() {
     region: '', durationDays: '', type: 'free', isPrivate: false, isCollection: false,
     stripePriceId: '', pricingKey: '',
     coverImage: '', status: 'draft', pdfUrl: '', pdf_url: '', pdf_version: 'v1.0', creatorId: '',
-    variant: '', parentId: '',
+    variant: '', parentId: '', parentTitle: '',
     contentDepth: 'essential',
     structureType: 'standalone',
+    relationshipType: 'standalone',
     content: { ...EMPTY_CONTENT },
   });
   const [allCreators, setAllCreators] = useState([]);  // for creator selector
@@ -684,6 +685,8 @@ export default function ItineraryCMSEditorPage() {
           : it.variant === 'short' ? 'short' : 'essential',
         structureType: it.isCollection ? 'collection_parent'
           : (it.parentId ? 'variant' : 'standalone'),
+        relationshipType: it.parentId ? 'associated' : 'standalone',
+        parentTitle: '',
         content,
       });
       savedId.current = it.id;
@@ -950,6 +953,14 @@ export default function ItineraryCMSEditorPage() {
       alert('A pricing plan is required for premium itineraries. Select one in the Basics tab.');
       return;
     }
+    if (form.relationshipType === 'associated' && !form.parentId?.trim()) {
+      alert('Please select a parent itinerary, or switch to "Standalone itinerary".');
+      return;
+    }
+    if (form.relationshipType === 'associated' && form.parentId?.trim() && !form.variant) {
+      alert('Please select a version (Complete, Essential, Short, or Custom) for this associated itinerary.');
+      return;
+    }
     setSaving(true); setSaveMsg(null);
     try {
       const token = await getToken();
@@ -962,14 +973,14 @@ export default function ItineraryCMSEditorPage() {
         days: Array.isArray(form.content?.days) ? form.content.days : [],
       };
 
-      // Normalize parentId and variant — empty string must become null before writing to DB.
-      // Empty string '' passes through ?? but fails the FK constraint; use || to catch it.
-      const normalizedParentId = form.parentId && form.parentId.trim() ? form.parentId.trim() : null;
-      // contentDepth drives variant; store it even for standalone itineraries so depth is preserved.
-      // Admin assetVariant override (form.variant) takes priority when it differs from contentDepth.
-      const normalizedVariant = (['complete', 'essential', 'short'].includes(form.variant) ? form.variant
-        : ['complete', 'essential', 'short'].includes(form.contentDepth) ? form.contentDepth
-        : null);
+      // Normalize parentId and variant.
+      // parentId is only meaningful when the itinerary is associated with a parent.
+      // Empty string '' fails FK constraint — coerce to null.
+      const isAssociated    = form.relationshipType === 'associated' && !!form.parentId?.trim();
+      const normalizedParentId = isAssociated ? form.parentId.trim() : null;
+      const normalizedVariant  = isAssociated
+        ? (['complete', 'essential', 'short', 'custom'].includes(form.variant) ? form.variant : null)
+        : null;
 
       const slug = form.slug;
       console.log("SAVE ITINERARY PARENT DEBUG", {
@@ -1032,6 +1043,8 @@ export default function ItineraryCMSEditorPage() {
         creatorId:     it.creatorId     ?? f.creatorId,
         contentDepth: (v => v === 'complete' || v === 'premium' ? 'complete' : v === 'short' ? 'short' : f.contentDepth || 'essential')(it.variant ?? f.variant),
         structureType: (it.isCollection ?? f.isCollection) ? 'collection_parent' : (f.parentId ? 'variant' : 'standalone'),
+        relationshipType: f.parentId ? 'associated' : 'standalone',
+        parentTitle: f.parentTitle,
         // content intentionally preserved from f — never replace with DB response
         // (JSONB may arrive as string in some pg/Vercel configurations)
       }));
@@ -1893,7 +1906,7 @@ export default function ItineraryCMSEditorPage() {
         </div>
 
         {/* ── Tab panels ── */}
-        {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} creators={allCreators} isAdmin={isAdmin} myCreatorId={myCreatorId} dayCount={(form.content?.days || []).length} />}
+        {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} creators={allCreators} isAdmin={isAdmin} myCreatorId={myCreatorId} dayCount={(form.content?.days || []).length} currentId={savedId.current || (isNew ? null : id)} />}
         {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} onCoverImageChange={handleHeroCoverImage} />}
         {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} dayImages={dayImages} />}
         {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} />}
@@ -2032,8 +2045,135 @@ function DestinationPicker({ destination, country, region, onChange }) {
   );
 }
 
+// ── Parent itinerary search picker ────────────────────────────────────────────
+function ParentItineraryPicker({ value, displayValue, currentId, onSelect, onClear }) {
+  const { getToken } = useAuth();
+  const [query,         setQuery]         = useState(displayValue || '');
+  const [results,       setResults]       = useState([]);
+  const [searching,     setSearching]     = useState(false);
+  const [open,          setOpen]          = useState(false);
+  const [resolvedTitle, setResolvedTitle] = useState(displayValue || '');
+
+  // When value/displayValue change externally (e.g. on form load), sync display
+  useEffect(() => {
+    if (!value) { setQuery(''); setResolvedTitle(''); return; }
+    if (displayValue) { setQuery(displayValue); setResolvedTitle(displayValue); return; }
+    // Resolve slug → title via API
+    setQuery(value);
+    getToken().then(token => {
+      if (!token) return;
+      return fetch(
+        `/api/itinerary-cms?action=search-parents&q=${encodeURIComponent(value)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      ).then(r => r.json()).then(data => {
+        const match = data.itineraries?.find(it => it.slug === value || it.slug.includes(value) || value.includes(it.slug));
+        if (match) {
+          const label = `${match.title}${match.destination ? ` · ${match.destination}` : ''}`;
+          setQuery(label);
+          setResolvedTitle(label);
+        }
+      });
+    }).catch(() => {});
+  }, [value, displayValue]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) { setResults([]); return; }
+    if (trimmed === resolvedTitle) return;
+    const t = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const url = `/api/itinerary-cms?action=search-parents&q=${encodeURIComponent(trimmed)}`
+          + (currentId ? `&id=${currentId}` : '');
+        const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await r.json();
+        setResults(Array.isArray(data.itineraries) ? data.itineraries : []);
+        setOpen(true);
+      } catch { setResults([]); }
+      finally { setSearching(false); }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleSelect(it) {
+    const label = `${it.title}${it.destination ? ` · ${it.destination}` : ''}`;
+    onSelect({ slug: it.slug, title: it.title, id: it.id });
+    setQuery(label);
+    setResolvedTitle(label);
+    setOpen(false);
+    setResults([]);
+  }
+
+  function handleClear() {
+    onClear();
+    setQuery('');
+    setResolvedTitle('');
+    setResults([]);
+    setOpen(false);
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <input
+          value={query}
+          style={{ ...inputStyle, flex: 1 }}
+          placeholder="Search by title or destination…"
+          onChange={e => { setQuery(e.target.value); if (!e.target.value.trim()) handleClear(); }}
+          onFocus={() => results.length > 0 && setOpen(true)}
+          onBlur={() => setTimeout(() => {
+            setOpen(false);
+            if (value && resolvedTitle) setQuery(resolvedTitle);
+          }, 200)}
+        />
+        {value && (
+          <button onClick={handleClear} style={{
+            padding: '8px 12px', border: '1px solid #E8E3DA', borderRadius: '5px',
+            background: 'white', cursor: 'pointer', fontSize: '12px', color: '#9A8E80', flexShrink: 0,
+          }}>
+            Clear
+          </button>
+        )}
+      </div>
+      {searching && (
+        <span style={{ position: 'absolute', right: value ? 80 : 10, top: 10, fontSize: '11px', color: '#B5AA99', pointerEvents: 'none' }}>
+          Searching…
+        </span>
+      )}
+      {open && results.length > 0 && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200,
+          background: 'white', border: '1px solid #E8E3DA', borderRadius: '8px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.10)', overflow: 'hidden',
+        }}>
+          {results.map((it, i) => (
+            <button key={it.id || it.slug} onMouseDown={() => handleSelect(it)} style={{
+              display: 'block', width: '100%', textAlign: 'left',
+              padding: '10px 14px', border: 'none',
+              borderBottom: i < results.length - 1 ? '1px solid #F0EDE8' : 'none',
+              background: 'white', cursor: 'pointer',
+            }}>
+              <span style={{ fontWeight: '600', color: '#1C1A16', fontSize: '13.5px' }}>{it.title}</span>
+              {it.destination && (
+                <span style={{ color: '#9A8E80', fontSize: '12px', marginLeft: '8px' }}>{it.destination}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+      {value && (
+        <p style={{ fontSize: '11px', color: '#C8C0B5', margin: '5px 0 0', fontFamily: 'monospace' }}>
+          {value}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Basics Tab ────────────────────────────────────────────────────────────────
-function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators = [], isAdmin = false, myCreatorId = null, dayCount = 0 }) {
+function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators = [], isAdmin = false, myCreatorId = null, dayCount = 0, currentId = null }) {
   function set(field, value) { setForm(f => ({ ...f, [field]: value })); }
   function setSEO(field, value) {
     setForm(f => ({ ...f, content: { ...f.content, seo: { ...(f.content?.seo ?? {}), [field]: value } } }));
@@ -2045,16 +2185,31 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  function setContentDepth(depth) {
-    setForm(f => ({ ...f, contentDepth: depth, variant: depth }));
+  function setRelationshipType(type) {
+    if (type === 'standalone') {
+      setForm(f => ({
+        ...f,
+        relationshipType: 'standalone',
+        structureType: f.structureType === 'collection_parent' ? 'collection_parent' : 'standalone',
+        parentId: '', parentTitle: '', variant: '',
+      }));
+    } else {
+      setForm(f => ({
+        ...f,
+        relationshipType: 'associated',
+        structureType: 'variant',
+      }));
+    }
   }
 
   function setStructureType(type) {
     setForm(f => ({
       ...f,
-      structureType: type,
-      isCollection:  type === 'collection_parent',
-      ...(type !== 'variant' ? { parentId: '' } : {}),
+      structureType:    type,
+      isCollection:     type === 'collection_parent',
+      relationshipType: type === 'variant' ? 'associated' : type === 'standalone' ? 'standalone' : f.relationshipType,
+      ...(type === 'standalone' ? { parentId: '', parentTitle: '', variant: '' } : {}),
+      ...(type === 'collection_parent' ? { parentId: '', parentTitle: '', variant: '' } : {}),
     }));
   }
 
@@ -2114,14 +2269,15 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
   const isDraft        = form.status !== 'published';
   const isClientReq    = form.type === 'custom';
   const isCollection   = form.structureType === 'collection_parent' || form.isCollection;
+  const isAssociated   = form.relationshipType === 'associated';
 
   const warnings = [];
-  if (hasDayMismatch) warnings.push(`You set ${actualDays} days but only created ${dayCount} day plan${dayCount !== 1 ? 's' : ''}.`);
-  if (isDraft)        warnings.push('This itinerary is set to Draft and will not appear on the public site.');
-  if (isClientReq)    warnings.push('Client Request itineraries are private by default.');
-  if (isCollection)   warnings.push('Collection parents cannot contain standalone day plans.');
-
-  const activeDepth = form.contentDepth || (form.variant === 'complete' || form.variant === 'premium' ? 'complete' : form.variant || 'essential');
+  if (hasDayMismatch)                                    warnings.push(`You set ${actualDays} days but only created ${dayCount} day plan${dayCount !== 1 ? 's' : ''}.`);
+  if (isDraft)                                           warnings.push('This itinerary is set to Draft and will not appear on the public site.');
+  if (isClientReq)                                       warnings.push('Client Request itineraries are private by default.');
+  if (isCollection)                                      warnings.push('Collection parents cannot contain standalone day plans.');
+  if (isAssociated && !form.parentId)                    warnings.push('Please select a parent itinerary to complete the association.');
+  if (isAssociated && form.parentId && !form.variant)    warnings.push('Please select a version for this associated itinerary.');
 
   return (
     <div style={{ maxWidth: '720px' }}>
@@ -2262,39 +2418,85 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
         })()}
       </div>
 
-      {/* ── 3. Content Depth ──────────────────────────────────────────────── */}
+      {/* ── 3. Itinerary Relationship ──────────────────────────────────── */}
       <div style={sectionCard}>
-        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '4px' }}>Content Depth</p>
-        <p style={{ fontSize: '12px', color: '#9A8E80', marginBottom: '18px' }}>How much detail does this itinerary cover?</p>
+        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '4px' }}>Itinerary Relationship</p>
+        <p style={{ fontSize: '12px', color: '#9A8E80', marginBottom: '18px' }}>Is this a standalone itinerary or part of a collection?</p>
 
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: isAssociated ? '20px' : 0 }}>
           {[
-            { value: 'complete',  label: 'Complete',  desc: 'Full detailed version' },
-            { value: 'essential', label: 'Essential', desc: 'Core route and highlights' },
-            { value: 'short',     label: 'Short',     desc: 'Condensed, lighter plan' },
-          ].map(({ value, label, desc }) => {
-            const active = activeDepth === value;
-            return (
-              <label key={value} style={{
-                display: 'flex', flexDirection: 'column', gap: '4px',
-                padding: '12px 16px', borderRadius: '8px', cursor: 'pointer', flex: '1 1 130px',
-                border: `1.5px solid ${active ? '#1B6B65' : '#E8E3DA'}`,
-                background: active ? '#EFF6F5' : 'white',
-              }}>
-                <input type="radio" name="contentDepth" value={value}
-                  checked={active}
-                  onChange={() => setContentDepth(value)}
-                  style={{ display: 'none' }}
-                />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {active && <Check size={13} strokeWidth={3} color="#1B6B65" />}
-                  <span style={{ fontSize: '13px', fontWeight: '600', color: active ? '#1B6B65' : '#1C1A16' }}>{label}</span>
-                </div>
-                <span style={{ fontSize: '11.5px', color: '#9A8E80', lineHeight: '1.4' }}>{desc}</span>
-              </label>
-            );
-          })}
+            { value: 'standalone', label: 'Standalone itinerary',             desc: 'Independent — does not belong to another itinerary.' },
+            { value: 'associated', label: 'Associate with existing itinerary', desc: 'A version or child of an existing itinerary.' },
+          ].map(({ value, label, desc }) => (
+            <label key={value} style={{
+              display: 'flex', flexDirection: 'column', gap: '4px',
+              padding: '12px 16px', borderRadius: '8px', cursor: 'pointer', flex: '1 1 200px',
+              border: `1.5px solid ${form.relationshipType === value ? '#1B6B65' : '#E8E3DA'}`,
+              background: form.relationshipType === value ? '#EFF6F5' : 'white',
+            }}>
+              <input type="radio" name="relationshipType" value={value}
+                checked={form.relationshipType === value}
+                onChange={() => setRelationshipType(value)}
+                style={{ display: 'none' }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {form.relationshipType === value && <Check size={13} strokeWidth={3} color="#1B6B65" />}
+                <span style={{ fontSize: '13px', fontWeight: '600', color: form.relationshipType === value ? '#1B6B65' : '#1C1A16' }}>{label}</span>
+              </div>
+              <span style={{ fontSize: '11.5px', color: '#9A8E80', lineHeight: '1.4' }}>{desc}</span>
+            </label>
+          ))}
         </div>
+
+        {isAssociated && (
+          <>
+            <Field label="Parent itinerary *" hint="Select the itinerary this belongs to.">
+              <ParentItineraryPicker
+                value={form.parentId || ''}
+                displayValue={form.parentTitle || ''}
+                currentId={currentId}
+                onSelect={({ slug, title }) =>
+                  setForm(f => ({ ...f, parentId: slug, parentTitle: title, structureType: 'variant', relationshipType: 'associated' }))
+                }
+                onClear={() => setForm(f => ({ ...f, parentId: '', parentTitle: '', variant: '' }))}
+              />
+            </Field>
+
+            {form.parentId && (
+              <Field label="Version *" hint="How does this itinerary relate to the parent?">
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {[
+                    { value: 'complete',  label: 'Complete',  desc: 'Full detailed version' },
+                    { value: 'essential', label: 'Essential', desc: 'Core route and highlights' },
+                    { value: 'short',     label: 'Short',     desc: 'Condensed, lighter plan' },
+                    { value: 'custom',    label: 'Custom',    desc: 'Custom variation' },
+                  ].map(({ value, label, desc }) => {
+                    const active = form.variant === value;
+                    return (
+                      <label key={value} style={{
+                        display: 'flex', flexDirection: 'column', gap: '4px',
+                        padding: '12px 14px', borderRadius: '8px', cursor: 'pointer', flex: '1 1 110px',
+                        border: `1.5px solid ${active ? '#1B6B65' : '#E8E3DA'}`,
+                        background: active ? '#EFF6F5' : 'white',
+                      }}>
+                        <input type="radio" name="itineraryVersion" value={value}
+                          checked={active}
+                          onChange={() => set('variant', value)}
+                          style={{ display: 'none' }}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {active && <Check size={13} strokeWidth={3} color="#1B6B65" />}
+                          <span style={{ fontSize: '13px', fontWeight: '600', color: active ? '#1B6B65' : '#1C1A16' }}>{label}</span>
+                        </div>
+                        <span style={{ fontSize: '11.5px', color: '#9A8E80', lineHeight: '1.4' }}>{desc}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </Field>
+            )}
+          </>
+        )}
       </div>
 
       {/* ── 4. SEO ────────────────────────────────────────────────────────── */}
@@ -2429,18 +2631,18 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
                 </div>
               </Field>
 
-              {form.structureType === 'variant' && (
-                <Field label="Parent slug" hint="Asset folder slug shared by all variants. e.g. california-american-west">
+              {(form.structureType === 'variant' || form.parentId) && (
+                <Field label="Parent slug" hint="Slug of the parent itinerary used for asset path resolution.">
                   <input value={form.parentId || ''} style={{ ...inputStyle, fontFamily: 'monospace' }}
-                    placeholder="california-american-west"
+                    placeholder="e.g. london-collection"
                     onChange={e => set('parentId', e.target.value)} />
                 </Field>
               )}
 
-              <Field label="Asset variant" hint="Which day-images subfolder to use. Defaults to Content Depth if left blank.">
+              <Field label="Asset variant" hint="Which day-images subfolder to use. Set automatically from Version selection.">
                 <select value={form.variant || ''} style={{ ...inputStyle, maxWidth: '260px' }}
                   onChange={e => set('variant', e.target.value)}>
-                  <option value="">Default (from Content Depth)</option>
+                  <option value="">None</option>
                   <option value="complete">complete</option>
                   <option value="essential">essential</option>
                   <option value="short">short</option>
