@@ -167,11 +167,13 @@ export default function ItinerariesPage() {
       .catch(() => {});
   }, []);
 
-  const itineraries = staticItineraries.map(it => {
-    const heroUrl = heroOverrides[it.id];
-    const creator = creatorMap[it.id] || null;
-    return { ...it, ...(heroUrl ? { coverImage: heroUrl } : {}), ...(creator ? { creator } : {}) };
-  });
+  const itineraries = staticItineraries
+    .filter(it => it.status !== 'draft')
+    .map(it => {
+      const heroUrl = heroOverrides[it.id];
+      const creator = creatorMap[it.id] || null;
+      return { ...it, ...(heroUrl ? { coverImage: heroUrl } : {}), ...(creator ? { creator } : {}) };
+    });
 
   useSEO({
     title: 'Travel Itineraries — Free & Premium Journeys',

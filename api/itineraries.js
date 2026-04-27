@@ -78,7 +78,8 @@ export default async function handler(req, res) {
          FROM   "ItineraryAsset" ia
          JOIN   "Itinerary"      i ON i.id = ia."itineraryId"
          WHERE  ia."assetType" = 'hero'
-           AND  ia.active = true`
+           AND  ia.active = true
+           AND  i.status = 'published'`
       );
       const heroes = {};
       for (const row of rows) heroes[row.slug] = row.url;
@@ -107,6 +108,7 @@ export default async function handler(req, res) {
          FROM   "ItineraryAsset" ia
          JOIN   "Itinerary"      i  ON i.id = ia."itineraryId"
          WHERE  i.slug = $1
+           AND  i.status = 'published'
            AND  ia.active = true
          ORDER BY ia."assetType",
                   ia."dayNumber" NULLS LAST,

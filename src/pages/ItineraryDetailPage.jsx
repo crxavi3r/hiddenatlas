@@ -673,7 +673,11 @@ const api = useApi();
     handlePurchase();
   }
 
-  if (!itinerary) {
+  // Draft itineraries are not publicly accessible.
+  // Wait until auth loads so admins get through; non-admins see 404.
+  const isDraft = itinerary?.status === 'draft';
+
+  if (!itinerary || (isDraft && isLoaded && !isAdmin)) {
     return (
       <div style={{ padding: '120px 24px', textAlign: 'center' }}>
         <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '32px', marginBottom: '16px' }}>

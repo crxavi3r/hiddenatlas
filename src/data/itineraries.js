@@ -197,6 +197,7 @@ export const itineraries = [
 
   {
     id: "albania-riviera-mountains",
+    status: "draft",
     title: "Albania",
     subtitle: "10 Day Riviera & Accursed Mountains Road Trip",
     tagline: "Ionian coast, Ottoman hill towns and the Albanian Alps",
