@@ -65,7 +65,7 @@ const EMPTY_CONTENT = {
   seo:       { metaTitle: '', metaDescription: '' },
 };
 
-const DIFFICULTIES     = ['Easy', 'Moderate', 'Intensive'];
+const DIFFICULTIES     = ['Relaxed', 'Balanced', 'Fast'];
 const BEST_FOR_OPTIONS = ['Couples', 'Families', 'Friend Groups', 'Adventurers', 'Solo'];
 const GROUP_SIZES      = ['1–2 people', '2–4 people', '4–6 people', 'Flexible'];
 const CATEGORIES       = ['City Break', 'Road Trip', 'Island Journey', 'Cultural Route', 'Nature Escape', 'Luxury Escape'];
@@ -3155,31 +3155,59 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
             assets={assets}
             onUpload={onUpload ? (file) => onUpload(file, 'hero') : null}
           />
+
+          {/* Inline preview card */}
+          {(form.title || tagline) && (
+            <div style={{
+              marginTop: '16px', borderTop: '1px solid #F0EDE8', paddingTop: '16px',
+              display: 'flex', gap: '12px', alignItems: 'center',
+            }}>
+              {coverUrl && (
+                <div style={{ width: '72px', height: '48px', borderRadius: '6px', overflow: 'hidden', flexShrink: 0, background: '#F4F1EC' }}>
+                  <img src={coverUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {form.title && (
+                  <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '2px',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {form.title}
+                  </p>
+                )}
+                {tagline && (
+                  <p style={{ fontSize: '12px', color: '#6B6156',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {tagline}
+                  </p>
+                )}
+                <p style={{ fontSize: '10.5px', color: '#C4BAB0', marginTop: '4px' }}>Card preview</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Details */}
         <div style={sectionCard}>
           <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>Details</p>
 
-          <Field label="Single sentence description" hint="A short sentence that captures the essence of this itinerary.">
-            <input value={tagline} style={inputStyle}
-              placeholder="London for the first time, done properly"
-              onChange={e => setContent('hero.tagline', e.target.value)} />
+          <Field label="Tagline" hint="A short punchy sentence that captures the essence of the itinerary.">
+            <div>
+              <input value={tagline} maxLength={80} style={inputStyle}
+                placeholder="London for the first time, done properly"
+                onChange={e => setContent('hero.tagline', e.target.value)} />
+              <p style={{ fontSize: '11px', color: tagline.length > 72 ? '#C9A96E' : '#C4BAB0', marginTop: '4px', textAlign: 'right' }}>
+                {tagline.length} / 80
+              </p>
+            </div>
           </Field>
 
-          <Field label="Short Description" hint="Shown in cards and at the top of the itinerary page (50–100 words).">
+          <Field label="Description" hint="Shown on cards and at the top of the itinerary page (80–120 words).">
             <textarea value={c('summary.shortDescription') || ''} style={{ ...textareaStyle, minHeight: '100px' }}
               placeholder="Lead paragraph for the itinerary…"
               onChange={e => setContent('summary.shortDescription', e.target.value)} />
           </Field>
 
-          <Field label="What makes this itinerary worth it" hint="Explain what makes this route different or special (150–250 words).">
-            <textarea value={c('summary.whySpecial') || ''} style={{ ...textareaStyle, minHeight: '130px' }}
-              placeholder="What makes this route distinct…"
-              onChange={e => setContent('summary.whySpecial', e.target.value)} />
-          </Field>
-
-          <Field label="Route" hint="Auto-generated from the itinerary days — not editable.">
+          <Field label="Route" hint="Automatically generated from your itinerary days.">
             <input
               value={autoRoute}
               readOnly
@@ -3232,10 +3260,10 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
             </Field>
           </div>
 
-          <Field label="Difficulty">
+          <Field label="Pace" hint="Overall rhythm of the itinerary.">
             <select value={c('tripFacts.difficulty') || ''} style={{ ...inputStyle, cursor: 'pointer' }}
               onChange={e => setContent('tripFacts.difficulty', e.target.value)}>
-              <option value="">Choose difficulty…</option>
+              <option value="">Choose pace…</option>
               {DIFFICULTIES.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           </Field>
