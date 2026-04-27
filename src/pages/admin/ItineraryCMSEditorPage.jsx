@@ -3662,9 +3662,9 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
           </div>
         </div>
 
-        {/* Action row */}
+        {/* Action row — Add image is always visible */}
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
-          {isDirty && !adding && !justAdded && (
+          {isDirty && !adding && (
             <button onClick={onCancel} style={btnGhost}>
               Cancel
             </button>
@@ -3674,20 +3674,27 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
             disabled={!canAdd || adding}
             style={{
               ...btnPrimary,
-              background: justAdded ? '#157a5a' : (!canAdd || adding ? '#B5AA99' : undefined),
-              cursor: (!canAdd || adding) ? 'not-allowed' : 'pointer',
-              transition: 'background 0.3s',
-              opacity: 1,
+              background: !canAdd || adding ? '#B5AA99' : '#1B6B65',
+              cursor: !canAdd || adding ? 'not-allowed' : 'pointer',
             }}
           >
-            {adding
-              ? <><span style={{ display: 'inline-block', width: '10px', height: '10px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Adding…</>
-              : justAdded
-                ? <><Check size={13} /> Added!</>
-                : <><ImageIcon size={13} /> Add image</>
-            }
+            {adding && (
+              <span style={{
+                display: 'inline-block', width: '10px', height: '10px',
+                border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white',
+                borderRadius: '50%', animation: 'spin 0.7s linear infinite',
+              }} />
+            )}
+            {adding ? 'Adding…' : 'Add image'}
           </button>
         </div>
+
+        {/* Success feedback */}
+        {justAdded && (
+          <p style={{ fontSize: '12px', color: '#1B6B65', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
+            <Check size={12} strokeWidth={3} /> Image added successfully
+          </p>
+        )}
 
         {/* Inline error */}
         {addError && (
