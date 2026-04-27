@@ -2073,6 +2073,7 @@ export default function ItineraryCMSEditorPage() {
             justAdded={justAdded}
             adding={addingAsset}
             addError={addError}
+            onAddError={setAddError}
             onCancel={() => { setNewAsset(a => ({ ...EMPTY_ASSET, assetType: a.assetType, dayNumber: a.dayNumber })); setAddError(null); }}
           />
         )}
@@ -3468,7 +3469,7 @@ function SectionsTab({ c, setContent }) {
 }
 
 // ── Images ────────────────────────────────────────────────────────────────────
-function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, onDelete, isNew, hasSavedId, dayCount, heroImageUrl, dayImages, onSetHero, lastAdded = [], justAdded = false, adding = false, addError = null, onCancel }) {
+function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, onDelete, isNew, hasSavedId, dayCount, heroImageUrl, dayImages, onSetHero, lastAdded = [], justAdded = false, adding = false, addError = null, onAddError, onCancel }) {
   const fileInputRef = useRef(null);
   const [lightbox, setLightbox] = useState(null); // { assets: [], index: 0 }
 
@@ -3499,20 +3500,20 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
   const isDirty = !!(newAsset.url || newAsset.file || newAsset.alt || newAsset.caption);
 
   const handleFileChange = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
     const VALID_FORMATS = ['image/jpeg', 'image/png', 'image/webp'];
     if (!VALID_FORMATS.includes(file.type)) {
-      setAddError('Unsupported format. Please upload a JPG, PNG or WebP image.');
+      onAddError?.('Unsupported format. Please upload a JPG, PNG or WebP image.');
       e.target.value = '';
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setAddError('This image is too large. Maximum size is 5MB.');
+      onAddError?.('This image is too large. Maximum size is 5MB.');
       e.target.value = '';
       return;
     }
-    setAddError(null);
+    onAddError?.(null);
     if (newAsset.filePreview) URL.revokeObjectURL(newAsset.filePreview);
     const preview = URL.createObjectURL(file);
     setNewAsset(a => ({ ...a, file, filePreview: preview }));
@@ -3604,17 +3605,19 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
         {newAsset.source === 'upload' && (
           <div style={{ marginBottom: '16px' }}>
             <label style={labelStyle}>File</label>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button onClick={() => fileInputRef.current?.click()} style={btnGhost}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => fileInputRef.current?.click()} style={btnGhost}>
                 <Upload size={12} /> Choose file
               </button>
               {newAsset.file && (
-                <span style={{ fontSize: '12px', color: '#4A433A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>
-                  {newAsset.file.name}
+                <span style={{ fontSize: '12px', color: '#4A433A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '260px' }}>
+                  {newAsset.file.name} · {newAsset.file.size >= 1024 * 1024
+                    ? `${(newAsset.file.size / (1024 * 1024)).toFixed(1)} MB`
+                    : `${Math.round(newAsset.file.size / 1024)} KB`}
                 </span>
               )}
             </div>
-            <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileChange} />
+            <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={handleFileChange} />
           </div>
         )}
 
