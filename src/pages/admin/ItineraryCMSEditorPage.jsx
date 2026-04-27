@@ -185,11 +185,6 @@ function DayCard({ day, index, total, onChange, onDelete, onMove, assets, resolv
   // resolvedDayImage comes from the shared dayImages map computed in the parent.
   // It already applies priority: DB asset > day.img > FS asset.
   // assets is still passed for the image library browser inside ImagePicker.
-  console.log('DAY IMAGE DEBUG', {
-    day: day.day,
-    resolvedDayImage: resolvedDayImage || null,
-    inline: day.img || null,
-  });
 
   function updBullet(i, val) {
     const b = [...(day.bullets || [])];
@@ -630,6 +625,7 @@ export default function ItineraryCMSEditorPage() {
 
   const [activeTab,  setActiveTab]  = useState('basics');
   const [loading,    setLoading]    = useState(!isNew);
+  const [loadError,  setLoadError]  = useState(null);  // non-null string = show error UI instead of editor
   const [saving,     setSaving]     = useState(false);
   const [saveMsg,    setSaveMsg]    = useState(null); // { ok: bool, text: string }
   const [form,       setForm]       = useState({
@@ -684,11 +680,12 @@ export default function ItineraryCMSEditorPage() {
       const json = await res.json();
       if (json.error) throw new Error(json.error);
       const it = json.itinerary;
-      // Defensive parse: JSONB may arrive as a string in some pg/Vercel configs
+      // Defensive parse: JSONB may arrive as a string in some pg/Vercel configs.
+      // JSON.parse("null") = null — guard with ?? {} so mergeContent never receives null.
       const rawContent = typeof it.content === 'string'
-        ? (() => { try { return JSON.parse(it.content); } catch { return {}; } })()
+        ? (() => { try { return JSON.parse(it.content) ?? {}; } catch { return {}; } })()
         : (it.content ?? {});
-      const content = mergeContent(rawContent);
+      const content = mergeContent(typeof rawContent === 'object' && rawContent !== null ? rawContent : {});
       // Derive canonical type from both `type` and legacy `accessType`
       const derivedType = it.type === 'custom' ? 'custom'
         : it.type === 'premium' ? 'premium'
@@ -729,7 +726,10 @@ export default function ItineraryCMSEditorPage() {
         variant:     it.variant     || '',
         durationDays: it.durationDays ?? '',
       });
-    } catch (e) { alert(e.message); navigate('/admin/itineraries'); }
+    } catch (e) {
+      console.error('[ItineraryCMSEditorPage] load failed:', e);
+      setLoadError(e.message || 'Failed to load itinerary.');
+    }
     finally { setLoading(false); }
   }, [id, isNew, getToken, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -796,14 +796,6 @@ export default function ItineraryCMSEditorPage() {
       if (dbJson.error) console.error('[loadAssets] DB assets error:', dbJson.error);
       const dbAssets = dbJson.error ? [] : (dbJson.assets ?? []);
 
-      console.log('DB ASSETS', dbAssets.map(a => ({
-        id: a.id,
-        type: a.assetType,
-        source: a.source,
-        dayNumber: a.dayNumber,
-        url: a.url,
-      })));
-
       // 2. Resolve identity.
       // Prefer explicit overrides (supplied by load() before React batches setForm)
       // then fall back to slugRef / form state (fine when Images tab is opened later).
@@ -813,21 +805,6 @@ export default function ItineraryCMSEditorPage() {
       const duration = overrides.durationDays !== undefined ? overrides.durationDays : form.durationDays;
 
       const { assetSlug, variant: resolvedVariant } = resolveAssetIdentity(slug, { parentId, variant });
-
-      console.log('ITINERARY DEBUG', {
-        slug,
-        parentId,
-        variant,
-        resolvedAssetSlug: assetSlug,
-        resolvedVariant: resolvedVariant || null,
-        durationDays: duration || null,
-        overridesProvided: Object.keys(overrides),
-      });
-
-      console.log(
-        `[loadAssets] slug="${slug}" → assetSlug="${assetSlug}" variant="${resolvedVariant || 'none'}"` +
-        ` durationDays=${duration || 'unlimited'} parentId="${parentId}"`
-      );
 
       // 3. Use the EXACT same resolvers as the public page — no separate implementation.
       const fsAssets = [];
@@ -842,57 +819,29 @@ export default function ItineraryCMSEditorPage() {
         const dbUrls = new Set(dbAssets.map(a => a.url));
 
         // Gallery
-        const galleryImgs = resolveGalleryImages(itineraryId, []);
-        console.log(`[loadAssets] gallery fs=${galleryImgs.length}`);
-        galleryImgs.forEach(({ src, filename }, i) => {
+        resolveGalleryImages(itineraryId, []).forEach(({ src, filename }, i) => {
           if (!dbUrls.has(src))
             fsAssets.push({ id: null, assetType: 'gallery', url: src, alt: filename, source: 'filesystem', active: true, sortOrder: i });
         });
 
         // Research
-        const researchImgs = resolveResearchImages(itineraryId, []);
-        console.log(`[loadAssets] research fs=${researchImgs.length}`);
-        researchImgs.forEach(({ src, filename }, i) => {
+        resolveResearchImages(itineraryId, []).forEach(({ src, filename }, i) => {
           if (!dbUrls.has(src))
             fsAssets.push({ id: null, assetType: 'research', url: src, alt: filename, source: 'filesystem', active: true, sortOrder: i });
         });
 
-        // Day images — synthetic days 1..durationDays; empty-folder suppression drops days with no images
+        // Day images
         const limit = itineraryId.durationDays || 30;
         const syntheticDays = Array.from({ length: limit }, (_, i) => ({ day: i + 1 }));
-        const resolvedDays = resolveDayImages(itineraryId, syntheticDays, []);
-        console.log(`[loadAssets] day images fs=${resolvedDays.length} days`);
-        resolvedDays.forEach(day => {
+        resolveDayImages(itineraryId, syntheticDays, []).forEach(day => {
           day.imgs.forEach((imgUrl, i) => {
             if (!dbUrls.has(imgUrl))
               fsAssets.push({ id: null, assetType: 'day', dayNumber: day.day, url: imgUrl, alt: `Day ${day.day} image ${i + 1}`, source: 'filesystem', active: true, sortOrder: i });
           });
         });
-      } else {
-        console.warn('[loadAssets] assetSlug is empty — filesystem scan skipped. slug was:', slug);
       }
 
-      const fsGallery   = fsAssets.filter(a => a.assetType === 'gallery').length;
-      const fsResearch  = fsAssets.filter(a => a.assetType === 'research').length;
-      const fsDayImages = fsAssets.filter(a => a.assetType === 'day').length;
-      const fsHero      = fsAssets.filter(a => a.assetType === 'hero').length;
-      console.log(
-        `[loadAssets] COUNTS for "${assetSlug}":` +
-        ` dbAssets=${dbAssets.length}` +
-        ` fsHero=${fsHero}` +
-        ` fsGallery=${fsGallery}` +
-        ` fsDayImages=${fsDayImages}` +
-        ` fsResearch=${fsResearch}` +
-        ` merged=${dbAssets.length + fsAssets.length}`
-      );
       const mergedAssets = [...dbAssets, ...fsAssets];
-      console.log('MERGED ASSETS', mergedAssets.map(a => ({
-        type: a.assetType,
-        source: a.source,
-        dayNumber: a.dayNumber ?? null,
-        url: a.url,
-        id: a.id ?? null,
-      })));
       setAssets(mergedAssets);
     } catch (e) { console.error('[loadAssets] unexpected error:', e); }
     finally { setAssetsLoading(false); }
@@ -1080,13 +1029,6 @@ export default function ItineraryCMSEditorPage() {
         : null;
 
       const slug = form.slug;
-      console.log("SAVE ITINERARY PARENT DEBUG", {
-        slug,
-        parentId: normalizedParentId,
-        parentSlug: normalizedParentId,
-        variant: normalizedVariant,
-        isCollection: form.isCollection,
-      });
 
       const payload = {
         ...form,
@@ -1911,6 +1853,29 @@ export default function ItineraryCMSEditorPage() {
     return (
       <div style={{ padding: '28px 32px' }}>
         <div style={{ ...card, height: '400px', opacity: 0.5 }} />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div style={{ padding: '40px 32px', maxWidth: '560px' }}>
+        <div style={{ ...card, padding: '32px', textAlign: 'center' }}>
+          <p style={{ fontSize: '13px', fontWeight: '600', color: '#C0392B', marginBottom: '12px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+            Unable to load itinerary
+          </p>
+          <p style={{ fontSize: '14px', color: '#6B6156', lineHeight: '1.6', marginBottom: '24px' }}>
+            {loadError}
+          </p>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button onClick={() => { setLoadError(null); setLoading(true); load(); }} style={btnPrimary}>
+              Retry
+            </button>
+            <Link to="/admin/itineraries" style={{ ...btnGhost, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+              Back to list
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
@@ -3500,7 +3465,6 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
   const fileInputRef = useRef(null);
   const [lightbox, setLightbox] = useState(null); // { assets: [], index: 0 }
 
-  console.log('IMAGES TAB INPUT', assets);
 
   if (isNew && !hasSavedId) {
     return (

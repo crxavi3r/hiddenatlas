@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Outlet, NavLink, Navigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
+import ErrorBoundary from '../components/ErrorBoundary';
 import { LayoutDashboard, Users, CreditCard, Download, Inbox, Menu, X, Map, UserCheck, User, ArrowUpRight } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useUserCtx } from '../lib/useUserCtx.jsx';
@@ -314,7 +315,9 @@ export default function AdminPage() {
         paddingTop: '52px',
         flex: 1, minHeight: '100vh', overflow: 'auto',
       }}>
-        <Outlet />
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
       </main>
 
     </div>
