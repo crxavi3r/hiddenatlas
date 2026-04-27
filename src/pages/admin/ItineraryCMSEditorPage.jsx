@@ -613,6 +613,8 @@ export default function ItineraryCMSEditorPage() {
     stripePriceId: '', pricingKey: '',
     coverImage: '', status: 'draft', pdfUrl: '', pdf_url: '', pdf_version: 'v1.0', creatorId: '',
     variant: '', parentId: '',
+    contentDepth: 'essential',
+    structureType: 'standalone',
     content: { ...EMPTY_CONTENT },
   });
   const [allCreators, setAllCreators] = useState([]);  // for creator selector
@@ -678,6 +680,10 @@ export default function ItineraryCMSEditorPage() {
         creatorId: it.creatorId || '',
         variant: it.variant || '',
         parentId: it.parentId || '',
+        contentDepth: it.variant === 'complete' || it.variant === 'premium' ? 'complete'
+          : it.variant === 'short' ? 'short' : 'essential',
+        structureType: it.isCollection ? 'collection_parent'
+          : (it.parentId ? 'variant' : 'standalone'),
         content,
       });
       savedId.current = it.id;
@@ -959,10 +965,11 @@ export default function ItineraryCMSEditorPage() {
       // Normalize parentId and variant — empty string must become null before writing to DB.
       // Empty string '' passes through ?? but fails the FK constraint; use || to catch it.
       const normalizedParentId = form.parentId && form.parentId.trim() ? form.parentId.trim() : null;
-      // If no parent, variant has no meaning — force it to null for standalone itineraries.
-      const normalizedVariant  = normalizedParentId
-        ? (['complete', 'essential', 'short', 'premium'].includes(form.variant) ? form.variant : null)
-        : null;
+      // contentDepth drives variant; store it even for standalone itineraries so depth is preserved.
+      // Admin assetVariant override (form.variant) takes priority when it differs from contentDepth.
+      const normalizedVariant = (['complete', 'essential', 'short'].includes(form.variant) ? form.variant
+        : ['complete', 'essential', 'short'].includes(form.contentDepth) ? form.contentDepth
+        : null);
 
       const slug = form.slug;
       console.log("SAVE ITINERARY PARENT DEBUG", {
@@ -1023,6 +1030,8 @@ export default function ItineraryCMSEditorPage() {
         stripePriceId: it.stripePriceId ?? f.stripePriceId,
         pricingKey:    it.pricingKey    ?? f.pricingKey,
         creatorId:     it.creatorId     ?? f.creatorId,
+        contentDepth: (v => v === 'complete' || v === 'premium' ? 'complete' : v === 'short' ? 'short' : f.contentDepth || 'essential')(it.variant ?? f.variant),
+        structureType: (it.isCollection ?? f.isCollection) ? 'collection_parent' : (f.parentId ? 'variant' : 'standalone'),
         // content intentionally preserved from f — never replace with DB response
         // (JSONB may arrive as string in some pg/Vercel configurations)
       }));
@@ -1884,7 +1893,7 @@ export default function ItineraryCMSEditorPage() {
         </div>
 
         {/* ── Tab panels ── */}
-        {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} creators={allCreators} isAdmin={isAdmin} myCreatorId={myCreatorId} />}
+        {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} creators={allCreators} isAdmin={isAdmin} myCreatorId={myCreatorId} dayCount={(form.content?.days || []).length} />}
         {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} onCoverImageChange={handleHeroCoverImage} />}
         {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} dayImages={dayImages} />}
         {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} />}
@@ -1920,261 +1929,583 @@ export default function ItineraryCMSEditorPage() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ── Basics ────────────────────────────────────────────────────────────────────
-function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators = [], isAdmin = false, myCreatorId = null }) {
+// ── Destination search picker ─────────────────────────────────────────────────
+function DestinationPicker({ destination, country, region, onChange }) {
+  const [query,     setQuery]     = useState(destination ? `${destination}${country ? `, ${country}` : ''}` : '');
+  const [results,   setResults]   = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [open,      setOpen]      = useState(false);
+
+  useEffect(() => {
+    setQuery(destination ? `${destination}${country ? `, ${country}` : ''}` : '');
+  }, [destination, country]);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) { setResults([]); setOpen(false); return; }
+    if (destination && trimmed === `${destination}${country ? `, ${country}` : ''}`) return;
+    const t = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const r = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(trimmed)}&format=json&addressdetails=1&limit=8`,
+          { headers: { 'Accept-Language': 'en' } }
+        );
+        const data = await r.json();
+        setResults(Array.isArray(data) ? data.slice(0, 6) : []);
+        setOpen(true);
+      } catch { setResults([]); }
+      finally { setSearching(false); }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function pickResult(r) {
+    const addr = r.address || {};
+    const city = addr.city || addr.town || addr.village || addr.municipality
+      || addr.county || r.display_name.split(',')[0].trim();
+    const cnt  = addr.country || '';
+    const rgn  = addr.state   || addr.region || addr.county || '';
+    onChange({ destination: city, country: cnt, region: rgn });
+    setQuery(`${city}${cnt ? `, ${cnt}` : ''}`);
+    setOpen(false);
+    setResults([]);
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        value={query}
+        style={inputStyle}
+        placeholder="Type a city or destination…"
+        onChange={e => {
+          setQuery(e.target.value);
+          if (!e.target.value.trim()) onChange({ destination: '', country: '', region: '' });
+        }}
+        onFocus={() => results.length > 0 && setOpen(true)}
+        onBlur={() => setTimeout(() => {
+          setOpen(false);
+          if (destination) setQuery(`${destination}${country ? `, ${country}` : ''}`);
+        }, 200)}
+      />
+      {searching && (
+        <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: '#B5AA99', pointerEvents: 'none' }}>
+          Searching…
+        </span>
+      )}
+      {open && results.length > 0 && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200,
+          background: 'white', border: '1px solid #E8E3DA', borderRadius: '8px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.10)', overflow: 'hidden',
+        }}>
+          {results.map((r, i) => {
+            const addr = r.address || {};
+            const city = addr.city || addr.town || addr.village || addr.municipality
+              || r.display_name.split(',')[0].trim();
+            const cnt  = addr.country || '';
+            const rgn  = addr.state   || '';
+            return (
+              <button key={i} onMouseDown={() => pickResult(r)} style={{
+                display: 'block', width: '100%', textAlign: 'left',
+                padding: '10px 14px', border: 'none',
+                borderBottom: i < results.length - 1 ? '1px solid #F0EDE8' : 'none',
+                background: 'white', cursor: 'pointer', fontSize: '13.5px',
+              }}>
+                <span style={{ fontWeight: '600', color: '#1C1A16' }}>{city}</span>
+                {(rgn || cnt) && (
+                  <span style={{ color: '#9A8E80', fontSize: '12px', marginLeft: '6px' }}>
+                    {[rgn, cnt].filter(Boolean).join(', ')}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {destination && country && (
+        <p style={{ fontSize: '11.5px', color: '#9A8E80', margin: '5px 0 0' }}>
+          {[country, region].filter(Boolean).join(' · ')}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Basics Tab ────────────────────────────────────────────────────────────────
+function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators = [], isAdmin = false, myCreatorId = null, dayCount = 0 }) {
   function set(field, value) { setForm(f => ({ ...f, [field]: value })); }
+  function setSEO(field, value) {
+    setForm(f => ({ ...f, content: { ...f.content, seo: { ...(f.content?.seo ?? {}), [field]: value } } }));
+  }
+
   const myCreator = !isAdmin
     ? (creators.find(c => c.id === (myCreatorId || form.creatorId)) ?? null)
     : null;
 
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  function setContentDepth(depth) {
+    setForm(f => ({ ...f, contentDepth: depth, variant: depth }));
+  }
+
+  function setStructureType(type) {
+    setForm(f => ({
+      ...f,
+      structureType: type,
+      isCollection:  type === 'collection_parent',
+      ...(type !== 'variant' ? { parentId: '' } : {}),
+    }));
+  }
+
+  function setAccessType(value) {
+    setForm(f => {
+      const isPremium = value === 'premium';
+      let autoOption = null;
+      if (isPremium && !f.stripePriceId) {
+        const usaSlugMap = {
+          'california-american-west-8-days':  'premium_short',
+          'california-american-west-12-days': 'premium_essential',
+          'california-american-west-16-days': 'premium_complete',
+        };
+        const targetKey = usaSlugMap[f.slug] ?? 'premium_complete';
+        autoOption = pricingOptions.find(o => o.key === targetKey)
+          ?? pricingOptions.find(o => o.key === 'premium_complete')
+          ?? pricingOptions[pricingOptions.length - 1]
+          ?? null;
+      }
+      return {
+        ...f,
+        type: value,
+        isPrivate: value === 'custom' ? true : (value === 'free' ? false : f.isPrivate),
+        ...(!isPremium
+          ? { stripePriceId: '', pricingKey: '' }
+          : autoOption
+            ? { stripePriceId: autoOption.stripePriceId, pricingKey: autoOption.key }
+            : {}),
+      };
+    });
+  }
+
+  function handleGenerateSEO() {
+    const title    = form.title?.trim() || 'Untitled';
+    const dest     = form.destination?.trim() || '';
+    const duration = form.durationDays ? `${form.durationDays}-day ` : '';
+    const subtitle = form.subtitle?.trim() || '';
+    const newTitle = `${title} | HiddenAtlas`.slice(0, 70);
+    const newDesc  = (subtitle
+      ? `${subtitle}${dest ? `. Discover ${dest} with this carefully curated ${duration}itinerary.` : ''}`
+      : dest
+        ? `A carefully curated ${duration}${dest} itinerary. Top landmarks, hidden gems and local highlights.`
+        : `A ${duration}travel itinerary by HiddenAtlas.`
+    ).slice(0, 155);
+    setSEO('metaTitle',       newTitle);
+    setSEO('metaDescription', newDesc);
+  }
+
+  const metaTitle = form.content?.seo?.metaTitle       || '';
+  const metaDesc  = form.content?.seo?.metaDescription || '';
+  const descLen   = metaDesc.length;
+  const descWarn  = descLen > 0 && (descLen < 120 || descLen > 160);
+  const descColor = descLen === 0 ? '#9A8E80' : descLen < 120 || descLen > 160 ? '#C97B2E' : '#27866A';
+
+  const actualDays     = parseInt(form.durationDays, 10) || 0;
+  const hasDayMismatch = dayCount > 0 && actualDays > 0 && dayCount !== actualDays;
+  const isDraft        = form.status !== 'published';
+  const isClientReq    = form.type === 'custom';
+  const isCollection   = form.structureType === 'collection_parent' || form.isCollection;
+
+  const warnings = [];
+  if (hasDayMismatch) warnings.push(`You set ${actualDays} days but only created ${dayCount} day plan${dayCount !== 1 ? 's' : ''}.`);
+  if (isDraft)        warnings.push('This itinerary is set to Draft and will not appear on the public site.');
+  if (isClientReq)    warnings.push('Client Request itineraries are private by default.');
+  if (isCollection)   warnings.push('Collection parents cannot contain standalone day plans.');
+
+  const activeDepth = form.contentDepth || (form.variant === 'complete' || form.variant === 'premium' ? 'complete' : form.variant || 'essential');
+
   return (
     <div style={{ maxWidth: '720px' }}>
+
+      {/* ── 1. Identity ──────────────────────────────────────────────────── */}
       <div style={sectionCard}>
         <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>Identity</p>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
           <Field label="Title *">
-            <input value={form.title} style={inputStyle} placeholder="e.g. Bali Island Journey"
+            <input value={form.title} style={inputStyle} placeholder="e.g. London in 4 Days"
               onChange={e => onTitleChange(e.target.value)} />
           </Field>
           <Field label="Subtitle">
-            <input value={form.subtitle} style={inputStyle} placeholder="e.g. 10 Day Island Journey"
+            <input value={form.subtitle} style={inputStyle} placeholder="e.g. London for the first time, done properly"
               onChange={e => set('subtitle', e.target.value)} />
           </Field>
         </div>
 
-        <Field label="Slug *" hint="URL-safe identifier. Auto-generated from title. Changing this after publishing breaks existing links.">
-          <input value={form.slug} style={{ ...inputStyle, fontFamily: 'monospace' }}
-            placeholder="bali-island-journey" onChange={e => set('slug', e.target.value)} />
-        </Field>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
-          <Field label="Destination">
-            <input value={form.destination} style={inputStyle} placeholder="e.g. Bali"
-              onChange={e => set('destination', e.target.value)} />
-          </Field>
-          <Field label="Country">
-            <input value={form.country} style={inputStyle} placeholder="e.g. Indonesia"
-              onChange={e => set('country', e.target.value)} />
-          </Field>
-          <Field label="Region">
-            <input value={form.region} style={inputStyle} placeholder="e.g. Southeast Asia"
-              onChange={e => set('region', e.target.value)} />
-          </Field>
-        </div>
-
-        <Field label="Duration (days)">
-          <input type="number" value={form.durationDays} style={{ ...inputStyle, maxWidth: '140px' }}
-            placeholder="10" min="1" max="60"
-            onChange={e => set('durationDays', e.target.value)} />
-        </Field>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px', marginBottom: '18px', alignItems: 'start' }}>
-          <label style={labelStyle}>Parent slug</label>
-          <label style={labelStyle}>Variant</label>
-          <p style={{ fontSize: '11px', color: '#B5AA99', marginBottom: '6px' }}>
-            Asset folder slug for variant itineraries. E.g. california-american-west for all USA variants. Leave empty for standalone itineraries.
-          </p>
-          <p style={{ fontSize: '11px', color: '#B5AA99', marginBottom: '6px' }}>
-            {'Image variant to resolve for this itinerary. Determines which day-images/dayN/<variant>/ subfolder is used.'}
-          </p>
-          <input
-            value={form.parentId}
-            style={{ ...inputStyle, fontFamily: 'monospace' }}
-            placeholder="california-american-west"
-            onChange={e => set('parentId', e.target.value)}
+        <Field label="Destination" hint="Select a city. Country and region are filled automatically.">
+          <DestinationPicker
+            destination={form.destination}
+            country={form.country}
+            region={form.region}
+            onChange={({ destination, country, region }) =>
+              setForm(f => ({ ...f, destination, country, region }))
+            }
           />
-          <select
-            value={form.variant}
-            style={inputStyle}
-            onChange={e => set('variant', e.target.value)}
-          >
-            <option value="">None (standalone)</option>
-            <option value="complete">Complete</option>
-            <option value="premium">Premium / Complete</option>
-            <option value="essential">Essential</option>
-            <option value="short">Short</option>
-          </select>
+        </Field>
+
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '16px' }}>
+          <Field label="Duration (days)" hint={hasDayMismatch ? `⚠ ${dayCount} day plan${dayCount !== 1 ? 's' : ''} created` : undefined}>
+            <input type="number" value={form.durationDays} style={{ ...inputStyle, width: '120px' }}
+              placeholder="4" min="1" max="60"
+              onChange={e => set('durationDays', e.target.value)} />
+          </Field>
         </div>
 
-        {isAdmin ? (
-          creators.length > 0 && (
-            <Field label="Travel Designer" hint="Assign this itinerary to a travel designer. Leave empty to show no attribution.">
-              <select
-                value={form.creatorId || ''}
-                onChange={e => set('creatorId', e.target.value || null)}
-                style={{ ...inputStyle, maxWidth: '320px' }}
-              >
-                <option value="">None (no attribution)</option>
-                {creators.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </Field>
-          )
-        ) : (
-          myCreator && (
-            <Field label="Travel Designer">
-              <div style={{ ...inputStyle, maxWidth: '320px', background: '#F5F2EE', color: '#4A433A', cursor: 'default', userSelect: 'none' }}>
-                {myCreator.name}
+        {/* Travel Designer */}
+        {!isAdmin && myCreator && (
+          <Field label="Travel Designer">
+            <div style={{ ...inputStyle, maxWidth: '320px', background: '#F5F2EE', color: '#4A433A', cursor: 'default', userSelect: 'none' }}>
+              {myCreator.name}
+            </div>
+          </Field>
+        )}
+
+        {/* Slug — read-only for designers */}
+        {!isAdmin && (
+          <Field label="URL slug">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ ...inputStyle, background: '#F5F2EE', color: '#9A8E80', cursor: 'default', fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {form.slug || '—'}
               </div>
-            </Field>
-          )
+              <span style={{ fontSize: '11px', color: '#B5AA99', whiteSpace: 'nowrap' }}>auto-generated</span>
+            </div>
+          </Field>
         )}
       </div>
 
+      {/* ── 2. Access ─────────────────────────────────────────────────────── */}
       <div style={sectionCard}>
-        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>Type & Access</p>
+        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '4px' }}>Access</p>
+        <p style={{ fontSize: '12px', color: '#9A8E80', marginBottom: '18px' }}>Who can access this itinerary?</p>
 
-        <Field label="Itinerary type">
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            {[
-              { value: 'free',    label: 'Free',    hint: 'No purchase required' },
-              { value: 'premium', label: 'Premium', hint: 'Paid download' },
-              { value: 'custom',  label: 'Custom',  hint: 'Private, linked to a client request' },
-            ].map(({ value, label, hint }) => (
-              <label key={value} style={{
-                display: 'flex', alignItems: 'center', gap: '8px',
-                padding: '10px 18px', borderRadius: '6px', cursor: 'pointer',
-                border: `1px solid ${form.type === value ? '#1B6B65' : '#E8E3DA'}`,
-                background: form.type === value ? '#EFF6F5' : 'white',
-                fontSize: '13px', fontWeight: '500',
-                color: form.type === value ? '#1B6B65' : '#4A433A',
-              }}>
-                <input type="radio" name="type" value={value}
-                  checked={form.type === value}
-                  onChange={() => setForm(f => {
-                    const isPremium = value === 'premium';
-                    // When switching TO premium, auto-select the correct default plan:
-                    //   USA variants → their tier; all others → premium_complete (€29)
-                    let autoOption = null;
-                    if (isPremium && !f.stripePriceId) {
-                      const usaSlugMap = {
-                        'california-american-west-8-days':  'premium_short',
-                        'california-american-west-12-days': 'premium_essential',
-                        'california-american-west-16-days': 'premium_complete',
-                      };
-                      const targetKey = usaSlugMap[f.slug] ?? 'premium_complete';
-                      autoOption = pricingOptions.find(o => o.key === targetKey)
-                        ?? pricingOptions.find(o => o.key === 'premium_complete')
-                        ?? pricingOptions[pricingOptions.length - 1]
-                        ?? null;
-                    }
-                    return {
-                      ...f,
-                      type: value,
-                      isPrivate: value === 'custom' ? true : (value === 'free' ? false : f.isPrivate),
-                      // clear pricing when leaving premium; auto-default when entering
-                      ...(!isPremium
-                        ? { stripePriceId: '', pricingKey: '' }
-                        : autoOption
-                          ? { stripePriceId: autoOption.stripePriceId, pricingKey: autoOption.key }
-                          : {}),
-                    };
-                  })}
-                  style={{ display: 'none' }}
-                />
-                {form.type === value && <Check size={13} strokeWidth={3} />}
-                <span>
-                  {label}
-                  <span style={{ fontSize: '11px', color: '#B5AA99', display: 'block', fontWeight: '400' }}>{hint}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-        </Field>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          {[
+            { value: 'free',    label: 'Free',           desc: 'Available to everyone' },
+            { value: 'premium', label: 'Premium',        desc: 'Paid itinerary download' },
+            { value: 'custom',  label: 'Client Request', desc: 'Private, for a specific client' },
+          ].map(({ value, label, desc }) => (
+            <label key={value} style={{
+              display: 'flex', flexDirection: 'column', gap: '4px',
+              padding: '12px 16px', borderRadius: '8px', cursor: 'pointer', flex: '1 1 150px',
+              border: `1.5px solid ${form.type === value ? '#1B6B65' : '#E8E3DA'}`,
+              background: form.type === value ? '#EFF6F5' : 'white',
+            }}>
+              <input type="radio" name="type" value={value}
+                checked={form.type === value}
+                onChange={() => setAccessType(value)}
+                style={{ display: 'none' }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {form.type === value && <Check size={13} strokeWidth={3} color="#1B6B65" />}
+                <span style={{ fontSize: '13px', fontWeight: '600', color: form.type === value ? '#1B6B65' : '#1C1A16' }}>{label}</span>
+              </div>
+              <span style={{ fontSize: '11.5px', color: '#9A8E80', lineHeight: '1.4' }}>{desc}</span>
+            </label>
+          ))}
+        </div>
 
-        <Field label="Visibility" hint="Private itineraries are only accessible to users who purchased them.">
-          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: form.type === 'custom' ? 'default' : 'pointer' }}>
-            <input type="checkbox"
-              checked={form.isPrivate}
-              onChange={e => form.type !== 'custom' && set('isPrivate', e.target.checked)}
-              disabled={form.type === 'custom'}
-              style={{ width: '15px', height: '15px', accentColor: '#1B6B65' }}
-            />
-            <span style={{ fontSize: '13.5px', color: form.type === 'custom' ? '#B5AA99' : '#4A433A' }}>
-              Private {form.type === 'custom' ? '(always private for custom itineraries)' : ''}
-            </span>
-          </label>
-        </Field>
-
-        <Field label="Collection" hint="Mark as a collection/parent itinerary. Collections are hidden from the main CMS list and shown under a separate Collections tab.">
-          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-            <input type="checkbox"
-              checked={form.isCollection ?? false}
-              onChange={e => set('isCollection', e.target.checked)}
-              style={{ width: '15px', height: '15px', accentColor: '#7C5CBA' }}
-            />
-            <span style={{ fontSize: '13.5px', color: '#4A433A' }}>
-              This is a collection (parent/aggregator — has no standalone day plan)
-            </span>
-          </label>
-        </Field>
+        {isClientReq && (
+          <p style={{ marginTop: '12px', padding: '10px 14px', background: '#F5F2EE', borderRadius: '6px', fontSize: '12.5px', color: '#7A7265', lineHeight: '1.5' }}>
+            Client Request itineraries should be created from a client request. They are private by default.
+          </p>
+        )}
 
         {form.type === 'premium' && (() => {
           const selectedOption = pricingOptions.find(o => o.key === form.pricingKey)
             ?? pricingOptions.find(o => o.stripePriceId === form.stripePriceId);
           return (
-            <Field label="Pricing plan" hint="Required before saving or publishing.">
-              {pricingOptions.length === 0 ? (
-                <p style={{ fontSize: '13px', color: '#E05353', margin: 0 }}>
-                  No pricing plans available. Set STRIPE_PRICE_PREMIUM_COMPLETE (or STRIPE_PRICE_ID) in Vercel env vars.
-                </p>
-              ) : (
-                <>
-                  <select
-                    value={form.pricingKey || ''}
-                    onChange={e => {
-                      const opt = pricingOptions.find(o => o.key === e.target.value);
-                      setForm(f => ({
-                        ...f,
-                        pricingKey:    opt ? opt.key            : '',
-                        stripePriceId: opt ? opt.stripePriceId  : '',
-                      }));
-                    }}
-                    style={{ ...inputStyle, cursor: 'pointer' }}
-                  >
-                    <option value="">— select a plan —</option>
-                    {pricingOptions.map(opt => (
-                      <option key={opt.key} value={opt.key}>
-                        {opt.label} · {opt.displayPrice}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedOption && (
-                    <p style={{ fontSize: '12px', color: '#7A7265', margin: '6px 0 0', fontFamily: 'monospace' }}>
-                      {selectedOption.stripePriceId}
-                    </p>
-                  )}
-                  {!selectedOption && form.stripePriceId && (
-                    <p style={{ fontSize: '12px', color: '#C97B2E', margin: '6px 0 0' }}>
-                      Stored price ID does not match any configured plan — select a plan to update.
-                    </p>
-                  )}
-                </>
-              )}
-            </Field>
+            <div style={{ marginTop: '16px' }}>
+              <Field label="Pricing plan" hint="Required before publishing.">
+                {pricingOptions.length === 0 ? (
+                  <p style={{ fontSize: '13px', color: '#E05353', margin: 0 }}>
+                    No pricing plans available. Set STRIPE_PRICE_PREMIUM_COMPLETE in Vercel env vars.
+                  </p>
+                ) : (
+                  <>
+                    <select
+                      value={form.pricingKey || ''}
+                      onChange={e => {
+                        const opt = pricingOptions.find(o => o.key === e.target.value);
+                        setForm(f => ({ ...f, pricingKey: opt?.key ?? '', stripePriceId: opt?.stripePriceId ?? '' }));
+                      }}
+                      style={{ ...inputStyle, cursor: 'pointer', maxWidth: '320px' }}
+                    >
+                      <option value="">— select a plan —</option>
+                      {pricingOptions.map(opt => (
+                        <option key={opt.key} value={opt.key}>{opt.label} · {opt.displayPrice}</option>
+                      ))}
+                    </select>
+                    {selectedOption && (
+                      <p style={{ fontSize: '11.5px', color: '#7A7265', margin: '5px 0 0', fontFamily: 'monospace' }}>
+                        {selectedOption.stripePriceId}
+                      </p>
+                    )}
+                    {!selectedOption && form.stripePriceId && (
+                      <p style={{ fontSize: '12px', color: '#C97B2E', margin: '6px 0 0' }}>
+                        Stored price ID does not match any configured plan.
+                      </p>
+                    )}
+                  </>
+                )}
+              </Field>
+            </div>
           );
         })()}
       </div>
 
+      {/* ── 3. Content Depth ──────────────────────────────────────────────── */}
       <div style={sectionCard}>
-        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>SEO</p>
-        <Field label="Meta Title">
-          <input value={form.content?.seo?.metaTitle || ''} style={inputStyle}
-            placeholder="Auto-generated from title if blank"
-            onChange={e => {
-              setForm(f => ({ ...f, content: { ...f.content, seo: { ...f.content.seo, metaTitle: e.target.value } } }));
-            }} />
+        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '4px' }}>Content Depth</p>
+        <p style={{ fontSize: '12px', color: '#9A8E80', marginBottom: '18px' }}>How much detail does this itinerary cover?</p>
+
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          {[
+            { value: 'complete',  label: 'Complete',  desc: 'Full detailed version' },
+            { value: 'essential', label: 'Essential', desc: 'Core route and highlights' },
+            { value: 'short',     label: 'Short',     desc: 'Condensed, lighter plan' },
+          ].map(({ value, label, desc }) => {
+            const active = activeDepth === value;
+            return (
+              <label key={value} style={{
+                display: 'flex', flexDirection: 'column', gap: '4px',
+                padding: '12px 16px', borderRadius: '8px', cursor: 'pointer', flex: '1 1 130px',
+                border: `1.5px solid ${active ? '#1B6B65' : '#E8E3DA'}`,
+                background: active ? '#EFF6F5' : 'white',
+              }}>
+                <input type="radio" name="contentDepth" value={value}
+                  checked={active}
+                  onChange={() => setContentDepth(value)}
+                  style={{ display: 'none' }}
+                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {active && <Check size={13} strokeWidth={3} color="#1B6B65" />}
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: active ? '#1B6B65' : '#1C1A16' }}>{label}</span>
+                </div>
+                <span style={{ fontSize: '11.5px', color: '#9A8E80', lineHeight: '1.4' }}>{desc}</span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── 4. SEO ────────────────────────────────────────────────────────── */}
+      <div style={sectionCard}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+          <div>
+            <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '2px' }}>SEO</p>
+            <p style={{ fontSize: '12px', color: '#9A8E80' }}>How this itinerary appears in search results</p>
+          </div>
+          <button onClick={handleGenerateSEO} style={{
+            padding: '7px 14px', borderRadius: '5px', border: '1px solid #E8E3DA',
+            background: 'white', fontSize: '12px', fontWeight: '500', color: '#1C1A16', cursor: 'pointer', flexShrink: 0,
+          }}>
+            Generate SEO
+          </button>
+        </div>
+
+        {/* Search preview */}
+        {(metaTitle || form.title) && (
+          <div style={{ padding: '14px 16px', background: '#F8F7F4', border: '1px solid #E8E3DA', borderRadius: '8px', marginBottom: '18px' }}>
+            <p style={{ fontSize: '11px', color: '#B5AA99', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600' }}>
+              Search preview
+            </p>
+            <p style={{ fontSize: '18px', color: '#1a0dab', fontWeight: '400', margin: '0 0 3px' }}>
+              {metaTitle || `${form.title || 'Untitled'} | HiddenAtlas`}
+            </p>
+            <p style={{ fontSize: '12px', color: '#006621', margin: '0 0 5px' }}>
+              hiddenatlas.travel/itineraries/{form.slug || '…'}
+            </p>
+            <p style={{ fontSize: '13px', color: '#545454', lineHeight: '1.55', margin: 0 }}>
+              {metaDesc || <span style={{ color: '#B5AA99' }}>No description yet.</span>}
+            </p>
+          </div>
+        )}
+
+        <Field label={`Meta Title${metaTitle ? ` · ${metaTitle.length}/70` : ''}`}>
+          <input value={metaTitle} style={inputStyle}
+            placeholder={`${form.title || 'Title'} | HiddenAtlas`}
+            onChange={e => setSEO('metaTitle', e.target.value)}
+          />
+          {metaTitle.length > 70 && (
+            <p style={{ fontSize: '11.5px', color: '#C97B2E', margin: '4px 0 0' }}>Too long — trim to under 70 characters.</p>
+          )}
         </Field>
-        <Field label="Meta Description">
-          <textarea value={form.content?.seo?.metaDescription || ''} rows={3}
+
+        <Field label={`Meta Description · ${descLen}/160`}>
+          <textarea value={metaDesc} rows={3}
             style={{ ...textareaStyle, minHeight: '72px' }}
-            placeholder="155-character summary for search results"
-            onChange={e => {
-              setForm(f => ({ ...f, content: { ...f.content, seo: { ...f.content.seo, metaDescription: e.target.value } } }));
-            }} />
+            placeholder="120–160 character summary for search results"
+            onChange={e => setSEO('metaDescription', e.target.value)}
+          />
+          {descLen > 0 && (
+            <p style={{ fontSize: '11.5px', color: descColor, margin: '4px 0 0' }}>
+              {descLen < 120 ? 'Too short — aim for 120–160 characters.'
+                : descLen > 160 ? 'Too long — trim to under 160 characters.'
+                : 'Good length.'}
+            </p>
+          )}
         </Field>
       </div>
+
+      {/* ── 5. Warnings ───────────────────────────────────────────────────── */}
+      {warnings.length > 0 && (
+        <div style={{ ...sectionCard, padding: 0, overflow: 'hidden' }}>
+          {warnings.map((msg, i) => (
+            <div key={i} style={{
+              padding: '11px 16px', fontSize: '12.5px', color: '#5A4E3A',
+              background: '#FEF8ED',
+              borderBottom: i < warnings.length - 1 ? '1px solid #F5EDDA' : 'none',
+              display: 'flex', gap: '10px', alignItems: 'flex-start', lineHeight: '1.5',
+            }}>
+              <span style={{ color: '#C97B2E', flexShrink: 0 }}>⚠</span>
+              {msg}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── 6. Admin Advanced Settings ────────────────────────────────────── */}
+      {isAdmin && (
+        <div style={{ ...sectionCard, overflow: 'hidden' }}>
+          <button
+            onClick={() => setAdvancedOpen(o => !o)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              width: '100%', padding: 0, border: 'none', background: 'transparent',
+              cursor: 'pointer', fontSize: '13px', fontWeight: '700', color: '#1C1A16',
+            }}
+          >
+            <span>Advanced Settings</span>
+            {advancedOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+
+          {advancedOpen && (
+            <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #E8E3DA' }}>
+
+              <Field label="Slug *" hint="Changing this after publishing breaks existing links.">
+                <input value={form.slug} style={{ ...inputStyle, fontFamily: 'monospace' }}
+                  placeholder="london-in-4-days" onChange={e => set('slug', e.target.value)} />
+              </Field>
+
+              <Field label="Itinerary structure">
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {[
+                    { value: 'standalone',       label: 'Standalone',        hint: 'Independent itinerary' },
+                    { value: 'variant',           label: 'Variant',           hint: 'Version of another itinerary' },
+                    { value: 'collection_parent', label: 'Collection parent', hint: 'Groups child itineraries, no own days' },
+                  ].map(({ value, label, hint }) => {
+                    const active = (form.structureType || 'standalone') === value;
+                    return (
+                      <label key={value} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: '8px',
+                        padding: '10px 14px', borderRadius: '6px', cursor: 'pointer',
+                        border: `1px solid ${active ? '#1B6B65' : '#E8E3DA'}`,
+                        background: active ? '#EFF6F5' : 'white',
+                        fontSize: '12.5px', fontWeight: '500',
+                        color: active ? '#1B6B65' : '#4A433A',
+                      }}>
+                        <input type="radio" name="structureType" value={value}
+                          checked={active}
+                          onChange={() => setStructureType(value)}
+                          style={{ display: 'none' }}
+                        />
+                        {active && <Check size={12} strokeWidth={3} style={{ marginTop: '2px', flexShrink: 0 }} />}
+                        <span>
+                          {label}
+                          <span style={{ fontSize: '11px', color: '#B5AA99', display: 'block', fontWeight: '400' }}>{hint}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </Field>
+
+              {form.structureType === 'variant' && (
+                <Field label="Parent slug" hint="Asset folder slug shared by all variants. e.g. california-american-west">
+                  <input value={form.parentId || ''} style={{ ...inputStyle, fontFamily: 'monospace' }}
+                    placeholder="california-american-west"
+                    onChange={e => set('parentId', e.target.value)} />
+                </Field>
+              )}
+
+              <Field label="Asset variant" hint="Which day-images subfolder to use. Defaults to Content Depth if left blank.">
+                <select value={form.variant || ''} style={{ ...inputStyle, maxWidth: '260px' }}
+                  onChange={e => set('variant', e.target.value)}>
+                  <option value="">Default (from Content Depth)</option>
+                  <option value="complete">complete</option>
+                  <option value="essential">essential</option>
+                  <option value="short">short</option>
+                  <option value="custom">custom</option>
+                </select>
+              </Field>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <Field label="Country" hint="Auto-filled from destination picker.">
+                  <input value={form.country} style={inputStyle} placeholder="e.g. United Kingdom"
+                    onChange={e => set('country', e.target.value)} />
+                </Field>
+                <Field label="Region" hint="Auto-filled from destination picker.">
+                  <input value={form.region} style={inputStyle} placeholder="e.g. Europe"
+                    onChange={e => set('region', e.target.value)} />
+                </Field>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <Field label="Visibility">
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px', cursor: form.type === 'custom' ? 'default' : 'pointer' }}>
+                    <input type="checkbox"
+                      checked={form.isPrivate}
+                      onChange={e => form.type !== 'custom' && set('isPrivate', e.target.checked)}
+                      disabled={form.type === 'custom'}
+                      style={{ width: '15px', height: '15px', accentColor: '#1B6B65' }}
+                    />
+                    <span style={{ fontSize: '13px', color: form.type === 'custom' ? '#B5AA99' : '#4A433A' }}>
+                      Private {form.type === 'custom' ? '(always)' : ''}
+                    </span>
+                  </label>
+                </Field>
+                <Field label="Is collection">
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px', cursor: 'default' }}>
+                    <input type="checkbox"
+                      checked={form.structureType === 'collection_parent' || !!form.isCollection}
+                      readOnly
+                      style={{ width: '15px', height: '15px', accentColor: '#7C5CBA' }}
+                    />
+                    <span style={{ fontSize: '12px', color: '#9A8E80' }}>
+                      Derived from structure
+                    </span>
+                  </label>
+                </Field>
+              </div>
+
+              {creators.length > 0 && (
+                <Field label="Owner / Travel Designer" hint="Leave empty for no attribution.">
+                  <select
+                    value={form.creatorId || ''}
+                    onChange={e => set('creatorId', e.target.value || null)}
+                    style={{ ...inputStyle, maxWidth: '320px' }}
+                  >
+                    <option value="">None (no attribution)</option>
+                    {creators.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
