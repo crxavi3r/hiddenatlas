@@ -580,11 +580,19 @@ async function handleSetStatus(pool, id, status) {
     }
   }
 
+  // When publishing a free itinerary, ensure isPrivate is cleared so the
+  // public listing query (which filters isPrivate = false) returns it.
   const { rows } = await pool.query(
     `UPDATE "Itinerary"
-     SET status = $2, "isPublished" = $3, "updatedAt" = NOW()
+     SET status      = $2,
+         "isPublished" = $3,
+         "isPrivate" = CASE
+           WHEN $3 = true AND type != 'custom' THEN false
+           ELSE "isPrivate"
+         END,
+         "updatedAt" = NOW()
      WHERE id = $1
-     RETURNING id, slug, status, "isPublished"`,
+     RETURNING id, slug, status, "isPublished", "isPrivate"`,
     [id, status, status === 'published']
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });

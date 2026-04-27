@@ -135,11 +135,33 @@ function DesignerSelect({ creators, value, onChange }) {
   );
 }
 
+// Normalise a raw DB row into the shape ItineraryCard expects.
+function normalizeDbRow(row) {
+  const isPremium = row.type === 'premium' || row.accessType === 'paid';
+  return {
+    id:          row.slug,
+    slug:        row.slug,
+    title:       row.title       || '',
+    subtitle:    row.subtitle    || '',
+    country:     row.country     || row.destination || row.region || '',
+    duration:    row.durationDays ? `${row.durationDays} days` : '',
+    isPremium,
+    price:       Number(row.price) || 0,
+    tag:         isPremium ? 'Premium' : 'Free Journey',
+    coverImage:  row.coverImage  || '',
+    description: row.description || '',
+    bestFor:     [],
+    status:      'published',
+    parentId:    row.parentId    || null,
+  };
+}
+
 export default function ItinerariesPage() {
   const [searchQuery,    setSearchQuery]    = useState('');
   const [creatorFilter,  setCreatorFilter]  = useState('');   // creator slug or ''
   const [creators,       setCreators]       = useState([]);   // for filter dropdown
   const [creatorMap,     setCreatorMap]     = useState({});   // { slug: { name, slug, avatarUrl } }
+  const [dbRows,         setDbRows]         = useState([]);   // published itineraries from DB
   const purchasedSlugs = usePurchasedSlugs();
 
   // DB hero images override the static coverImage so CMS changes are reflected immediately.
@@ -167,13 +189,32 @@ export default function ItinerariesPage() {
       .catch(() => {});
   }, []);
 
-  const itineraries = staticItineraries
+  // Fetch all published DB itineraries — merges CMS-created routes with static data.
+  useEffect(() => {
+    fetch('/api/itineraries?action=list')
+      .then(r => r.ok ? r.json() : { itineraries: [] })
+      .then(data => setDbRows(data.itineraries || []))
+      .catch(() => {});
+  }, []);
+
+  // Static slugs that already exist in the bundled data — skip them in DB merge to avoid duplication.
+  const staticSlugs = new Set(staticItineraries.map(it => it.id));
+
+  const applyOverrides = (it) => {
+    const heroUrl = heroOverrides[it.id];
+    const creator = creatorMap[it.id] || null;
+    return { ...it, ...(heroUrl ? { coverImage: heroUrl } : {}), ...(creator ? { creator } : {}) };
+  };
+
+  const staticList = staticItineraries
     .filter(it => it.status !== 'draft')
-    .map(it => {
-      const heroUrl = heroOverrides[it.id];
-      const creator = creatorMap[it.id] || null;
-      return { ...it, ...(heroUrl ? { coverImage: heroUrl } : {}), ...(creator ? { creator } : {}) };
-    });
+    .map(applyOverrides);
+
+  const dbList = dbRows
+    .filter(row => !staticSlugs.has(row.slug))
+    .map(row => applyOverrides(normalizeDbRow(row)));
+
+  const itineraries = [...staticList, ...dbList];
 
   useSEO({
     title: 'Travel Itineraries — Free & Premium Journeys',
@@ -184,7 +225,7 @@ export default function ItinerariesPage() {
   const matchesSearch = (it) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
-    return it.title.toLowerCase().includes(q) || it.country.toLowerCase().includes(q);
+    return (it.title || '').toLowerCase().includes(q) || (it.country || '').toLowerCase().includes(q);
   };
 
   const matchesCreator = (it) => {

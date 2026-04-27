@@ -94,6 +94,37 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── GET /api/itineraries?action=list ────────────────────────────────────────
+  // Public — returns all published, public, non-collection itineraries for the
+  // listing page. Includes itineraries created via CMS that are not in the
+  // static data file. Short cache so publish is visible within ~30 s.
+  if (action === 'list') {
+    res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=30');
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      const { rows } = await pool.query(
+        `SELECT slug, title, subtitle, destination, country, region,
+                "durationDays", type, "accessType", price,
+                "isPrivate", "isCollection", "parentId",
+                "coverImage", description, status, "isPublished"
+         FROM   "Itinerary"
+         WHERE  (status = 'published' OR "isPublished" = true)
+           AND  ("isPrivate" = false OR "isPrivate" IS NULL)
+           AND  ("isCollection" = false OR "isCollection" IS NULL)
+           AND  ("parentId" IS NULL OR "parentId" = '')
+           AND  (type IS NULL OR type != 'custom')
+         ORDER BY "updatedAt" DESC`
+      );
+      return res.json({ itineraries: rows });
+    } catch (err) {
+      if (err.message?.includes('does not exist')) return res.json({ itineraries: [] });
+      console.error('[itineraries/list]', err.message);
+      return res.status(500).json({ error: err.message });
+    } finally {
+      await pool.end();
+    }
+  }
+
   // ── GET /api/itineraries?action=assets&slug= ────────────────────────────────
   // Public — no auth required. Asset URLs are already public (Vercel Blob / CDN).
   if (action === 'assets') {
