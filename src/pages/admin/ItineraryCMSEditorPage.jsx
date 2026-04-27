@@ -612,7 +612,7 @@ export default function ItineraryCMSEditorPage() {
     region: '', durationDays: '', type: 'free', isPrivate: false, isCollection: false,
     stripePriceId: '', pricingKey: '',
     coverImage: '', status: 'draft', pdfUrl: '', pdf_url: '', pdf_version: 'v1.0', creatorId: '',
-    variant: '', parentId: '', parentTitle: '',
+    variant: '', parentId: '', parentTitle: '', parentIsCollection: false,
     contentDepth: 'essential',
     structureType: 'standalone',
     relationshipType: 'standalone',
@@ -687,6 +687,7 @@ export default function ItineraryCMSEditorPage() {
           : (it.parentId ? 'variant' : 'standalone'),
         relationshipType: it.parentId ? 'associated' : 'standalone',
         parentTitle: '',
+        parentIsCollection: false,
         content,
       });
       savedId.current = it.id;
@@ -958,19 +959,47 @@ export default function ItineraryCMSEditorPage() {
       return;
     }
     if (form.relationshipType === 'associated' && form.parentId?.trim() && !form.variant) {
-      alert('Please select a version (Complete, Essential, Short, or Custom) for this associated itinerary.');
+      alert('Please select a version (Complete, Essential, or Short) for this associated itinerary.');
       return;
     }
     setSaving(true); setSaveMsg(null);
     try {
-      const token = await getToken();
+      const token    = await getToken();
       const targetId = savedId.current || (isNew ? null : id);
       const action   = targetId ? `update&id=${targetId}` : 'create';
+
+      // Duplicate version check — warn and let user decide whether to proceed
+      if (form.relationshipType === 'associated' && form.parentId?.trim() && form.variant) {
+        try {
+          const dupUrl = `/api/itinerary-cms?action=check-version-duplicate`
+            + `&parentSlug=${encodeURIComponent(form.parentId)}`
+            + `&variant=${encodeURIComponent(form.variant)}`
+            + (targetId ? `&id=${targetId}` : '');
+          const dupRes  = await fetch(dupUrl, { headers: { Authorization: `Bearer ${token}` } });
+          const dupData = await dupRes.json();
+          if (dupData.isDuplicate) {
+            const vLabel = { complete: 'Complete', essential: 'Essential', short: 'Short' }[form.variant] || form.variant;
+            const ok = window.confirm(
+              `Another itinerary ("${dupData.existing?.title || 'unknown'}") already exists as the ${vLabel} version of this parent.\n\nSave anyway?`
+            );
+            if (!ok) { setSaving(false); return; }
+          }
+        } catch { /* check failed — proceed with save */ }
+      }
 
       // Build content explicitly so days structure is always correct
       const contentToSave = {
         ...form.content,
         days: Array.isArray(form.content?.days) ? form.content.days : [],
+      };
+
+      // Auto-fill SEO fields if empty — never overwrite values already set.
+      const existingMeta  = contentToSave.seo ?? {};
+      const autoSEO       = generateSEO(form);
+      contentToSave.seo = {
+        ...existingMeta,
+        metaTitle:       existingMeta.metaTitle?.trim()       || autoSEO.metaTitle,
+        metaDescription: existingMeta.metaDescription?.trim() || autoSEO.metaDescription,
       };
 
       // Normalize parentId and variant.
@@ -979,7 +1008,7 @@ export default function ItineraryCMSEditorPage() {
       const isAssociated    = form.relationshipType === 'associated' && !!form.parentId?.trim();
       const normalizedParentId = isAssociated ? form.parentId.trim() : null;
       const normalizedVariant  = isAssociated
-        ? (['complete', 'essential', 'short', 'custom'].includes(form.variant) ? form.variant : null)
+        ? (['complete', 'essential', 'short'].includes(form.variant) ? form.variant : null)
         : null;
 
       const slug = form.slug;
@@ -1045,6 +1074,7 @@ export default function ItineraryCMSEditorPage() {
         structureType: (it.isCollection ?? f.isCollection) ? 'collection_parent' : (f.parentId ? 'variant' : 'standalone'),
         relationshipType: f.parentId ? 'associated' : 'standalone',
         parentTitle: f.parentTitle,
+        parentIsCollection: f.parentIsCollection,
         // content intentionally preserved from f — never replace with DB response
         // (JSONB may arrive as string in some pg/Vercel configurations)
       }));
@@ -2046,7 +2076,7 @@ function DestinationPicker({ destination, country, region, onChange }) {
 }
 
 // ── Parent itinerary search picker ────────────────────────────────────────────
-function ParentItineraryPicker({ value, displayValue, currentId, onSelect, onClear }) {
+function ParentItineraryPicker({ value, displayValue, currentId, onSelect, onClear, isAdmin = false }) {
   const { getToken } = useAuth();
   const [query,         setQuery]         = useState(displayValue || '');
   const [results,       setResults]       = useState([]);
@@ -2099,7 +2129,7 @@ function ParentItineraryPicker({ value, displayValue, currentId, onSelect, onCle
 
   function handleSelect(it) {
     const label = `${it.title}${it.destination ? ` · ${it.destination}` : ''}`;
-    onSelect({ slug: it.slug, title: it.title, id: it.id });
+    onSelect({ slug: it.slug, title: it.title, id: it.id, isCollection: it.isCollection ?? false });
     setQuery(label);
     setResolvedTitle(label);
     setOpen(false);
@@ -2163,7 +2193,7 @@ function ParentItineraryPicker({ value, displayValue, currentId, onSelect, onCle
           ))}
         </div>
       )}
-      {value && (
+      {isAdmin && value && (
         <p style={{ fontSize: '11px', color: '#C8C0B5', margin: '5px 0 0', fontFamily: 'monospace' }}>
           {value}
         </p>
@@ -2172,8 +2202,39 @@ function ParentItineraryPicker({ value, displayValue, currentId, onSelect, onCle
   );
 }
 
+// ── SEO generator (pure, usable at save time + in admin Regenerate button) ─────
+function generateSEO(form) {
+  const title    = form.title?.trim()       || 'Untitled';
+  const dest     = form.destination?.trim() || '';
+  const duration = form.durationDays ? `${form.durationDays}-day ` : '';
+  const subtitle = form.subtitle?.trim()    || '';
+  const summary  = form.content?.summary?.shortDescription?.trim() || '';
+  const variant  = form.variant
+    ? ` (${form.variant.charAt(0).toUpperCase() + form.variant.slice(1)} version)`
+    : '';
+  const parentRef = form.parentTitle?.trim()
+    ? ` Part of "${form.parentTitle}"${variant}.`
+    : '';
+
+  const metaTitle = `${title} | HiddenAtlas`.slice(0, 70);
+
+  let metaDescription;
+  if (summary) {
+    metaDescription = `${summary}${parentRef}`.slice(0, 155);
+  } else if (subtitle) {
+    metaDescription = (`${subtitle}${dest ? `. Discover ${dest} with this carefully curated ${duration}itinerary.` : ''}${parentRef}`).slice(0, 155);
+  } else if (dest) {
+    metaDescription = (`A carefully curated ${duration}${dest} itinerary. Top landmarks, hidden gems and local highlights.${parentRef}`).slice(0, 155);
+  } else {
+    metaDescription = (`A ${duration}travel itinerary by HiddenAtlas.${parentRef}`).slice(0, 155);
+  }
+
+  return { metaTitle, metaDescription };
+}
+
 // ── Basics Tab ────────────────────────────────────────────────────────────────
 function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators = [], isAdmin = false, myCreatorId = null, dayCount = 0, currentId = null }) {
+  const { getToken } = useAuth();
   function set(field, value) { setForm(f => ({ ...f, [field]: value })); }
   function setSEO(field, value) {
     setForm(f => ({ ...f, content: { ...f.content, seo: { ...(f.content?.seo ?? {}), [field]: value } } }));
@@ -2183,7 +2244,31 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
     ? (creators.find(c => c.id === (myCreatorId || form.creatorId)) ?? null)
     : null;
 
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [advancedOpen,     setAdvancedOpen]     = useState(false);
+  const [versionDuplicate, setVersionDuplicate] = useState({ checking: false, exists: false, title: '' });
+
+  useEffect(() => {
+    const parentSlug = form.parentId?.trim();
+    const variant    = form.variant;
+    if (!parentSlug || !variant) { setVersionDuplicate({ checking: false, exists: false, title: '' }); return; }
+    setVersionDuplicate(d => ({ ...d, checking: true }));
+    let cancelled = false;
+    getToken().then(token => {
+      if (!token || cancelled) return;
+      const url = `/api/itinerary-cms?action=check-version-duplicate`
+        + `&parentSlug=${encodeURIComponent(parentSlug)}`
+        + `&variant=${encodeURIComponent(variant)}`
+        + (currentId ? `&id=${currentId}` : '');
+      return fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          if (!cancelled) {
+            setVersionDuplicate({ checking: false, exists: !!data.isDuplicate, title: data.existing?.title || '' });
+          }
+        });
+    }).catch(() => { if (!cancelled) setVersionDuplicate({ checking: false, exists: false, title: '' }); });
+    return () => { cancelled = true; };
+  }, [form.parentId, form.variant, currentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function setRelationshipType(type) {
     if (type === 'standalone') {
@@ -2242,20 +2327,10 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
     });
   }
 
-  function handleGenerateSEO() {
-    const title    = form.title?.trim() || 'Untitled';
-    const dest     = form.destination?.trim() || '';
-    const duration = form.durationDays ? `${form.durationDays}-day ` : '';
-    const subtitle = form.subtitle?.trim() || '';
-    const newTitle = `${title} | HiddenAtlas`.slice(0, 70);
-    const newDesc  = (subtitle
-      ? `${subtitle}${dest ? `. Discover ${dest} with this carefully curated ${duration}itinerary.` : ''}`
-      : dest
-        ? `A carefully curated ${duration}${dest} itinerary. Top landmarks, hidden gems and local highlights.`
-        : `A ${duration}travel itinerary by HiddenAtlas.`
-    ).slice(0, 155);
-    setSEO('metaTitle',       newTitle);
-    setSEO('metaDescription', newDesc);
+  function handleRegenerateSEO() {
+    const { metaTitle, metaDescription } = generateSEO(form);
+    setSEO('metaTitle',       metaTitle);
+    setSEO('metaDescription', metaDescription);
   }
 
   const metaTitle = form.content?.seo?.metaTitle       || '';
@@ -2278,6 +2353,7 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
   if (isCollection)                                      warnings.push('Collection parents cannot contain standalone day plans.');
   if (isAssociated && !form.parentId)                    warnings.push('Please select a parent itinerary to complete the association.');
   if (isAssociated && form.parentId && !form.variant)    warnings.push('Please select a version for this associated itinerary.');
+  if (versionDuplicate.exists)                           warnings.push(`Another itinerary ("${versionDuplicate.title}") already uses this parent + version combination.`);
 
   return (
     <div style={{ maxWidth: '720px' }}>
@@ -2455,21 +2531,32 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
                 value={form.parentId || ''}
                 displayValue={form.parentTitle || ''}
                 currentId={currentId}
-                onSelect={({ slug, title }) =>
-                  setForm(f => ({ ...f, parentId: slug, parentTitle: title, structureType: 'variant', relationshipType: 'associated' }))
+                isAdmin={isAdmin}
+                onSelect={({ slug, title, isCollection: parentIsCollection }) =>
+                  setForm(f => ({ ...f, parentId: slug, parentTitle: title, parentIsCollection: !!parentIsCollection, structureType: 'variant', relationshipType: 'associated' }))
                 }
-                onClear={() => setForm(f => ({ ...f, parentId: '', parentTitle: '', variant: '' }))}
+                onClear={() => setForm(f => ({ ...f, parentId: '', parentTitle: '', parentIsCollection: false, variant: '' }))}
               />
+              {form.parentId && (
+                <span style={{
+                  display: 'inline-block', marginTop: '8px',
+                  padding: '2px 9px', borderRadius: '20px', fontSize: '11px', fontWeight: '600',
+                  background: form.parentIsCollection ? '#EEF5FF' : '#EFF6F5',
+                  color: form.parentIsCollection ? '#2563EB' : '#1B6B65',
+                  border: `1px solid ${form.parentIsCollection ? '#BFDBFE' : '#9BD0CA'}`,
+                }}>
+                  {form.parentIsCollection ? 'Collection' : 'Parent itinerary'}
+                </span>
+              )}
             </Field>
 
             {form.parentId && (
-              <Field label="Version *" hint="How does this itinerary relate to the parent?">
+              <Field label="Itinerary Version" hint="Choose the version for this parent itinerary.">
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   {[
                     { value: 'complete',  label: 'Complete',  desc: 'Full detailed version' },
                     { value: 'essential', label: 'Essential', desc: 'Core route and highlights' },
                     { value: 'short',     label: 'Short',     desc: 'Condensed, lighter plan' },
-                    { value: 'custom',    label: 'Custom',    desc: 'Custom variation' },
                   ].map(({ value, label, desc }) => {
                     const active = form.variant === value;
                     return (
@@ -2493,72 +2580,25 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
                     );
                   })}
                 </div>
+                {form.parentId && form.variant && (
+                  <p style={{ marginTop: '10px', fontSize: '12px', color: '#6B6156' }}>
+                    <span style={{ fontWeight: '600' }}>Result:</span>{' '}
+                    {form.parentTitle || form.parentId}
+                    {' → '}
+                    {form.variant.charAt(0).toUpperCase() + form.variant.slice(1)}
+                    {' · '}
+                    <span style={{ color: form.type === 'free' ? '#27866A' : '#C97B2E' }}>
+                      {form.type === 'free' ? 'Free' : form.type === 'premium' ? 'Premium' : 'Client Request'}
+                    </span>
+                  </p>
+                )}
               </Field>
             )}
           </>
         )}
       </div>
 
-      {/* ── 4. SEO ────────────────────────────────────────────────────────── */}
-      <div style={sectionCard}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-          <div>
-            <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '2px' }}>SEO</p>
-            <p style={{ fontSize: '12px', color: '#9A8E80' }}>How this itinerary appears in search results</p>
-          </div>
-          <button onClick={handleGenerateSEO} style={{
-            padding: '7px 14px', borderRadius: '5px', border: '1px solid #E8E3DA',
-            background: 'white', fontSize: '12px', fontWeight: '500', color: '#1C1A16', cursor: 'pointer', flexShrink: 0,
-          }}>
-            Generate SEO
-          </button>
-        </div>
-
-        {/* Search preview */}
-        {(metaTitle || form.title) && (
-          <div style={{ padding: '14px 16px', background: '#F8F7F4', border: '1px solid #E8E3DA', borderRadius: '8px', marginBottom: '18px' }}>
-            <p style={{ fontSize: '11px', color: '#B5AA99', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600' }}>
-              Search preview
-            </p>
-            <p style={{ fontSize: '18px', color: '#1a0dab', fontWeight: '400', margin: '0 0 3px' }}>
-              {metaTitle || `${form.title || 'Untitled'} | HiddenAtlas`}
-            </p>
-            <p style={{ fontSize: '12px', color: '#006621', margin: '0 0 5px' }}>
-              hiddenatlas.travel/itineraries/{form.slug || '…'}
-            </p>
-            <p style={{ fontSize: '13px', color: '#545454', lineHeight: '1.55', margin: 0 }}>
-              {metaDesc || <span style={{ color: '#B5AA99' }}>No description yet.</span>}
-            </p>
-          </div>
-        )}
-
-        <Field label={`Meta Title${metaTitle ? ` · ${metaTitle.length}/70` : ''}`}>
-          <input value={metaTitle} style={inputStyle}
-            placeholder={`${form.title || 'Title'} | HiddenAtlas`}
-            onChange={e => setSEO('metaTitle', e.target.value)}
-          />
-          {metaTitle.length > 70 && (
-            <p style={{ fontSize: '11.5px', color: '#C97B2E', margin: '4px 0 0' }}>Too long — trim to under 70 characters.</p>
-          )}
-        </Field>
-
-        <Field label={`Meta Description · ${descLen}/160`}>
-          <textarea value={metaDesc} rows={3}
-            style={{ ...textareaStyle, minHeight: '72px' }}
-            placeholder="120–160 character summary for search results"
-            onChange={e => setSEO('metaDescription', e.target.value)}
-          />
-          {descLen > 0 && (
-            <p style={{ fontSize: '11.5px', color: descColor, margin: '4px 0 0' }}>
-              {descLen < 120 ? 'Too short — aim for 120–160 characters.'
-                : descLen > 160 ? 'Too long — trim to under 160 characters.'
-                : 'Good length.'}
-            </p>
-          )}
-        </Field>
-      </div>
-
-      {/* ── 5. Warnings ───────────────────────────────────────────────────── */}
+      {/* ── 4. Warnings ───────────────────────────────────────────────────── */}
       {warnings.length > 0 && (
         <div style={{ ...sectionCard, padding: 0, overflow: 'hidden' }}>
           {warnings.map((msg, i) => (
@@ -2703,6 +2743,64 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
                   </select>
                 </Field>
               )}
+
+              {/* ── SEO (admin only) ───────────────────────────────────────── */}
+              <div style={{ borderTop: '1px solid #E8E3DA', paddingTop: '20px', marginTop: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <div>
+                    <p style={{ fontSize: '12.5px', fontWeight: '700', color: '#1C1A16', marginBottom: '2px' }}>SEO</p>
+                    <p style={{ fontSize: '11.5px', color: '#9A8E80' }}>Auto-generated on save if empty. Click Regenerate to overwrite.</p>
+                  </div>
+                  <button onClick={handleRegenerateSEO} style={{
+                    padding: '6px 12px', borderRadius: '5px', border: '1px solid #E8E3DA',
+                    background: 'white', fontSize: '12px', fontWeight: '500', color: '#4A433A', cursor: 'pointer', flexShrink: 0,
+                  }}>
+                    Regenerate SEO
+                  </button>
+                </div>
+
+                {(metaTitle || form.title) && (
+                  <div style={{ padding: '12px 14px', background: '#F8F7F4', border: '1px solid #E8E3DA', borderRadius: '7px', marginBottom: '14px' }}>
+                    <p style={{ fontSize: '10.5px', color: '#B5AA99', marginBottom: '7px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600' }}>
+                      Search preview
+                    </p>
+                    <p style={{ fontSize: '16px', color: '#1a0dab', fontWeight: '400', margin: '0 0 3px' }}>
+                      {metaTitle || `${form.title || 'Untitled'} | HiddenAtlas`}
+                    </p>
+                    <p style={{ fontSize: '11.5px', color: '#006621', margin: '0 0 4px' }}>
+                      hiddenatlas.travel/itineraries/{form.slug || '…'}
+                    </p>
+                    <p style={{ fontSize: '12.5px', color: '#545454', lineHeight: '1.5', margin: 0 }}>
+                      {metaDesc || <span style={{ color: '#B5AA99' }}>No description yet.</span>}
+                    </p>
+                  </div>
+                )}
+
+                <Field label={`Meta Title${metaTitle ? ` · ${metaTitle.length}/70` : ''}`}>
+                  <input value={metaTitle} style={inputStyle}
+                    placeholder={`${form.title || 'Title'} | HiddenAtlas`}
+                    onChange={e => setSEO('metaTitle', e.target.value)}
+                  />
+                  {metaTitle.length > 70 && (
+                    <p style={{ fontSize: '11.5px', color: '#C97B2E', margin: '4px 0 0' }}>Too long — trim to under 70 characters.</p>
+                  )}
+                </Field>
+
+                <Field label={`Meta Description · ${descLen}/160`}>
+                  <textarea value={metaDesc} rows={3}
+                    style={{ ...textareaStyle, minHeight: '72px' }}
+                    placeholder="120–160 character summary for search results"
+                    onChange={e => setSEO('metaDescription', e.target.value)}
+                  />
+                  {descLen > 0 && (
+                    <p style={{ fontSize: '11.5px', color: descColor, margin: '4px 0 0' }}>
+                      {descLen < 120 ? 'Too short — aim for 120–160 characters.'
+                        : descLen > 160 ? 'Too long — trim to under 160 characters.'
+                        : 'Good length.'}
+                    </p>
+                  )}
+                </Field>
+              </div>
 
             </div>
           )}

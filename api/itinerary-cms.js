@@ -133,7 +133,8 @@ export default async function handler(req, res) {
       if (action === 'ai-history')       { await assertOwnership(pool, id, ctx); return res.json(await handleAIHistory(pool, id)); }
       if (action === 'linked-request')   { adminOnly(); return res.json(await handleLinkedRequest(pool, id)); }
       if (action === 'pricing-options')    return res.json(handlePricingOptions());
-      if (action === 'search-parents')    return res.json(await handleSearchParents(pool, req.query.q || '', req.query.id || null));
+      if (action === 'search-parents')         return res.json(await handleSearchParents(pool, req.query.q || '', req.query.id || null));
+      if (action === 'check-version-duplicate') return res.json(await handleCheckVersionDuplicate(pool, req.query.parentSlug || '', req.query.variant || '', req.query.id || null));
       if (action === 'migration-status')  { adminOnly(); return res.json(await handleMigrationStatus(pool)); }
       if (action === 'upload-pdf-token')  { await assertOwnership(pool, id, ctx); return res.json(await handleUploadPDFToken(pool, id)); }
       return res.status(400).json({ error: 'Unknown GET action' });
@@ -222,7 +223,7 @@ async function handleSearchParents(pool, q = '', excludeId = null) {
   const search = q.trim() ? `%${q.trim()}%` : '%';
   const params = excludeId ? [search, excludeId] : [search];
   const { rows } = await pool.query(
-    `SELECT id, slug, title, destination, country
+    `SELECT id, slug, title, destination, country, "isCollection"
      FROM "Itinerary"
      WHERE (title ILIKE $1 OR destination ILIKE $1 OR slug ILIKE $1)
        ${excludeId ? 'AND id != $2' : ''}
@@ -231,6 +232,20 @@ async function handleSearchParents(pool, q = '', excludeId = null) {
     params
   );
   return { itineraries: rows };
+}
+
+// ── Check if a version duplicate exists for a given parent+variant ─────────────
+async function handleCheckVersionDuplicate(pool, parentSlug, variant, excludeId = null) {
+  if (!parentSlug || !variant) return { isDuplicate: false, existing: null };
+  const params = excludeId ? [parentSlug, variant, excludeId] : [parentSlug, variant];
+  const { rows } = await pool.query(
+    `SELECT id, title, slug FROM "Itinerary"
+     WHERE "parentId" = $1 AND variant = $2
+       ${excludeId ? 'AND id != $3' : ''}
+     LIMIT 1`,
+    params
+  );
+  return { isDuplicate: rows.length > 0, existing: rows[0] ?? null };
 }
 
 // ── List all itineraries (CMS view) ──────────────────────────────────────────
