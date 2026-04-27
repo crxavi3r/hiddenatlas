@@ -4,7 +4,7 @@ import { useAuth } from '@clerk/clerk-react';
 import { useUserCtx } from '../../lib/useUserCtx';
 import {
   ArrowLeft, Save, Globe, EyeOff, Eye, Plus, Trash2, ChevronDown, ChevronUp,
-  Wand2, Image as ImageIcon, Clock, Check, User, Upload, FileText, ExternalLink,
+  Wand2, Image as ImageIcon, Clock, Check, User, Upload, FileText, ExternalLink, Edit2, X,
 } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { resolveCoverImage } from '../../lib/resolveCoverImage';
@@ -65,10 +65,10 @@ const EMPTY_CONTENT = {
   seo:       { metaTitle: '', metaDescription: '' },
 };
 
-const DIFFICULTIES     = ['Easy', 'Easy to Moderate', 'Moderate', 'Moderate to Challenging', 'Challenging'];
+const DIFFICULTIES     = ['Easy', 'Moderate', 'Intensive'];
 const BEST_FOR_OPTIONS = ['Couples', 'Families', 'Friend Groups', 'Adventurers', 'Solo'];
-const GROUP_SIZES      = ['1–2 people', '2–4 people', '4–6 people', '6+'];
-const CATEGORIES       = ['City Break', 'Road Trip', 'Island Journey', 'Nature & Adventure', 'Cultural Journey'];
+const GROUP_SIZES      = ['1–2 people', '2–4 people', '4–6 people', 'Flexible'];
+const CATEGORIES       = ['City Break', 'Road Trip', 'Island Journey', 'Cultural Route', 'Nature Escape', 'Luxury Escape'];
 
 function slugify(title) {
   return title.toLowerCase()
@@ -3035,6 +3035,106 @@ function CoverImagePicker({ value, onChange, assets = [], onUpload }) {
   );
 }
 
+// ── Route auto-generation ─────────────────────────────────────────────────────
+function computeRoute(days) {
+  if (!Array.isArray(days) || days.length === 0) return '';
+  const cities = days.map(d => {
+    if (d.route) return d.route.split('·')[0].trim();
+    return (d.title || '').replace(/^Day\s+\d+[:\s\-–—]+/i, '').split(/[·,]/)[0].trim();
+  }).filter(Boolean);
+  return cities.filter((c, i) => i === 0 || c !== cities[i - 1]).join(' → ');
+}
+
+// ── Highlights structured editor ──────────────────────────────────────────────
+function HighlightsEditor({ value = [], onChange, maxItems = 6 }) {
+  const [draft,   setDraft]   = useState('');
+  const [editIdx, setEditIdx] = useState(null);
+  const [editVal, setEditVal] = useState('');
+  const arr   = Array.isArray(value) ? value : [];
+  const atMax = arr.length >= maxItems;
+
+  function handleAdd() {
+    const v = draft.trim();
+    if (!v || atMax) return;
+    onChange([...arr, v]);
+    setDraft('');
+  }
+
+  function startEdit(i) { setEditIdx(i); setEditVal(arr[i]); }
+
+  function saveEdit() {
+    if (editVal.trim()) {
+      const next = [...arr];
+      next[editIdx] = editVal.trim();
+      onChange(next);
+    }
+    setEditIdx(null); setEditVal('');
+  }
+
+  function cancelEdit() { setEditIdx(null); setEditVal(''); }
+
+  function remove(i) {
+    onChange(arr.filter((_, j) => j !== i));
+    if (editIdx === i) { setEditIdx(null); setEditVal(''); }
+  }
+
+  return (
+    <div>
+      {arr.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '10px' }}>
+          {arr.map((item, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: '8px',
+              background: '#FAFAF8', border: '1px solid #EDE8E0', borderRadius: '6px', padding: '8px 10px',
+            }}>
+              {editIdx === i ? (
+                <>
+                  <input
+                    value={editVal} autoFocus maxLength={100}
+                    onChange={e => setEditVal(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveEdit(); } if (e.key === 'Escape') cancelEdit(); }}
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <button type="button" onClick={saveEdit} style={{ ...iconBtn, color: '#1B6B65' }} title="Save"><Check size={13} /></button>
+                  <button type="button" onClick={cancelEdit} style={iconBtn} title="Cancel"><X size={13} /></button>
+                </>
+              ) : (
+                <>
+                  <span style={{ flex: 1, fontSize: '13px', color: '#1C1A16', lineHeight: '1.4' }}>{item}</span>
+                  <button type="button" onClick={() => startEdit(i)} style={iconBtn} title="Edit"><Edit2 size={12} /></button>
+                  <button type="button" onClick={() => remove(i)} style={{ ...iconBtn, color: '#C0392B' }} title="Remove"><Trash2 size={12} /></button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {atMax ? (
+        <p style={{ fontSize: '11.5px', color: '#B5AA99', margin: '0 0 6px' }}>Maximum {maxItems} highlights reached.</p>
+      ) : (
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <input
+            value={draft} maxLength={100}
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } }}
+            placeholder="e.g. Buckingham Palace and Westminster in a single walkable route"
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button type="button" onClick={handleAdd} disabled={!draft.trim()}
+            style={{ ...btnGhost, whiteSpace: 'nowrap', opacity: draft.trim() ? 1 : 0.5 }}>
+            <Plus size={12} /> Add
+          </button>
+        </div>
+      )}
+
+      <p style={{ fontSize: '11.5px', color: '#8C8070', marginTop: '6px' }}>
+        {arr.length} / {maxItems} highlights · Short, punchy highlights shown on the itinerary page
+      </p>
+    </div>
+  );
+}
+
 // ── Overview Tab (formerly Hero & Summary) ────────────────────────────────────
 function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) {
   const rawCover   = c('hero.coverImage');
@@ -3042,6 +3142,7 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
   const tagline    = c('hero.tagline')        || '';
   const highlights = c('summary.highlights') || [];
   const isPremium  = form.type === 'premium';
+  const autoRoute  = computeRoute(c('days') || []);
 
   return (
     <div style={{ maxWidth: '720px' }}>
@@ -3078,25 +3179,23 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
               onChange={e => setContent('summary.whySpecial', e.target.value)} />
           </Field>
 
-          <Field label="Route" hint="The main route of this itinerary.">
-            <input value={c('summary.routeOverview') || ''} style={inputStyle}
-              placeholder="London → Oxford → Bath"
-              onChange={e => setContent('summary.routeOverview', e.target.value)} />
+          <Field label="Route" hint="Auto-generated from the itinerary days — not editable.">
+            <input
+              value={autoRoute}
+              readOnly
+              placeholder="Will be generated from itinerary days"
+              style={{ ...inputStyle, background: '#FAFAF8', color: autoRoute ? '#4A433A' : '#B5AA99', cursor: 'default' }}
+            />
           </Field>
         </div>
 
         {/* Highlights */}
         <div style={sectionCard}>
-          <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>
-            Highlights{highlights.length > 0 ? ` · ${highlights.length}/6` : ''}
-          </p>
+          <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '16px' }}>Highlights</p>
 
-          <ArrayEditor
-            hint="Up to 6 key bullet points shown on the itinerary page."
+          <HighlightsEditor
             value={highlights}
             onChange={v => setContent('summary.highlights', v)}
-            placeholder="Add a key highlight…"
-            maxItems={6}
           />
 
           {isPremium && (
@@ -3120,22 +3219,23 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
             <Field label="Group Size">
               <select value={c('tripFacts.groupSize') || ''} style={{ ...inputStyle, cursor: 'pointer' }}
                 onChange={e => setContent('tripFacts.groupSize', e.target.value)}>
-                <option value="">Select…</option>
+                <option value="">Choose group size…</option>
                 {GROUP_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </Field>
-            <Field label="Category">
+            <Field label="Category" hint="Used for navigation and SEO.">
               <select value={c('tripFacts.category') || ''} style={{ ...inputStyle, cursor: 'pointer' }}
                 onChange={e => setContent('tripFacts.category', e.target.value)}>
-                <option value="">Select…</option>
+                <option value="">Choose category…</option>
                 {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
               </select>
             </Field>
           </div>
 
           <Field label="Difficulty">
-            <select value={c('tripFacts.difficulty') || 'Moderate'} style={{ ...inputStyle, cursor: 'pointer' }}
+            <select value={c('tripFacts.difficulty') || ''} style={{ ...inputStyle, cursor: 'pointer' }}
               onChange={e => setContent('tripFacts.difficulty', e.target.value)}>
+              <option value="">Choose difficulty…</option>
               {DIFFICULTIES.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           </Field>
