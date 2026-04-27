@@ -394,9 +394,10 @@ export default async function handler(req, res) {
 
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
-      const userCtx = await resolveUserCtx(req.headers.authorization, pool);
-      const userId  = userCtx?.userId ?? null;
-      const isAdmin = userCtx?.isAdmin ?? false;
+      const userCtx   = await resolveUserCtx(req.headers.authorization, pool);
+      const userId    = userCtx?.userId    ?? null;
+      const creatorId = userCtx?.creatorId ?? null;
+      const isAdmin   = userCtx?.isAdmin   ?? false;
 
       const { rows } = await pool.query(
         `SELECT * FROM "Itinerary" WHERE slug = $1 LIMIT 1`, [slug]
@@ -404,12 +405,18 @@ export default async function handler(req, res) {
       if (!rows.length) return res.status(404).json({ error: 'Itinerary not found' });
       const it = rows[0];
 
-      const isOwner = userId !== null && it.userId === userId;
+      // Owner = user who holds the custom itinerary (userId) OR the designer/creator who built it
+      const isOwner =
+        (userId    !== null && it.userId      === userId)    ||
+        (creatorId !== null && it.creator_id  === creatorId);
+
       if (!isOwner && !isAdmin) {
         return res.status(403).json({ error: 'You do not have access to this itinerary' });
       }
 
-      if (preview !== 'true' && it.status !== 'published' && !isAdmin) {
+      // Owners may always preview their own itineraries (including drafts).
+      // Non-owner, non-admin users can only see published itineraries.
+      if (!isOwner && !isAdmin && it.status !== 'published') {
         return res.status(403).json({ error: 'This itinerary is not ready yet' });
       }
 

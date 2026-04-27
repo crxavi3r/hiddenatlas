@@ -204,13 +204,12 @@ export default function ItinerariesCMSPage() {
   }
 
   function handlePreview(it, nav) {
-    // Custom, private, or unpublished itineraries don't exist on the public storefront.
-    // Route to the CMS editor instead so the admin can still inspect the content.
-    const canPreview = it.isPublished && !it.isPrivate && it.type !== 'custom';
-    if (canPreview) {
+    if (it.isPublished && !it.isPrivate && it.type !== 'custom') {
+      // Public itinerary — open live page
       window.open(`/itineraries/${it.slug}`, '_blank');
     } else {
-      nav(`/admin/itineraries/${it.id}`);
+      // Draft, private, or custom — open preview page (backend allows admin + owner)
+      window.open(`/itinerary/custom/${it.slug}?preview=true`, '_blank');
     }
   }
 
@@ -628,7 +627,7 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
                     <button
                       onClick={() => onPreview(it)}
                       style={iconBtn}
-                      title={it.isPublished && !it.isPrivate && it.type !== 'custom' ? 'Preview on site' : 'Open in editor'}
+                      title={it.isPublished && !it.isPrivate && it.type !== 'custom' ? 'Preview on site' : 'Preview (draft)'}
                     >
                       <Eye size={13} />
                     </button>
@@ -699,7 +698,7 @@ function MobileList({ items, onEdit, onPreview, onTogglePublish, onDuplicate, on
           <div style={{ display: 'flex', gap: '0', borderTop: '1px solid #F4F1EC' }}>
             {[
               { icon: Edit2, label: 'Edit',      action: () => onEdit(it) },
-              { icon: Eye, label: it.isPublished && !it.isPrivate && it.type !== 'custom' ? 'Preview' : 'Editor', action: () => onPreview(it) },
+              { icon: Eye, label: it.isPublished && !it.isPrivate && it.type !== 'custom' ? 'Preview' : 'Preview', action: () => onPreview(it) },
               { icon: Copy,  label: 'Duplicate', action: () => onDuplicate(it) },
               {
                 icon: it.status === 'published' ? EyeOff : Globe,
