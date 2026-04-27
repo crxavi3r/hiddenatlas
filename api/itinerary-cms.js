@@ -152,7 +152,7 @@ export default async function handler(req, res) {
       if (action === 'create')       return res.json(await handleCreate(pool, body, ctx));
       if (action === 'update')       { await assertOwnership(pool, id, ctx); return res.json(await handleUpdate(pool, id, body, ctx)); }
       if (action === 'duplicate')    { await assertOwnership(pool, id, ctx); return res.json(await handleDuplicate(pool, id)); }
-      if (action === 'delete')       { adminOnly(); return res.json(await handleDelete(pool, id)); }
+      if (action === 'delete')       return res.json(await handleDelete(pool, id, ctx));
       if (action === 'publish')      { await assertOwnership(pool, id, ctx); return res.json(await handleSetStatus(pool, id, 'published')); }
       if (action === 'unpublish')    { await assertOwnership(pool, id, ctx); return res.json(await handleSetStatus(pool, id, 'draft')); }
       if (action === 'seed')         { adminOnly(); return res.json(await handleSeed(pool, body)); }
@@ -517,15 +517,42 @@ async function handleDuplicate(pool, id) {
 }
 
 // ── Delete itinerary ──────────────────────────────────────────────────────────
-async function handleDelete(pool, id) {
+async function handleDelete(pool, id, ctx) {
   if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
 
+  // Permission check for non-admins: must own it and it must be a draft
+  if (!ctx.isAdmin) {
+    const { rows: itRows } = await pool.query(
+      `SELECT status, creator_id AS "creatorId" FROM "Itinerary" WHERE id = $1 LIMIT 1`, [id]
+    );
+    if (!itRows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+    const it = itRows[0];
+    if (it.creatorId !== ctx.creatorId) {
+      throw Object.assign(new Error('You can only delete your own itineraries.'), { status: 403 });
+    }
+    if (it.status !== 'draft') {
+      throw Object.assign(new Error('Only draft itineraries can be deleted. Unpublish it first.'), { status: 403 });
+    }
+  }
+
+  // Block if the itinerary has purchases
   const { rows: purchases } = await pool.query(
     `SELECT id FROM "Purchase" WHERE "itineraryId" = $1 LIMIT 1`, [id]
   );
   if (purchases.length > 0) {
     throw Object.assign(
-      new Error('Cannot delete — this itinerary has purchases. Unpublish it instead.'),
+      new Error('This itinerary cannot be deleted because it already has purchases.'),
+      { status: 409 }
+    );
+  }
+
+  // Block if other itineraries use this one as a parent
+  const { rows: children } = await pool.query(
+    `SELECT id FROM "Itinerary" WHERE "parentId" = $1 LIMIT 1`, [id]
+  );
+  if (children.length > 0) {
+    throw Object.assign(
+      new Error('This itinerary cannot be deleted because it is already in use as a parent collection.'),
       { status: 409 }
     );
   }

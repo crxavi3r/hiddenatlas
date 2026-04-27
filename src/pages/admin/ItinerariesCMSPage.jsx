@@ -92,7 +92,7 @@ export default function ItinerariesCMSPage() {
   const { getToken } = useAuth();
   const navigate     = useNavigate();
   const isMobile     = useIsMobile();
-  const { isAdmin }  = useUserCtx();
+  const { isAdmin, creatorId: myCreatorId } = useUserCtx();
 
   const [items,          setItems]          = useState([]);
   const [collections,    setCollections]    = useState([]);
@@ -103,10 +103,26 @@ export default function ItinerariesCMSPage() {
   const [backfilling,    setBackfilling]    = useState(false);
   const [publishing,     setPublishing]     = useState(false);
   const [toDelete,       setToDelete]       = useState(null);
+  const [deleteError,    setDeleteError]    = useState(null);
   const [filter,         setFilter]         = useState('all');   // all | draft | published
   const [typeFilter,     setTypeFilter]     = useState('all');   // all | free | premium | custom
   const [creatorFilter,  setCreatorFilter]  = useState('');      // creator id or ''
   const [allCreators,    setAllCreators]    = useState([]);      // for filter dropdown
+
+  // An itinerary is deletable if: admin (always), or designer owns it and it's a draft.
+  function canDelete(it) {
+    if (isAdmin) return true;
+    return it.status === 'draft' && it.creator_id === myCreatorId;
+  }
+
+  function requestDelete(it) {
+    if (!canDelete(it)) {
+      setDeleteError('You can only delete your own draft itineraries.');
+      setTimeout(() => setDeleteError(null), 4000);
+      return;
+    }
+    setToDelete(it);
+  }
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -239,8 +255,13 @@ export default function ItinerariesCMSPage() {
       const json = await res.json();
       if (json.error) throw new Error(json.error);
       setItems(prev => prev.filter(it => it.id !== id));
+      setCollections(prev => prev.filter(it => it.id !== id));
       setToDelete(null);
-    } catch (e) { alert(e.message); setToDelete(null); }
+    } catch (e) {
+      setToDelete(null);
+      setDeleteError(e.message);
+      setTimeout(() => setDeleteError(null), 5000);
+    }
   }
 
   // Server already splits itineraries vs collections; no client-side re-filter needed.
@@ -279,6 +300,17 @@ export default function ItinerariesCMSPage() {
           onConfirm={() => handleDelete(toDelete.id)}
           onCancel={() => setToDelete(null)}
         />
+      )}
+
+      {deleteError && (
+        <div style={{
+          position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
+          background: '#1C1A16', color: 'white', padding: '12px 20px', borderRadius: '8px',
+          fontSize: '13px', zIndex: 700, boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+          maxWidth: '420px', textAlign: 'center', lineHeight: '1.5',
+        }}>
+          {deleteError}
+        </div>
       )}
 
       {/* Header */}
@@ -449,7 +481,8 @@ export default function ItinerariesCMSPage() {
           onPreview={it => handlePreview(it, navigate)}
           onTogglePublish={handleTogglePublish}
           onDuplicate={handleDuplicate}
-          onDelete={it => setToDelete(it)}
+          onDelete={requestDelete}
+          canDelete={canDelete}
         />
       ) : (
         <DesktopTable
@@ -458,7 +491,8 @@ export default function ItinerariesCMSPage() {
           onPreview={it => handlePreview(it, navigate)}
           onTogglePublish={handleTogglePublish}
           onDuplicate={handleDuplicate}
-          onDelete={it => setToDelete(it)}
+          onDelete={requestDelete}
+          canDelete={canDelete}
         />
       )}
     </div>
@@ -466,7 +500,7 @@ export default function ItinerariesCMSPage() {
 }
 
 // ── Desktop table ─────────────────────────────────────────────────────────────
-function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, onDelete }) {
+function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, onDelete, canDelete }) {
   const [sortKey, setSortKey] = useState(null);  // null | 'pdf_version' | 'updatedAt'
   const [sortDir, setSortDir] = useState('asc'); // 'asc' | 'desc'
 
@@ -608,13 +642,15 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
                     >
                       {it.status === 'published' ? <EyeOff size={13} /> : <Globe size={13} />}
                     </button>
-                    <button
-                      onClick={() => onDelete(it)}
-                      style={{ ...iconBtn, color: '#C0392B' }}
-                      title="Delete"
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    {canDelete(it) && (
+                      <button
+                        onClick={() => onDelete(it)}
+                        style={{ ...iconBtn, color: '#C0392B' }}
+                        title="Delete"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -628,7 +664,7 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
 }
 
 // ── Mobile list ───────────────────────────────────────────────────────────────
-function MobileList({ items, onEdit, onPreview, onTogglePublish, onDuplicate, onDelete }) {
+function MobileList({ items, onEdit, onPreview, onTogglePublish, onDuplicate, onDelete, canDelete }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       {items.map(it => (
@@ -671,7 +707,7 @@ function MobileList({ items, onEdit, onPreview, onTogglePublish, onDuplicate, on
                 action: () => onTogglePublish(it),
                 color: it.status === 'published' ? '#C9A96E' : '#1B6B65',
               },
-              { icon: Trash2, label: 'Delete', action: () => onDelete(it), color: '#C0392B' },
+              ...(canDelete(it) ? [{ icon: Trash2, label: 'Delete', action: () => onDelete(it), color: '#C0392B' }] : []),
             ].map(({ icon: Icon, label, action, color }) => (
               <button key={label} onClick={action} style={{
                 flex: 1, background: 'none', border: 'none', cursor: 'pointer',

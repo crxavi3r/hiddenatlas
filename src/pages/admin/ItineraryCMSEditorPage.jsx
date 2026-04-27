@@ -2893,32 +2893,165 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
   );
 }
 
+// ── Cover Image Picker — hero-specific, 16:9 with hover overlay ───────────────
+function CoverImagePicker({ value, onChange, assets = [], onUpload }) {
+  const [open,        setOpen]        = useState(false);
+  const [uploading,   setUploading]   = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+  const [localValue,  setLocalValue]  = useState(value);
+  const [hovered,     setHovered]     = useState(false);
+  const fileRef = useRef(null);
+
+  useEffect(() => { setLocalValue(value); }, [value]);
+
+  const libraryAssets = assets.filter(a => a.active !== false);
+
+  async function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file || !onUpload) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const url = await onUpload(file);
+      if (url) { setLocalValue(url); onChange(url); setOpen(false); }
+    } catch (err) {
+      setUploadError(err.message || 'Upload failed.');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  function handleClear() { setLocalValue(''); onChange(''); }
+
+  return (
+    <div>
+      {/* 16:9 image area */}
+      <div
+        style={{ width: '100%', aspectRatio: '16/9', borderRadius: '8px', overflow: 'hidden', position: 'relative', cursor: localValue ? 'default' : 'pointer' }}
+        onMouseEnter={() => localValue && setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onClick={() => !localValue && fileRef.current?.click()}
+      >
+        {localValue ? (
+          <>
+            <img
+              src={localValue}
+              alt="Cover"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              onError={e => { e.currentTarget.style.display = 'none'; }}
+            />
+            {hovered && (
+              <div style={{
+                position: 'absolute', inset: 0,
+                background: 'rgba(0,0,0,0.42)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+              }}>
+                <button type="button"
+                  onClick={e => { e.stopPropagation(); fileRef.current?.click(); }}
+                  style={{ padding: '8px 18px', borderRadius: '6px', border: '1.5px solid rgba(255,255,255,0.75)', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+                  Replace
+                </button>
+                <button type="button"
+                  onClick={e => { e.stopPropagation(); handleClear(); }}
+                  style={{ padding: '8px 18px', borderRadius: '6px', border: '1.5px solid rgba(255,255,255,0.35)', background: 'transparent', color: 'rgba(255,255,255,0.75)', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }}>
+                  Remove
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{
+            width: '100%', height: '100%',
+            background: 'linear-gradient(135deg, #F5F2ED 0%, #EDE8E0 100%)',
+            border: '2px dashed #DDD7CC', borderRadius: '8px',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px',
+          }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '10px', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+              <Upload size={20} color="#9A8E80" />
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ fontSize: '14px', fontWeight: '600', color: '#4A433A', marginBottom: '4px' }}>Upload cover image</p>
+              <p style={{ fontSize: '12px', color: '#B5AA99' }}>Displayed at 16:9 on the website and in the PDF</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Action buttons */}
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '10px', marginBottom: open ? '10px' : 0 }}>
+        <button type="button" onClick={() => setOpen(o => !o)} style={btnGhost}>
+          <ImageIcon size={12} />
+          {open ? 'Close library' : `Library${libraryAssets.length > 0 ? ` (${libraryAssets.length})` : ''}`}
+        </button>
+        <button type="button" onClick={() => fileRef.current?.click()}
+          disabled={!onUpload || uploading} style={btnGhost}>
+          <Upload size={12} /> {uploading ? 'Uploading…' : 'Upload'}
+        </button>
+        {localValue && (
+          <button type="button" onClick={handleClear}
+            style={{ ...btnGhost, fontSize: '11px', color: '#B5AA99', borderColor: '#F0EDE8' }}>
+            ✕ Clear
+          </button>
+        )}
+      </div>
+      {uploadError && (
+        <p style={{ fontSize: '12px', color: '#C0392B', margin: '6px 0 0', lineHeight: '1.4' }}>{uploadError}</p>
+      )}
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
+
+      {/* Library grid */}
+      {open && (
+        <div style={{ border: '1px solid #E8E3DA', borderRadius: '8px', padding: '12px', background: '#FAFAF8', marginTop: '4px' }}>
+          {libraryAssets.length === 0 ? (
+            <p style={{ fontSize: '12px', color: '#B5AA99', textAlign: 'center', padding: '20px 0' }}>
+              No images in library yet. Upload one above or add images in the Images tab.
+            </p>
+          ) : (
+            <>
+              <p style={{ fontSize: '10px', fontWeight: '600', color: '#8C8070', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                {libraryAssets.length} image{libraryAssets.length !== 1 ? 's' : ''} in library — click to select
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: '5px', maxHeight: '200px', overflowY: 'auto' }}>
+                {libraryAssets.map((a, i) => (
+                  <div key={a.id ?? `lib-${i}`}
+                    onClick={() => { setLocalValue(a.url); onChange(a.url); setOpen(false); }}
+                    title={a.alt || a.caption || a.assetType}
+                    style={{ cursor: 'pointer', borderRadius: '4px', overflow: 'hidden', aspectRatio: '4/3', background: '#F4F1EC', position: 'relative', border: `2px solid ${localValue === a.url ? '#1B6B65' : 'transparent'}` }}>
+                    <img src={a.url} alt={a.alt || ''} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={e => { e.currentTarget.style.opacity = '0.3'; }} />
+                    {localValue === a.url && (
+                      <div style={{ position: 'absolute', inset: 0, background: 'rgba(27,107,101,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Check size={14} color="white" strokeWidth={3} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Overview Tab (formerly Hero & Summary) ────────────────────────────────────
 function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) {
   const coverUrl   = resolveCoverImage(c('hero.coverImage'), form.slug) || '';
   const tagline    = c('hero.tagline')        || '';
   const highlights = c('summary.highlights') || [];
   const isPremium  = form.type === 'premium';
-  const [previewImgError, setPreviewImgError] = useState(false);
-  useEffect(() => { setPreviewImgError(false); }, [coverUrl]);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '24px', alignItems: 'start' }}>
-
-      {/* ── Left: form fields ─────────────────────────────────────────────── */}
-      <div style={{ minWidth: 0 }}>
+    <div style={{ maxWidth: '720px' }}>
 
         {/* Cover Image */}
         <div style={sectionCard}>
-          <ImagePicker
-            label="Cover Image"
-            hint="Upload or select from the library. Displayed at 16:9 on the website and in the PDF."
+          <CoverImagePicker
             value={coverUrl}
             onChange={url => onCoverImageChange(url)}
             assets={assets}
             onUpload={onUpload ? (file) => onUpload(file, 'hero') : null}
-            assetType="hero"
-            aspectRatio="16/9"
           />
         </div>
 
@@ -3013,70 +3146,6 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
             onChange={v => setContent('tripFacts.bestFor', v)}
           />
         </div>
-      </div>
-
-      {/* ── Right: preview ───────────────────────────────────────────────── */}
-      <div style={{ position: 'sticky', top: '80px' }}>
-        <p style={{ fontSize: '10.5px', fontWeight: '700', color: '#9A8E80', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '10px' }}>
-          Preview
-        </p>
-        <div style={{ ...card, overflow: 'hidden' }}>
-          {/* Cover image */}
-          <div style={{ width: '100%', aspectRatio: '16/9', overflow: 'hidden', position: 'relative', background: 'linear-gradient(135deg, #F0ECE4 0%, #E8E3DB 100%)' }}>
-            {coverUrl && !previewImgError ? (
-              <img
-                src={coverUrl}
-                alt=""
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                onError={() => setPreviewImgError(true)}
-              />
-            ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <ImageIcon size={16} color="#C8C0B5" />
-                </div>
-                <span style={{ fontSize: '11px', color: '#B5AA99', letterSpacing: '0.2px' }}>Cover image preview</span>
-              </div>
-            )}
-          </div>
-
-          {/* Card body */}
-          <div style={{ padding: '14px 16px 18px' }}>
-            {(form.destination || form.durationDays) && (
-              <p style={{ fontSize: '11px', color: '#9A8E80', marginBottom: '6px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                {form.destination && <span>{form.destination}</span>}
-                {form.destination && form.durationDays && <span style={{ color: '#D0C8BE' }}>·</span>}
-                {form.durationDays && <span>{form.durationDays} days</span>}
-              </p>
-            )}
-            <p style={{ fontSize: '15px', fontWeight: '700', color: form.title ? '#1C1A16' : '#D0C8BE', lineHeight: '1.35', marginBottom: tagline ? '6px' : 0, fontFamily: 'Georgia, serif' }}>
-              {form.title || 'Itinerary title'}
-            </p>
-            {tagline ? (
-              <p style={{ fontSize: '12px', color: '#6B6156', lineHeight: '1.5', marginBottom: highlights.length > 0 ? '10px' : 0 }}>
-                {tagline}
-              </p>
-            ) : (
-              <p style={{ fontSize: '12px', color: '#D0C8BE', lineHeight: '1.5', marginBottom: highlights.length > 0 ? '10px' : 0, fontStyle: 'italic' }}>
-                Single sentence description
-              </p>
-            )}
-            {highlights.length > 0 && (
-              <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                {highlights.slice(0, 4).map((h, i) => (
-                  <li key={i} style={{ fontSize: '11.5px', color: '#6B6156', lineHeight: '1.5', display: 'flex', gap: '7px', alignItems: 'flex-start' }}>
-                    <span style={{ color: '#1B6B65', fontWeight: '700', flexShrink: 0, marginTop: '1px' }}>·</span>
-                    <span>{h}</span>
-                  </li>
-                ))}
-                {highlights.length > 4 && (
-                  <li style={{ fontSize: '11px', color: '#B5AA99', paddingLeft: '14px' }}>+{highlights.length - 4} more</li>
-                )}
-              </ul>
-            )}
-          </div>
-        </div>
-      </div>
 
     </div>
   );
