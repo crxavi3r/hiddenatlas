@@ -2034,7 +2034,7 @@ export default function ItineraryCMSEditorPage() {
         </div>
 
         {/* ── Tab panels ── */}
-        {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} creators={allCreators} isAdmin={isAdmin} myCreatorId={myCreatorId} dayCount={(form.content?.days || []).length} currentId={savedId.current || (isNew ? null : id)} />}
+        {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} creators={allCreators} isAdmin={isAdmin} myCreatorId={myCreatorId} dayCount={(form.content?.days || []).length} currentId={savedId.current || (isNew ? null : id)} isNew={isNew} hasSavedId={!!savedId.current} slugOverride={slugOverride} onSlugOverride={handleSlugOverride} />}
         {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} onCoverImageChange={handleHeroCoverImage} />}
         {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} dayImages={dayImages} durationDays={form.durationDays} />}
         {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} />}
@@ -2380,7 +2380,7 @@ function generateSEO(form) {
 }
 
 // ── Basics Tab ────────────────────────────────────────────────────────────────
-function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators = [], isAdmin = false, myCreatorId = null, dayCount = 0, currentId = null }) {
+function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators = [], isAdmin = false, myCreatorId = null, dayCount = 0, currentId = null, isNew = false, hasSavedId = false, slugOverride = false, onSlugOverride }) {
   const { getToken } = useAuth();
   function set(field, value) { setForm(f => ({ ...f, [field]: value })); }
   function setSEO(field, value) {
@@ -2556,7 +2556,7 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
                 {form.slug || '—'}
               </div>
               <span style={{ fontSize: '11px', color: '#B5AA99', whiteSpace: 'nowrap' }}>
-                {(isNew && !savedId.current) ? 'auto-generated' : 'locked'}
+                {(isNew && !hasSavedId) ? 'auto-generated' : 'locked'}
               </span>
             </div>
           </Field>
@@ -2778,12 +2778,12 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
             <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #E8E3DA' }}>
 
               <Field label="Slug *" hint="Changing this after publishing breaks existing links.">
-                {(!isNew || savedId.current) && !slugOverride ? (
+                {(!isNew || hasSavedId) && !slugOverride ? (
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <div style={{ ...inputStyle, background: '#F5F2EE', color: '#6B6156', fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'default' }}>
                       {form.slug || '—'}
                     </div>
-                    <button type="button" onClick={handleSlugOverride} style={{ ...btnGhost, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    <button type="button" onClick={onSlugOverride} style={{ ...btnGhost, whiteSpace: 'nowrap', flexShrink: 0 }}>
                       Override
                     </button>
                   </div>
