@@ -2476,12 +2476,7 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
                         <option key={opt.key} value={opt.key}>{opt.label} · {opt.displayPrice}</option>
                       ))}
                     </select>
-                    {selectedOption && (
-                      <p style={{ fontSize: '11.5px', color: '#7A7265', margin: '5px 0 0', fontFamily: 'monospace' }}>
-                        {selectedOption.stripePriceId}
-                      </p>
-                    )}
-                    {!selectedOption && form.stripePriceId && (
+                    {isAdmin && !selectedOption && form.stripePriceId && (
                       <p style={{ fontSize: '12px', color: '#C97B2E', margin: '6px 0 0' }}>
                         Stored price ID does not match any configured plan.
                       </p>
@@ -2741,6 +2736,16 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
+                </Field>
+              )}
+
+              {form.type === 'premium' && form.stripePriceId && (
+                <Field label="Internal price ID" hint="Stripe price identifier. Read-only.">
+                  <input
+                    value={form.stripePriceId}
+                    readOnly
+                    style={{ ...inputStyle, fontFamily: 'monospace', color: '#7A7265', background: '#F8F7F4', cursor: 'default', maxWidth: '360px' }}
+                  />
                 </Field>
               )}
 
