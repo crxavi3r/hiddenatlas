@@ -2939,7 +2939,7 @@ function CoverImagePicker({ value, onChange, assets = [], onUpload }) {
               src={localValue}
               alt="Cover"
               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-              onError={e => { e.currentTarget.style.display = 'none'; }}
+              onError={() => { setLocalValue(''); }}
             />
             {hovered && (
               <div style={{
@@ -3037,7 +3037,8 @@ function CoverImagePicker({ value, onChange, assets = [], onUpload }) {
 
 // ── Overview Tab (formerly Hero & Summary) ────────────────────────────────────
 function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) {
-  const coverUrl   = resolveCoverImage(c('hero.coverImage'), form.slug) || '';
+  const rawCover   = c('hero.coverImage');
+  const coverUrl   = rawCover ? (resolveCoverImage(rawCover, form.slug) || '') : '';
   const tagline    = c('hero.tagline')        || '';
   const highlights = c('summary.highlights') || [];
   const isPremium  = form.type === 'premium';
