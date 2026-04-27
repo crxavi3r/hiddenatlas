@@ -617,6 +617,8 @@ function ImagePicker({ value, onChange, assets = [], onUpload, assetType = 'gall
   );
 }
 
+const EMPTY_ASSET = { assetType: 'gallery', source: 'url', dayNumber: 1, url: '', alt: '', caption: '', file: null, filePreview: null };
+
 // ── Main editor component ─────────────────────────────────────────────────────
 export default function ItineraryCMSEditorPage() {
   const { id }       = useParams();
@@ -649,6 +651,8 @@ export default function ItineraryCMSEditorPage() {
   const [newAsset,     setNewAsset]     = useState({ assetType: 'gallery', source: 'url', dayNumber: 1, url: '', alt: '', caption: '', file: null, filePreview: null });
   const [lastAdded,    setLastAdded]    = useState([]);
   const [justAdded,    setJustAdded]    = useState(false);
+  const [addingAsset,  setAddingAsset]  = useState(false);
+  const [addError,     setAddError]     = useState(null);
 
   // AI tab state
   const [aiPrompt,      setAiPrompt]      = useState('');
@@ -1593,12 +1597,14 @@ export default function ItineraryCMSEditorPage() {
   }
 
   // ── Asset actions ─────────────────────────────────────────────────────────────
-  const EMPTY_ASSET = { assetType: 'gallery', source: 'url', dayNumber: 1, url: '', alt: '', caption: '', file: null, filePreview: null };
 
   function afterAdd(asset) {
     setLastAdded(prev => [asset, ...prev].slice(0, 4));
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 2000);
+    setAddError(null);
+    // Reset image fields, keep asset type + day so the next add is fast
+    setNewAsset(a => ({ ...EMPTY_ASSET, assetType: a.assetType, dayNumber: a.dayNumber }));
 
     // Sync DB state when assets are added from Images tab.
     // DB state (form fields) is the single source of truth — resolver is read-only fallback.
@@ -1628,27 +1634,27 @@ export default function ItineraryCMSEditorPage() {
   }
 
   async function handleAddAsset() {
+    setAddError(null);
     const targetId = savedId.current || (isNew ? null : id);
-    if (!targetId) { alert('Save the itinerary first.'); return; }
+    if (!targetId) { setAddError('Save the itinerary first.'); return; }
     const currentDayCount = (c('days') || []).length || parseInt(form.durationDays, 10) || 0;
-    if (newAsset.assetType === 'day' && currentDayCount === 0) { alert('Add days in the Days tab before attaching Day Images.'); return; }
-    if (newAsset.assetType === 'day' && (!newAsset.dayNumber || newAsset.dayNumber > currentDayCount)) { alert('Select a valid day number.'); return; }
-
-    if (newAsset.source === 'upload') {
-      if (!newAsset.file) { alert('Choose a file to upload.'); return; }
-      await handleUploadAsset(targetId);
+    if (newAsset.assetType === 'day' && currentDayCount === 0) { setAddError('Add days in the Days tab before attaching Day Images.'); return; }
+    if (newAsset.assetType === 'day' && (!newAsset.dayNumber || newAsset.dayNumber > currentDayCount)) { setAddError('Select a valid day number.'); return; }
+    if (newAsset.source === 'upload' && !newAsset.file) { setAddError('Choose a file to upload.'); return; }
+    if (newAsset.source !== 'upload' && !newAsset.url.trim()) {
+      setAddError(newAsset.source === 'filesystem' ? 'Select an image from the filesystem browser.' : 'Image URL is required.');
       return;
     }
 
-    if (!newAsset.url.trim()) {
-      alert(newAsset.source === 'filesystem' ? 'Select an image from the filesystem browser.' : 'URL is required.');
-      return;
-    }
-
+    setAddingAsset(true);
     try {
-      const token = await getToken();
+      if (newAsset.source === 'upload') {
+        await handleUploadAsset(targetId);
+        return;
+      }
+      const token  = await getToken();
       const safeDay = newAsset.assetType === 'day' ? newAsset.dayNumber : null;
-      const res   = await fetch('/api/itinerary-cms?action=save-asset', {
+      const res    = await fetch('/api/itinerary-cms?action=save-asset', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1663,46 +1669,44 @@ export default function ItineraryCMSEditorPage() {
       });
       const json = await res.json();
       if (json.error) throw new Error(json.error);
-      // Replace filesystem entry (same URL, no id) with the new DB record
-      setAssets(prev => [
-        ...prev.filter(a => !(a.url === json.asset.url && !a.id)),
-        json.asset,
-      ]);
+      setAssets(prev => [...prev.filter(a => !(a.url === json.asset.url && !a.id)), json.asset]);
       afterAdd(json.asset);
-    } catch (e) { alert(e.message); }
+    } catch (e) {
+      setAddError(e.message);
+    } finally {
+      setAddingAsset(false);
+    }
   }
 
   async function handleUploadAsset(targetId) {
     const slug = slugRef.current || form.slug;
-    if (!slug) { alert('Slug is required to upload images.'); return; }
-    try {
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = e => resolve(e.target.result.split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(newAsset.file);
-      });
-      const token = await getToken();
-      const res   = await fetch('/api/itinerary-cms?action=upload-asset', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          itineraryId: targetId,
-          slug,
-          assetType: newAsset.assetType,
-          dayNumber: newAsset.assetType === 'day' ? newAsset.dayNumber : null,
-          filename: newAsset.file.name,
-          data: base64,
-          alt: newAsset.alt,
-          caption: newAsset.caption,
-        }),
-      });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      setAssets(prev => [...prev, json.asset]);
-      if (newAsset.filePreview) URL.revokeObjectURL(newAsset.filePreview);
-      afterAdd(json.asset);
-    } catch (e) { alert(e.message); }
+    if (!slug) throw new Error('Slug is required to upload images.');
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(newAsset.file);
+    });
+    const token = await getToken();
+    const res   = await fetch('/api/itinerary-cms?action=upload-asset', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        itineraryId: targetId,
+        slug,
+        assetType: newAsset.assetType,
+        dayNumber: newAsset.assetType === 'day' ? newAsset.dayNumber : null,
+        filename: newAsset.file.name,
+        data: base64,
+        alt: newAsset.alt,
+        caption: newAsset.caption,
+      }),
+    });
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+    setAssets(prev => [...prev, json.asset]);
+    if (newAsset.filePreview) URL.revokeObjectURL(newAsset.filePreview);
+    afterAdd(json.asset);
   }
 
   async function handleToggleAsset(asset) {
@@ -2057,6 +2061,9 @@ export default function ItineraryCMSEditorPage() {
             onSetHero={handleHeroCoverImage}
             lastAdded={lastAdded}
             justAdded={justAdded}
+            adding={addingAsset}
+            addError={addError}
+            onCancel={() => { setNewAsset(a => ({ ...EMPTY_ASSET, assetType: a.assetType, dayNumber: a.dayNumber })); setAddError(null); }}
           />
         )}
         {activeTab === 'ai'       && (
@@ -3451,7 +3458,7 @@ function SectionsTab({ c, setContent }) {
 }
 
 // ── Images ────────────────────────────────────────────────────────────────────
-function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, onDelete, isNew, hasSavedId, dayCount, heroImageUrl, dayImages, onSetHero, lastAdded = [], justAdded = false }) {
+function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, onDelete, isNew, hasSavedId, dayCount, heroImageUrl, dayImages, onSetHero, lastAdded = [], justAdded = false, adding = false, addError = null, onCancel }) {
   const fileInputRef = useRef(null);
   const [lightbox, setLightbox] = useState(null); // { assets: [], index: 0 }
 
@@ -3476,6 +3483,10 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
   });
 
   const previewUrl = newAsset.source === 'upload' ? newAsset.filePreview : newAsset.url;
+  const canAdd = newAsset.source === 'upload'
+    ? !!newAsset.file
+    : !!newAsset.url.trim();
+  const isDirty = !!(newAsset.url || newAsset.file || newAsset.alt || newAsset.caption);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -3651,14 +3662,39 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
           </div>
         </div>
 
-        <button onClick={onAdd} style={{
-          ...btnPrimary,
-          background: justAdded ? '#157a5a' : undefined,
-          transition: 'background 0.3s',
-        }}>
-          {justAdded ? <Check size={13} /> : <ImageIcon size={13} />}
-          {justAdded ? 'Added!' : 'Add image'}
-        </button>
+        {/* Action row */}
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+          {isDirty && !adding && !justAdded && (
+            <button onClick={onCancel} style={btnGhost}>
+              Cancel
+            </button>
+          )}
+          <button
+            onClick={onAdd}
+            disabled={!canAdd || adding}
+            style={{
+              ...btnPrimary,
+              background: justAdded ? '#157a5a' : (!canAdd || adding ? '#B5AA99' : undefined),
+              cursor: (!canAdd || adding) ? 'not-allowed' : 'pointer',
+              transition: 'background 0.3s',
+              opacity: 1,
+            }}
+          >
+            {adding
+              ? <><span style={{ display: 'inline-block', width: '10px', height: '10px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Adding…</>
+              : justAdded
+                ? <><Check size={13} /> Added!</>
+                : <><ImageIcon size={13} /> Add image</>
+            }
+          </button>
+        </div>
+
+        {/* Inline error */}
+        {addError && (
+          <p style={{ fontSize: '12px', color: '#C0392B', marginTop: '8px', lineHeight: '1.4' }}>
+            {addError}
+          </p>
+        )}
 
         {/* Recently added */}
         {lastAdded.length > 0 && (
