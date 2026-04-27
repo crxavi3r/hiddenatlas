@@ -617,7 +617,7 @@ function ImagePicker({ value, onChange, assets = [], onUpload, assetType = 'gall
   );
 }
 
-const EMPTY_ASSET = { assetType: 'gallery', source: 'url', dayNumber: 1, url: '', alt: '', caption: '', file: null, filePreview: null };
+const EMPTY_ASSET = { assetType: 'gallery', source: 'upload', dayNumber: 1, url: '', alt: '', caption: '', file: null, filePreview: null };
 
 // ── Main editor component ─────────────────────────────────────────────────────
 export default function ItineraryCMSEditorPage() {
@@ -648,7 +648,7 @@ export default function ItineraryCMSEditorPage() {
   // Images tab state
   const [assets,       setAssets]       = useState([]);
   const [assetsLoading, setAssetsLoading] = useState(false);
-  const [newAsset,     setNewAsset]     = useState({ assetType: 'gallery', source: 'url', dayNumber: 1, url: '', alt: '', caption: '', file: null, filePreview: null });
+  const [newAsset,     setNewAsset]     = useState({ assetType: 'gallery', source: 'upload', dayNumber: 1, url: '', alt: '', caption: '', file: null, filePreview: null });
   const [lastAdded,    setLastAdded]    = useState([]);
   const [justAdded,    setJustAdded]    = useState(false);
   const [addingAsset,  setAddingAsset]  = useState(false);
@@ -1702,7 +1702,17 @@ export default function ItineraryCMSEditorPage() {
         caption: newAsset.caption,
       }),
     });
-    const json = await res.json();
+    const text = await res.text();
+    let json;
+    try { json = JSON.parse(text); } catch {
+      if (!res.ok) {
+        if (res.status === 413 || text.includes('Entity Too Large') || text.includes('Request Entity Too Large')) {
+          throw new Error('This image is too large. Please upload a smaller image.');
+        }
+        throw new Error('Image upload failed. Please try again.');
+      }
+      throw new Error('Unexpected response from server. Please try again.');
+    }
     if (json.error) throw new Error(json.error);
     setAssets(prev => [...prev, json.asset]);
     if (newAsset.filePreview) URL.revokeObjectURL(newAsset.filePreview);
@@ -3491,6 +3501,18 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    const VALID_FORMATS = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!VALID_FORMATS.includes(file.type)) {
+      setAddError('Unsupported format. Please upload a JPG, PNG or WebP image.');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAddError('This image is too large. Maximum size is 5MB.');
+      e.target.value = '';
+      return;
+    }
+    setAddError(null);
     if (newAsset.filePreview) URL.revokeObjectURL(newAsset.filePreview);
     const preview = URL.createObjectURL(file);
     setNewAsset(a => ({ ...a, file, filePreview: preview }));

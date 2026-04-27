@@ -660,7 +660,7 @@ export default function CustomItineraryPage() {
                     fontSize: '15px', color: '#4A433A', lineHeight: '1.7',
                     maxWidth: '520px', marginBottom: '28px',
                   }}>
-                    This itinerary was developed through careful first-hand research, based on on-the-ground exploration of the destination.
+                    This itinerary was built from real experience in the destination, shaped by careful research and time spent exploring it in person.
                   </p>
                   <div style={{
                     display: 'grid',

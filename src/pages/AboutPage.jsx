@@ -5,7 +5,7 @@ import { useSEO } from '../hooks/useSEO';
 export default function AboutPage() {
   useSEO({
     title: 'About HiddenAtlas — Independent Travel Itineraries Built on Real Experience',
-    description: 'HiddenAtlas is an independent travel planning platform built on firsthand travel experience. No sponsored placements, no affiliate commissions. Just honest, well-researched itineraries.',
+    description: 'HiddenAtlas is an independent travel planning platform built on real travel experience. No sponsored placements, no affiliate commissions. Just honest, well-researched itineraries.',
     canonical: 'https://hiddenatlas.travel/about',
   });
   const values = [
@@ -61,7 +61,7 @@ export default function AboutPage() {
                 After years exploring destinations across Europe, Asia, and beyond, Cristiano began documenting the routes, experiences, and hidden corners that made each journey memorable. HiddenAtlas grew from this idea: to transform real travel experience into curated itineraries that others could follow.
               </p>
               <p style={{ fontSize: '17px', color: '#4A433A', lineHeight: '1.8', marginBottom: '20px' }}>
-                Each journey on HiddenAtlas is built from firsthand exploration, thoughtful planning, and a deep appreciation for places that reward curiosity.
+                Each journey on HiddenAtlas is built from real exploration, thoughtful planning, and a genuine appreciation for places that reward curiosity.
               </p>
               <p style={{ fontSize: '17px', color: '#4A433A', lineHeight: '1.8' }}>
                 Today, HiddenAtlas helps travellers discover beautiful destinations through carefully designed routes, combining iconic highlights with lesser-known locations that most visitors never find.

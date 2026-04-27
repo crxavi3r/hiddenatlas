@@ -1354,7 +1354,7 @@ function CTAPage({ itinerary }) {
     'Refined route planning and pacing',
     'Carefully selected areas to stay',
     'Logistics guidance for a smooth journey',
-    'Insider tips from on-the-ground research',
+    'Insider tips from real research in the destination',
   ];
 
   return (

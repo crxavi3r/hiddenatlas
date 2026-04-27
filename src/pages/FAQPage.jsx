@@ -9,7 +9,7 @@ const faqs = [
     items: [
       {
         q: 'Are the itineraries based on real travel experience?',
-        a: 'Yes. Many routes in our library are based on firsthand travel by our team or trusted local contributors. We prioritise destinations we know well and continuously update itineraries when conditions change or new experiences emerge.',
+        a: 'Yes. Many routes in our library are based on real travel by our team or trusted local contributors. We prioritise destinations we know well and continuously update itineraries when conditions change or new experiences emerge.',
       },
       {
         q: 'How detailed are the premium itineraries?',
