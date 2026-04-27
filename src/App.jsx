@@ -1,4 +1,4 @@
-import { Routes, Route, Outlet, useLocation } from 'react-router-dom';
+import { Routes, Route, Outlet, useLocation, Navigate, useParams } from 'react-router-dom';
 import { useEffect } from 'react';
 import './index.css';
 import { useUserSync } from './hooks/useUserSync';
@@ -39,6 +39,12 @@ import CreatorEditorPage from './pages/admin/CreatorEditorPage';
 import CreatorProfilePage from './pages/CreatorProfilePage';
 
 // ── Scroll to top on route change ────────────────────────────────────────────
+function LegacyCustomRedirect() {
+  const { slug } = useParams();
+  const search = typeof window !== 'undefined' ? window.location.search : '';
+  return <Navigate to={`/itineraries/${slug}${search}`} replace />;
+}
+
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
@@ -109,7 +115,10 @@ export default function App() {
           <Route path="/ai-planner" element={<AIPlannerPage />} />
           <Route path="/my-trips" element={<MyTrips />} />
           <Route path="/my-trips/:id" element={<TripDetailPage />} />
-          <Route path="/itinerary/custom/:slug" element={<CustomItineraryPage />} />
+          {/* Legacy /itinerary/custom/:slug → /itineraries/:slug. CustomItineraryPage
+              required owner/admin auth, preventing public access to published routes.
+              ItineraryDetailPage handles both public and preview (preview=true) flows. */}
+          <Route path="/itinerary/custom/:slug" element={<LegacyCustomRedirect />} />
           <Route path="/sign-in/*" element={<SignInPage />} />
           <Route path="/sign-up/*" element={<SignUpPage />} />
           <Route path="/privacy" element={<PrivacyPolicyPage />} />

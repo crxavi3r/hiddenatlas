@@ -314,18 +314,76 @@ function DayEntry({ day, index, isLocked, isLast }) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// DB row → itinerary shape expected by this page
+// ─────────────────────────────────────────────────────────────
+function parseContentJson(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'string') { try { return JSON.parse(raw); } catch { return {}; } }
+  return typeof raw === 'object' ? raw : {};
+}
+
+function normalizeDbItinerary(row) {
+  const content = parseContentJson(row.content);
+  const isPremium = row.type === 'premium' || row.accessType === 'paid';
+  return {
+    id:               row.slug,
+    slug:             row.slug,
+    title:            row.title        || '',
+    subtitle:         row.subtitle     || '',
+    country:          row.country      || row.destination || '',
+    region:           row.region       || '',
+    destination:      row.destination  || '',
+    duration:         row.durationDays ? `${row.durationDays} days` : '',
+    durationDays:     row.durationDays || null,
+    price:            Number(row.price) || 0,
+    isPremium,
+    tag:              isPremium ? 'Premium' : 'Free Journey',
+    coverImage:       row.coverImage   || content?.hero?.coverImage || '',
+    image:            row.coverImage   || content?.hero?.coverImage || '',
+    description:      row.description  || content?.summary?.shortDescription || '',
+    shortDescription: content?.summary?.shortDescription || row.description || '',
+    highlights:       content?.summary?.highlights   || [],
+    bestFor:          content?.summary?.bestFor      || [],
+    days:             content?.days                  || [],
+    nights:           row.durationDays ? row.durationDays - 1 : null,
+    whySpecial:       content?.summary?.whySpecial   || '',
+    routeOverview:    content?.route?.overview       || content?.route?.description || '',
+    transport:        content?.transport             || null,
+    groupSize:        content?.summary?.groupSize    || '',
+    difficulty:       '',
+    status:           row.status       || 'published',
+    type:             row.type         || 'free',
+    accessType:       row.accessType   || 'free',
+    isPrivate:        row.isPrivate    ?? false,
+    parentId:         row.parentId     || null,
+    isCollection:     row.isCollection ?? false,
+    variant:          row.variant      || null,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
 // Main page
 // ─────────────────────────────────────────────────────────────
 export default function ItineraryDetailPage() {
   const { id } = useParams();
-  const itinerary = itineraries.find(it => it.id === id);
+  // Static bundle — fast, no network. Undefined for CMS-only itineraries.
+  const staticItinerary = itineraries.find(it => it.id === id);
 
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn, getToken } = useAuth();
   const { isAdmin } = useUserCtx();
   const { track } = useTrack();
-const api = useApi();
+  const api = useApi();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const isPreview = searchParams.get('preview') === 'true';
+
+  // DB fallback: populated when itinerary is not in the static bundle
+  const [dbItinerary,   setDbItinerary]   = useState(null);
+  const [dbLoading,     setDbLoading]     = useState(!staticItinerary);
+  const [dbFetchError,  setDbFetchError]  = useState(null);
+
+  // Effective itinerary — static takes priority, DB fills the gap
+  const itinerary = staticItinerary || dbItinerary;
 
   const [accessState, setAccessState] = useState('checking'); // 'checking' | 'locked' | 'unlocked' | 'unauthenticated' | 'verifying'
   const [pdfUrl, setPdfUrl]           = useState(null);
@@ -339,6 +397,43 @@ const api = useApi();
   const [dbAssets, setDbAssets]                       = useState([]);
   const [dbDays, setDbDays]                           = useState(null);
   const [dbCoverImage, setDbCoverImage]               = useState(null);
+
+  // ── DB fetch for CMS-only itineraries (not in static bundle) ────────────────
+  useEffect(() => {
+    if (staticItinerary) return; // already have static data
+    if (!isLoaded) return;       // wait for Clerk to be ready so auth token is available
+
+    let cancelled = false;
+    setDbLoading(true);
+    setDbFetchError(null);
+
+    (async () => {
+      try {
+        const token = isSignedIn ? await getToken() : null;
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const qs = `/api/itineraries?action=public&slug=${encodeURIComponent(id)}${isPreview ? '&preview=true' : ''}`;
+        const res = await fetch(qs, { headers });
+        if (cancelled) return;
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          setDbFetchError(body.error || 'Itinerary not found');
+          setDbLoading(false);
+          return;
+        }
+        const data = await res.json();
+        setDbItinerary(normalizeDbItinerary(data.itinerary));
+        if (data.assets?.length) setDbAssets(data.assets);
+        setDbLoading(false);
+      } catch (e) {
+        if (!cancelled) {
+          setDbFetchError('Failed to load itinerary');
+          setDbLoading(false);
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [id, isLoaded, isSignedIn, isPreview]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isPremium = itinerary?.isPremium;
 
@@ -396,9 +491,9 @@ const api = useApi();
   }, [itinerary?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load published day content from DB — overrides static itineraries.js data.
-  // Uses the variant's own slug (itinerary.id) so each variant loads its own
-  // day content. Falls back silently to static data on 404 or error.
+  // Skipped for DB-only itineraries: their content already comes from action=public.
   useEffect(() => {
+    if (!staticItinerary) return;
     const slug = itinerary?.id;
     if (!slug) return;
     fetch(`/api/itineraries?action=content&slug=${encodeURIComponent(slug)}`)
@@ -410,17 +505,15 @@ const api = useApi();
       .catch(() => {}); // silent — static data remains active
   }, [itinerary?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load DB-backed assets for this itinerary (blob uploads, manually added URLs)
+  // Load DB-backed assets — skipped for DB-only itineraries (assets come from action=public).
   useEffect(() => {
+    if (!staticItinerary) return;
     const slug = itinerary?.parentId || itinerary?.id;
     if (!slug) return;
     fetch(`/api/itineraries?action=assets&slug=${encodeURIComponent(slug)}`)
       .then(r => r.json())
       .then(data => {
-        if (data.assets) {
-          console.log('[ItineraryDetailPage] DB assets loaded:', data.assets.length, data.assets.map(a => a.assetType));
-          setDbAssets(data.assets);
-        }
+        if (data.assets) setDbAssets(data.assets);
       })
       .catch(err => console.warn('[ItineraryDetailPage] Failed to load DB assets:', err));
   }, [itinerary?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -671,6 +764,27 @@ const api = useApi();
       return;
     }
     handlePurchase();
+  }
+
+  // For DB-only itineraries: show spinner while fetching, error if not found.
+  if (!staticItinerary) {
+    if (dbLoading) {
+      return (
+        <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #1B6B65', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
+        </div>
+      );
+    }
+    if (dbFetchError || !dbItinerary) {
+      return (
+        <div style={{ padding: '120px 24px', textAlign: 'center' }}>
+          <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '32px', marginBottom: '16px' }}>
+            Itinerary not found
+          </h1>
+          <Link to="/itineraries" style={{ color: '#1B6B65', fontWeight: '600' }}>← Back to Itineraries</Link>
+        </div>
+      );
+    }
   }
 
   // Draft itineraries are not publicly accessible.

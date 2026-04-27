@@ -1938,7 +1938,7 @@ export default function ItineraryCMSEditorPage() {
           {/* Preview — opens custom itinerary page in new tab */}
           {form.slug && (
             <a
-              href={`/itinerary/custom/${form.slug}?preview=true`}
+              href={`/itineraries/${form.slug}?preview=true`}
               target="_blank"
               rel="noopener noreferrer"
               style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}

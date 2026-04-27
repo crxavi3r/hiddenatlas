@@ -185,6 +185,81 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── GET /api/itineraries?action=public&slug=:slug[&preview=true] ─────────────
+  // Public detail page resolver. No auth required for published+non-private rows.
+  // With preview=true and a valid admin/owner token, drafts and private are allowed.
+  if (action === 'public') {
+    if (!slug) return res.status(400).json({ error: 'slug is required' });
+
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      // Auth is optional — resolveUserCtx returns null when header is absent/invalid.
+      let userCtx = null;
+      try { userCtx = await resolveUserCtx(req.headers.authorization, pool); } catch {}
+      const isAdmin   = userCtx?.isAdmin   ?? false;
+      const creatorId = userCtx?.creatorId ?? null;
+      const userId    = userCtx?.userId    ?? null;
+
+      const { rows } = await pool.query(
+        `SELECT * FROM "Itinerary" WHERE slug = $1 LIMIT 1`, [slug]
+      );
+
+      const it = rows[0] ?? null;
+      const isOwner = it && (
+        (userId    !== null && it.userId     === userId)    ||
+        (creatorId !== null && it.creator_id === creatorId)
+      );
+      const canPreview = isAdmin || isOwner;
+
+      // Debug log for diagnosing "not found" issues
+      console.log('[itineraries/public]', {
+        slug,
+        found:        !!it,
+        status:       it?.status,
+        type:         it?.type,
+        isPublished:  it?.isPublished,
+        isPrivate:    it?.isPrivate,
+        isCollection: it?.isCollection,
+        parentId:     it?.parentId,
+        preview:      preview === 'true',
+        isAdmin,
+        isOwner,
+        canPreview,
+      });
+
+      if (!it) return res.status(404).json({ error: 'Itinerary not found' });
+
+      const isPublic = (it.status === 'published' || it.isPublished === true)
+                    && !it.isPrivate
+                    && (it.type !== 'custom');
+
+      if (!isPublic) {
+        // Preview mode: admin or owner can see anything
+        if (preview === 'true' && canPreview) {
+          // allowed — fall through
+        } else {
+          return res.status(404).json({ error: 'Itinerary not found' });
+        }
+      }
+
+      const assetRes = await pool.query(
+        `SELECT "assetType", url, alt, caption, "dayNumber", source, "sortOrder"
+         FROM   "ItineraryAsset"
+         WHERE  "itineraryId" = $1 AND active = true
+         ORDER  BY "assetType", "dayNumber" NULLS LAST, "sortOrder", "createdAt"`,
+        [it.id]
+      );
+
+      res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=30');
+      return res.json({ itinerary: it, assets: assetRes.rows, isAdmin, canPreview });
+    } catch (err) {
+      console.error('[itineraries/public]', err.message);
+      return res.status(500).json({ error: 'Database error' });
+    } finally {
+      await pool.end();
+    }
+  }
+
   // ── All remaining actions require authentication ────────────────────────────
   if (!process.env.CLERK_SECRET_KEY) {
     return res.status(500).json({ error: 'Server misconfigured' });
