@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
+import { useUserCtx } from '../../lib/useUserCtx';
 import {
   ArrowLeft, Save, Globe, EyeOff, Eye, Plus, Trash2, ChevronDown, ChevronUp,
   Wand2, Image as ImageIcon, Clock, Check, User, Upload, FileText, ExternalLink,
@@ -598,6 +599,7 @@ export default function ItineraryCMSEditorPage() {
   const { id }       = useParams();
   const navigate     = useNavigate();
   const { getToken } = useAuth();
+  const { isAdmin, creatorId: myCreatorId } = useUserCtx();
   const isMobile     = useIsMobile();
   const isNew        = id === 'new';
 
@@ -693,6 +695,15 @@ export default function ItineraryCMSEditorPage() {
   }, [id, isNew, getToken, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
+
+  // ── For designers creating a new itinerary, pre-populate their own creatorId ──
+  // The backend enforces this regardless, but keeping the form consistent avoids
+  // a mismatch between what was submitted and what the server returns on save.
+  useEffect(() => {
+    if (isNew && !isAdmin && myCreatorId) {
+      setForm(f => ({ ...f, creatorId: myCreatorId }));
+    }
+  }, [isNew, isAdmin, myCreatorId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load pricing options + creators once on mount ────────────────────────────
   useEffect(() => {
@@ -1873,7 +1884,7 @@ export default function ItineraryCMSEditorPage() {
         </div>
 
         {/* ── Tab panels ── */}
-        {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} creators={allCreators} />}
+        {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} creators={allCreators} isAdmin={isAdmin} myCreatorId={myCreatorId} />}
         {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} onCoverImageChange={handleHeroCoverImage} />}
         {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} dayImages={dayImages} />}
         {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} />}
@@ -1909,8 +1920,11 @@ export default function ItineraryCMSEditorPage() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ── Basics ────────────────────────────────────────────────────────────────────
-function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators = [] }) {
+function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators = [], isAdmin = false, myCreatorId = null }) {
   function set(field, value) { setForm(f => ({ ...f, [field]: value })); }
+  const myCreator = !isAdmin
+    ? (creators.find(c => c.id === (myCreatorId || form.creatorId)) ?? null)
+    : null;
 
   return (
     <div style={{ maxWidth: '720px' }}>
@@ -1982,19 +1996,29 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
           </select>
         </div>
 
-        {creators.length > 0 && (
-          <Field label="Travel Designer" hint="Assign this itinerary to a travel designer. Leave empty to show no attribution.">
-            <select
-              value={form.creatorId || ''}
-              onChange={e => set('creatorId', e.target.value || null)}
-              style={{ ...inputStyle, maxWidth: '320px' }}
-            >
-              <option value="">None (no attribution)</option>
-              {creators.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </Field>
+        {isAdmin ? (
+          creators.length > 0 && (
+            <Field label="Travel Designer" hint="Assign this itinerary to a travel designer. Leave empty to show no attribution.">
+              <select
+                value={form.creatorId || ''}
+                onChange={e => set('creatorId', e.target.value || null)}
+                style={{ ...inputStyle, maxWidth: '320px' }}
+              >
+                <option value="">None (no attribution)</option>
+                {creators.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </Field>
+          )
+        ) : (
+          myCreator && (
+            <Field label="Travel Designer">
+              <div style={{ ...inputStyle, maxWidth: '320px', background: '#F5F2EE', color: '#4A433A', cursor: 'default', userSelect: 'none' }}>
+                {myCreator.name}
+              </div>
+            </Field>
+          )
         )}
       </div>
 
