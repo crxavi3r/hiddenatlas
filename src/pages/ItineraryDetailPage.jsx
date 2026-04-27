@@ -343,14 +343,15 @@ function normalizeDbItinerary(row) {
     description:      row.description  || content?.summary?.shortDescription || '',
     shortDescription: content?.summary?.shortDescription || row.description || '',
     highlights:       content?.summary?.highlights   || [],
-    bestFor:          content?.summary?.bestFor      || [],
+    bestFor:          content?.tripFacts?.bestFor    || content?.summary?.bestFor   || [],
     days:             content?.days                  || [],
     nights:           row.durationDays ? row.durationDays - 1 : null,
     whySpecial:       content?.summary?.whySpecial   || '',
     routeOverview:    content?.route?.overview       || content?.route?.description || '',
     transport:        content?.transport             || null,
-    groupSize:        content?.summary?.groupSize    || '',
-    difficulty:       '',
+    groupSize:        content?.tripFacts?.groupSize  || content?.summary?.groupSize || '',
+    difficulty:       content?.tripFacts?.difficulty || '',
+    category:         content?.tripFacts?.category   || '',
     status:           row.status       || 'published',
     type:             row.type         || 'free',
     accessType:       row.accessType   || 'free',
@@ -804,7 +805,7 @@ export default function ItineraryDetailPage() {
 
   const {
     title, subtitle, country, region, duration, groupSize, price,
-    image, coverImage, highlights, description, shortDescription, bestFor, difficulty,
+    image, coverImage, highlights, description, shortDescription, bestFor, difficulty, category,
     days: staticDays = [], nights, whySpecial, routeOverview, transport,
   } = itinerary;
 
@@ -1183,14 +1184,21 @@ export default function ItineraryDetailPage() {
               </h2>
               <p style={{ fontSize: '17px', color: '#4A433A', lineHeight: '1.8' }}>{description}</p>
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '24px' }}>
-                {bestFor.map(tag => (
+                {category && (
+                  <span style={{ padding: '6px 14px', borderRadius: '3px', background: '#F4F1EC', color: '#6B6156', fontSize: '12px', fontWeight: '600', letterSpacing: '0.5px' }}>
+                    {category}
+                  </span>
+                )}
+                {(bestFor || []).map(tag => (
                   <span key={tag} style={{ padding: '6px 14px', borderRadius: '3px', background: '#EFF6F5', color: '#1B6B65', fontSize: '12px', fontWeight: '600', letterSpacing: '0.5px' }}>
                     {tag}
                   </span>
                 ))}
-                <span style={{ padding: '6px 14px', borderRadius: '3px', background: '#F4F1EC', color: '#6B6156', fontSize: '12px', fontWeight: '600' }}>
-                  {difficulty} Pace
-                </span>
+                {difficulty && (
+                  <span style={{ padding: '6px 14px', borderRadius: '3px', background: '#F4F1EC', color: '#6B6156', fontSize: '12px', fontWeight: '600' }}>
+                    {difficulty} pace
+                  </span>
+                )}
               </div>
             </section>
 

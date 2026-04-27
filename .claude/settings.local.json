@@ -110,7 +110,11 @@
       "Bash(awk '/id: \"philippines-island-journey\"/,/^\\\\s*\\\\},[^}]*$/' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/src/data/itineraries.js)",
       "Bash(awk '/id: \"philippines-island-journey\"/,/^\\\\s*\\\\},?\\\\s*$/' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/src/data/itineraries.js)",
       "Bash(awk '/^\\\\s+id: \"philippines-island-journey\",/,/^\\\\s+\\\\},\\\\s*$/' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/src/data/itineraries.js)",
-      "Bash(mktemp -d)"
+      "Bash(mktemp -d)",
+      "Bash(awk -F: '$2 >= 2383')",
+      "Bash(awk -F: '{if \\($2+0 >= 2383 && $2+0 < 2979\\) print}')",
+      "Bash(awk -F: '$2+0 >= 2383 && $2+0 <= 3000')",
+      "Bash(awk 'NR>=2383 && NR<2979' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/src/pages/admin/ItineraryCMSEditorPage.jsx)"
     ]
   }
 }
