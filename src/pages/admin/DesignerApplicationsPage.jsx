@@ -130,17 +130,43 @@ function ApplicationCard({ app, onApprove, onReject, actionBusy }) {
       {/* Expanded body */}
       {open && (
         <div style={{ padding: '20px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+          <style>{`
+            .da-details-grid {
+              display: grid;
+              grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr);
+              gap: 20px 32px;
+              align-items: start;
+              margin-bottom: 20px;
+            }
+            .da-details-grid > * { min-width: 0; overflow: hidden; }
+            .da-link {
+              display: block;
+              max-width: 100%;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+              color: #1B6B65;
+              font-size: 13.5px;
+            }
+            .da-link:hover { text-decoration: underline; }
+            @media (max-width: 1100px) {
+              .da-details-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+            }
+            @media (max-width: 760px) {
+              .da-details-grid { grid-template-columns: 1fr; }
+            }
+          `}</style>
+          <div className="da-details-grid">
             {app.expertiseRegions && (
               <div>
                 <p style={labelStyle}>Expertise Regions</p>
-                <p style={valueStyle}>{app.expertiseRegions}</p>
+                <p style={{ ...valueStyle, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{app.expertiseRegions}</p>
               </div>
             )}
             {app.websiteUrl && (
               <div>
                 <p style={labelStyle}>Website</p>
-                <a href={app.websiteUrl} target="_blank" rel="noopener noreferrer" style={{ ...valueStyle, color: '#1B6B65' }}>
+                <a href={app.websiteUrl} target="_blank" rel="noopener noreferrer" className="da-link">
                   {app.websiteUrl}
                 </a>
               </div>
@@ -148,7 +174,7 @@ function ApplicationCard({ app, onApprove, onReject, actionBusy }) {
             {app.instagramUrl && (
               <div>
                 <p style={labelStyle}>Instagram</p>
-                <a href={app.instagramUrl} target="_blank" rel="noopener noreferrer" style={{ ...valueStyle, color: '#1B6B65' }}>
+                <a href={app.instagramUrl} target="_blank" rel="noopener noreferrer" className="da-link">
                   {app.instagramUrl}
                 </a>
               </div>
