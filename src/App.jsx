@@ -37,6 +37,8 @@ import ItineraryCMSEditorPage from './pages/admin/ItineraryCMSEditorPage';
 import CreatorsPage from './pages/admin/CreatorsPage';
 import CreatorEditorPage from './pages/admin/CreatorEditorPage';
 import CreatorProfilePage from './pages/CreatorProfilePage';
+import BecomeDesignerPage from './pages/BecomeDesignerPage';
+import DesignerApplicationsPage from './pages/admin/DesignerApplicationsPage';
 
 // ── Scroll to top on route change ────────────────────────────────────────────
 function LegacyCustomRedirect() {
@@ -99,6 +101,7 @@ export default function App() {
           <Route path="itineraries/:id" element={<ItineraryCMSEditorPage />} />
           <Route path="creators" element={<CreatorsPage />} />
           <Route path="creators/:id" element={<CreatorEditorPage />} />
+          <Route path="designer-applications" element={<DesignerApplicationsPage />} />
         </Route>
 
         {/* ── Public pages — shared Navbar + Footer ── */}
@@ -119,6 +122,7 @@ export default function App() {
               required owner/admin auth, preventing public access to published routes.
               ItineraryDetailPage handles both public and preview (preview=true) flows. */}
           <Route path="/itinerary/custom/:slug" element={<LegacyCustomRedirect />} />
+          <Route path="/become-a-designer" element={<BecomeDesignerPage />} />
           <Route path="/sign-in/*" element={<SignInPage />} />
           <Route path="/sign-up/*" element={<SignUpPage />} />
           <Route path="/privacy" element={<PrivacyPolicyPage />} />

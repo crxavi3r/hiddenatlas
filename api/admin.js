@@ -47,7 +47,7 @@ async function verifyAdmin(req, pool) {
     console.warn(`[api/admin] verifyAdmin — FORBIDDEN: email=${ctx.email} role=${ctx.role} isAdmin=false`);
     throw Object.assign(new Error('Forbidden'), { status: 403 });
   }
-  return ctx.email;
+  return ctx;
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ export default async function handler(req, res) {
 }
 
 async function _handler(req, res) {
-  if (req.method !== 'GET' && req.method !== 'PATCH') {
+  if (!['GET', 'PATCH', 'POST'].includes(req.method)) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   if (!process.env.DATABASE_URL || !process.env.CLERK_SECRET_KEY) {
@@ -87,8 +87,9 @@ async function _handler(req, res) {
     console.error('[api/admin] idle pool client error (non-fatal):', err.message);
   });
 
+  let adminCtx;
   try {
-    await verifyAdmin(req, pool);
+    adminCtx = await verifyAdmin(req, pool);
   } catch (err) {
     try { await pool.end(); } catch {}
     return res.status(err.status ?? 401).json({ error: err.message });
@@ -99,6 +100,114 @@ async function _handler(req, res) {
   const offset = (Math.max(1, parseInt(page, 10)) - 1) * 50;
 
   try {
+    // ── POST: designer application review ────────────────────────────────
+    if (req.method === 'POST') {
+      if (action === 'approve-designer-application') {
+        if (!id) return res.status(400).json({ error: 'id is required' });
+
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+
+          const { rows: appRows } = await client.query(
+            `SELECT id, "userId", status FROM "DesignerApplication" WHERE id = $1 FOR UPDATE`,
+            [id]
+          );
+          const app = appRows[0];
+          if (!app) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Application not found' });
+          }
+          if (app.status !== 'pending') {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ error: 'Application is not pending' });
+          }
+
+          const now = new Date();
+          await client.query(
+            `UPDATE "DesignerApplication"
+             SET status = 'approved', "reviewedBy" = $1, "reviewedAt" = $2, "updatedAt" = $2
+             WHERE id = $3`,
+            [adminCtx.userId, now, id]
+          );
+          await client.query(
+            `UPDATE "User" SET role = 'designer', "updatedAt" = $1 WHERE id = $2`,
+            [now, app.userId]
+          );
+
+          await client.query('COMMIT');
+        } catch (txErr) {
+          await client.query('ROLLBACK').catch(() => {});
+          throw txErr;
+        } finally {
+          client.release();
+        }
+
+        // Optional approval notification — non-fatal
+        try {
+          const { rows: applicantRows } = await pool.query(
+            `SELECT "fullName", email FROM "DesignerApplication" WHERE id = $1`, [id]
+          );
+          const applicant = applicantRows[0];
+          if (applicant) await sendApplicantEmail(applicant.email, applicant.fullName, 'approved');
+        } catch (emailErr) {
+          console.error('[api/admin] approval email failed:', emailErr.message);
+        }
+
+        return res.status(200).json({ ok: true });
+      }
+
+      if (action === 'reject-designer-application') {
+        if (!id) return res.status(400).json({ error: 'id is required' });
+        const { adminNote } = req.body ?? {};
+
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+
+          const { rows: appRows } = await client.query(
+            `SELECT id, "userId", "fullName", email, status FROM "DesignerApplication" WHERE id = $1 FOR UPDATE`,
+            [id]
+          );
+          const app = appRows[0];
+          if (!app) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Application not found' });
+          }
+          if (app.status !== 'pending') {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ error: 'Application is not pending' });
+          }
+
+          const now = new Date();
+          await client.query(
+            `UPDATE "DesignerApplication"
+             SET status = 'rejected', "adminNote" = $1, "reviewedBy" = $2, "reviewedAt" = $3, "updatedAt" = $3
+             WHERE id = $4`,
+            [adminNote?.trim() || null, adminCtx.userId, now, id]
+          );
+
+          await client.query('COMMIT');
+
+          // Optional rejection notification — non-fatal
+          try {
+            await sendApplicantEmail(app.email, app.fullName, 'rejected');
+          } catch (emailErr) {
+            console.error('[api/admin] rejection email failed:', emailErr.message);
+          }
+        } catch (txErr) {
+          await client.query('ROLLBACK').catch(() => {});
+          throw txErr;
+        } finally {
+          client.release();
+        }
+
+        return res.status(200).json({ ok: true });
+      }
+
+      return res.status(400).json({ error: 'Unknown action' });
+    }
+
     // ── PATCH: status updates ─────────────────────────────────────────────
     if (req.method === 'PATCH') {
       if (action === 'custom-request-status') {
@@ -180,6 +289,38 @@ async function _handler(req, res) {
     if (action === 'sales')     return res.status(200).json(await getSales(pool, cutoff, offset));
     if (action === 'downloads') return res.status(200).json(await getDownloads(pool, cutoff, offset));
     if (action === 'custom-requests') return res.status(200).json(await getCustomRequests(pool, status, offset, req.query.all === 'true'));
+
+    if (action === 'designer-applications') {
+      const filterStatus = status || 'all';
+      const { rows } = await pool.query(
+        `SELECT
+           da.id,
+           da."fullName",
+           da.email,
+           da.bio,
+           da."websiteUrl",
+           da."instagramUrl",
+           da."expertiseRegions",
+           da.message,
+           da.status,
+           da."adminNote",
+           da."createdAt",
+           da."reviewedAt",
+           da."updatedAt",
+           u.id        AS "userId",
+           u.email     AS "userEmail",
+           u.name      AS "userName",
+           u.role      AS "userRole",
+           rv.name     AS "reviewedByName"
+         FROM "DesignerApplication" da
+         JOIN "User" u  ON u.id  = da."userId"
+         LEFT JOIN "User" rv ON rv.id = da."reviewedBy"
+         WHERE ($1 = 'all' OR da.status = $1)
+         ORDER BY da."createdAt" DESC`,
+        [filterStatus]
+      );
+      return res.status(200).json(rows);
+    }
 
     // ── One-time backfill: populate null new columns from legacy `amount` ─────
     if (action === 'backfill-purchases') {
@@ -660,4 +801,42 @@ async function getDownloads(pool, cutoff, offset) {
   `, [cutoff]);
 
   return { downloads, total: parseInt(total, 10) };
+}
+
+// ── Designer application emails ───────────────────────────────────────────────
+async function sendApplicantEmail(email, fullName, verdict) {
+  if (!process.env.RESEND_API_KEY) return;
+  const { Resend } = await import('resend');
+  const resend = new Resend(process.env.RESEND_API_KEY);
+
+  const isApproved = verdict === 'approved';
+  const subject = isApproved
+    ? 'Your HiddenAtlas designer application has been approved'
+    : 'Update on your HiddenAtlas designer application';
+
+  const bodyHtml = isApproved
+    ? `<p>Hi ${esc(fullName)},</p>
+       <p>We are pleased to let you know that your application to become a HiddenAtlas travel designer has been approved. Your designer profile is now active.</p>
+       <p>You can access your designer portal at <a href="https://hiddenatlas.travel/admin" style="color:#1B6B65;">hiddenatlas.travel/admin</a>.</p>
+       <p>Welcome to the team.</p>`
+    : `<p>Hi ${esc(fullName)},</p>
+       <p>Thank you for applying to become a HiddenAtlas travel designer. After careful review, we are not able to move forward with your application at this time.</p>
+       <p>You are welcome to submit a new application in the future if you would like us to review it again.</p>
+       <p>Thank you for your interest in HiddenAtlas.</p>`;
+
+  await resend.emails.send({
+    from:    'HiddenAtlas <hello@hiddenatlas.travel>',
+    to:      [email],
+    subject,
+    html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;line-height:1.7;">${bodyHtml}<p style="margin-top:32px;color:#8C8070;font-size:13px;">The HiddenAtlas Team</p></div>`,
+  });
+}
+
+function esc(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

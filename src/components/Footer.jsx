@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Instagram, Mail } from 'lucide-react';
+import { Instagram, Mail, ArrowRight } from 'lucide-react';
 
 export default function Footer() {
   return (
@@ -132,6 +132,36 @@ export default function Footer() {
                 </Link>
               ))}
             </nav>
+          </div>
+
+          {/* Work with us */}
+          <div>
+            <p style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '1.5px', textTransform: 'uppercase', color: '#6B6156', marginBottom: '20px' }}>
+              Work with us
+            </p>
+            <Link
+              to="/become-a-designer"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '8px',
+                padding: '9px 18px',
+                border: '1px solid #2E2922',
+                borderRadius: '5px',
+                fontSize: '13.5px', fontWeight: '500', color: '#C9A96E',
+                textDecoration: 'none',
+                transition: 'border-color 0.2s, color 0.2s',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = '#C9A96E';
+                e.currentTarget.style.color = '#D4B97E';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = '#2E2922';
+                e.currentTarget.style.color = '#C9A96E';
+              }}
+            >
+              Become a Travel Designer
+              <ArrowRight size={13} />
+            </Link>
           </div>
         </div>
 

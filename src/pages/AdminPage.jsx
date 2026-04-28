@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Outlet, NavLink, Navigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import ErrorBoundary from '../components/ErrorBoundary';
-import { LayoutDashboard, Users, CreditCard, Download, Inbox, Menu, X, Map, UserCheck, User, ArrowUpRight } from 'lucide-react';
+import { LayoutDashboard, Users, CreditCard, Download, Inbox, Menu, X, Map, UserCheck, User, ArrowUpRight, ClipboardList } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useUserCtx } from '../lib/useUserCtx.jsx';
 
@@ -32,7 +32,8 @@ const NAV_GROUPS_ADMIN = [
   {
     label: 'Operations',
     items: [
-      { label: 'Custom Requests', path: '/admin/custom-requests', icon: Inbox },
+      { label: 'Custom Requests',       path: '/admin/custom-requests',        icon: Inbox },
+      { label: 'Designer Applications', path: '/admin/designer-applications',  icon: ClipboardList },
     ],
   },
 ];
