@@ -78,11 +78,11 @@ async function verifyUser(authHeader, pool) {
   const ctx = await resolveUserCtx(authHeader, pool);
   if (!ctx) throw Object.assign(new Error('Unauthorized'), { status: 401 });
 
-  // Must be admin, OR a designer with an active creator profile
-  if (!ctx.isAdmin && !ctx.creatorId) {
+  // Must be admin OR designer (creator profile is optional — designers without one see an empty list)
+  if (!ctx.isAdmin && !ctx.isDesigner) {
     throw Object.assign(new Error('Forbidden'), { status: 403 });
   }
-  return { email: ctx.email, isAdmin: ctx.isAdmin, creatorId: ctx.creatorId };
+  return { email: ctx.email, isAdmin: ctx.isAdmin, creatorId: ctx.creatorId, userId: ctx.userId, isDesigner: ctx.isDesigner };
 }
 
 // ── Ownership guard for itinerary-scoped operations ───────────────────────────
@@ -252,6 +252,11 @@ async function handleCheckVersionDuplicate(pool, parentSlug, variant, excludeId 
 // Admin: all itineraries.  Creator: only itineraries assigned to them.
 // Returns creator name/slug alongside each row for display in the CMS table.
 async function handleList(pool, ctx) {
+  // Designer with no creator profile yet has no itineraries
+  if (!ctx.isAdmin && !ctx.creatorId) {
+    return { itineraries: [], collections: [] };
+  }
+
   const creatorFilter = ctx.isAdmin ? '' : `WHERE i.creator_id = $1`;
   const params        = ctx.isAdmin ? [] : [ctx.creatorId];
 

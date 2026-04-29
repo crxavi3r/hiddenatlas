@@ -825,7 +825,7 @@ async function sendApplicantEmail(email, fullName, verdict) {
        <p>Thank you for your interest in HiddenAtlas.</p>`;
 
   await resend.emails.send({
-    from:    'HiddenAtlas <hello@hiddenatlas.travel>',
+    from:    'HiddenAtlas <noreply@hiddenatlas.travel>',
     to:      [email],
     subject,
     html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;line-height:1.7;">${bodyHtml}<p style="margin-top:32px;color:#8C8070;font-size:13px;">The HiddenAtlas Team</p></div>`,

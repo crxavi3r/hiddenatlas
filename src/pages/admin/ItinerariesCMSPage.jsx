@@ -463,14 +463,33 @@ export default function ItinerariesCMSPage() {
           <p style={{ fontSize: '13px', color: '#C0392B' }}>{error}</p>
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{ ...card, padding: '48px', textAlign: 'center' }}>
-          <p style={{ fontSize: '14px', color: '#B5AA99', marginBottom: '16px' }}>
-            No itineraries found. {items.length === 0 && 'Use "Seed from static data" to import existing ones.'}
-          </p>
-          {items.length === 0 && (
-            <button onClick={handleSeed} disabled={seeding} style={btnPrimary}>
-              {seeding ? 'Seeding…' : 'Seed from static data'}
-            </button>
+        <div style={{ ...card, padding: '56px 48px', textAlign: 'center' }}>
+          {!isAdmin && items.length === 0 ? (
+            <>
+              <p style={{
+                fontFamily: "'Playfair Display', Georgia, serif",
+                fontSize: '20px', fontWeight: '600', color: '#1C1A16', marginBottom: '12px',
+              }}>
+                No itineraries yet
+              </p>
+              <p style={{ fontSize: '14px', color: '#8C8070', lineHeight: '1.7', marginBottom: '24px', maxWidth: '380px', margin: '0 auto 24px' }}>
+                You have not created any itineraries yet. Start by creating your first HiddenAtlas itinerary.
+              </p>
+              <button onClick={() => navigate('/admin/itineraries/new')} style={btnPrimary}>
+                Create new itinerary
+              </button>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: '14px', color: '#B5AA99', marginBottom: '16px' }}>
+                No itineraries found.{items.length === 0 && ' Use "Seed from static data" to import existing ones.'}
+              </p>
+              {isAdmin && items.length === 0 && (
+                <button onClick={handleSeed} disabled={seeding} style={btnPrimary}>
+                  {seeding ? 'Seeding…' : 'Seed from static data'}
+                </button>
+              )}
+            </>
           )}
         </div>
       ) : isMobile ? (

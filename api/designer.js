@@ -158,7 +158,7 @@ async function sendAdminNotification({ fullName, email, bio, websiteUrl, instagr
   `;
 
   await resend.emails.send({
-    from:    'HiddenAtlas <hello@hiddenatlas.travel>',
+    from:    'HiddenAtlas <noreply@hiddenatlas.travel>',
     to:      [adminTo],
     subject: 'New HiddenAtlas designer application',
     html,
