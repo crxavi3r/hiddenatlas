@@ -103,9 +103,9 @@ async function handleSession(req, res, body) {
     let planPriceId = null;
     try {
       const { rows: itinRow } = await pool.query(
-        `SELECT p.stripe_price_id AS plan_price_id
+        `SELECT p."stripePriceId" AS plan_price_id
          FROM "Itinerary" i
-         LEFT JOIN "DesignerPricingPlan" p ON p.id = i.pricing_plan_id AND p.is_active = true
+         LEFT JOIN "DesignerPricingPlan" p ON p.id = i."pricingPlanId" AND p."isActive" = true
          WHERE i.slug = $1 LIMIT 1`,
         [slug]
       );
@@ -287,12 +287,12 @@ async function handleCustomSession(req, res, body) {
     const planPool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
       const { rows } = await planPool.query(
-        `SELECT stripe_price_id FROM "DesignerPricingPlan"
-         WHERE id = $1 AND is_active = true AND is_custom_quote = false
+        `SELECT "stripePriceId" FROM "DesignerPricingPlan"
+         WHERE id = $1 AND "isActive" = true AND "isCustomQuote" = false
          LIMIT 1`,
         [pricingPlanId]
       );
-      priceId = rows[0]?.stripe_price_id ?? null;
+      priceId = rows[0]?.stripePriceId ?? null;
     } catch (err) {
       console.warn('[checkout/custom-session] designer plan lookup failed:', err.message);
     } finally {
@@ -408,10 +408,10 @@ async function processCustomPayment(pool, session) {
   if (pricingPlanId) {
     try {
       const { rows: planRows } = await pool.query(
-        `SELECT designer_user_id FROM "DesignerPricingPlan" WHERE id = $1 LIMIT 1`,
+        `SELECT "designerUserId" FROM "DesignerPricingPlan" WHERE id = $1 LIMIT 1`,
         [pricingPlanId]
       );
-      designerUserId = planRows[0]?.designer_user_id ?? null;
+      designerUserId = planRows[0]?.designerUserId ?? null;
     } catch { /* non-fatal */ }
   }
   const notes     = meta.notes      || null;
@@ -522,7 +522,7 @@ async function processCustomPayment(pool, session) {
         `INSERT INTO "Purchase"
            (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId",
             amount, "grossAmount", "netAmount", "discountAmount", "couponCode", "stripeCouponId",
-            pricing_plan_id, designer_user_id,
+            "pricingPlanId", "designerUserId",
             status, "purchasedAt", "createdAt")
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'paid', NOW(), NOW())
          ON CONFLICT ("stripeSessionId") DO NOTHING`,

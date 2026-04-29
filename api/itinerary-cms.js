@@ -198,16 +198,16 @@ async function handlePricingOptions(pool, creatorId = null, ctx = null) {
       if (designerUserId) {
         const { rows: planRows } = await pool.query(
           `SELECT * FROM "DesignerPricingPlan"
-           WHERE designer_user_id = $1 AND is_active = true AND plan_type = 'digital'
-           ORDER BY sort_order ASC, created_at ASC`,
+           WHERE "designerUserId" = $1 AND "isActive" = true AND "planType" = 'digital'
+           ORDER BY "sortOrder" ASC, "createdAt" ASC`,
           [designerUserId]
         );
 
         if (planRows.length > 0) {
           const options = planRows
-            .filter(p => !p.is_custom_quote && p.stripe_price_id)
+            .filter(p => !p.isCustomQuote && p.stripePriceId)
             .map(p => {
-              const priceEuros = p.price_cents != null ? p.price_cents / 100 : null;
+              const priceEuros = p.priceCents != null ? p.priceCents / 100 : null;
               return {
                 key:          p.id,
                 label:        p.name,
@@ -216,7 +216,7 @@ async function handlePricingOptions(pool, creatorId = null, ctx = null) {
                   : null,
                 price:        priceEuros,
                 currency:     p.currency,
-                stripePriceId: p.stripe_price_id,
+                stripePriceId: p.stripePriceId,
                 pricingPlanId: p.id,
                 isPlanBased:   true,
               };
@@ -389,7 +389,7 @@ async function handleCreate(pool, body, ctx) {
   const { rows } = await pool.query(
     `INSERT INTO "Itinerary"
        (id, title, subtitle, slug, destination, country, region, "durationDays",
-        "accessType", price, "stripePriceId", "pricingKey", pricing_plan_id, "coverImage", description,
+        "accessType", price, "stripePriceId", "pricingKey", "pricingPlanId", "coverImage", description,
         type, "isPrivate", "isCollection", status, "isPublished", content, "schemaVersion", "updatedAt",
         creator_id, variant, "parentId")
      VALUES (gen_random_uuid()::text,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,$16,$17,$18,1,NOW(),$19,$20,$21)
@@ -463,7 +463,7 @@ async function handleUpdate(pool, id, body, ctx) {
        "accessType"      = COALESCE($9, "accessType"),
        "stripePriceId"   = $10,
        "pricingKey"      = $11,
-       pricing_plan_id   = $22,
+       "pricingPlanId"   = $22,
        "coverImage"      = COALESCE(NULLIF($12,''), "coverImage"),
        description       = COALESCE(NULLIF($13,''), description),
        status            = COALESCE($14, status),
