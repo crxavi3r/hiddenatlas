@@ -39,6 +39,7 @@ import CreatorEditorPage from './pages/admin/CreatorEditorPage';
 import CreatorProfilePage from './pages/CreatorProfilePage';
 import BecomeDesignerPage from './pages/BecomeDesignerPage';
 import DesignerApplicationsPage from './pages/admin/DesignerApplicationsPage';
+import PricingPlansPage from './pages/admin/PricingPlansPage';
 
 // ── Scroll to top on route change ────────────────────────────────────────────
 function LegacyCustomRedirect() {
@@ -102,6 +103,7 @@ export default function App() {
           <Route path="creators" element={<CreatorsPage />} />
           <Route path="creators/:id" element={<CreatorEditorPage />} />
           <Route path="designer-applications" element={<DesignerApplicationsPage />} />
+          <Route path="pricing" element={<PricingPlansPage />} />
         </Route>
 
         {/* ── Public pages — shared Navbar + Footer ── */}

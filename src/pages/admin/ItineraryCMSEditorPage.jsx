@@ -631,7 +631,7 @@ export default function ItineraryCMSEditorPage() {
   const [form,       setForm]       = useState({
     title: '', subtitle: '', slug: '', destination: '', country: '',
     region: '', durationDays: '', type: 'free', isPrivate: false, isCollection: false,
-    stripePriceId: '', pricingKey: '',
+    stripePriceId: '', pricingKey: '', pricingPlanId: '',
     coverImage: '', status: 'draft', pdfUrl: '', pdf_url: '', pdf_version: 'v1.0', creatorId: '',
     variant: '', parentId: '', parentTitle: '', parentIsCollection: false,
     contentDepth: 'essential',
@@ -699,7 +699,7 @@ export default function ItineraryCMSEditorPage() {
         durationDays: it.durationDays ?? '', type: derivedType,
         isPrivate: it.isPrivate ?? false,
         isCollection: it.isCollection ?? false,
-        stripePriceId: it.stripePriceId || '', pricingKey: it.pricingKey || '',
+        stripePriceId: it.stripePriceId || '', pricingKey: it.pricingKey || '', pricingPlanId: it.pricingPlanId || it.pricing_plan_id || '',
         coverImage: it.coverImage || '', status: it.status || 'draft',
         pdfUrl: it.pdfUrl || '',
         pdf_url: it.pdf_url || it.pdfUrl || '',
@@ -744,16 +744,25 @@ export default function ItineraryCMSEditorPage() {
     }
   }, [isNew, isAdmin, myCreatorId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Load pricing options + creators once on mount ────────────────────────────
+  // ── Load pricing options (re-runs when creatorId changes) ────────────────────
+  // If the itinerary's creator has designer plans → use those (plan-based).
+  // Fallback: env-var tiers (default platform pricing).
   useEffect(() => {
+    const creatorId = form.creatorId || myCreatorId || '';
     getToken().then(token => {
-      fetch('/api/itinerary-cms?action=pricing-options', {
+      const qs = creatorId ? `&creatorId=${encodeURIComponent(creatorId)}` : '';
+      fetch(`/api/itinerary-cms?action=pricing-options${qs}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then(r => r.json())
         .then(json => { if (Array.isArray(json.options)) setPricingOptions(json.options); })
         .catch(() => {});
+    }).catch(() => {});
+  }, [form.creatorId, myCreatorId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Load all creators once on mount ──────────────────────────────────────────
+  useEffect(() => {
+    getToken().then(token => {
       fetch('/api/creators?action=list', {
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -967,7 +976,7 @@ export default function ItineraryCMSEditorPage() {
       alert('Title and slug are required.');
       return;
     }
-    if (form.type === 'premium' && !form.stripePriceId) {
+    if (form.type === 'premium' && !form.stripePriceId && !form.pricingPlanId) {
       alert('A pricing plan is required for premium itineraries. Select one in the Basics tab.');
       return;
     }
@@ -1036,8 +1045,9 @@ export default function ItineraryCMSEditorPage() {
         accessType: form.type === 'free' ? 'free' : 'paid',
         durationDays: form.durationDays !== '' && form.durationDays != null
           ? parseInt(form.durationDays, 10) : null,
-        stripePriceId: form.type === 'premium' ? (form.stripePriceId || null) : null,
-        pricingKey:    form.type === 'premium' ? (form.pricingKey    || null) : null,
+        stripePriceId:  form.type === 'premium' ? (form.stripePriceId  || null) : null,
+        pricingKey:     form.type === 'premium' ? (form.pricingKey     || null) : null,
+        pricingPlanId:  form.type === 'premium' ? (form.pricingPlanId  || null) : null,
         parentId: normalizedParentId,
         variant:  normalizedVariant,
         // creatorId is immutable after creation — strip it from update payloads.
@@ -1079,6 +1089,7 @@ export default function ItineraryCMSEditorPage() {
         isCollection:  it.isCollection  ?? f.isCollection,
         stripePriceId: it.stripePriceId ?? f.stripePriceId,
         pricingKey:    it.pricingKey    ?? f.pricingKey,
+        pricingPlanId: it.pricingPlanId ?? it.pricing_plan_id ?? f.pricingPlanId,
         creatorId:     it.creatorId     ?? f.creatorId,
         contentDepth: (v => v === 'complete' || v === 'premium' ? 'complete' : v === 'short' ? 'short' : f.contentDepth || 'essential')(it.variant ?? f.variant),
         structureType: (it.isCollection ?? f.isCollection) ? 'collection_parent' : (f.parentId ? 'variant' : 'standalone'),
@@ -1105,7 +1116,7 @@ export default function ItineraryCMSEditorPage() {
     const targetId = savedId.current || (isNew ? null : id);
     if (!targetId) { alert('Save the itinerary first.'); return; }
     const action = form.status === 'published' ? 'unpublish' : 'publish';
-    if (action === 'publish' && form.type === 'premium' && !form.stripePriceId) {
+    if (action === 'publish' && form.type === 'premium' && !form.stripePriceId && !form.pricingPlanId) {
       alert('Cannot publish: select a pricing plan before publishing a premium itinerary.');
       return;
     }
@@ -2466,9 +2477,13 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
         type: value,
         isPrivate: value === 'custom' ? true : (value === 'free' ? false : f.isPrivate),
         ...(!isPremium
-          ? { stripePriceId: '', pricingKey: '' }
+          ? { stripePriceId: '', pricingKey: '', pricingPlanId: '' }
           : autoOption
-            ? { stripePriceId: autoOption.stripePriceId, pricingKey: autoOption.key }
+            ? {
+                stripePriceId: autoOption.stripePriceId,
+                pricingKey:    autoOption.isPlanBased ? '' : autoOption.key,
+                pricingPlanId: autoOption.isPlanBased ? autoOption.pricingPlanId : '',
+              }
             : {}),
       };
     });
@@ -2601,22 +2616,32 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
         )}
 
         {form.type === 'premium' && (() => {
-          const selectedOption = pricingOptions.find(o => o.key === form.pricingKey)
-            ?? pricingOptions.find(o => o.stripePriceId === form.stripePriceId);
+          const currentKey = form.pricingPlanId || form.pricingKey || '';
+          const selectedOption = pricingOptions.find(o =>
+            (o.pricingPlanId && o.pricingPlanId === form.pricingPlanId) ||
+            (!o.isPlanBased && o.key === form.pricingKey) ||
+            o.stripePriceId === form.stripePriceId
+          );
           return (
             <div style={{ marginTop: '16px' }}>
               <Field label="Pricing plan" hint="Required before publishing.">
                 {pricingOptions.length === 0 ? (
                   <p style={{ fontSize: '13px', color: '#E05353', margin: 0 }}>
-                    No pricing plans available. Set STRIPE_PRICE_PREMIUM_COMPLETE in Vercel env vars.
+                    No pricing plans available. Set STRIPE_PRICE_PREMIUM_COMPLETE in Vercel env vars or add plans in the Pricing section.
                   </p>
                 ) : (
                   <>
                     <select
-                      value={form.pricingKey || ''}
+                      value={currentKey}
                       onChange={e => {
                         const opt = pricingOptions.find(o => o.key === e.target.value);
-                        setForm(f => ({ ...f, pricingKey: opt?.key ?? '', stripePriceId: opt?.stripePriceId ?? '' }));
+                        if (!opt) {
+                          setForm(f => ({ ...f, pricingKey: '', stripePriceId: '', pricingPlanId: '' }));
+                        } else if (opt.isPlanBased) {
+                          setForm(f => ({ ...f, pricingKey: '', stripePriceId: opt.stripePriceId ?? '', pricingPlanId: opt.pricingPlanId ?? '' }));
+                        } else {
+                          setForm(f => ({ ...f, pricingKey: opt.key ?? '', stripePriceId: opt.stripePriceId ?? '', pricingPlanId: '' }));
+                        }
                       }}
                       style={{ ...inputStyle, cursor: 'pointer', maxWidth: '320px' }}
                     >

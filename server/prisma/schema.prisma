@@ -35,12 +35,14 @@ model User {
   clerkId   String?    @unique   // Clerk's user_xxx ID — set on first sign-in
   email     String     @unique
   name      String
+  role      String     @default("user")  // user | admin | designer — managed via migrations
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
-  purchases Purchase[]
-  trips     Trip[]
-  events    TripEvent[]
+  purchases    Purchase[]
+  trips        Trip[]
+  events       TripEvent[]
+  pricingPlans DesignerPricingPlan[]
 }
 
 // ─────────────────────────────────────────────
@@ -85,7 +87,10 @@ model Itinerary {
   pdfGeneratedAt  DateTime?
   pdfError        String?
 
-  creator           Creator?   @relation(fields: [creatorId], references: [id])
+  pricingPlanId     String?                    // FK to DesignerPricingPlan.id — null for default pricing
+
+  creator           Creator?            @relation(fields: [creatorId], references: [id])
+  pricingPlan       DesignerPricingPlan? @relation(fields: [pricingPlanId], references: [id])
   purchases         Purchase[]
   assets            ItineraryAsset[]
   aiGenerations     ItineraryAIGeneration[]
@@ -160,8 +165,12 @@ model Purchase {
   purchasedAt           DateTime @default(now())
   createdAt             DateTime @default(now())
 
-  user      User      @relation(fields: [userId],      references: [id])
-  itinerary Itinerary @relation(fields: [itineraryId], references: [id])
+  pricingPlanId  String?  // FK to DesignerPricingPlan.id — null for default pricing
+  designerUserId String?  // Denormalized from pricingPlan.designerUserId for fast querying
+
+  user        User                 @relation(fields: [userId],       references: [id])
+  itinerary   Itinerary            @relation(fields: [itineraryId],  references: [id])
+  pricingPlan DesignerPricingPlan? @relation(fields: [pricingPlanId], references: [id])
 
   @@unique([userId, itineraryId])
 }
@@ -276,4 +285,36 @@ model CustomRequest {
   @@index([status])
   @@index([createdAt])
   @@index([userId])
+}
+
+// ─────────────────────────────────────────────
+// DesignerPricingPlan
+// Per-designer pricing — created by designers, managed in backoffice.
+// planType: 'custom' | 'digital'
+// ─────────────────────────────────────────────
+model DesignerPricingPlan {
+  id              String   @id @default(uuid())
+  designerUserId  String   // FK to User.id
+  name            String
+  description     String?
+  planType        String   @default("custom")  // custom | digital
+  audienceLabel   String?                      // e.g. 'Couple', 'Family', 'Group'
+  travelerMin     Int?
+  travelerMax     Int?
+  priceCents      Int?                         // null when isCustomQuote = true
+  currency        String   @default("EUR")
+  stripeProductId String?
+  stripePriceId   String?
+  isActive        Boolean  @default(true)
+  isCustomQuote   Boolean  @default(false)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  designer    User        @relation(fields: [designerUserId], references: [id])
+  purchases   Purchase[]
+  itineraries Itinerary[]
+
+  @@index([designerUserId])
+  @@index([isActive])
 }

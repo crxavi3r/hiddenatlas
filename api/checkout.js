@@ -88,29 +88,43 @@ async function handleSession(req, res, body) {
   const { slug, variant = 'premium', title = '' } = body;
   if (!slug) return res.status(400).json({ error: 'slug is required' });
 
-  // Resolve the correct Stripe price ID for this variant tier
-  const priceId = getVariantPriceId(variant);
-  if (!priceId) {
-    console.error('[checkout/session] no price configured for variant:', variant);
-    return res.status(500).json({ error: `Stripe price not configured for variant: ${variant}` });
-  }
-
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  let userId, userEmail;
+  let userId, userEmail, resolvedPriceId;
   try {
-    const { rows } = await pool.query(
-      `SELECT id, email FROM "User" WHERE "clerkId" = $1`,
-      [clerkId]
+    const { rows: userRow } = await pool.query(
+      `SELECT id, email FROM "User" WHERE "clerkId" = $1`, [clerkId]
     );
-    if (!rows.length) return res.status(404).json({ error: 'User not found' });
-    userId = rows[0].id;
-    userEmail = rows[0].email;
+    if (!userRow.length) return res.status(404).json({ error: 'User not found' });
+    userId    = userRow[0].id;
+    userEmail = userRow[0].email;
+
+    // Try to resolve price from designer pricing plan attached to the itinerary
+    // Falls back gracefully if DesignerPricingPlan table or column doesn't exist yet
+    let planPriceId = null;
+    try {
+      const { rows: itinRow } = await pool.query(
+        `SELECT p.stripe_price_id AS plan_price_id
+         FROM "Itinerary" i
+         LEFT JOIN "DesignerPricingPlan" p ON p.id = i.pricing_plan_id AND p.is_active = true
+         WHERE i.slug = $1 LIMIT 1`,
+        [slug]
+      );
+      planPriceId = itinRow[0]?.plan_price_id ?? null;
+    } catch { /* table/column not yet migrated — use env-var fallback */ }
+
+    resolvedPriceId = planPriceId || getVariantPriceId(variant);
   } catch (err) {
     console.error('[checkout/session] DB error:', err.message);
     return res.status(500).json({ error: 'Database error' });
   } finally {
     await pool.end();
   }
+
+  if (!resolvedPriceId) {
+    console.error('[checkout/session] no price configured — slug:', slug, '| variant:', variant);
+    return res.status(500).json({ error: `Stripe price not configured for variant: ${variant}` });
+  }
+  const priceId = resolvedPriceId;
 
   const origin = req.headers.origin || 'http://localhost:3000';
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -261,17 +275,43 @@ async function handleCustomSession(req, res, body) {
     return res.status(500).json({ error: 'Server misconfigured' });
   }
 
-  const { tierKey, formData: fd, designerSlug } = body;
-  if (!tierKey || !fd) return res.status(400).json({ error: 'tierKey and formData are required' });
+  const { tierKey, pricingPlanId, formData: fd, designerSlug } = body;
+  if (!fd) return res.status(400).json({ error: 'formData is required' });
+  if (!tierKey && !pricingPlanId) return res.status(400).json({ error: 'tierKey or pricingPlanId is required' });
 
-  const PRICE_ID_MAP = {
-    couple:      process.env.STRIPE_CUSTOM_COUPLE_PRICE_ID,
-    small_group: process.env.STRIPE_CUSTOM_SMALL_GROUP_PRICE_ID,
-    large_group: process.env.STRIPE_CUSTOM_LARGE_GROUP_PRICE_ID,
-  };
-  const priceId = PRICE_ID_MAP[tierKey];
+  let priceId = null;
+  let resolvedPlanId = pricingPlanId || null;
+
+  // Prefer designer pricing plan when provided
+  if (pricingPlanId && process.env.DATABASE_URL) {
+    const planPool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      const { rows } = await planPool.query(
+        `SELECT stripe_price_id FROM "DesignerPricingPlan"
+         WHERE id = $1 AND is_active = true AND is_custom_quote = false
+         LIMIT 1`,
+        [pricingPlanId]
+      );
+      priceId = rows[0]?.stripe_price_id ?? null;
+    } catch (err) {
+      console.warn('[checkout/custom-session] designer plan lookup failed:', err.message);
+    } finally {
+      await planPool.end().catch(() => {});
+    }
+  }
+
+  // Fallback to global tier price IDs from env
+  if (!priceId && tierKey) {
+    const PRICE_ID_MAP = {
+      couple:      process.env.STRIPE_CUSTOM_COUPLE_PRICE_ID,
+      small_group: process.env.STRIPE_CUSTOM_SMALL_GROUP_PRICE_ID,
+      large_group: process.env.STRIPE_CUSTOM_LARGE_GROUP_PRICE_ID,
+    };
+    priceId = PRICE_ID_MAP[tierKey] ?? null;
+  }
+
   if (!priceId) {
-    return res.status(400).json({ error: `Stripe price not configured for tier: ${tierKey}` });
+    return res.status(400).json({ error: 'Stripe price not configured for this plan' });
   }
 
   // Optional auth — look up internal userId to embed in metadata
@@ -304,9 +344,10 @@ async function handleCustomSession(req, res, body) {
       cancel_url:  `${origin}/custom`,
       metadata: {
         // Stripe metadata limit: 50 keys, 500 chars/value
-        type:         'custom_planning',
-        tier_key:     tierKey,
-        user_id:      internalUserId ?? '',
+        type:             'custom_planning',
+        tier_key:         tierKey ?? '',
+        pricing_plan_id:  resolvedPlanId ?? '',
+        user_id:          internalUserId ?? '',
         full_name:    (fd.name?.trim()                          || '').slice(0, 500),
         email:        (fd.email?.trim().toLowerCase()           || '').slice(0, 500),
         phone:        (fd.phone?.trim()                         || '').slice(0, 500),
@@ -346,20 +387,33 @@ async function processCustomPayment(pool, session) {
   }
 
   // ── Extract form data from metadata ──────────────────────────────────────
-  const meta      = session.metadata || {};
-  const userId    = meta.user_id    || null;
-  const fullName  = meta.full_name  || '';
-  const email     = meta.email      || '';
-  const phone     = meta.phone      || null;
-  const dest      = meta.destination || null;
-  const dates     = meta.dates      || null;
-  const duration  = meta.duration   || null;
-  const groupSize = meta.group_size ? (parseInt(meta.group_size, 10) || null) : null;
-  const groupType = meta.group_type || null;
-  const budget    = meta.budget     || null;
-  const style     = meta.travel_style
+  const meta          = session.metadata || {};
+  const userId        = meta.user_id    || null;
+  const pricingPlanId = meta.pricing_plan_id || null;
+  const fullName      = meta.full_name  || '';
+  const email         = meta.email      || '';
+  const phone         = meta.phone      || null;
+  const dest          = meta.destination || null;
+  const dates         = meta.dates      || null;
+  const duration      = meta.duration   || null;
+  const groupSize     = meta.group_size ? (parseInt(meta.group_size, 10) || null) : null;
+  const groupType     = meta.group_type || null;
+  const budget        = meta.budget     || null;
+  const style         = meta.travel_style
     ? meta.travel_style.split(',').map(s => s.trim()).filter(Boolean)
     : [];
+
+  // Resolve designer's User.id from pricingPlan (for denormalized designerUserId on Purchase)
+  let designerUserId = null;
+  if (pricingPlanId) {
+    try {
+      const { rows: planRows } = await pool.query(
+        `SELECT designer_user_id FROM "DesignerPricingPlan" WHERE id = $1 LIMIT 1`,
+        [pricingPlanId]
+      );
+      designerUserId = planRows[0]?.designer_user_id ?? null;
+    } catch { /* non-fatal */ }
+  }
   const notes     = meta.notes      || null;
   const amount    = (session.amount_total ?? 0) / 100;
 
@@ -468,12 +522,14 @@ async function processCustomPayment(pool, session) {
         `INSERT INTO "Purchase"
            (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId",
             amount, "grossAmount", "netAmount", "discountAmount", "couponCode", "stripeCouponId",
+            pricing_plan_id, designer_user_id,
             status, "purchasedAt", "createdAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'paid', NOW(), NOW())
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'paid', NOW(), NOW())
          ON CONFLICT ("stripeSessionId") DO NOTHING`,
         [
           userId, itinId, session.id, session.payment_intent ?? null,
           netAmount, grossAmount, netAmount, discountAmount, couponCode, stripeCouponId,
+          pricingPlanId, designerUserId,
         ]
       );
     } catch (err) {

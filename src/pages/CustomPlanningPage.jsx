@@ -68,15 +68,16 @@ const STEPS_REVIEW = [
 ];
 
 /* ─── Pricing display — sidebar and mobile ─── */
-function PricingTierList({ dark }) {
+function PricingTierList({ dark, tiers }) {
+  const list = tiers ?? CUSTOM_TIERS;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-      {CUSTOM_TIERS.map((tier, i) => (
-        <div key={i} style={{
+      {list.map((tier, i) => (
+        <div key={tier.key ?? i} style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           paddingTop: i === 0 ? '0' : '16px',
-          paddingBottom: i < CUSTOM_TIERS.length - 1 ? '16px' : '0',
-          borderBottom: i < CUSTOM_TIERS.length - 1 ? `1px solid ${dark ? '#2E2922' : '#E8E3DA'}` : 'none',
+          paddingBottom: i < list.length - 1 ? '16px' : '0',
+          borderBottom: i < list.length - 1 ? `1px solid ${dark ? '#2E2922' : '#E8E3DA'}` : 'none',
         }}>
           <div>
             <p style={{ fontSize: dark ? '14px' : '13.5px', fontWeight: '600', color: dark ? 'white' : '#1C1A16', marginBottom: '2px' }}>{tier.label}</p>
@@ -99,7 +100,7 @@ function PricingTierList({ dark }) {
 }
 
 /* ─── Mobile-only pricing block ─── */
-function MobilePricingBlock() {
+function MobilePricingBlock({ tiers }) {
   return (
     <div className="ha-mobile-only" style={{
       background: '#1C1A16',
@@ -118,7 +119,7 @@ function MobilePricingBlock() {
         A personalised itinerary designed around your travel style, pace and priorities.
       </p>
 
-      <PricingTierList dark />
+      <PricingTierList dark tiers={tiers} />
 
       <p style={{
         fontSize: '11.5px', color: 'rgba(255,255,255,0.3)',
@@ -157,6 +158,42 @@ function SectionLegend({ label, helper }) {
   );
 }
 
+// ── Designer plan helpers ─────────────────────────────────────────────────────
+// Find the best matching designer plan for the selected group size.
+function resolveDesignerPlan(plans, groupSizeValue) {
+  if (!plans?.length || !groupSizeValue) return null;
+  const sizeMap = { '1-2': [1,2], '3-8': [3,8], '9-12': [9,12], '13+': [13, Infinity] };
+  const [min, max] = sizeMap[groupSizeValue] ?? [null, null];
+  if (min == null) return null;
+  const midpoint = max === Infinity ? min : Math.round((min + max) / 2);
+  return plans.find(p =>
+    (p.travelerMin == null || midpoint >= p.travelerMin) &&
+    (p.travelerMax == null || midpoint <= p.travelerMax)
+  ) ?? plans[0] ?? null;
+}
+
+// Convert a DesignerPricingPlan to the same shape as CUSTOM_TIERS entries
+// so all downstream display code works with both.
+function planToTier(plan) {
+  if (!plan) return null;
+  return {
+    key:         plan.id,
+    label:       plan.name,
+    range:       plan.travelerMin != null && plan.travelerMax != null
+      ? `${plan.travelerMin}–${plan.travelerMax} travellers`
+      : plan.travelerMin != null ? `${plan.travelerMin}+ travellers` : '',
+    groupMin:    plan.travelerMin ?? 1,
+    groupMax:    plan.travelerMax ?? null,
+    price:       plan.priceCents != null ? plan.priceCents / 100 : null,
+    displayPrice: plan.displayPrice ?? (plan.isCustomQuote ? 'Custom quote' : null),
+    customQuote: plan.isCustomQuote,
+    best:        false,
+    features:    [],
+    isPlanBased: true,
+    planId:      plan.id,
+  };
+}
+
 export default function CustomPlanningPage() {
   const { user, isLoaded } = useUser();
   const api = useApi();
@@ -164,6 +201,7 @@ export default function CustomPlanningPage() {
   const [searchParams] = useSearchParams();
   const [designer, setDesigner]   = useState(null);
   const [designers, setDesigners] = useState(null); // null = loading
+  const [designerPlans, setDesignerPlans] = useState(null); // null = not loaded, [] = no plans
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode]   = useState('grid'); // 'grid' | 'list'
 
@@ -172,11 +210,20 @@ export default function CustomPlanningPage() {
   // (e.g. user picks a designer from the picker or arrives via a direct link).
   const designerSlug = searchParams.get('designer');
   useEffect(() => {
-    if (!designerSlug) { setDesigner(null); return; }
+    if (!designerSlug) { setDesigner(null); setDesignerPlans(null); return; }
     fetch(`/api/creators?action=get&slug=${encodeURIComponent(designerSlug)}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data?.creator) setDesigner(data.creator); })
       .catch(() => {});
+  }, [designerSlug]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load designer's active pricing plans when a designer is selected
+  useEffect(() => {
+    if (!designerSlug) { setDesignerPlans(null); return; }
+    fetch(`/api/pricing-plans?action=list-public&designerSlug=${encodeURIComponent(designerSlug)}`)
+      .then(r => r.ok ? r.json() : { plans: [] })
+      .then(data => setDesignerPlans(data.plans || []))
+      .catch(() => setDesignerPlans([]));
   }, [designerSlug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch all active designers for the picker
@@ -286,15 +333,22 @@ export default function CustomPlanningPage() {
     setSubmitting(true);
     setSubmitError(null);
 
-    const tier = getTierByGroupSize(formData.groupSize);
+    // Resolve pricing: prefer designer's custom plans when available
+    const activePlans      = Array.isArray(designerPlans) ? designerPlans : [];
+    const selectedPlanId   = resolveDesignerPlan(activePlans, formData.groupSize)?.id ?? null;
+    const tier             = getTierByGroupSize(formData.groupSize);
+    const effectiveIsQuote = selectedPlanId
+      ? (activePlans.find(p => p.id === selectedPlanId)?.isCustomQuote ?? false)
+      : (tier?.customQuote ?? false);
 
-    if (!tier?.customQuote) {
+    if (!effectiveIsQuote) {
       // Fixed-price tier: redirect to Stripe Checkout
       try {
         const res = await api.post('/api/checkout?action=custom-session', {
-          tierKey: tier.key,
+          tierKey:       tier?.key ?? null,
+          pricingPlanId: selectedPlanId,
           formData,
-          designerSlug: designer?.slug ?? null,
+          designerSlug:  designer?.slug ?? null,
         });
         const data = await res.json();
         if (!res.ok || !data.url) throw new Error(data.error || 'Failed to start checkout. Please try again.');
@@ -305,11 +359,12 @@ export default function CustomPlanningPage() {
         setSubmitting(false);
       }
     } else {
-      // 13+ review-first flow
+      // Review-first flow (custom quote or 13+)
       try {
         const res = await api.post('/api/custom', {
           ...formData,
-          designerSlug: designer?.slug ?? null,
+          designerSlug:  designer?.slug ?? null,
+          pricingPlanId: selectedPlanId,
         });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -327,9 +382,13 @@ export default function CustomPlanningPage() {
   };
 
   // ── Derived state ──────────────────────────────────────────────────────────
-  const selectedTier  = getTierByGroupSize(formData.groupSize);
-  const isCustomQuote = selectedTier?.customQuote === true;
-  const nextSteps     = isCustomQuote ? STEPS_REVIEW : STEPS_PAID;
+  const activePlans    = Array.isArray(designerPlans) ? designerPlans : [];
+  const selectedPlan   = resolveDesignerPlan(activePlans, formData.groupSize);
+  const selectedTier   = selectedPlan ? planToTier(selectedPlan) : getTierByGroupSize(formData.groupSize);
+  const isCustomQuote  = selectedTier?.customQuote === true;
+  const nextSteps      = isCustomQuote ? STEPS_REVIEW : STEPS_PAID;
+  // Use designer plans for pricing display when available; else default tiers
+  const displayTiers   = activePlans.length > 0 ? activePlans.map(planToTier).filter(Boolean) : null;
 
   // ── Loading: verifying payment ─────────────────────────────────────────────
   if (verifying) {
@@ -826,7 +885,7 @@ export default function CustomPlanningPage() {
               </p>
 
               {/* Mobile pricing block */}
-              <MobilePricingBlock />
+              <MobilePricingBlock tiers={displayTiers} />
 
               {/* ── Your Details ── */}
               <fieldset style={{ border: 'none', padding: 0, marginBottom: '40px' }}>
@@ -1159,7 +1218,7 @@ export default function CustomPlanningPage() {
                 </p>
 
                 <div style={{ marginBottom: '28px' }}>
-                  <PricingTierList dark />
+                  <PricingTierList dark tiers={displayTiers} />
                 </div>
 
                 <p style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.28)', lineHeight: '1.6', marginBottom: '12px' }}>

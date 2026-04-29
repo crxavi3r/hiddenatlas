@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Outlet, NavLink, Navigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import ErrorBoundary from '../components/ErrorBoundary';
-import { LayoutDashboard, Users, CreditCard, Download, Inbox, Menu, X, Map, UserCheck, User, ArrowUpRight, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, Users, CreditCard, Download, Inbox, Menu, X, Map, UserCheck, User, ArrowUpRight, ClipboardList, Tag } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useUserCtx } from '../lib/useUserCtx.jsx';
 
@@ -26,6 +26,7 @@ const NAV_GROUPS_ADMIN = [
     label: 'Management',
     items: [
       { label: 'Creators',        path: '/admin/creators',       icon: UserCheck },
+      { label: 'Pricing',         path: '/admin/pricing',        icon: Tag },
       { label: 'Users',           path: '/admin/users',          icon: Users },
     ],
   },
@@ -88,7 +89,8 @@ function SidebarContent({ onClose, isAdmin, creatorId }) {
     : [{
         label: 'My Work',
         items: [
-          { label: 'My Itineraries', path: '/admin/itineraries', icon: Map },
+          { label: 'My Itineraries', path: '/admin/itineraries',  icon: Map },
+          { label: 'Pricing',        path: '/admin/pricing',       icon: Tag },
           ...(creatorId ? [{ label: 'My Profile', path: `/admin/creators/${creatorId}`, icon: User }] : []),
         ],
       }];

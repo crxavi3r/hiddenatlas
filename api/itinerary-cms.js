@@ -132,7 +132,7 @@ export default async function handler(req, res) {
       if (action === 'scan-assets')      { return res.json(await handleScanAssets(req.query.assetSlug || req.query.slug, req.query.variant, req.query.durationDays ? parseInt(req.query.durationDays, 10) : null)); }
       if (action === 'ai-history')       { await assertOwnership(pool, id, ctx); return res.json(await handleAIHistory(pool, id)); }
       if (action === 'linked-request')   { adminOnly(); return res.json(await handleLinkedRequest(pool, id)); }
-      if (action === 'pricing-options')    return res.json(handlePricingOptions());
+      if (action === 'pricing-options')    return res.json(await handlePricingOptions(pool, req.query.creatorId || null, ctx));
       if (action === 'search-parents')         return res.json(await handleSearchParents(pool, req.query.q || '', req.query.id || null));
       if (action === 'check-version-duplicate') return res.json(await handleCheckVersionDuplicate(pool, req.query.parentSlug || '', req.query.variant || '', req.query.id || null));
       if (action === 'migration-status')  { adminOnly(); return res.json(await handleMigrationStatus(pool)); }
@@ -179,24 +179,73 @@ export default async function handler(req, res) {
   }
 }
 
-// ── Pricing options (from env) ────────────────────────────────────────────────
-// The 'complete' (€29) tier uses the same fallback chain as getVariantPriceId so
-// existing STRIPE_PRICE_PREMIUM / STRIPE_PRICE_ID values also surface it correctly.
-// Returns only tiers whose price ID resolves to a non-empty string.
-// Each option: { key, label, displayPrice, price, currency, stripePriceId }
-function handlePricingOptions() {
+// ── Pricing options ───────────────────────────────────────────────────────────
+// If the itinerary's creator (via creatorId) has designer pricing plans in the DB,
+// those are returned instead of the default env-var tiers.
+// Fallback: env-var tiers (STRIPE_PRICE_PREMIUM_*).
+// Each option: { key, label, displayPrice, price, currency, stripePriceId,
+//               pricingPlanId?, isPlanBased? }
+async function handlePricingOptions(pool, creatorId = null, ctx = null) {
+  // Try to load designer plans when a creatorId is provided
+  if (creatorId) {
+    try {
+      // Resolve the designer's User.id from their Creator record
+      const { rows: creatorRows } = await pool.query(
+        `SELECT user_id FROM "Creator" WHERE id = $1 LIMIT 1`, [creatorId]
+      );
+      const designerUserId = creatorRows[0]?.user_id ?? null;
+
+      if (designerUserId) {
+        const { rows: planRows } = await pool.query(
+          `SELECT * FROM "DesignerPricingPlan"
+           WHERE designer_user_id = $1 AND is_active = true AND plan_type = 'digital'
+           ORDER BY sort_order ASC, created_at ASC`,
+          [designerUserId]
+        );
+
+        if (planRows.length > 0) {
+          const options = planRows
+            .filter(p => !p.is_custom_quote && p.stripe_price_id)
+            .map(p => {
+              const priceEuros = p.price_cents != null ? p.price_cents / 100 : null;
+              return {
+                key:          p.id,
+                label:        p.name,
+                displayPrice: priceEuros != null
+                  ? `€${priceEuros % 1 === 0 ? priceEuros.toFixed(0) : priceEuros.toFixed(2)}`
+                  : null,
+                price:        priceEuros,
+                currency:     p.currency,
+                stripePriceId: p.stripe_price_id,
+                pricingPlanId: p.id,
+                isPlanBased:   true,
+              };
+            })
+            .filter(o => o.stripePriceId);
+
+          if (options.length > 0) {
+            return { options, source: 'designer_plans' };
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[pricing-options] designer plans lookup failed:', err.message);
+    }
+  }
+
+  // Default: env-var tiers
   const completeId  = process.env.STRIPE_PRICE_PREMIUM_COMPLETE || process.env.STRIPE_PRICE_PREMIUM || process.env.STRIPE_PRICE_ID || '';
   const essentialId = process.env.STRIPE_PRICE_PREMIUM_ESSENTIAL || '';
   const shortId     = process.env.STRIPE_PRICE_PREMIUM_SHORT     || '';
 
   const tiers = [
-    { key: 'premium_short',     label: 'Premium Itinerary Short',     displayPrice: '€14', price: 14, currency: 'EUR', stripePriceId: shortId     },
-    { key: 'premium_essential', label: 'Premium Itinerary Essential', displayPrice: '€19', price: 19, currency: 'EUR', stripePriceId: essentialId },
-    { key: 'premium_complete',  label: 'Premium Itinerary',           displayPrice: '€29', price: 29, currency: 'EUR', stripePriceId: completeId  },
+    { key: 'premium_short',     label: 'Premium Itinerary Short',     displayPrice: '€14', price: 14, currency: 'EUR', stripePriceId: shortId,     isPlanBased: false },
+    { key: 'premium_essential', label: 'Premium Itinerary Essential', displayPrice: '€19', price: 19, currency: 'EUR', stripePriceId: essentialId, isPlanBased: false },
+    { key: 'premium_complete',  label: 'Premium Itinerary',           displayPrice: '€29', price: 29, currency: 'EUR', stripePriceId: completeId,  isPlanBased: false },
   ];
 
   const options = tiers.filter(t => t.stripePriceId);
-  return { options };
+  return { options, source: 'default' };
 }
 
 // ── Migration status (admin diagnostic) ──────────────────────────────────────
@@ -310,6 +359,7 @@ async function handleCreate(pool, body, ctx) {
     isPrivate = false,
     stripePriceId = null,
     pricingKey = null,
+    pricingPlanId = null,
     coverImage = '',
     content = {},
     status = 'draft',
@@ -339,7 +389,7 @@ async function handleCreate(pool, body, ctx) {
   const { rows } = await pool.query(
     `INSERT INTO "Itinerary"
        (id, title, subtitle, slug, destination, country, region, "durationDays",
-        "accessType", price, "stripePriceId", "pricingKey", "coverImage", description,
+        "accessType", price, "stripePriceId", "pricingKey", pricing_plan_id, "coverImage", description,
         type, "isPrivate", "isCollection", status, "isPublished", content, "schemaVersion", "updatedAt",
         creator_id, variant, "parentId")
      VALUES (gen_random_uuid()::text,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,$16,$17,$18,1,NOW(),$19,$20,$21)
@@ -347,6 +397,7 @@ async function handleCreate(pool, body, ctx) {
     [
       title, subtitle, slug, destination, country, region, durationDays,
       finalAccessType, 0, stripePriceId || null, pricingKey || null,
+      pricingPlanId || null,
       derivedCoverImage,
       finalContent.summary?.shortDescription || '',
       finalType, finalPrivate,
@@ -366,7 +417,7 @@ async function handleUpdate(pool, id, body, ctx) {
 
   const {
     title, subtitle, slug, destination, country, region, durationDays,
-    accessType, stripePriceId, pricingKey, coverImage, content, status,
+    accessType, stripePriceId, pricingKey, pricingPlanId, coverImage, content, status,
     type, isPrivate, isCollection, variant, parentId,
   } = body;
 
@@ -402,28 +453,29 @@ async function handleUpdate(pool, id, body, ctx) {
 
   const { rows } = await pool.query(
     `UPDATE "Itinerary" SET
-       title           = COALESCE($2, title),
-       subtitle        = COALESCE($3, subtitle),
-       slug            = COALESCE($4, slug),
-       destination     = COALESCE(NULLIF($5,''), destination),
-       country         = COALESCE(NULLIF($6,''), country),
-       region          = COALESCE(NULLIF($7,''), region),
-       "durationDays"  = COALESCE($8, "durationDays"),
-       "accessType"    = COALESCE($9, "accessType"),
-       "stripePriceId" = $10,
-       "pricingKey"    = $11,
-       "coverImage"    = COALESCE(NULLIF($12,''), "coverImage"),
-       description     = COALESCE(NULLIF($13,''), description),
-       status          = COALESCE($14, status),
-       "isPublished"   = $15,
-       content         = $16::jsonb,
-       type            = COALESCE($17, type),
-       "isPrivate"     = COALESCE($18::boolean, "isPrivate"),
-       "isCollection"  = COALESCE($19::boolean, "isCollection"),
-       variant         = $20,
-       "parentId"      = $21,
-       "pdfStatus"     = 'stale',
-       "updatedAt"     = NOW()
+       title             = COALESCE($2, title),
+       subtitle          = COALESCE($3, subtitle),
+       slug              = COALESCE($4, slug),
+       destination       = COALESCE(NULLIF($5,''), destination),
+       country           = COALESCE(NULLIF($6,''), country),
+       region            = COALESCE(NULLIF($7,''), region),
+       "durationDays"    = COALESCE($8, "durationDays"),
+       "accessType"      = COALESCE($9, "accessType"),
+       "stripePriceId"   = $10,
+       "pricingKey"      = $11,
+       pricing_plan_id   = $22,
+       "coverImage"      = COALESCE(NULLIF($12,''), "coverImage"),
+       description       = COALESCE(NULLIF($13,''), description),
+       status            = COALESCE($14, status),
+       "isPublished"     = $15,
+       content           = $16::jsonb,
+       type              = COALESCE($17, type),
+       "isPrivate"       = COALESCE($18::boolean, "isPrivate"),
+       "isCollection"    = COALESCE($19::boolean, "isCollection"),
+       variant           = $20,
+       "parentId"        = $21,
+       "pdfStatus"       = 'stale',
+       "updatedAt"       = NOW()
      WHERE id = $1
      RETURNING *`,
     [
@@ -448,6 +500,7 @@ async function handleUpdate(pool, id, body, ctx) {
       typeof isCollection === 'boolean' ? isCollection : null,
       finalVariant,
       parentId || null,
+      pricingPlanId ?? null,
     ]
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
@@ -626,7 +679,7 @@ async function handleSetStatus(pool, id, status) {
 //   - All other premium itineraries get the 'premium_complete' (€29) plan
 // Idempotent: safe to run multiple times.
 async function handleBackfillPricing(pool) {
-  const { options } = handlePricingOptions();
+  const { options } = await handlePricingOptions(pool, null, null);
   const completeOpt  = options.find(o => o.key === 'premium_complete');
   const essentialOpt = options.find(o => o.key === 'premium_essential');
   const shortOpt     = options.find(o => o.key === 'premium_short');
