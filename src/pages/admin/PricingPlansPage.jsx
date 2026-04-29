@@ -322,7 +322,8 @@ export default function PricingPlansPage() {
     setSaving(true);
     try {
       const token  = await getToken();
-      const isEdit = editing && editing !== 'new';
+      // Presets have no id — treat them as creates even though editing !== 'new'
+      const isEdit = editing && editing !== 'new' && !!editing.id;
       const qs     = isEdit ? `&id=${editing.id}` : '';
       const action = isEdit ? 'update' : 'create';
 
@@ -446,20 +447,64 @@ export default function PricingPlansPage() {
           <p style={{ fontSize: '13px', color: '#C0392B' }}>{error}</p>
         </div>
       ) : plans.length === 0 ? (
-        <div style={{ ...card, padding: '56px 32px', textAlign: 'center' }}>
+        <div style={{ ...card, padding: '48px 32px', textAlign: 'center' }}>
           <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F4F1EC',
             display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
             <DollarSign size={20} color="#B5AA99" />
           </div>
-          <p style={{ fontSize: '15px', fontWeight: '600', color: '#1C1A16', marginBottom: '8px' }}>
-            No pricing plans yet
+          <p style={{ fontSize: '16px', fontWeight: '700', color: '#1C1A16', marginBottom: '8px',
+            fontFamily: "'Playfair Display', Georgia, serif" }}>
+            Set your pricing to start receiving requests
           </p>
-          <p style={{ fontSize: '13px', color: '#B5AA99', marginBottom: '24px', maxWidth: '320px', margin: '0 auto 24px' }}>
-            Add your first pricing option or use the default HiddenAtlas pricing.
+          <p style={{ fontSize: '13px', color: '#8C8070', maxWidth: '340px', margin: '0 auto 24px' }}>
+            Define how much you charge for your trips. You can offer fixed prices or custom quotes.
           </p>
-          <button onClick={() => setEditing('new')} style={btnPrimary}>
-            <Plus size={13} /> Add your first plan
+          <button onClick={() => setEditing('new')} style={{ ...btnPrimary, margin: '0 auto' }}>
+            <Plus size={13} /> Create your first pricing plan
           </button>
+
+          {/* Suggested quick actions */}
+          <div style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid #F4F1EC' }}>
+            <p style={{ fontSize: '11px', fontWeight: '700', color: '#B5AA99', textTransform: 'uppercase',
+              letterSpacing: '0.5px', marginBottom: '14px' }}>
+              Suggested setup
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
+              <button
+                onClick={() => setEditing({
+                  _preset: true,
+                  name: 'Couple Planning', planType: 'custom', audienceLabel: 'Couple',
+                  travelerMin: 1, travelerMax: 2, priceCents: 34900, currency: 'EUR',
+                  isActive: true, isCustomQuote: false, sortOrder: 0, description: '',
+                })}
+                style={{ ...btnSecondary, fontSize: '12px' }}
+              >
+                Couple Plan — €349
+              </button>
+              <button
+                onClick={() => setEditing({
+                  _preset: true,
+                  name: 'Family Planning', planType: 'custom', audienceLabel: 'Family',
+                  travelerMin: 3, travelerMax: 8, priceCents: 54900, currency: 'EUR',
+                  isActive: true, isCustomQuote: false, sortOrder: 1, description: '',
+                })}
+                style={{ ...btnSecondary, fontSize: '12px' }}
+              >
+                Family Plan — €549
+              </button>
+              <button
+                onClick={() => setEditing({
+                  _preset: true,
+                  name: 'Custom Trip', planType: 'custom', audienceLabel: '',
+                  travelerMin: '', travelerMax: '', priceCents: null, currency: 'EUR',
+                  isActive: true, isCustomQuote: true, sortOrder: 2, description: '',
+                })}
+                style={{ ...btnSecondary, fontSize: '12px' }}
+              >
+                Custom Quote
+              </button>
+            </div>
+          </div>
         </div>
       ) : isMobile ? (
         <MobileList
