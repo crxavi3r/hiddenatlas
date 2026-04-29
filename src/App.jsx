@@ -38,6 +38,7 @@ import CreatorsPage from './pages/admin/CreatorsPage';
 import CreatorEditorPage from './pages/admin/CreatorEditorPage';
 import CreatorProfilePage from './pages/CreatorProfilePage';
 import BecomeDesignerPage from './pages/BecomeDesignerPage';
+import DesignerPricingPage from './pages/DesignerPricingPage';
 import DesignerApplicationsPage from './pages/admin/DesignerApplicationsPage';
 import PricingPlansPage from './pages/admin/PricingPlansPage';
 
@@ -124,6 +125,7 @@ export default function App() {
               required owner/admin auth, preventing public access to published routes.
               ItineraryDetailPage handles both public and preview (preview=true) flows. */}
           <Route path="/itinerary/custom/:slug" element={<LegacyCustomRedirect />} />
+          <Route path="/designer/:slug/pricing" element={<DesignerPricingPage />} />
           <Route path="/become-a-designer" element={<BecomeDesignerPage />} />
           <Route path="/sign-in/*" element={<SignInPage />} />
           <Route path="/sign-up/*" element={<SignUpPage />} />

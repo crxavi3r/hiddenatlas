@@ -129,13 +129,6 @@ function MobilePricingBlock({ tiers }) {
         One-time itinerary fee · Not per person · No booking commissions
       </p>
 
-      <a href="/pricing" style={{
-        display: 'inline-flex', alignItems: 'center', gap: '4px',
-        marginTop: '12px', fontSize: '12px', fontWeight: '600',
-        color: '#C9A96E', textDecoration: 'none', letterSpacing: '0.3px',
-      }}>
-        View full pricing details <ArrowRight size={11} />
-      </a>
     </div>
   );
 }
@@ -1221,16 +1214,9 @@ export default function CustomPlanningPage() {
                   <PricingTierList dark tiers={displayTiers} />
                 </div>
 
-                <p style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.28)', lineHeight: '1.6', marginBottom: '12px' }}>
+                <p style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.28)', lineHeight: '1.6' }}>
                   One-time itinerary fee · Not per person · No booking commissions
                 </p>
-                <a href="/pricing" style={{
-                  fontSize: '13px', color: '#C9A96E',
-                  display: 'flex', alignItems: 'center', gap: '4px',
-                  textDecoration: 'none', fontWeight: '500',
-                }}>
-                  Full pricing details <ArrowRight size={12} />
-                </a>
               </div>
 
               {/* What happens next */}
