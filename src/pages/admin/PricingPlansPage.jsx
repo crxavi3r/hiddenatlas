@@ -97,13 +97,15 @@ function PlanModal({ plan, onSave, onClose, saving }) {
   );
   const [errors, setErrors] = useState({});
 
-  // Clear field error on change
   const set = (k, v) => {
     setForm(f => ({ ...f, [k]: v }));
     setErrors(e => { const n = { ...e }; delete n[k]; return n; });
   };
 
   const uiPlanType = toUiPlanType(form.planType, form.isCustomQuote);
+  const isDigital  = uiPlanType === 'digital';
+  const isCustom   = uiPlanType === 'custom';
+  const isQuote    = uiPlanType === 'custom_quote';
 
   function handleUiPlanTypeChange(val) {
     if (val === 'custom_quote') {
@@ -111,6 +113,7 @@ function PlanModal({ plan, onSave, onClose, saving }) {
       setErrors(e => { const n = { ...e }; delete n.priceEuros; return n; });
     } else if (val === 'digital') {
       setForm(f => ({ ...f, planType: 'digital', isCustomQuote: false }));
+      setErrors(e => { const n = { ...e }; delete n.audienceLabel; delete n.travelerMin; delete n.travelerMax; return n; });
     } else {
       setForm(f => ({ ...f, planType: 'custom', isCustomQuote: false }));
     }
@@ -119,14 +122,16 @@ function PlanModal({ plan, onSave, onClose, saving }) {
   function validate() {
     const errs = {};
     if (!form.name.trim()) errs.name = 'Plan name is required';
-    if (!form.isCustomQuote) {
+    // Price required for digital and custom, not for custom_quote
+    if (!isQuote) {
       if (form.priceEuros === '' || form.priceEuros == null) {
         errs.priceEuros = 'Price is required';
       } else if (Number(form.priceEuros) <= 0) {
         errs.priceEuros = 'Price must be greater than 0';
       }
     }
-    if (form.travelerMin !== '' && form.travelerMax !== '') {
+    // Traveller range only validated when visible (not digital)
+    if (!isDigital && form.travelerMin !== '' && form.travelerMax !== '') {
       if (Number(form.travelerMin) > Number(form.travelerMax)) {
         errs.travelerMax = 'Max must be ≥ min';
       }
@@ -137,24 +142,31 @@ function PlanModal({ plan, onSave, onClose, saving }) {
   function handleSaveClick() {
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+
     const { priceEuros, ...rest } = form;
-    const priceCents = (!form.isCustomQuote && priceEuros !== '' && priceEuros != null)
+    const priceCents = !isQuote && priceEuros !== '' && priceEuros != null
       ? Math.round(Number(priceEuros) * 100)
       : null;
-    onSave({ ...rest, priceCents });
+
+    // Null out fields that don't apply to this plan type so the DB stays clean
+    const payload = { ...rest, priceCents };
+    if (isDigital) {
+      payload.audienceLabel = null;
+      payload.travelerMin   = null;
+      payload.travelerMax   = null;
+    }
+
+    onSave(payload);
   }
 
   // Preview derived values
-  const previewRange          = travelerRange(form.travelerMin, form.travelerMax);
-  const previewFormattedPrice = !form.isCustomQuote && form.priceEuros !== ''
+  const previewRange          = !isDigital ? travelerRange(form.travelerMin, form.travelerMax) : null;
+  const previewFormattedPrice = !isQuote && form.priceEuros !== ''
     ? formatCurrency(form.priceEuros, form.currency)
     : null;
-  const hasPreview = !!(form.name || form.audienceLabel || previewRange);
+  const hasPreview = !!form.name;
 
-  // Reusable grid layout constant
-  const grid2 = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' };
-
-  // Input border highlight on error
+  const grid2     = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' };
   const errBorder = key => ({ borderColor: errors[key] ? '#C0392B' : '#E8E3DA' });
 
   return (
@@ -182,7 +194,7 @@ function PlanModal({ plan, onSave, onClose, saving }) {
               style={{ ...inputStyle, ...errBorder('name') }}
               value={form.name}
               onChange={e => set('name', e.target.value)}
-              placeholder="e.g. Couple & Duo Planning"
+              placeholder="e.g. Essential Itinerary"
             />
           </Field>
 
@@ -197,8 +209,8 @@ function PlanModal({ plan, onSave, onClose, saving }) {
             />
           </Field>
 
-          {/* Plan type / Audience label */}
-          <div style={grid2}>
+          {/* Plan type — full width for Premium Itinerary (no audience label partner) */}
+          {isDigital ? (
             <Field label="Plan type">
               <select
                 style={{ ...inputStyle, cursor: 'pointer' }}
@@ -210,48 +222,65 @@ function PlanModal({ plan, onSave, onClose, saving }) {
                 <option value="custom_quote">Custom Quote</option>
               </select>
             </Field>
-            <Field label="Audience label" hint="e.g. Couple, Family, Group">
-              <input
-                style={inputStyle}
-                value={form.audienceLabel}
-                onChange={e => set('audienceLabel', e.target.value)}
-                placeholder="e.g. Couple"
-              />
-            </Field>
-          </div>
+          ) : (
+            /* Custom / Custom Quote: plan type paired with audience label */
+            <div style={grid2}>
+              <Field label="Plan type">
+                <select
+                  style={{ ...inputStyle, cursor: 'pointer' }}
+                  value={uiPlanType}
+                  onChange={e => handleUiPlanTypeChange(e.target.value)}
+                >
+                  <option value="digital">Premium Itinerary</option>
+                  <option value="custom">Custom Trip Planning</option>
+                  <option value="custom_quote">Custom Quote</option>
+                </select>
+              </Field>
+              <Field label="Audience label" hint="e.g. Couple, Family, Group">
+                <input
+                  style={inputStyle}
+                  value={form.audienceLabel}
+                  onChange={e => set('audienceLabel', e.target.value)}
+                  placeholder="e.g. Couple"
+                />
+              </Field>
+            </div>
+          )}
 
           {/* Custom quote notice */}
-          {form.isCustomQuote && (
+          {isQuote && (
             <div style={{ padding: '10px 14px', background: '#FEF9F0', border: '1px solid #F5E4C3',
               borderRadius: '6px', fontSize: '12px', color: '#92400E', lineHeight: '1.5' }}>
               The client will contact you directly for a custom price. No Stripe checkout is created.
             </div>
           )}
 
-          {/* Min / Max travellers */}
-          <div style={grid2}>
-            <Field label="Min travellers">
-              <input
-                style={inputStyle}
-                type="number" min="1"
-                value={form.travelerMin}
-                onChange={e => set('travelerMin', e.target.value ? Number(e.target.value) : '')}
-                placeholder="1"
-              />
-            </Field>
-            <Field label="Max travellers" hint="Leave empty for no limit" error={errors.travelerMax}>
-              <input
-                style={{ ...inputStyle, ...errBorder('travelerMax') }}
-                type="number" min="1"
-                value={form.travelerMax}
-                onChange={e => set('travelerMax', e.target.value ? Number(e.target.value) : '')}
-                placeholder="e.g. 12"
-              />
-            </Field>
-          </div>
+          {/* Min / Max travellers — only for Custom Trip Planning and Custom Quote */}
+          {!isDigital && (
+            <div style={grid2}>
+              <Field label="Min travellers">
+                <input
+                  style={inputStyle}
+                  type="number" min="1"
+                  value={form.travelerMin}
+                  onChange={e => set('travelerMin', e.target.value ? Number(e.target.value) : '')}
+                  placeholder="1"
+                />
+              </Field>
+              <Field label="Max travellers" hint="Leave empty for no limit" error={errors.travelerMax}>
+                <input
+                  style={{ ...inputStyle, ...errBorder('travelerMax') }}
+                  type="number" min="1"
+                  value={form.travelerMax}
+                  onChange={e => set('travelerMax', e.target.value ? Number(e.target.value) : '')}
+                  placeholder="e.g. 12"
+                />
+              </Field>
+            </div>
+          )}
 
-          {/* Price / Currency */}
-          {!form.isCustomQuote && (
+          {/* Price / Currency — hidden for Custom Quote */}
+          {!isQuote && (
             <div style={grid2}>
               <Field label="Price *" hint="Enter the price in euros. Example: 349 for €349." error={errors.priceEuros}>
                 <input
@@ -307,32 +336,46 @@ function PlanModal({ plan, onSave, onClose, saving }) {
               </p>
               <div style={{ padding: '18px 20px', background: '#FAFAF8',
                 border: '1px solid #E8E3DA', borderRadius: '8px' }}>
-                {form.audienceLabel && (
+
+                {/* Eyebrow — fixed label for digital/quote, audience label for custom */}
+                {isDigital && (
+                  <p style={{ fontSize: '10.5px', fontWeight: '700', color: '#B5AA99',
+                    textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '5px' }}>
+                    Premium Itinerary
+                  </p>
+                )}
+                {isQuote && (
+                  <p style={{ fontSize: '10.5px', fontWeight: '700', color: '#B5AA99',
+                    textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '5px' }}>
+                    Custom Quote
+                  </p>
+                )}
+                {isCustom && form.audienceLabel && (
                   <p style={{ fontSize: '10.5px', fontWeight: '700', color: '#B5AA99',
                     textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '5px' }}>
                     {form.audienceLabel}
                   </p>
                 )}
+
+                {/* Plan name */}
                 <p style={{ fontSize: '15px', fontWeight: '700', color: '#1C1A16', margin: 0,
                   fontFamily: "'Playfair Display', Georgia, serif" }}>
-                  {form.name || 'Plan name'}
+                  {form.name}
                 </p>
+
+                {/* Traveller range */}
                 {previewRange && (
                   <p style={{ fontSize: '12.5px', color: '#8C8070', marginTop: '4px', marginBottom: 0 }}>
                     {previewRange}
                   </p>
                 )}
+
+                {/* Price or contact line */}
                 <div style={{ marginTop: '10px' }}>
-                  {form.isCustomQuote ? (
-                    <>
-                      <p style={{ fontSize: '14px', fontWeight: '600', color: '#8C8070',
-                        fontStyle: 'italic', margin: 0 }}>
-                        Custom quote
-                      </p>
-                      <p style={{ fontSize: '11.5px', color: '#B5AA99', marginTop: '3px', marginBottom: 0 }}>
-                        Client contacts you
-                      </p>
-                    </>
+                  {isQuote ? (
+                    <p style={{ fontSize: '12.5px', color: '#8C8070', margin: 0 }}>
+                      Client contacts you
+                    </p>
                   ) : (
                     previewFormattedPrice && (
                       <p style={{ fontSize: '20px', fontWeight: '700', color: '#C9A96E', margin: 0,
