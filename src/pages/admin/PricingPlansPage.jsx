@@ -28,9 +28,16 @@ const labelStyle = { fontSize: '11.5px', fontWeight: '600', color: '#4A433A', ma
 
 const EMPTY_FORM = {
   name: '', description: '', planType: 'custom', audienceLabel: '',
-  travelerMin: '', travelerMax: '', priceCents: '', currency: 'EUR',
+  travelerMin: '', travelerMax: '', priceEuros: '', currency: 'EUR',
   isActive: true, isCustomQuote: false, sortOrder: 0,
 };
+
+// Maps the three UI-facing plan type options to/from planType + isCustomQuote
+function toUiPlanType(planType, isCustomQuote) {
+  if (isCustomQuote) return 'custom_quote';
+  if (planType === 'digital') return 'digital';
+  return 'custom';
+}
 
 function Field({ label, hint, children }) {
   return (
@@ -45,40 +52,72 @@ function Field({ label, hint, children }) {
 function PlanModal({ plan, onSave, onClose, saving }) {
   const [form, setForm] = useState(plan
     ? {
-        name:         plan.name,
-        description:  plan.description || '',
-        planType:     plan.planType,
+        name:          plan.name,
+        description:   plan.description || '',
+        planType:      plan.planType,
         audienceLabel: plan.audienceLabel || '',
-        travelerMin:  plan.travelerMin ?? '',
-        travelerMax:  plan.travelerMax ?? '',
-        priceCents:   plan.priceCents ?? '',
-        currency:     plan.currency || 'EUR',
-        isActive:     plan.isActive,
+        travelerMin:   plan.travelerMin ?? '',
+        travelerMax:   plan.travelerMax ?? '',
+        priceEuros:    plan.priceCents != null ? plan.priceCents / 100 : '',
+        currency:      plan.currency || 'EUR',
+        isActive:      plan.isActive,
         isCustomQuote: plan.isCustomQuote,
-        sortOrder:    plan.sortOrder ?? 0,
+        sortOrder:     plan.sortOrder ?? 0,
       }
     : { ...EMPTY_FORM }
   );
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const displayPrice = form.isCustomQuote
+  // Derived: which option is showing in the Plan type dropdown
+  const uiPlanType = toUiPlanType(form.planType, form.isCustomQuote);
+
+  function handleUiPlanTypeChange(val) {
+    if (val === 'custom_quote') {
+      setForm(f => ({ ...f, planType: 'custom', isCustomQuote: true }));
+    } else if (val === 'digital') {
+      setForm(f => ({ ...f, planType: 'digital', isCustomQuote: false }));
+    } else {
+      setForm(f => ({ ...f, planType: 'custom', isCustomQuote: false }));
+    }
+  }
+
+  // Convert euros → cents before passing up to the parent save handler
+  // Custom quotes always send priceCents: null regardless of what was typed
+  function handleSaveClick() {
+    const { priceEuros, ...rest } = form;
+    const priceCents = (!form.isCustomQuote && priceEuros !== '' && priceEuros != null)
+      ? Math.round(Number(priceEuros) * 100)
+      : null;
+    onSave({ ...rest, priceCents });
+  }
+
+  // Preview values
+  const previewPrice = form.isCustomQuote
     ? 'Custom quote'
-    : form.priceCents
-      ? `€${(Number(form.priceCents) / 100).toFixed(Number(form.priceCents) % 100 === 0 ? 0 : 2)}`
-      : '';
+    : form.priceEuros !== ''
+      ? `€${Number(form.priceEuros) % 1 === 0 ? Number(form.priceEuros).toFixed(0) : Number(form.priceEuros).toFixed(2)}`
+      : '—';
+
+  const previewRange = form.travelerMin !== '' && form.travelerMax !== ''
+    ? `${form.travelerMin}–${form.travelerMax} travellers`
+    : form.travelerMin !== ''
+      ? `${form.travelerMin}+ travellers`
+      : null;
+
+  const hasPreview = form.name || form.audienceLabel || previewRange || previewPrice !== '—';
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 600,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
       <div style={{ ...card, width: '100%', maxWidth: '520px', maxHeight: '90vh', overflow: 'auto' }}>
 
-        <div style={{ padding: '20px 20px 0', borderBottom: '1px solid #F4F1EC', marginBottom: '0' }}>
+        <div style={{ padding: '20px 20px 0', borderBottom: '1px solid #F4F1EC' }}>
           <p style={{ fontSize: '15px', fontWeight: '700', color: '#1C1A16', fontFamily: "'Playfair Display', Georgia, serif" }}>
             {plan ? 'Edit Pricing Plan' : 'New Pricing Plan'}
           </p>
           <p style={{ fontSize: '12px', color: '#8C8070', marginTop: '4px', paddingBottom: '16px' }}>
-            {plan ? 'Update this pricing option.' : 'Add a new pricing option for your custom trips.'}
+            {plan ? 'Update this pricing option.' : 'Add a new pricing option for your trips.'}
           </p>
         </div>
 
@@ -100,9 +139,10 @@ function PlanModal({ plan, onSave, onClose, saving }) {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <Field label="Plan type">
-              <select style={{ ...inputStyle, cursor: 'pointer' }} value={form.planType} onChange={e => set('planType', e.target.value)}>
+              <select style={{ ...inputStyle, cursor: 'pointer' }} value={uiPlanType} onChange={e => handleUiPlanTypeChange(e.target.value)}>
+                <option value="digital">Premium Itinerary</option>
                 <option value="custom">Custom Trip Planning</option>
-                <option value="digital">Digital Itinerary</option>
+                <option value="custom_quote">Custom Quote</option>
               </select>
             </Field>
             <Field label="Audience label" hint="e.g. Couple, Family, Group">
@@ -110,6 +150,13 @@ function PlanModal({ plan, onSave, onClose, saving }) {
                 placeholder="e.g. Couple" />
             </Field>
           </div>
+
+          {form.isCustomQuote && (
+            <div style={{ padding: '10px 14px', background: '#FEF9F0', border: '1px solid #F5E4C3',
+              borderRadius: '6px', fontSize: '12px', color: '#92400E' }}>
+              The client will contact you directly for a custom price. No Stripe checkout is created.
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <Field label="Min travellers">
@@ -124,30 +171,12 @@ function PlanModal({ plan, onSave, onClose, saving }) {
             </Field>
           </div>
 
-          <div style={{ padding: '12px', background: '#F9F6F2', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <input
-              type="checkbox"
-              id="isCustomQuote"
-              checked={form.isCustomQuote}
-              onChange={e => set('isCustomQuote', e.target.checked)}
-              style={{ width: '15px', height: '15px', cursor: 'pointer' }}
-            />
-            <div>
-              <label htmlFor="isCustomQuote" style={{ ...labelStyle, marginBottom: 0, cursor: 'pointer' }}>
-                Custom quote (no fixed price)
-              </label>
-              <p style={{ fontSize: '11px', color: '#9A8E80', marginTop: '2px' }}>
-                Client contacts you for a custom price. No Stripe checkout.
-              </p>
-            </div>
-          </div>
-
           {!form.isCustomQuote && (
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
-              <Field label="Price (in cents) *" hint="e.g. 34900 for €349">
-                <input style={inputStyle} type="number" min="0" value={form.priceCents}
-                  onChange={e => set('priceCents', e.target.value ? Number(e.target.value) : '')}
-                  placeholder="34900" />
+              <Field label="Price *" hint="Enter the final price in euros. Example: 349 for €349.">
+                <input style={inputStyle} type="number" min="0" step="any" value={form.priceEuros}
+                  onChange={e => set('priceEuros', e.target.value)}
+                  placeholder="349" />
               </Field>
               <Field label="Currency">
                 <select style={{ ...inputStyle, cursor: 'pointer' }} value={form.currency} onChange={e => set('currency', e.target.value)}>
@@ -156,15 +185,6 @@ function PlanModal({ plan, onSave, onClose, saving }) {
                   <option value="GBP">GBP</option>
                 </select>
               </Field>
-            </div>
-          )}
-
-          {displayPrice && (
-            <div style={{ padding: '10px 14px', background: '#EFF6F5', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <DollarSign size={14} color="#1B6B65" />
-              <span style={{ fontSize: '13px', color: '#1B6B65', fontWeight: '600' }}>
-                Display price: {displayPrice}
-              </span>
             </div>
           )}
 
@@ -182,12 +202,48 @@ function PlanModal({ plan, onSave, onClose, saving }) {
             </Field>
           </div>
 
+          {/* Client preview */}
+          {hasPreview && (
+            <div style={{ borderTop: '1px solid #F4F1EC', paddingTop: '14px' }}>
+              <p style={{ fontSize: '11px', fontWeight: '700', color: '#B5AA99', textTransform: 'uppercase',
+                letterSpacing: '0.5px', marginBottom: '10px' }}>
+                Client preview
+              </p>
+              <div style={{ padding: '14px 16px', background: '#FAFAF8', border: '1px solid #E8E3DA', borderRadius: '8px' }}>
+                {form.audienceLabel && (
+                  <p style={{ fontSize: '11px', fontWeight: '600', color: '#B5AA99', textTransform: 'uppercase',
+                    letterSpacing: '0.5px', marginBottom: '4px' }}>
+                    {form.audienceLabel}
+                  </p>
+                )}
+                <p style={{ fontSize: '14px', fontWeight: '700', color: '#1C1A16',
+                  fontFamily: "'Playfair Display', Georgia, serif", marginBottom: '2px' }}>
+                  {form.name || 'Plan name'}
+                </p>
+                {previewRange && (
+                  <p style={{ fontSize: '12px', color: '#8C8070', marginBottom: '6px' }}>
+                    {previewRange}
+                  </p>
+                )}
+                <p style={{
+                  fontSize: '15px', fontWeight: '700',
+                  color: form.isCustomQuote ? '#8C8070' : '#C9A96E',
+                  fontFamily: form.isCustomQuote ? 'inherit' : "'Playfair Display', Georgia, serif",
+                  fontStyle: form.isCustomQuote ? 'italic' : 'normal',
+                  marginTop: previewRange ? 0 : '6px',
+                }}>
+                  {previewPrice}
+                </p>
+              </div>
+            </div>
+          )}
+
         </div>
 
         <div style={{ padding: '16px 20px', borderTop: '1px solid #F4F1EC', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={btnSecondary} disabled={saving}>Cancel</button>
           <button
-            onClick={() => onSave(form)}
+            onClick={handleSaveClick}
             style={{ ...btnPrimary, opacity: saving ? 0.7 : 1 }}
             disabled={saving}
           >
@@ -199,8 +255,21 @@ function PlanModal({ plan, onSave, onClose, saving }) {
   );
 }
 
+// Human-readable type label for table / mobile list
+function planTypeLabel(p) {
+  if (p.isCustomQuote) return 'Custom Quote';
+  if (p.planType === 'digital') return 'Premium Itinerary';
+  return 'Custom Planning';
+}
+
+function planTypeBadgeColors(p) {
+  if (p.isCustomQuote) return { background: '#FEF9F0', color: '#92400E' };
+  if (p.planType === 'digital') return { background: '#EEF2FE', color: '#3B5BD5' };
+  return { background: '#F4F1EC', color: '#6B6156' };
+}
+
 export default function PricingPlansPage() {
-  const { isAdmin, isDesigner, creatorId, loading: ctxLoading } = useUserCtx();
+  const { isAdmin, isDesigner, loading: ctxLoading } = useUserCtx();
   const { getToken } = useAuth();
   const isMobile = useIsMobile();
 
@@ -428,10 +497,8 @@ export default function PricingPlansPage() {
                     </td>
                     <td style={td}>
                       <span style={{ fontSize: '11px', fontWeight: '600', padding: '2px 7px', borderRadius: '8px',
-                        background: p.planType === 'digital' ? '#EEF2FE' : '#F4F1EC',
-                        color: p.planType === 'digital' ? '#3B5BD5' : '#6B6156',
-                        textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                        {p.planType}
+                        textTransform: 'uppercase', letterSpacing: '0.4px', ...planTypeBadgeColors(p) }}>
+                        {planTypeLabel(p)}
                       </span>
                     </td>
                     <td style={{ ...td, color: '#4A433A' }}>{p.audienceLabel || '—'}</td>
