@@ -150,6 +150,8 @@ function PlanModal({ plan, onSave, onClose, saving }) {
 
     // Null out fields that don't apply to this plan type so the DB stays clean
     const payload = { ...rest, priceCents };
+    payload.travelerMin = payload.travelerMin === '' || payload.travelerMin == null ? null : Number(payload.travelerMin);
+    payload.travelerMax = payload.travelerMax === '' || payload.travelerMax == null ? null : Number(payload.travelerMax);
     if (isDigital) {
       payload.audienceLabel = null;
       payload.travelerMin   = null;
