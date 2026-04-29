@@ -10,6 +10,7 @@ import { useIsMobile } from '../../hooks/useIsMobile';
 import { resolveCoverImage } from '../../lib/resolveCoverImage';
 import { resolveAssetIdentity } from '../../lib/resolveAssetIdentity';
 import { resolveGalleryImages, resolveDayImages, resolveResearchImages } from '../../lib/resolveItineraryImages';
+import PlanModal from '../../components/admin/PlanModal.jsx';
 
 // ── Shared style tokens ───────────────────────────────────────────────────────
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
@@ -2045,7 +2046,7 @@ export default function ItineraryCMSEditorPage() {
         </div>
 
         {/* ── Tab panels ── */}
-        {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} creators={allCreators} isAdmin={isAdmin} myCreatorId={myCreatorId} dayCount={(form.content?.days || []).length} currentId={savedId.current || (isNew ? null : id)} isNew={isNew} hasSavedId={!!savedId.current} slugOverride={slugOverride} onSlugOverride={handleSlugOverride} />}
+        {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} setPricingOptions={setPricingOptions} creators={allCreators} isAdmin={isAdmin} myCreatorId={myCreatorId} dayCount={(form.content?.days || []).length} currentId={savedId.current || (isNew ? null : id)} isNew={isNew} hasSavedId={!!savedId.current} slugOverride={slugOverride} onSlugOverride={handleSlugOverride} />}
         {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} onCoverImageChange={handleHeroCoverImage} />}
         {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} dayImages={dayImages} durationDays={form.durationDays} />}
         {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} />}
@@ -2391,8 +2392,49 @@ function generateSEO(form) {
 }
 
 // ── Basics Tab ────────────────────────────────────────────────────────────────
-function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators = [], isAdmin = false, myCreatorId = null, dayCount = 0, currentId = null, isNew = false, hasSavedId = false, slugOverride = false, onSlugOverride }) {
+function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], setPricingOptions, creators = [], isAdmin = false, myCreatorId = null, dayCount = 0, currentId = null, isNew = false, hasSavedId = false, slugOverride = false, onSlugOverride }) {
   const { getToken } = useAuth();
+  const [newPlanOpen,   setNewPlanOpen]   = useState(false);
+  const [savingNewPlan, setSavingNewPlan] = useState(false);
+
+  async function handleCreatePlan(formData) {
+    setSavingNewPlan(true);
+    try {
+      const token = await getToken();
+      const designerUserId = isAdmin && form.creatorId
+        ? (creators.find(c => c.id === form.creatorId)?.userId || null)
+        : null;
+      const res = await fetch('/api/pricing-plans?action=create', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...formData, ...(designerUserId ? { designerUserId } : {}) }),
+      });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      const p = json.plan;
+      const priceEuros = p.priceCents != null ? p.priceCents / 100 : null;
+      const opt = {
+        key:          p.id,
+        label:        p.name,
+        displayPrice: priceEuros != null
+          ? `€${priceEuros % 1 === 0 ? priceEuros.toFixed(0) : priceEuros.toFixed(2)}`
+          : null,
+        price:        priceEuros,
+        currency:     p.currency,
+        stripePriceId: p.stripePriceId,
+        pricingPlanId: p.id,
+        isPlanBased:   true,
+      };
+      if (setPricingOptions) setPricingOptions(prev => [...prev, opt]);
+      setForm(f => ({ ...f, pricingKey: '', stripePriceId: p.stripePriceId || '', pricingPlanId: p.id }));
+      setNewPlanOpen(false);
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setSavingNewPlan(false);
+    }
+  }
+
   function set(field, value) { setForm(f => ({ ...f, [field]: value })); }
   function setSEO(field, value) {
     setForm(f => ({ ...f, content: { ...f.content, seo: { ...(f.content?.seo ?? {}), [field]: value } } }));
@@ -2622,34 +2664,56 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], creators
             (!o.isPlanBased && o.key === form.pricingKey) ||
             o.stripePriceId === form.stripePriceId
           );
+          const newPlanPreset = {
+            planType: 'digital', isCustomQuote: false, isActive: true, sortOrder: 0,
+            name: '', description: '', priceCents: null, currency: 'EUR',
+          };
           return (
             <div style={{ marginTop: '16px' }}>
+              {newPlanOpen && (
+                <PlanModal
+                  plan={newPlanPreset}
+                  onSave={handleCreatePlan}
+                  onClose={() => setNewPlanOpen(false)}
+                  saving={savingNewPlan}
+                />
+              )}
               <Field label="Pricing plan" hint="Required before publishing.">
                 {pricingOptions.length === 0 ? (
-                  <p style={{ fontSize: '13px', color: '#E05353', margin: 0 }}>
-                    No pricing plans available. Set STRIPE_PRICE_PREMIUM_COMPLETE in Vercel env vars or add plans in the Pricing section.
-                  </p>
+                  <div>
+                    <p style={{ fontSize: '13px', color: '#8C8070', margin: '0 0 10px' }}>
+                      Create a Premium pricing plan before publishing this itinerary.
+                    </p>
+                    <button type="button" onClick={() => setNewPlanOpen(true)} style={{ ...btnGhost, fontSize: '12px' }}>
+                      <Plus size={12} /> Create pricing plan
+                    </button>
+                  </div>
                 ) : (
                   <>
-                    <select
-                      value={currentKey}
-                      onChange={e => {
-                        const opt = pricingOptions.find(o => o.key === e.target.value);
-                        if (!opt) {
-                          setForm(f => ({ ...f, pricingKey: '', stripePriceId: '', pricingPlanId: '' }));
-                        } else if (opt.isPlanBased) {
-                          setForm(f => ({ ...f, pricingKey: '', stripePriceId: opt.stripePriceId ?? '', pricingPlanId: opt.pricingPlanId ?? '' }));
-                        } else {
-                          setForm(f => ({ ...f, pricingKey: opt.key ?? '', stripePriceId: opt.stripePriceId ?? '', pricingPlanId: '' }));
-                        }
-                      }}
-                      style={{ ...inputStyle, cursor: 'pointer', maxWidth: '320px' }}
-                    >
-                      <option value="">— select a plan —</option>
-                      {pricingOptions.map(opt => (
-                        <option key={opt.key} value={opt.key}>{opt.label} · {opt.displayPrice}</option>
-                      ))}
-                    </select>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <select
+                        value={currentKey}
+                        onChange={e => {
+                          const opt = pricingOptions.find(o => o.key === e.target.value);
+                          if (!opt) {
+                            setForm(f => ({ ...f, pricingKey: '', stripePriceId: '', pricingPlanId: '' }));
+                          } else if (opt.isPlanBased) {
+                            setForm(f => ({ ...f, pricingKey: '', stripePriceId: opt.stripePriceId ?? '', pricingPlanId: opt.pricingPlanId ?? '' }));
+                          } else {
+                            setForm(f => ({ ...f, pricingKey: opt.key ?? '', stripePriceId: opt.stripePriceId ?? '', pricingPlanId: '' }));
+                          }
+                        }}
+                        style={{ ...inputStyle, cursor: 'pointer', maxWidth: '280px' }}
+                      >
+                        <option value="">— select a plan —</option>
+                        {pricingOptions.map(opt => (
+                          <option key={opt.key} value={opt.key}>{opt.label} · {opt.displayPrice}</option>
+                        ))}
+                      </select>
+                      <button type="button" onClick={() => setNewPlanOpen(true)} style={{ ...btnGhost, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        <Plus size={12} /> New plan
+                      </button>
+                    </div>
                     {isAdmin && !selectedOption && form.stripePriceId && (
                       <p style={{ fontSize: '12px', color: '#C97B2E', margin: '6px 0 0' }}>
                         Stored price ID does not match any configured plan.
