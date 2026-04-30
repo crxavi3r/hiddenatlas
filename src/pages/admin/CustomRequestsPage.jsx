@@ -625,7 +625,7 @@ function ReplyModal({ request, token, onClose }) {
             )}
 
             <p style={{ fontSize: '11px', color: '#B5AA99', marginTop: '8px' }}>
-              Sent from HiddenAtlas &lt;noreply@hiddenatlas.travel&gt;. Your email address will be used as reply-to.
+              Sent from HiddenAtlas &lt;noreply@hiddenatlas.travel&gt;. The client's reply will go to the designer's email address.
             </p>
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '16px', justifyContent: 'flex-end' }}>

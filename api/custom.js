@@ -231,7 +231,7 @@ export default async function handler(req, res) {
     try {
       const emailPayload = {
         from:    FROM,
-        replyTo: [email.trim().toLowerCase()],
+        replyTo: email.trim().toLowerCase(),
         to:      [primaryTo],
         subject: subjectLabel,
         ...(isFallback ? {} : { bcc: [FALLBACK_EMAIL] }),
