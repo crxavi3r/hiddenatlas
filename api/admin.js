@@ -364,12 +364,12 @@ async function _handler(req, res) {
           seo: { metaTitle: title, metaDescription: '' },
         };
 
-        // Insert Itinerary
+        // Insert Itinerary — note: creator_id is snake_case in the DB (renamed via migration)
         const { rows: itinInsert } = await pool.query(
           `INSERT INTO "Itinerary"
              (id, slug, title, subtitle, destination, description, price,
               "durationDays", "coverImage", content,
-              type, status, "userId", "creatorId", "isPrivate", "isPublished", "createdAt")
+              type, status, "userId", creator_id, "isPrivate", "isPublished", "createdAt")
            VALUES
              (gen_random_uuid(), $1, $2, $3, $4, $5, 0,
               $6, '', $7::jsonb,
