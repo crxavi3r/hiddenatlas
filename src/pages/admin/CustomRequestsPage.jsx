@@ -946,10 +946,12 @@ export default function CustomRequestsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Sync failed');
       if (data.ok && (data.synced || data.alreadyPaid)) {
+        // Optimistic update for instant badge change, then reload from DB to confirm
         setAllRows(prev => prev.map(r =>
           r.id === requestId ? { ...r, paymentStatus: 'paid', paidAt: new Date().toISOString() } : r
         ));
         setToast(data.message || 'Payment synced.');
+        load();
       } else {
         setToast(data.message || 'Stripe session not yet paid.');
       }

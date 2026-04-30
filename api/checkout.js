@@ -686,10 +686,12 @@ async function markQuotePaid(pool, requestId, session) {
   // Step 1: atomic UPDATE — only fires when paidAt IS NULL (idempotency guard)
   const result = await pool.query(
     `UPDATE "CustomRequest"
-     SET "paidAt"                  = $1::timestamptz,
-         "quoteAcceptedAt"         = $2::timestamptz,
+     SET "paymentStatus"           = 'paid',
+         "paidAt"                  = $1::timestamptz,
+         "quoteAcceptedAt"         = $2::timestamp,
+         "stripeSessionId"         = $3::text,
          "stripeCheckoutSessionId" = $3::text,
-         status = CASE WHEN status = 'open' THEN 'in_progress' ELSE status END
+         status                    = 'in_progress'
      WHERE id = $4::text AND "paidAt" IS NULL
      RETURNING id, "fullName", email, destination, "designerId"`,
     [nowISO, nowISO, session.id, requestId]

@@ -469,15 +469,20 @@ async function _handler(req, res) {
         // to avoid "inconsistent types deduced for parameter $N" PostgreSQL error
         const { rowCount } = await pool.query(
           `UPDATE "CustomRequest"
-           SET "paidAt"                  = $1::timestamptz,
-               "quoteAcceptedAt"         = $2::timestamptz,
+           SET "paymentStatus"           = 'paid',
+               "paidAt"                  = $1::timestamptz,
+               "quoteAcceptedAt"         = $2::timestamp,
+               "stripeSessionId"         = $3::text,
                "stripeCheckoutSessionId" = $3::text,
-               status = CASE WHEN status = 'open' THEN 'in_progress' ELSE status END
+               status                    = 'in_progress'
            WHERE id = $4::text AND "paidAt" IS NULL`,
           [nowISO, nowISO, stripeSession.id, requestId]
         );
 
-        console.log('[api/admin] sync-payment — marked paid requestId:', requestId, '| rowsUpdated:', rowCount);
+        console.log('[api/admin] sync-payment — requestId:', requestId,
+          '| rowsUpdated:', rowCount,
+          '| sessionId:', stripeSession.id,
+          '| payment_status:', stripeSession.payment_status);
         return res.status(200).json({ ok: true, alreadyPaid: false, synced: rowCount > 0, message: rowCount > 0 ? 'Payment synced successfully' : 'Already up to date' });
       }
 
