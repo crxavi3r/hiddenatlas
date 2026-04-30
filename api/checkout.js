@@ -693,7 +693,8 @@ async function markQuotePaid(pool, requestId, session) {
          "stripeCheckoutSessionId" = $3::text,
          status                    = 'in_progress'
      WHERE id = $4::text AND "paidAt" IS NULL
-     RETURNING id, "fullName", email, destination, "designerId"`,
+     RETURNING id, "fullName", email, destination, "designerId",
+               "userId", "itineraryId", "quoteAmount"`,
     [nowISO, nowISO, session.id, requestId]
   );
   if (!result.rows[0]) return null;
@@ -766,7 +767,37 @@ async function processQuotePayment(pool, session) {
     '| sessionId:', session.id,
     '| amount:', amount);
 
-  const dest      = cr.destination || 'your destination';
+  // ── Create Purchase record ───────────────────────────────────────────────
+  // userId and itineraryId are optional — do not fail if null.
+  // Idempotency: ON CONFLICT ("stripeSessionId") DO NOTHING.
+  try {
+    const grossAmount    = (cr.quoteAmount  ?? 0) / 100;
+    const netAmount      = (session.amount_total ?? 0) / 100;
+    const discountAmount = Math.max(0, grossAmount - netAmount);
+    await pool.query(
+      `INSERT INTO "Purchase"
+         (id, "userId", "itineraryId", "customRequestId", "stripeSessionId", "stripePaymentIntentId",
+          amount, "grossAmount", "netAmount", "discountAmount",
+          "designerUserId", status, "purchasedAt", "createdAt")
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'paid', NOW(), NOW())
+       ON CONFLICT ("stripeSessionId") DO NOTHING`,
+      [
+        cr.userId        || null,
+        cr.itineraryId   || null,
+        cr.id,
+        session.id,
+        session.payment_intent || null,
+        netAmount, grossAmount, netAmount, discountAmount,
+        cr.designerId    || null,
+      ]
+    );
+    console.log('[processQuotePayment] Purchase created — requestId:', requestId, '| sessionId:', session.id);
+  } catch (purchaseErr) {
+    console.error('[processQuotePayment] Purchase INSERT failed (non-fatal):', purchaseErr.message,
+      '| hint: ensure customRequestId column exists on Purchase table');
+  }
+
+  const dest = cr.destination || 'your destination';
 
   // Emails — non-fatal
   if (!process.env.RESEND_API_KEY) return;

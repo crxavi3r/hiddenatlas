@@ -417,7 +417,8 @@ async function _handler(req, res) {
 
         // CustomRequest.id is TEXT — use ::text, never ::uuid
         const { rows: crRows } = await pool.query(
-          `SELECT id, "paidAt", "stripeCheckoutSessionId", "designerId"
+          `SELECT id, "paidAt", "stripeCheckoutSessionId", "designerId",
+                  "userId", "itineraryId", "quoteAmount"
            FROM "CustomRequest" WHERE id = $1::text LIMIT 1`,
           [requestId]
         );
@@ -443,7 +444,11 @@ async function _handler(req, res) {
 
         let stripeSession;
         try {
-          stripeSession = await stripe.checkout.sessions.retrieve(crData.stripeCheckoutSessionId);
+          // Expand total_details.breakdown to get accurate coupon/discount data
+          stripeSession = await stripe.checkout.sessions.retrieve(
+            crData.stripeCheckoutSessionId,
+            { expand: ['total_details.breakdown'] }
+          );
         } catch (err) {
           console.error('[api/admin] sync-payment Stripe retrieve error:', err.message);
           return res.status(502).json({ error: `Stripe error: ${err.message}` });
@@ -483,6 +488,35 @@ async function _handler(req, res) {
           '| rowsUpdated:', rowCount,
           '| sessionId:', stripeSession.id,
           '| payment_status:', stripeSession.payment_status);
+
+        // ── Create Purchase — idempotent, userId/itineraryId optional ────────
+        try {
+          const grossAmount    = (crData.quoteAmount   ?? 0) / 100;
+          const netAmount      = (stripeSession.amount_total ?? 0) / 100;
+          const discountAmount = Math.max(0, grossAmount - netAmount);
+          await pool.query(
+            `INSERT INTO "Purchase"
+               (id, "userId", "itineraryId", "customRequestId", "stripeSessionId", "stripePaymentIntentId",
+                amount, "grossAmount", "netAmount", "discountAmount",
+                "designerUserId", status, "purchasedAt", "createdAt")
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'paid', NOW(), NOW())
+             ON CONFLICT ("stripeSessionId") DO NOTHING`,
+            [
+              crData.userId      || null,
+              crData.itineraryId || null,
+              requestId,
+              stripeSession.id,
+              stripeSession.payment_intent || null,
+              netAmount, grossAmount, netAmount, discountAmount,
+              crData.designerId  || null,
+            ]
+          );
+          console.log('[api/admin] sync-payment — Purchase upserted for requestId:', requestId);
+        } catch (purchaseErr) {
+          console.error('[api/admin] sync-payment — Purchase INSERT failed (non-fatal):', purchaseErr.message,
+            '| hint: ensure customRequestId column exists on Purchase table');
+        }
+
         return res.status(200).json({ ok: true, alreadyPaid: false, synced: rowCount > 0, message: rowCount > 0 ? 'Payment synced successfully' : 'Already up to date' });
       }
 
@@ -935,12 +969,20 @@ async function getRecentActivity(pool, cutoff) {
       WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1
       ORDER BY ts DESC LIMIT 15
     ) UNION ALL (
-      SELECT 'purchase' AS type, u.email, u.name, NULL::text AS country,
-        COALESCE(i.title, p."itineraryId") AS detail,
+      SELECT 'purchase' AS type,
+        COALESCE(u.email, '') AS email,
+        COALESCE(u.name,  '') AS name,
+        NULL::text AS country,
+        COALESCE(i.title,
+          'Custom trip planning' ||
+          CASE WHEN cr.destination IS NOT NULL AND cr.destination <> ''
+               THEN ' — ' || cr.destination ELSE '' END
+        ) AS detail,
         p."purchasedAt" AS ts
       FROM "Purchase" p
-      JOIN "User" u ON u.id=p."userId"
-      LEFT JOIN "Itinerary" i ON i.id=p."itineraryId"
+      LEFT JOIN "User"          u  ON u.id  = p."userId"
+      LEFT JOIN "Itinerary"     i  ON i.id  = p."itineraryId"
+      LEFT JOIN "CustomRequest" cr ON cr.id = p."customRequestId"
       WHERE p."purchasedAt" >= $1
       ORDER BY ts DESC LIMIT 15
     ) UNION ALL (
@@ -1063,15 +1105,24 @@ async function getSales(pool, cutoff, offset) {
   let sales;
   try {
     const { rows } = await pool.query(`
-      SELECT p."purchasedAt", u.email, u.name, i.title AS itinerary, i.slug,
+      SELECT p."purchasedAt",
+             COALESCE(u.email, '') AS email,
+             COALESCE(u.name,  '') AS name,
+             COALESCE(i.title,
+               'Custom trip planning' ||
+               CASE WHEN cr.destination IS NOT NULL AND cr.destination <> ''
+                    THEN ' — ' || cr.destination ELSE '' END
+             ) AS itinerary,
+             i.slug,
              p.amount,
              COALESCE(p."grossAmount", p.amount)  AS "grossAmount",
              COALESCE(p."discountAmount", 0)       AS "discountAmount",
              p."couponCode",
              p.status
       FROM "Purchase" p
-      JOIN "User" u ON u.id=p."userId"
-      JOIN "Itinerary" i ON i.id=p."itineraryId"
+      LEFT JOIN "User"          u  ON u.id  = p."userId"
+      LEFT JOIN "Itinerary"     i  ON i.id  = p."itineraryId"
+      LEFT JOIN "CustomRequest" cr ON cr.id = p."customRequestId"
       WHERE p."purchasedAt" >= $1
       ORDER BY p."purchasedAt" DESC
       LIMIT 50 OFFSET $2
@@ -1079,14 +1130,18 @@ async function getSales(pool, cutoff, offset) {
     sales = rows;
   } catch (err) {
     if (!err.message.toLowerCase().includes('column')) throw err;
-    // Discount columns not yet added — serve legacy data with safe defaults
+    // Discount columns or customRequestId not yet added — serve legacy data with safe defaults
     const { rows } = await pool.query(`
-      SELECT p."purchasedAt", u.email, u.name, i.title AS itinerary, i.slug,
+      SELECT p."purchasedAt",
+             COALESCE(u.email, '') AS email,
+             COALESCE(u.name,  '') AS name,
+             COALESCE(i.title, 'Custom trip planning') AS itinerary,
+             i.slug,
              p.amount, p.amount AS "grossAmount", 0 AS "discountAmount",
              NULL::text AS "couponCode", p.status
       FROM "Purchase" p
-      JOIN "User" u ON u.id=p."userId"
-      JOIN "Itinerary" i ON i.id=p."itineraryId"
+      LEFT JOIN "User"      u ON u.id = p."userId"
+      LEFT JOIN "Itinerary" i ON i.id = p."itineraryId"
       WHERE p."purchasedAt" >= $1
       ORDER BY p."purchasedAt" DESC
       LIMIT 50 OFFSET $2
