@@ -27,6 +27,7 @@ const DESIGNER_ACCESSIBLE_ACTIONS = new Set([
   'custom-request-status',
   'custom-request-assign',
   'custom-request-reply',
+  'create-itinerary-from-request',
 ]);
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
@@ -278,6 +279,116 @@ async function _handler(req, res) {
         }
         console.log('[api/admin] custom-request-reply sent — to:', reqData.email, '| id:', result.data?.id);
         return res.status(200).json({ ok: true, messageId: result.data?.id });
+      }
+
+      // ── Create an itinerary from a custom request ────────────────────────
+      if (action === 'create-itinerary-from-request') {
+        const { id: bodyId } = req.body ?? {};
+        const requestId = bodyId || id;
+        if (!requestId) return res.status(400).json({ error: 'id is required' });
+
+        // Fetch request data
+        const { rows: crRows } = await pool.query(
+          `SELECT id, "fullName", email, destination, dates, duration, "groupSize",
+                  "groupType", budget, style, notes, "designerId", "itineraryId", "userId"
+           FROM "CustomRequest" WHERE id = $1 LIMIT 1`,
+          [requestId]
+        );
+        if (!crRows.length) return res.status(404).json({ error: 'Request not found' });
+        const crData = crRows[0];
+
+        // Auth: admin or assigned designer only
+        if (!adminCtx.isAdmin && adminCtx.userId !== crData.designerId) {
+          return res.status(403).json({ error: 'Not your request' });
+        }
+
+        // Idempotency: return existing itinerary if already linked
+        if (crData.itineraryId) {
+          return res.status(200).json({ itineraryId: crData.itineraryId, isNew: false });
+        }
+
+        // Resolve Creator profile for the designer (so itinerary appears under their profile)
+        let creatorId = null;
+        if (crData.designerId) {
+          try {
+            const { rows: crtrRows } = await pool.query(
+              `SELECT id FROM "Creator" WHERE user_id = $1 AND is_active = true LIMIT 1`,
+              [crData.designerId]
+            );
+            creatorId = crtrRows[0]?.id ?? null;
+          } catch { /* non-fatal */ }
+        }
+
+        // Build initial content from request fields
+        const dest        = crData.destination || '';
+        const dur         = crData.duration    || '';
+        const title       = dest ? `${dest} — Custom Journey` : 'Custom Journey';
+        const subtitle    = dur;
+        const durDays     = dur ? (parseInt((dur.match(/(\d+)/) || [])[1], 10) || null) : null;
+        let   styleArr    = [];
+        try { styleArr = Array.isArray(crData.style) ? crData.style : JSON.parse(crData.style || '[]'); } catch {}
+        const styleStr    = styleArr.length ? styleArr.join(', ') : null;
+        const shortDesc   = [
+          dest     ? `A custom journey to ${dest}` : null,
+          crData.dates  ? `in ${crData.dates}`     : null,
+          dur      ? `for ${dur}`                  : null,
+        ].filter(Boolean).join(', ') + (dest || crData.dates || dur ? '.' : '');
+
+        const slug = `custom-req-${requestId.slice(0, 8).toLowerCase()}-${Date.now().toString(36)}`;
+
+        const content = {
+          hero:    { title, subtitle, tagline: dest ? `A tailor-made journey to ${dest}` : 'A tailor-made journey', coverImage: '' },
+          summary: { shortDescription: shortDesc || title, whySpecial: crData.notes || '', routeOverview: dest, highlights: [], included: [] },
+          tripFacts: {
+            groupSize: crData.groupSize ? String(crData.groupSize) : '',
+            difficulty: 'Moderate',
+            bestFor: crData.groupType ? [crData.groupType] : [],
+            category: 'Custom Journey',
+          },
+          days: [],
+          sections: {
+            hotels: [],
+            practicalNotes: [
+              crData.budget    ? `Budget: ${crData.budget}` : null,
+              styleStr         ? `Travel style: ${styleStr}` : null,
+              crData.groupType ? `Group type: ${crData.groupType}` : null,
+              crData.notes     ? `Notes: ${crData.notes}` : null,
+            ].filter(Boolean).join('\n'),
+            faq: [],
+          },
+          pdfConfig: { showRouteMap: true, showHotels: true },
+          seo: { metaTitle: title, metaDescription: '' },
+        };
+
+        // Insert Itinerary
+        const { rows: itinInsert } = await pool.query(
+          `INSERT INTO "Itinerary"
+             (id, slug, title, subtitle, destination, description, price,
+              "durationDays", "coverImage", content,
+              type, status, "userId", "creatorId", "isPrivate", "isPublished", "createdAt")
+           VALUES
+             (gen_random_uuid(), $1, $2, $3, $4, $5, 0,
+              $6, '', $7::jsonb,
+              'custom', 'draft', $8, $9, true, false, NOW())
+           RETURNING id`,
+          [
+            slug, title, subtitle, dest, shortDesc || title,
+            durDays, JSON.stringify(content),
+            crData.designerId || null,
+            creatorId,
+          ]
+        );
+        const newItinId = itinInsert[0]?.id;
+        if (!newItinId) return res.status(500).json({ error: 'Itinerary insert failed' });
+
+        // Link itinerary back to the custom request
+        await pool.query(
+          `UPDATE "CustomRequest" SET "itineraryId" = $1 WHERE id = $2`,
+          [newItinId, requestId]
+        );
+
+        console.log('[api/admin] create-itinerary-from-request — requestId:', requestId, '| itineraryId:', newItinId);
+        return res.status(200).json({ itineraryId: newItinId, isNew: true, title });
       }
 
       return res.status(400).json({ error: 'Unknown action' });
@@ -864,6 +975,7 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false, ctx
        cr."itineraryId", cr."designerId", cr."createdAt",
        itin.slug   AS "linkedItinerarySlug",
        itin.status AS "linkedItineraryStatus",
+       itin.title  AS "linkedItineraryTitle",
        (cr."itineraryId" IS NOT NULL AND ${PAID_EXISTS}) AS "isPaid"
        ${designerSelect}
      FROM "CustomRequest" cr

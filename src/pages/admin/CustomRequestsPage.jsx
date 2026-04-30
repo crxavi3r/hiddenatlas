@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { ChevronDown, ChevronUp, ChevronsUpDown, Check, X, Filter, ChevronRight, ExternalLink, Send, UserCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Check, X, Filter, ChevronRight, ExternalLink, Send, UserCircle, Plus } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useUserCtx } from '../../lib/useUserCtx.jsx';
 
@@ -654,24 +654,56 @@ function ReplyModal({ request, token, onClose }) {
   );
 }
 
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function Toast({ message, onDismiss }) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 4000);
+    return () => clearTimeout(t);
+  }, [onDismiss]);
+
+  return (
+    <div style={{
+      position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
+      zIndex: 10001, background: '#1C1A16', color: 'white',
+      padding: '10px 18px', borderRadius: '8px',
+      fontSize: '13px', fontWeight: '500',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+      display: 'flex', alignItems: 'center', gap: '10px',
+      whiteSpace: 'nowrap',
+    }}>
+      <Check size={14} color="#4ADE80" />
+      {message}
+      <button
+        onClick={onDismiss}
+        style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', padding: '0 0 0 6px', display: 'flex', alignItems: 'center' }}
+      >
+        <X size={12} />
+      </button>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function CustomRequestsPage() {
-  const { getToken }                        = useAuth();
-  const { isAdmin, isDesigner }             = useUserCtx();
-  const [allRows, setAllRows]               = useState([]);
-  const [designers, setDesigners]           = useState([]);
-  const [designerFilter, setDesignerFilter] = useState('');
-  const [counts, setCounts]                 = useState({});
-  const [paymentCounts, setPaymentCounts]   = useState({});
-  const [loading, setLoading]               = useState(true);
-  const [authToken, setAuthToken]           = useState(null);
-  const [sort, setSort]                     = useState({ key: 'createdAt', dir: 'desc' });
-  const [filters, setFilters]               = useState(initFilters);
-  const [page, setPage]                     = useState(1);
-  const [popover, setPopover]               = useState(null);
-  const [expandedRows, setExpandedRows]     = useState(new Set());
-  const [replyModal, setReplyModal]         = useState(null);
-  const isMobile                            = useIsMobile();
+  const { getToken }                              = useAuth();
+  const { isAdmin, isDesigner }                   = useUserCtx();
+  const navigate                                  = useNavigate();
+  const [allRows, setAllRows]                     = useState([]);
+  const [designers, setDesigners]                 = useState([]);
+  const [designerFilter, setDesignerFilter]       = useState('');
+  const [counts, setCounts]                       = useState({});
+  const [paymentCounts, setPaymentCounts]         = useState({});
+  const [loading, setLoading]                     = useState(true);
+  const [authToken, setAuthToken]                 = useState(null);
+  const [sort, setSort]                           = useState({ key: 'createdAt', dir: 'desc' });
+  const [filters, setFilters]                     = useState(initFilters);
+  const [page, setPage]                           = useState(1);
+  const [popover, setPopover]                     = useState(null);
+  const [expandedRows, setExpandedRows]           = useState(new Set());
+  const [replyModal, setReplyModal]               = useState(null);
+  const [creatingItinerary, setCreatingItinerary] = useState(new Set());
+  const [toast, setToast]                         = useState(null);
+  const isMobile                                  = useIsMobile();
 
   // Extra columns rendered manually (not in PRIMARY_COLS filter system)
   // Admin: expand + 9 data cols + Itinerary + Designer = 12; designer: expand + 9 + Itinerary = 11
@@ -722,6 +754,31 @@ export default function CustomRequestsPage() {
     setAllRows(prev => prev.map(r =>
       r.id === id ? { ...r, designerId, designerName: designerName ?? null, designerEmail: designerEmail ?? null } : r
     ));
+  }
+
+  async function handleCreateItinerary(requestId) {
+    if (creatingItinerary.has(requestId) || !authToken) return;
+    setCreatingItinerary(prev => new Set([...prev, requestId]));
+    try {
+      const res  = await fetch('/api/admin?action=create-itinerary-from-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ id: requestId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create itinerary');
+      const { itineraryId, isNew, title } = data;
+      setAllRows(prev => prev.map(r =>
+        r.id === requestId ? { ...r, itineraryId, linkedItineraryTitle: title ?? r.linkedItineraryTitle } : r
+      ));
+      if (isNew) setToast('Custom itinerary created and linked to this request.');
+      navigate(`/admin/itineraries/${itineraryId}`);
+    } catch (err) {
+      console.error('[admin/create-itinerary]', err);
+      setToast(`Error: ${err.message}`);
+    } finally {
+      setCreatingItinerary(prev => { const next = new Set(prev); next.delete(requestId); return next; });
+    }
   }
 
   function setFilter(colId, val) {
@@ -830,7 +887,7 @@ export default function CustomRequestsPage() {
               <StatusAction requestId={r.id} current={r.status || 'open'} linkedItineraryStatus={r.linkedItineraryStatus} onUpdated={handleStatusUpdated} token={authToken} />
             )}
             <PaymentBadge isPaid={r.isPaid} />
-            {r.itineraryId && (
+            {r.itineraryId ? (
               <Link
                 to={`/admin/itineraries/${r.itineraryId}`}
                 style={{
@@ -840,9 +897,24 @@ export default function CustomRequestsPage() {
                   padding: '3px 9px', borderRadius: '6px', textDecoration: 'none',
                 }}
               >
-                Edit itinerary <ExternalLink size={10} />
+                Open itinerary <ExternalLink size={10} />
               </Link>
-            )}
+            ) : (isAdmin || isDesigner) ? (
+              <button
+                onClick={() => handleCreateItinerary(r.id)}
+                disabled={creatingItinerary.has(r.id)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  fontSize: '11px', fontWeight: '500', color: '#6B6156',
+                  background: 'white', border: '1px solid #D4CCBF',
+                  padding: '3px 9px', borderRadius: '6px',
+                  cursor: creatingItinerary.has(r.id) ? 'wait' : 'pointer',
+                  opacity: creatingItinerary.has(r.id) ? 0.6 : 1,
+                }}
+              >
+                {creatingItinerary.has(r.id) ? '…' : <><Plus size={10} /> Itinerary</>}
+              </button>
+            ) : null}
             {authToken && (isAdmin || isDesigner) && (
               <button
                 onClick={() => setReplyModal(r)}
@@ -1061,22 +1133,44 @@ export default function CustomRequestsPage() {
                         <PaymentBadge isPaid={r.isPaid} />
                       </td>
 
-                      {/* Itinerary CMS link */}
-                      <td style={{ ...TD, whiteSpace: 'nowrap' }}>
+                      {/* Itinerary */}
+                      <td style={{ ...TD, maxWidth: '180px' }}>
                         {r.itineraryId ? (
-                          <Link
-                            to={`/admin/itineraries/${r.itineraryId}`}
-                            title="Open itinerary in CMS editor"
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            {r.linkedItineraryTitle && (
+                              <span style={{ fontSize: '11px', color: '#4A433A', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '170px', display: 'block' }}>
+                                {r.linkedItineraryTitle}
+                              </span>
+                            )}
+                            <Link
+                              to={`/admin/itineraries/${r.itineraryId}`}
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                fontSize: '11px', fontWeight: '500', color: '#1B6B65',
+                                background: '#EFF6F5', border: '1px solid #A8D5D0',
+                                padding: '3px 9px', borderRadius: '6px',
+                                textDecoration: 'none', whiteSpace: 'nowrap', width: 'fit-content',
+                              }}
+                            >
+                              Open <ExternalLink size={10} />
+                            </Link>
+                          </div>
+                        ) : (isAdmin || isDesigner) ? (
+                          <button
+                            onClick={() => handleCreateItinerary(r.id)}
+                            disabled={creatingItinerary.has(r.id)}
                             style={{
                               display: 'inline-flex', alignItems: 'center', gap: '4px',
-                              fontSize: '11px', fontWeight: '500', color: '#1B6B65',
-                              background: '#EFF6F5', border: '1px solid #A8D5D0',
+                              fontSize: '11px', fontWeight: '500', color: '#6B6156',
+                              background: 'white', border: '1px solid #D4CCBF',
                               padding: '3px 9px', borderRadius: '6px',
-                              textDecoration: 'none',
+                              cursor: creatingItinerary.has(r.id) ? 'wait' : 'pointer',
+                              opacity: creatingItinerary.has(r.id) ? 0.6 : 1,
+                              whiteSpace: 'nowrap',
                             }}
                           >
-                            Edit itinerary <ExternalLink size={10} />
-                          </Link>
+                            {creatingItinerary.has(r.id) ? '…' : <><Plus size={10} /> Itinerary</>}
+                          </button>
                         ) : (
                           <span style={{ fontSize: '11px', color: '#C4BDB4' }}>—</span>
                         )}
@@ -1131,9 +1225,41 @@ export default function CustomRequestsPage() {
                               </div>
                             </div>
 
-                            {/* Reply to client */}
+                            {/* Actions */}
                             {authToken && (isAdmin || isDesigner) && (
-                              <div style={{ borderTop: '1px solid #EDE8DF', paddingTop: '12px' }}>
+                              <div style={{ borderTop: '1px solid #EDE8DF', paddingTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                {r.itineraryId ? (
+                                  <Link
+                                    to={`/admin/itineraries/${r.itineraryId}`}
+                                    style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                      padding: '6px 14px',
+                                      background: '#1B6B65', color: 'white',
+                                      border: 'none', borderRadius: '6px',
+                                      fontSize: '12px', fontWeight: '600',
+                                      textDecoration: 'none',
+                                    }}
+                                  >
+                                    Open itinerary <ExternalLink size={12} />
+                                  </Link>
+                                ) : (
+                                  <button
+                                    onClick={() => handleCreateItinerary(r.id)}
+                                    disabled={creatingItinerary.has(r.id)}
+                                    style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                      padding: '6px 14px',
+                                      background: '#1B6B65', color: 'white',
+                                      border: 'none', borderRadius: '6px',
+                                      fontSize: '12px', fontWeight: '600',
+                                      cursor: creatingItinerary.has(r.id) ? 'wait' : 'pointer',
+                                      opacity: creatingItinerary.has(r.id) ? 0.6 : 1,
+                                    }}
+                                  >
+                                    <Plus size={12} />
+                                    {creatingItinerary.has(r.id) ? 'Creating…' : 'Create itinerary'}
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => setReplyModal(r)}
                                   style={{
@@ -1198,6 +1324,9 @@ export default function CustomRequestsPage() {
           onClose={() => setReplyModal(null)}
         />
       )}
+
+      {/* Toast */}
+      {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
 
     </div>
   );
