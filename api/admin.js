@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { resolveUserCtx } from './_lib/resolveUserCtx.js';
+import { reconcileCustomRequestPayment } from './_lib/reconcileCustomRequestPayment.js';
 
 const { Pool } = pg;
 
@@ -415,19 +416,14 @@ async function _handler(req, res) {
         if (!requestId)                     return res.status(400).json({ error: 'id is required' });
         if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: 'Stripe not configured' });
 
-        // CustomRequest.id is TEXT — use ::text, never ::uuid
+        // Fetch just enough to do auth check and validate preconditions
         const { rows: crRows } = await pool.query(
-          `SELECT id, "paidAt", "stripeCheckoutSessionId", "designerId",
-                  "userId", "itineraryId", "quoteAmount"
+          `SELECT id, "paidAt", "stripeCheckoutSessionId", "designerId"
            FROM "CustomRequest" WHERE id = $1::text LIMIT 1`,
           [requestId]
         );
         if (!crRows.length) return res.status(404).json({ error: 'Request not found' });
         const crData = crRows[0];
-
-        console.log('[api/admin] sync-payment — requestId:', requestId,
-          '| paidAt:', crData.paidAt,
-          '| stripeCheckoutSessionId:', crData.stripeCheckoutSessionId);
 
         if (!adminCtx.isAdmin && adminCtx.userId !== crData.designerId) {
           return res.status(403).json({ error: 'Not your request' });
@@ -439,85 +435,25 @@ async function _handler(req, res) {
           return res.status(400).json({ error: 'No Stripe session ID on record — send a quote first' });
         }
 
-        const Stripe = (await import('stripe')).default;
-        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+        console.log('[api/admin] sync-payment — delegating to reconcileCustomRequestPayment',
+          '| requestId:', requestId,
+          '| stripeCheckoutSessionId:', crData.stripeCheckoutSessionId);
 
-        let stripeSession;
-        try {
-          // Expand total_details.breakdown to get accurate coupon/discount data
-          stripeSession = await stripe.checkout.sessions.retrieve(
-            crData.stripeCheckoutSessionId,
-            { expand: ['total_details.breakdown'] }
-          );
-        } catch (err) {
-          console.error('[api/admin] sync-payment Stripe retrieve error:', err.message);
-          return res.status(502).json({ error: `Stripe error: ${err.message}` });
+        const result = await reconcileCustomRequestPayment(pool, requestId, crData.stripeCheckoutSessionId);
+
+        if (!result.ok) {
+          if (result.paid === false) {
+            return res.status(200).json({ ok: false, alreadyPaid: false, paymentStatus: result.paymentStatus, message: 'Stripe session not yet paid' });
+          }
+          return res.status(502).json({ error: result.error || 'Reconciliation failed' });
         }
 
-        console.log('[api/admin] sync-payment — Stripe session retrieved',
-          '| sessionId:', stripeSession.id,
-          '| payment_status:', stripeSession.payment_status,
-          '| amount_total:', stripeSession.amount_total);
-
-        const isPaid =
-          stripeSession.payment_status === 'paid' ||
-          stripeSession.payment_status === 'no_payment_required' ||
-          stripeSession.amount_total === 0;
-
-        if (!isPaid) {
-          console.log('[api/admin] sync-payment — not yet paid, payment_status:', stripeSession.payment_status);
-          return res.status(200).json({ ok: false, alreadyPaid: false, paymentStatus: stripeSession.payment_status, message: 'Stripe session not yet paid' });
-        }
-
-        const nowISO = new Date().toISOString();
-        // Use separate $1/$2 for the two timestamp columns and explicit type casts
-        // to avoid "inconsistent types deduced for parameter $N" PostgreSQL error
-        const { rowCount } = await pool.query(
-          `UPDATE "CustomRequest"
-           SET "paymentStatus"           = 'paid',
-               "paidAt"                  = $1::timestamptz,
-               "quoteAcceptedAt"         = $2::timestamp,
-               "stripeSessionId"         = $3::text,
-               "stripeCheckoutSessionId" = $3::text,
-               status                    = 'in_progress'
-           WHERE id = $4::text AND "paidAt" IS NULL`,
-          [nowISO, nowISO, stripeSession.id, requestId]
-        );
-
-        console.log('[api/admin] sync-payment — requestId:', requestId,
-          '| rowsUpdated:', rowCount,
-          '| sessionId:', stripeSession.id,
-          '| payment_status:', stripeSession.payment_status);
-
-        // ── Create Purchase — idempotent, userId/itineraryId optional ────────
-        try {
-          const grossAmount    = (crData.quoteAmount   ?? 0) / 100;
-          const netAmount      = (stripeSession.amount_total ?? 0) / 100;
-          const discountAmount = Math.max(0, grossAmount - netAmount);
-          await pool.query(
-            `INSERT INTO "Purchase"
-               (id, "userId", "itineraryId", "customRequestId", "stripeSessionId", "stripePaymentIntentId",
-                amount, "grossAmount", "netAmount", "discountAmount",
-                "designerUserId", status, "purchasedAt", "createdAt")
-             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'paid', NOW(), NOW())
-             ON CONFLICT ("stripeSessionId") DO NOTHING`,
-            [
-              crData.userId      || null,
-              crData.itineraryId || null,
-              requestId,
-              stripeSession.id,
-              stripeSession.payment_intent || null,
-              netAmount, grossAmount, netAmount, discountAmount,
-              crData.designerId  || null,
-            ]
-          );
-          console.log('[api/admin] sync-payment — Purchase upserted for requestId:', requestId);
-        } catch (purchaseErr) {
-          console.error('[api/admin] sync-payment — Purchase INSERT failed (non-fatal):', purchaseErr.message,
-            '| hint: ensure customRequestId column exists on Purchase table');
-        }
-
-        return res.status(200).json({ ok: true, alreadyPaid: false, synced: rowCount > 0, message: rowCount > 0 ? 'Payment synced successfully' : 'Already up to date' });
+        return res.status(200).json({
+          ok:         true,
+          alreadyPaid: result.alreadyPaid,
+          synced:      result.synced,
+          message:     result.synced ? 'Payment synced successfully' : 'Already up to date',
+        });
       }
 
       // ── Create an itinerary from a custom request ────────────────────────

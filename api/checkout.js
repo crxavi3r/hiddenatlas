@@ -3,6 +3,7 @@ import pg from 'pg';
 import { verifyAuth } from './_lib/verifyAuth.js';
 import { getVariantPriceId, getUnlockableSlugs } from './_lib/itineraryVariants.js';
 import { sendPurchaseEmail } from './_lib/sendPurchaseEmail.js';
+import { reconcileCustomRequestPayment } from './_lib/reconcileCustomRequestPayment.js';
 
 const { Pool } = pg;
 
@@ -674,190 +675,6 @@ function esc(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── Shared: mark a CustomRequest as paid from a Stripe session ────────────────
-// Used by processQuotePayment (webhook).
-// Returns the updated CustomRequest row (with designer info), or null if not
-// found / already paid.
-// NOTE: paidAt and quoteAcceptedAt use separate parameters ($1/$2) with
-// explicit ::timestamptz casts to avoid PostgreSQL "inconsistent types deduced
-// for parameter $N" when the two columns have different timestamp type variants.
-async function markQuotePaid(pool, requestId, session) {
-  const nowISO = new Date().toISOString();
-  // Step 1: atomic UPDATE — only fires when paidAt IS NULL (idempotency guard)
-  const result = await pool.query(
-    `UPDATE "CustomRequest"
-     SET "paymentStatus"           = 'paid',
-         "paidAt"                  = $1::timestamptz,
-         "quoteAcceptedAt"         = $2::timestamp,
-         "stripeSessionId"         = $3::text,
-         "stripeCheckoutSessionId" = $3::text,
-         status                    = 'in_progress'
-     WHERE id = $4::text AND "paidAt" IS NULL
-     RETURNING id, "fullName", email, destination, "designerId",
-               "userId", "itineraryId", "quoteAmount"`,
-    [nowISO, nowISO, session.id, requestId]
-  );
-  if (!result.rows[0]) return null;
-  const row = { ...result.rows[0] };
-
-  // Step 2: fetch designer contact separately (avoids correlated-subquery
-  // ambiguity in RETURNING when designerId/id column names overlap)
-  if (row.designerId) {
-    try {
-      const { rows: dRows } = await pool.query(
-        `SELECT email AS "designerEmail", name AS "designerName"
-         FROM "User" WHERE id = $1::text LIMIT 1`,
-        [row.designerId]
-      );
-      if (dRows[0]) {
-        row.designerEmail = dRows[0].designerEmail;
-        row.designerName  = dRows[0].designerName;
-      }
-    } catch { /* non-fatal — emails will use fallback address */ }
-  }
-  return row;
-}
-
-// ── Process a completed quote payment (custom_request_quote) ──────────────────
-// Idempotent: guards on CustomRequest.paidAt IS NULL in the UPDATE.
-async function processQuotePayment(pool, session) {
-  const meta = session.metadata || {};
-  // Support both camelCase (new) and snake_case (legacy sessions in flight)
-  let requestId = meta.customRequestId || meta.custom_request_id || null;
-
-  console.log('[processQuotePayment] START',
-    '| sessionId:', session.id,
-    '| payment_status:', session.payment_status,
-    '| amount_total:', session.amount_total,
-    '| metadata:', JSON.stringify(meta));
-
-  // Fallback: if metadata is missing, look up by the session ID stored on the record
-  if (!requestId) {
-    console.warn('[processQuotePayment] customRequestId missing from metadata — attempting lookup by stripeCheckoutSessionId');
-    const { rows: fallback } = await pool.query(
-      `SELECT id::text FROM "CustomRequest" WHERE "stripeCheckoutSessionId" = $1::text LIMIT 1`,
-      [session.id]
-    );
-    requestId = fallback[0]?.id ?? null;
-    if (requestId) {
-      console.log('[processQuotePayment] fallback lookup matched requestId:', requestId);
-    } else {
-      console.error('[processQuotePayment] no matching CustomRequest found for sessionId:', session.id);
-      return;
-    }
-  }
-
-  // amount_total === 0 means 100% coupon — still treat as paid
-  const amount    = (session.amount_total ?? 0) / 100;
-  const amountFmt = `€${amount.toFixed(2)}`;
-
-  const cr = await markQuotePaid(pool, requestId, session);
-  if (!cr) {
-    // Either not found or already paid (UPDATE WHERE paidAt IS NULL returned 0 rows)
-    const { rows } = await pool.query(`SELECT id, "paidAt" FROM "CustomRequest" WHERE id = $1::text`, [requestId]);
-    if (rows[0]?.paidAt) {
-      console.log('[processQuotePayment] already paid — requestId:', requestId);
-    } else {
-      console.error('[processQuotePayment] CustomRequest not found — id:', requestId, '| sessionId:', session.id);
-    }
-    return;
-  }
-
-  console.log('[processQuotePayment] marked paid — requestId:', requestId,
-    '| sessionId:', session.id,
-    '| amount:', amount);
-
-  // ── Create Purchase record ───────────────────────────────────────────────
-  // userId and itineraryId are optional — do not fail if null.
-  // Idempotency: ON CONFLICT ("stripeSessionId") DO NOTHING.
-  try {
-    const grossAmount    = (cr.quoteAmount  ?? 0) / 100;
-    const netAmount      = (session.amount_total ?? 0) / 100;
-    const discountAmount = Math.max(0, grossAmount - netAmount);
-    await pool.query(
-      `INSERT INTO "Purchase"
-         (id, "userId", "itineraryId", "customRequestId", "stripeSessionId", "stripePaymentIntentId",
-          amount, "grossAmount", "netAmount", "discountAmount",
-          "designerUserId", status, "purchasedAt", "createdAt")
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'paid', NOW(), NOW())
-       ON CONFLICT ("stripeSessionId") DO NOTHING`,
-      [
-        cr.userId        || null,
-        cr.itineraryId   || null,
-        cr.id,
-        session.id,
-        session.payment_intent || null,
-        netAmount, grossAmount, netAmount, discountAmount,
-        cr.designerId    || null,
-      ]
-    );
-    console.log('[processQuotePayment] Purchase created — requestId:', requestId, '| sessionId:', session.id);
-  } catch (purchaseErr) {
-    console.error('[processQuotePayment] Purchase INSERT failed (non-fatal):', purchaseErr.message,
-      '| hint: ensure customRequestId column exists on Purchase table');
-  }
-
-  const dest = cr.destination || 'your destination';
-
-  // Emails — non-fatal
-  if (!process.env.RESEND_API_KEY) return;
-  const { Resend } = await import('resend');
-  const resend   = new Resend(process.env.RESEND_API_KEY);
-  const FROM     = process.env.EMAIL_FROM || 'HiddenAtlas <noreply@hiddenatlas.travel>';
-  const FALLBACK = 'contact@hiddenatlas.travel';
-  const firstName = cr.fullName?.split(' ')[0] ?? 'there';
-  const senderLabel = cr.designerName ?? 'The HiddenAtlas Team';
-
-  // Notify designer/admin
-  try {
-    const designerTo = cr.designerEmail ?? FALLBACK;
-    await resend.emails.send({
-      from:    FROM,
-      replyTo: cr.email,
-      to:      designerTo,
-      ...(cr.designerEmail ? { bcc: [FALLBACK] } : {}),
-      subject: `Quote accepted — ${cr.fullName} paid ${amountFmt}`,
-      html: `
-        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;">
-          <h2 style="color:#1B6B65;">Quote accepted — payment received</h2>
-          <p style="font-size:14px;color:#8C8070;">${esc(cr.fullName)} has paid the custom trip planning quote.</p>
-          <table style="width:100%;border-collapse:collapse;font-size:14px;margin:16px 0;">
-            <tr><td style="padding:6px 0;color:#8C8070;width:120px;">Client</td><td style="padding:6px 0;font-weight:600;">${esc(cr.fullName)}</td></tr>
-            <tr><td style="padding:6px 0;color:#8C8070;">Email</td><td style="padding:6px 0;"><a href="mailto:${esc(cr.email)}" style="color:#1B6B65;">${esc(cr.email)}</a></td></tr>
-            <tr><td style="padding:6px 0;color:#8C8070;">Destination</td><td style="padding:6px 0;">${esc(dest)}</td></tr>
-            <tr><td style="padding:6px 0;color:#8C8070;">Amount paid</td><td style="padding:6px 0;font-weight:700;color:#1B6B65;">${amountFmt}</td></tr>
-          </table>
-          <p><a href="https://hiddenatlas.travel/admin/custom-requests" style="display:inline-block;background:#1B6B65;color:white;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:13px;font-weight:600;">Open in Backoffice →</a></p>
-        </div>
-      `,
-    });
-  } catch (err) {
-    console.error('[processQuotePayment] designer notification error:', err.message);
-  }
-
-  // Confirm to client
-  try {
-    await resend.emails.send({
-      from:    FROM,
-      replyTo: cr.designerEmail ?? FALLBACK,
-      to:      cr.email,
-      subject: `Payment confirmed — your HiddenAtlas journey to ${dest}`,
-      html: `
-        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;">
-          <h2 style="color:#1B6B65;">Hi ${esc(firstName)},</h2>
-          <p style="font-size:15px;line-height:1.7;">Your payment of <strong>${amountFmt}</strong> has been received. ${cr.designerName ? esc(cr.designerName) : 'Your travel designer'} will now start building your bespoke itinerary for <strong>${esc(dest)}</strong>.</p>
-          <p style="font-size:15px;line-height:1.7;">You'll receive your itinerary once it's ready. If you have any questions in the meantime, just reply to this email.</p>
-          <p style="font-size:14px;color:#8C8070;margin-top:24px;">— ${esc(senderLabel)}, HiddenAtlas</p>
-          <hr style="border:none;border-top:1px solid #E8E3DA;margin:24px 0;" />
-          <p style="color:#B5AA99;font-size:11px;">You are receiving this because you purchased a custom trip planning service on hiddenatlas.travel.</p>
-        </div>
-      `,
-    });
-  } catch (err) {
-    console.error('[processQuotePayment] client confirmation error:', err.message);
-  }
-}
-
 // ── POST /api/checkout (stripe-signature header present) ─────────────────────
 async function handleWebhook(req, res, rawBody) {
   if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET || !process.env.DATABASE_URL) {
@@ -903,18 +720,47 @@ async function handleWebhook(req, res, rawBody) {
 
   // ── Route by session type ─────────────────────────────────────────────────
   if (session.metadata?.type === 'custom_request_quote') {
-    console.log('[checkout/webhook] routing → processQuotePayment',
+    const meta      = session.metadata || {};
+    let requestId   = meta.customRequestId || meta.custom_request_id || null;
+
+    console.log('[checkout/webhook] routing → reconcileCustomRequestPayment',
       '| sessionId:', session.id,
-      '| customRequestId:', session.metadata?.customRequestId || session.metadata?.custom_request_id || '(missing)');
-    const wpPool = new Pool({ connectionString: process.env.DATABASE_URL });
-    try {
-      await processQuotePayment(wpPool, session);
-      console.log('[checkout/webhook] custom_request_quote processed — sessionId:', session.id);
-    } catch (err) {
-      console.error('[checkout/webhook] custom_request_quote DB error:', err.message);
-    } finally {
-      await wpPool.end();
+      '| customRequestId:', requestId || '(missing — will attempt fallback lookup)');
+
+    // Fallback: look up CustomRequest by stripeCheckoutSessionId if metadata is missing
+    if (!requestId) {
+      const fbPool = new Pool({ connectionString: process.env.DATABASE_URL });
+      try {
+        const { rows } = await fbPool.query(
+          `SELECT id::text FROM "CustomRequest" WHERE "stripeCheckoutSessionId" = $1::text LIMIT 1`,
+          [session.id]
+        );
+        requestId = rows[0]?.id ?? null;
+        if (requestId) {
+          console.log('[checkout/webhook] fallback lookup matched requestId:', requestId);
+        } else {
+          console.error('[checkout/webhook] no matching CustomRequest for sessionId:', session.id);
+        }
+      } catch (err) {
+        console.error('[checkout/webhook] fallback lookup error:', err.message);
+      } finally {
+        await fbPool.end();
+      }
     }
+
+    if (requestId) {
+      const wpPool = new Pool({ connectionString: process.env.DATABASE_URL });
+      try {
+        const result = await reconcileCustomRequestPayment(wpPool, requestId, session.id);
+        console.log('[checkout/webhook] custom_request_quote reconciled — sessionId:', session.id,
+          '| ok:', result.ok, '| synced:', result.synced, '| alreadyPaid:', result.alreadyPaid);
+      } catch (err) {
+        console.error('[checkout/webhook] custom_request_quote reconcile error:', err.message);
+      } finally {
+        await wpPool.end();
+      }
+    }
+
     return res.status(200).json({ received: true });
   }
 
