@@ -29,6 +29,7 @@ const DESIGNER_ACCESSIBLE_ACTIONS = new Set([
   'custom-request-reply',
   'create-itinerary-from-request',
   'send-quote',
+  'sync-payment',
 ]);
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
@@ -405,6 +406,70 @@ async function _handler(req, res) {
 
         console.log('[api/admin] send-quote done — requestId:', requestId, '| amountCents:', amountCents, '| sessionId:', stripeSession.id);
         return res.status(200).json({ ok: true, stripePaymentUrl: stripeSession.url, sessionId: stripeSession.id });
+      }
+
+      // ── Manually sync payment status from Stripe ─────────────────────────
+      if (action === 'sync-payment') {
+        const { id: bodyId } = req.body ?? {};
+        const requestId = bodyId || id;
+        if (!requestId)                     return res.status(400).json({ error: 'id is required' });
+        if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: 'Stripe not configured' });
+
+        const { rows: crRows } = await pool.query(
+          `SELECT id, "paidAt", "stripeCheckoutSessionId", "designerId"
+           FROM "CustomRequest" WHERE id = $1 LIMIT 1`,
+          [requestId]
+        );
+        if (!crRows.length) return res.status(404).json({ error: 'Request not found' });
+        const crData = crRows[0];
+
+        if (!adminCtx.isAdmin && adminCtx.userId !== crData.designerId) {
+          return res.status(403).json({ error: 'Not your request' });
+        }
+        if (crData.paidAt) {
+          return res.status(200).json({ ok: true, alreadyPaid: true, message: 'Already marked as paid' });
+        }
+        if (!crData.stripeCheckoutSessionId) {
+          return res.status(400).json({ error: 'No Stripe session ID on record — send a quote first' });
+        }
+
+        const Stripe = (await import('stripe')).default;
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+        let stripeSession;
+        try {
+          stripeSession = await stripe.checkout.sessions.retrieve(crData.stripeCheckoutSessionId);
+        } catch (err) {
+          console.error('[api/admin] sync-payment Stripe retrieve error:', err.message);
+          return res.status(502).json({ error: `Stripe error: ${err.message}` });
+        }
+
+        console.log('[api/admin] sync-payment — sessionId:', stripeSession.id,
+          '| payment_status:', stripeSession.payment_status,
+          '| amount_total:', stripeSession.amount_total);
+
+        const isPaid =
+          stripeSession.payment_status === 'paid' ||
+          stripeSession.payment_status === 'no_payment_required' ||
+          stripeSession.amount_total === 0;
+
+        if (!isPaid) {
+          return res.status(200).json({ ok: false, alreadyPaid: false, paymentStatus: stripeSession.payment_status, message: 'Stripe session not yet paid' });
+        }
+
+        const now = new Date();
+        const { rowCount } = await pool.query(
+          `UPDATE "CustomRequest"
+           SET "paidAt"                  = $1,
+               "quoteAcceptedAt"         = $1,
+               "stripeCheckoutSessionId" = $2,
+               status = CASE WHEN status = 'open' THEN 'in_progress' ELSE status END
+           WHERE id = $3 AND "paidAt" IS NULL`,
+          [now, stripeSession.id, requestId]
+        );
+
+        console.log('[api/admin] sync-payment — marked paid requestId:', requestId, '| rowsUpdated:', rowCount);
+        return res.status(200).json({ ok: true, alreadyPaid: false, synced: rowCount > 0, message: rowCount > 0 ? 'Payment synced successfully' : 'Already up to date' });
       }
 
       // ── Create an itinerary from a custom request ────────────────────────

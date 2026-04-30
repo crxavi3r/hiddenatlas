@@ -674,65 +674,76 @@ function esc(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── Process a completed quote payment (custom_request_quote) ──────────────────
-// Idempotent: guards on CustomRequest.paidAt.
-async function processQuotePayment(pool, session) {
-  const meta = session.metadata || {};
-  // Support both camelCase (new) and snake_case (legacy sessions)
-  const requestId = meta.customRequestId || meta.custom_request_id;
-
-  console.log('[processQuotePayment] START — sessionId:', session.id,
-    '| payment_status:', session.payment_status,
-    '| amount_total:', session.amount_total,
-    '| metadata:', JSON.stringify(meta));
-
-  if (!requestId) {
-    console.error('[processQuotePayment] missing customRequestId in metadata — sessionId:', session.id);
-    return;
-  }
-
-  const { rows: crRows } = await pool.query(
-    `SELECT cr.id, cr."fullName", cr.email, cr.destination, cr."designerId",
-            cr."userId", cr.status, cr."paidAt", cr."stripePaymentUrl",
-            d.email AS "designerEmail", d.name AS "designerName"
-     FROM "CustomRequest" cr
-     LEFT JOIN "User" d ON d.id = cr."designerId"
-     WHERE cr.id = $1 LIMIT 1`,
-    [requestId]
-  );
-  if (!crRows.length) {
-    console.error('[processQuotePayment] CustomRequest not found — id:', requestId, '| sessionId:', session.id);
-    return;
-  }
-  const cr = crRows[0];
-
-  // Idempotency — return early but do not throw; webhook must get 200
-  if (cr.paidAt) {
-    console.log('[processQuotePayment] already paid — requestId:', requestId, '| paidAt:', cr.paidAt);
-    return;
-  }
-
-  const now       = new Date();
-  const amount    = (session.amount_total ?? 0) / 100;
-  const amountFmt = `€${amount.toFixed(2)}`;
-  const dest      = cr.destination || 'your destination';
-  // Keep existing payment URL if Stripe session doesn't carry one (e.g. completed sessions)
-  const paymentUrl = session.url || cr.stripePaymentUrl || null;
-
-  const updateResult = await pool.query(
+// ── Shared: mark a CustomRequest as paid from a Stripe session ────────────────
+// Used by processQuotePayment (webhook) and sync-payment (admin action).
+// Returns the updated CustomRequest row, or null if not found / already paid.
+async function markQuotePaid(pool, requestId, session) {
+  const now    = new Date();
+  const result = await pool.query(
     `UPDATE "CustomRequest"
      SET "paidAt"                  = $1,
          "quoteAcceptedAt"         = $1,
          "stripeCheckoutSessionId" = $2,
-         "stripePaymentUrl"        = COALESCE($3, "stripePaymentUrl"),
          status = CASE WHEN status = 'open' THEN 'in_progress' ELSE status END
-     WHERE id = $4`,
-    [now, session.id, paymentUrl, requestId]
+     WHERE id = $3 AND "paidAt" IS NULL
+     RETURNING id, "fullName", email, destination, "designerId",
+               (SELECT email FROM "User" WHERE id = "designerId") AS "designerEmail",
+               (SELECT name  FROM "User" WHERE id = "designerId") AS "designerName"`,
+    [now, session.id, requestId]
   );
+  return result.rows[0] ?? null;
+}
+
+// ── Process a completed quote payment (custom_request_quote) ──────────────────
+// Idempotent: guards on CustomRequest.paidAt IS NULL in the UPDATE.
+async function processQuotePayment(pool, session) {
+  const meta = session.metadata || {};
+  // Support both camelCase (new) and snake_case (legacy sessions in flight)
+  let requestId = meta.customRequestId || meta.custom_request_id || null;
+
+  console.log('[processQuotePayment] START',
+    '| sessionId:', session.id,
+    '| payment_status:', session.payment_status,
+    '| amount_total:', session.amount_total,
+    '| metadata:', JSON.stringify(meta));
+
+  // Fallback: if metadata is missing, look up by the session ID stored on the record
+  if (!requestId) {
+    console.warn('[processQuotePayment] customRequestId missing from metadata — attempting lookup by stripeCheckoutSessionId');
+    const { rows: fallback } = await pool.query(
+      `SELECT id FROM "CustomRequest" WHERE "stripeCheckoutSessionId" = $1 LIMIT 1`,
+      [session.id]
+    );
+    requestId = fallback[0]?.id ?? null;
+    if (requestId) {
+      console.log('[processQuotePayment] fallback lookup matched requestId:', requestId);
+    } else {
+      console.error('[processQuotePayment] no matching CustomRequest found for sessionId:', session.id);
+      return;
+    }
+  }
+
+  // amount_total === 0 means 100% coupon — still treat as paid
+  const amount    = (session.amount_total ?? 0) / 100;
+  const amountFmt = `€${amount.toFixed(2)}`;
+
+  const cr = await markQuotePaid(pool, requestId, session);
+  if (!cr) {
+    // Either not found or already paid (UPDATE WHERE paidAt IS NULL returned 0 rows)
+    const { rows } = await pool.query(`SELECT id, "paidAt" FROM "CustomRequest" WHERE id = $1`, [requestId]);
+    if (rows[0]?.paidAt) {
+      console.log('[processQuotePayment] already paid — requestId:', requestId);
+    } else {
+      console.error('[processQuotePayment] CustomRequest not found — id:', requestId, '| sessionId:', session.id);
+    }
+    return;
+  }
+
   console.log('[processQuotePayment] marked paid — requestId:', requestId,
     '| sessionId:', session.id,
-    '| amount:', amount,
-    '| rowsUpdated:', updateResult.rowCount);
+    '| amount:', amount);
+
+  const dest      = cr.destination || 'your destination';
 
   // Emails — non-fatal
   if (!process.env.RESEND_API_KEY) return;
@@ -810,32 +821,37 @@ async function handleWebhook(req, res, rawBody) {
     return res.status(400).send(`Webhook error: ${err.message}`);
   }
 
+  // Log every event — essential for diagnosing missed webhooks in production
   console.log('[checkout/webhook] event received — type:', event.type, '| id:', event.id);
 
   if (event.type !== 'checkout.session.completed') {
+    console.log('[checkout/webhook] ignoring event type:', event.type);
     return res.status(200).json({ received: true });
   }
 
   const session = event.data.object;
-  console.log('[checkout/webhook] session.id:', session.id,
+  console.log('[checkout/webhook] checkout.session.completed',
+    '| session.id:', session.id,
     '| payment_status:', session.payment_status,
     '| amount_total:', session.amount_total,
     '| customer_email:', session.customer_email,
-    '| metadata.type:', session.metadata?.type,
-    '| metadata.customRequestId:', session.metadata?.customRequestId,
-    '| metadata.custom_request_id:', session.metadata?.custom_request_id);
+    '| metadata:', JSON.stringify(session.metadata));
 
-  // 'no_payment_required' = 100% coupon; treat as completed
-  const sessionPaid = session.payment_status === 'paid' || session.payment_status === 'no_payment_required';
+  // paid OR no_payment_required (100% coupon) OR amount_total === 0 → all treated as paid
+  const sessionPaid =
+    session.payment_status === 'paid' ||
+    session.payment_status === 'no_payment_required' ||
+    session.amount_total === 0;
   if (!sessionPaid) {
-    console.log('[checkout/webhook] payment not completed (status:', session.payment_status, ') — skipping');
+    console.warn('[checkout/webhook] payment not completed — payment_status:', session.payment_status, '— skipping');
     return res.status(200).json({ received: true });
   }
 
   // ── Route by session type ─────────────────────────────────────────────────
   if (session.metadata?.type === 'custom_request_quote') {
-    console.log('[checkout/webhook] routing to processQuotePayment — sessionId:', session.id,
-      '| requestId:', session.metadata?.customRequestId || session.metadata?.custom_request_id);
+    console.log('[checkout/webhook] routing → processQuotePayment',
+      '| sessionId:', session.id,
+      '| customRequestId:', session.metadata?.customRequestId || session.metadata?.custom_request_id || '(missing)');
     const wpPool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
       await processQuotePayment(wpPool, session);

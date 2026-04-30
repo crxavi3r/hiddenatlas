@@ -845,6 +845,7 @@ export default function CustomRequestsPage() {
   const [creatingItinerary, setCreatingItinerary] = useState(new Set());
   const [toast, setToast]                         = useState(null);
   const [quoteModal, setQuoteModal]               = useState(null);
+  const [syncingPayment, setSyncingPayment]       = useState(new Set());
   const isMobile                                  = useIsMobile();
 
   // Extra columns rendered manually (not in PRIMARY_COLS filter system)
@@ -931,6 +932,32 @@ export default function CustomRequestsPage() {
     ));
     setQuoteModal(null);
     setToast('Quote sent — payment link delivered to client.');
+  }
+
+  async function handleSyncPayment(requestId) {
+    if (syncingPayment.has(requestId) || !authToken) return;
+    setSyncingPayment(prev => new Set([...prev, requestId]));
+    try {
+      const res  = await fetch('/api/admin?action=sync-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ id: requestId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Sync failed');
+      if (data.ok && (data.synced || data.alreadyPaid)) {
+        setAllRows(prev => prev.map(r =>
+          r.id === requestId ? { ...r, paymentStatus: 'paid', paidAt: new Date().toISOString() } : r
+        ));
+        setToast(data.message || 'Payment synced.');
+      } else {
+        setToast(data.message || 'Stripe session not yet paid.');
+      }
+    } catch (err) {
+      setToast(`Sync error: ${err.message}`);
+    } finally {
+      setSyncingPayment(prev => { const next = new Set(prev); next.delete(requestId); return next; });
+    }
   }
 
   function setFilter(colId, val) {
@@ -1458,6 +1485,24 @@ export default function CustomRequestsPage() {
                                     }}
                                   >
                                     {r.paymentStatus === 'quote_sent' ? 'Resend quote' : 'Send quote'}
+                                  </button>
+                                )}
+                                {/* Sync payment — manual fallback when webhook missed */}
+                                {r.paymentStatus === 'quote_sent' && (
+                                  <button
+                                    onClick={() => handleSyncPayment(r.id)}
+                                    disabled={syncingPayment.has(r.id)}
+                                    title="Fetch payment status from Stripe and update this record"
+                                    style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                      padding: '6px 14px',
+                                      background: 'white', border: '1px solid #D4CCBF',
+                                      borderRadius: '6px', cursor: syncingPayment.has(r.id) ? 'wait' : 'pointer',
+                                      fontSize: '12px', fontWeight: '500', color: '#4A433A',
+                                      opacity: syncingPayment.has(r.id) ? 0.6 : 1,
+                                    }}
+                                  >
+                                    {syncingPayment.has(r.id) ? 'Syncing…' : 'Sync payment'}
                                   </button>
                                 )}
                                 <button
