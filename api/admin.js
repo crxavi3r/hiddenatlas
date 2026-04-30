@@ -235,7 +235,7 @@ async function _handler(req, res) {
         }
 
         const { rows: reqRows } = await pool.query(
-          `SELECT cr.email, cr."fullName", cr."designerId", d.name AS "designerName"
+          `SELECT cr.email, cr."fullName", cr."designerId", d.name AS "designerName", d.email AS "designerEmail"
            FROM "CustomRequest" cr
            LEFT JOIN "User" d ON d.id = cr."designerId"
            WHERE cr.id = $1 LIMIT 1`,
@@ -254,19 +254,23 @@ async function _handler(req, res) {
         const { Resend } = await import('resend');
         const resend = new Resend(process.env.RESEND_API_KEY);
         const FROM = process.env.EMAIL_FROM || 'HiddenAtlas <noreply@hiddenatlas.travel>';
-        const senderLabel = reqData.designerName ?? 'The HiddenAtlas Team';
-        const firstName   = reqData.fullName?.split(' ')[0] ?? 'there';
+        const senderLabel   = reqData.designerName ?? 'The HiddenAtlas Team';
+        const firstName     = reqData.fullName?.split(' ')[0] ?? 'there';
+        // Prefer assigned designer's email for replyTo; fall back to authenticated sender's email
+        const replyToEmail  = reqData.designerEmail ?? adminCtx.email ?? null;
+        const hasReplyTo    = !!replyToEmail;
 
         const result = await resend.emails.send({
           from:    FROM,
-          replyTo: adminCtx.email ? [adminCtx.email] : undefined,
+          replyTo: hasReplyTo ? [replyToEmail] : undefined,
           to:      [reqData.email],
           subject: `A message from ${senderLabel} — HiddenAtlas`,
           html: `
             <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;">
               <h2 style="color:#1B6B65;">Hi ${esc(firstName)},</h2>
               <p style="font-size:15px;line-height:1.7;white-space:pre-wrap;">${esc(replyMessage.trim())}</p>
-              <p style="font-size:14px;color:#8C8070;margin-top:24px;">— ${esc(senderLabel)}, HiddenAtlas</p>
+              ${hasReplyTo ? `<p style="font-size:13px;color:#8C8070;margin-top:20px;">You can reply directly to this email to contact ${esc(senderLabel)}.</p>` : ''}
+              <p style="font-size:14px;color:#8C8070;margin-top:12px;">— ${esc(senderLabel)}, HiddenAtlas</p>
               <hr style="border:none;border-top:1px solid #E8E3DA;margin:24px 0;" />
               <p style="color:#B5AA99;font-size:11px;">You are receiving this about your custom trip request on hiddenatlas.travel.</p>
             </div>
