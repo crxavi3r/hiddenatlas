@@ -343,10 +343,10 @@ async function _handler(req, res) {
             success_url: `${origin}/custom-request/${requestId}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
             cancel_url:  `${origin}/custom-request/${requestId}/payment-cancelled`,
             metadata: {
-              type:              'custom_request_quote',
-              custom_request_id: requestId,
-              designer_id:       crData.designerId || '',
-              user_id:           crData.userId     || '',
+              type:            'custom_request_quote',
+              customRequestId: requestId,
+              designerId:      crData.designerId || '',
+              userId:          crData.userId     || '',
             },
           });
         } catch (stripeErr) {

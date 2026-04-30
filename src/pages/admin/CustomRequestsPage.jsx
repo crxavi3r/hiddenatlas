@@ -657,7 +657,8 @@ function ReplyModal({ request, token, onClose }) {
 
 // ── QuoteModal ────────────────────────────────────────────────────────────────
 function QuoteModal({ request, token, onClose, onSent }) {
-  const [amount,  setAmount]  = useState('');
+  const initialAmount = request.quoteAmount ? String(request.quoteAmount / 100) : '';
+  const [amount,  setAmount]  = useState(initialAmount);
   const [message, setMessage] = useState('We reviewed your request and prepared a custom trip planning quote. Please click below to confirm your booking.');
   const [sending, setSending] = useState(false);
   const [sent,    setSent]    = useState(false);
