@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { ChevronDown, ChevronUp, ChevronsUpDown, Check, X, Filter, ChevronRight, ExternalLink } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Check, X, Filter, ChevronRight, ExternalLink, Send, UserCircle } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { useUserCtx } from '../../lib/useUserCtx.jsx';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STATUS_META = {
@@ -46,9 +47,8 @@ const SECONDARY_COLS = [
   { id: 'notes',     label: 'Notes',       field: 'notes',     type: 'text'  },
 ];
 
-const COLUMNS   = [...PRIMARY_COLS, ...SECONDARY_COLS];
+const COLUMNS  = [...PRIMARY_COLS, ...SECONDARY_COLS];
 const PAGE_SIZE = 25;
-const COL_SPAN  = PRIMARY_COLS.length + 2; // +1 expand-toggle, +1 itinerary link
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtDate(ts) {
@@ -334,7 +334,7 @@ function ColHeader({ col, sort, onSort, filterActive, onOpenFilter }) {
 // ── StatusAction — workflow status badge + advance button ─────────────────────
 function StatusAction({ requestId, current, linkedItineraryStatus, onUpdated, token }) {
   const [loading,     setLoading]     = useState(false);
-  const [confirming,  setConfirming]  = useState(false); // waiting for publish confirmation
+  const [confirming,  setConfirming]  = useState(false);
 
   async function doAdvance(next, confirm = false) {
     setLoading(true);
@@ -348,7 +348,6 @@ function StatusAction({ requestId, current, linkedItineraryStatus, onUpdated, to
       });
       const data = await res.json();
       if (data.needsConfirm) {
-        // Itinerary is still draft — ask the admin to confirm publishing it
         setConfirming(true);
         return;
       }
@@ -420,7 +419,7 @@ function StatusAction({ requestId, current, linkedItineraryStatus, onUpdated, to
   );
 }
 
-// ── PaymentBadge — read-only payment status (derived from Purchase table) ─────
+// ── PaymentBadge ──────────────────────────────────────────────────────────────
 function PaymentBadge({ isPaid }) {
   const m = isPaid ? PAYMENT_META.paid : PAYMENT_META.unpaid;
   return (
@@ -433,20 +432,250 @@ function PaymentBadge({ isPaid }) {
   );
 }
 
+// ── DesignerCell — shows designer name or unassigned badge (admin only) ───────
+function DesignerCell({ requestId, designerId, designerName, designers, token, onAssigned }) {
+  const [open, setOpen]       = useState(false);
+  const [saving, setSaving]   = useState(false);
+  const ref                   = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  async function assign(newId) {
+    setSaving(true);
+    setOpen(false);
+    try {
+      await fetch('/api/admin?action=custom-request-assign', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id: requestId, designerId: newId || null }),
+      });
+      const found = designers.find(d => d.id === newId);
+      onAssigned(requestId, newId || null, found?.name ?? null, found?.email ?? null);
+    } catch (err) {
+      console.error('[admin/assign-designer]', err);
+    } finally { setSaving(false); }
+  }
+
+  const label = designerName ?? null;
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        disabled={saving}
+        title={label ? `Assigned to ${label} — click to change` : 'Unassigned — click to assign'}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: '5px',
+          padding: '3px 8px',
+          background: label ? '#EFF6F5' : '#F4F1EC',
+          border: `1px solid ${label ? '#A8D5D0' : '#D4CCBF'}`,
+          borderRadius: '10px', cursor: saving ? 'wait' : 'pointer',
+          fontSize: '11px', fontWeight: '600',
+          color: label ? '#1B6B65' : '#8C8070',
+          whiteSpace: 'nowrap',
+          opacity: saving ? 0.6 : 1,
+        }}
+      >
+        <UserCircle size={11} />
+        {saving ? '…' : (label ?? 'Unassigned')}
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, zIndex: 9999,
+          marginTop: '4px', background: 'white',
+          border: '1px solid #E8E3DA', borderRadius: '8px',
+          boxShadow: '0 8px 28px rgba(28,26,22,0.14)',
+          minWidth: '200px', padding: '6px',
+        }}>
+          <button
+            onClick={() => assign(null)}
+            style={{
+              display: 'block', width: '100%', textAlign: 'left',
+              padding: '7px 10px', fontSize: '12.5px',
+              color: designerId ? '#4A433A' : '#1B6B65',
+              fontWeight: designerId ? '400' : '600',
+              background: designerId ? 'transparent' : '#EFF6F5',
+              border: 'none', borderRadius: '5px', cursor: 'pointer',
+            }}
+          >
+            Unassigned
+          </button>
+          {designers.map(d => (
+            <button
+              key={d.id}
+              onClick={() => assign(d.id)}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left',
+                padding: '7px 10px', fontSize: '12.5px',
+                color: d.id === designerId ? '#1B6B65' : '#4A433A',
+                fontWeight: d.id === designerId ? '600' : '400',
+                background: d.id === designerId ? '#EFF6F5' : 'transparent',
+                border: 'none', borderRadius: '5px', cursor: 'pointer',
+              }}
+            >
+              {d.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ReplyModal ────────────────────────────────────────────────────────────────
+function ReplyModal({ request, token, onClose }) {
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sent,    setSent]    = useState(false);
+  const [error,   setError]   = useState(null);
+  const textareaRef           = useRef(null);
+
+  useEffect(() => { textareaRef.current?.focus(); }, []);
+
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  async function send() {
+    if (!message.trim() || sending) return;
+    setSending(true);
+    setError(null);
+    try {
+      const res  = await fetch('/api/admin?action=custom-request-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id: request.id, message: message.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send');
+      setSent(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 10000,
+        background: 'rgba(15,26,24,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px',
+      }}
+    >
+      <div style={{
+        background: 'white', borderRadius: '12px',
+        padding: '28px', width: '100%', maxWidth: '520px',
+        boxShadow: '0 24px 60px rgba(0,0,0,0.25)',
+      }}>
+        {sent ? (
+          <div style={{ textAlign: 'center', padding: '16px 0' }}>
+            <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#EFF6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+              <Check size={22} color="#1B6B65" />
+            </div>
+            <p style={{ fontWeight: '600', color: '#1C1A16', fontSize: '15px', marginBottom: '6px' }}>Message sent</p>
+            <p style={{ fontSize: '13px', color: '#8C8070', marginBottom: '20px' }}>
+              Your message was delivered to <strong>{request.email}</strong>.
+            </p>
+            <button onClick={onClose} style={{ padding: '8px 20px', background: '#1B6B65', color: 'white', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+              Close
+            </button>
+          </div>
+        ) : (
+          <>
+            <div style={{ marginBottom: '18px' }}>
+              <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '17px', fontWeight: '600', color: '#1C1A16', marginBottom: '4px' }}>
+                Reply to client
+              </h3>
+              <p style={{ fontSize: '12.5px', color: '#8C8070' }}>
+                Sending to <strong>{request.fullName}</strong> at <a href={`mailto:${request.email}`} style={{ color: '#1B6B65' }}>{request.email}</a>
+              </p>
+            </div>
+
+            <textarea
+              ref={textareaRef}
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              placeholder="Write your message to the client…"
+              rows={6}
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                padding: '10px 12px',
+                border: '1px solid #D4CCBF', borderRadius: '6px',
+                fontSize: '13.5px', color: '#1C1A16', lineHeight: '1.6',
+                resize: 'vertical', outline: 'none', fontFamily: 'inherit',
+              }}
+              onFocus={e => { e.target.style.borderColor = '#1B6B65'; }}
+              onBlur={e  => { e.target.style.borderColor = '#D4CCBF'; }}
+            />
+
+            {error && (
+              <p style={{ fontSize: '12px', color: '#B91C1C', marginTop: '8px' }}>{error}</p>
+            )}
+
+            <p style={{ fontSize: '11px', color: '#B5AA99', marginTop: '8px' }}>
+              Sent from HiddenAtlas &lt;noreply@hiddenatlas.travel&gt;. Your email address will be used as reply-to.
+            </p>
+
+            <div style={{ display: 'flex', gap: '8px', marginTop: '16px', justifyContent: 'flex-end' }}>
+              <button onClick={onClose} style={{ padding: '8px 16px', background: 'white', color: '#4A433A', border: '1px solid #E8E3DA', borderRadius: '6px', fontSize: '13px', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button
+                onClick={send}
+                disabled={!message.trim() || sending}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 18px', background: '#1B6B65', color: 'white',
+                  border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '600',
+                  cursor: (!message.trim() || sending) ? 'not-allowed' : 'pointer',
+                  opacity: (!message.trim() || sending) ? 0.6 : 1,
+                }}
+              >
+                <Send size={13} />
+                {sending ? 'Sending…' : 'Send message'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function CustomRequestsPage() {
-  const { getToken }                    = useAuth();
-  const [allRows, setAllRows]           = useState([]);
-  const [counts, setCounts]             = useState({});
-  const [paymentCounts, setPaymentCounts] = useState({});
-  const [loading, setLoading]           = useState(true);
-  const [authToken, setAuthToken]       = useState(null);
-  const [sort, setSort]                 = useState({ key: 'createdAt', dir: 'desc' });
-  const [filters, setFilters]           = useState(initFilters);
-  const [page, setPage]                 = useState(1);
-  const [popover, setPopover]           = useState(null);
-  const [expandedRows, setExpandedRows] = useState(new Set());
-  const isMobile                        = useIsMobile();
+  const { getToken }                        = useAuth();
+  const { isAdmin, isDesigner }             = useUserCtx();
+  const [allRows, setAllRows]               = useState([]);
+  const [designers, setDesigners]           = useState([]);
+  const [designerFilter, setDesignerFilter] = useState('');
+  const [counts, setCounts]                 = useState({});
+  const [paymentCounts, setPaymentCounts]   = useState({});
+  const [loading, setLoading]               = useState(true);
+  const [authToken, setAuthToken]           = useState(null);
+  const [sort, setSort]                     = useState({ key: 'createdAt', dir: 'desc' });
+  const [filters, setFilters]               = useState(initFilters);
+  const [page, setPage]                     = useState(1);
+  const [popover, setPopover]               = useState(null);
+  const [expandedRows, setExpandedRows]     = useState(new Set());
+  const [replyModal, setReplyModal]         = useState(null);
+  const isMobile                            = useIsMobile();
+
+  // Extra columns rendered manually (not in PRIMARY_COLS filter system)
+  // Admin: expand + 9 data cols + Itinerary + Designer = 12; designer: expand + 9 + Itinerary = 11
+  const COL_SPAN = PRIMARY_COLS.length + 2 + (isAdmin ? 1 : 0);
 
   useEffect(() => {
     getToken().then(setAuthToken).catch(() => {});
@@ -462,6 +691,7 @@ export default function CustomRequestsPage() {
       });
       const data = await res.json();
       setAllRows(data.requests       ?? []);
+      setDesigners(data.designers    ?? []);
       setCounts(data.counts          ?? {});
       setPaymentCounts(data.paymentCounts ?? {});
     } catch (err) {
@@ -488,6 +718,12 @@ export default function CustomRequestsPage() {
     });
   }
 
+  function handleDesignerAssigned(id, designerId, designerName, designerEmail) {
+    setAllRows(prev => prev.map(r =>
+      r.id === id ? { ...r, designerId, designerName: designerName ?? null, designerEmail: designerEmail ?? null } : r
+    ));
+  }
+
   function setFilter(colId, val) {
     setFilters(prev => ({ ...prev, [colId]: val }));
     setPage(1);
@@ -495,6 +731,7 @@ export default function CustomRequestsPage() {
 
   function clearAllFilters() {
     setFilters(emptyFilters());
+    setDesignerFilter('');
     setPage(1);
   }
 
@@ -529,16 +766,20 @@ export default function CustomRequestsPage() {
         rows = rows.filter(r => matchesFilter(r, col, fv));
       }
     }
+    if (designerFilter) {
+      rows = rows.filter(r => r.designerId === designerFilter);
+    }
     rows = sortRows(rows, sort.key, sort.dir);
     return { filteredRows: rows, filteredTotal: rows.length };
-  }, [allRows, filters, sort]);
+  }, [allRows, filters, designerFilter, sort]);
 
   const totalPages = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE));
   const pageRows   = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const activeFilterCount = useMemo(() => {
-    return COLUMNS.reduce((n, col) => isFilterActive(col, filters[col.id]) ? n + 1 : n, 0);
-  }, [filters]);
+    const colCount = COLUMNS.reduce((n, col) => isFilterActive(col, filters[col.id]) ? n + 1 : n, 0);
+    return colCount + (designerFilter ? 1 : 0);
+  }, [filters, designerFilter]);
 
   const TD = { padding: '9px 10px' };
 
@@ -562,6 +803,11 @@ export default function CustomRequestsPage() {
             </span>
           </div>
         </div>
+        {isAdmin && r.designerName && (
+          <p style={{ fontSize: '11px', color: '#8C8070', marginBottom: '6px' }}>
+            <span style={{ color: '#B5AA99' }}>Designer: </span>{r.designerName}
+          </p>
+        )}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', marginBottom: '8px' }}>
           <span style={{ fontSize: '12px', color: '#4A433A' }}>
             <span style={{ color: '#B5AA99', fontSize: '10.5px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>To </span>
@@ -597,6 +843,19 @@ export default function CustomRequestsPage() {
                 Edit itinerary <ExternalLink size={10} />
               </Link>
             )}
+            {authToken && (isAdmin || isDesigner) && (
+              <button
+                onClick={() => setReplyModal(r)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  fontSize: '11px', fontWeight: '500', color: '#4A433A',
+                  background: 'white', border: '1px solid #E8E3DA',
+                  padding: '3px 9px', borderRadius: '6px', cursor: 'pointer',
+                }}
+              >
+                <Send size={10} /> Reply
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -615,7 +874,9 @@ export default function CustomRequestsPage() {
           </h1>
           <p style={{ fontSize: '12.5px', color: '#8C8070', marginTop: '3px' }}>
             {counts.all != null
-              ? `${counts.all} total · ${counts.open ?? 0} open · ${counts.in_progress ?? 0} in progress · ${paymentCounts.paid ?? 0} paid`
+              ? isAdmin
+                ? `${counts.all} total · ${counts.open ?? 0} open · ${counts.in_progress ?? 0} in progress · ${paymentCounts.paid ?? 0} paid`
+                : `${counts.all} assigned to you · ${counts.open ?? 0} open · ${counts.in_progress ?? 0} in progress`
               : '—'}
             {!loading && filteredTotal !== (counts.all ?? 0) && (
               <span style={{ color: '#1B6B65' }}> · {filteredTotal} shown</span>
@@ -623,20 +884,43 @@ export default function CustomRequestsPage() {
           </p>
         </div>
 
-        {activeFilterCount > 0 && (
-          <button
-            onClick={clearAllFilters}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '5px',
-              padding: '6px 12px', background: '#FBF6EE',
-              border: '1px solid #E8C87A', borderRadius: '6px',
-              fontSize: '12px', fontWeight: '500', color: '#A07830', cursor: 'pointer',
-            }}
-          >
-            <X size={11} />
-            Clear {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''}
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {/* Designer filter — admin only */}
+          {isAdmin && designers.length > 0 && (
+            <select
+              value={designerFilter}
+              onChange={e => { setDesignerFilter(e.target.value); setPage(1); }}
+              style={{
+                padding: '6px 10px', fontSize: '12px', borderRadius: '6px',
+                border: `1px solid ${designerFilter ? '#A8D5D0' : '#D4CCBF'}`,
+                background: designerFilter ? '#EFF6F5' : 'white',
+                color: designerFilter ? '#1B6B65' : '#4A433A',
+                cursor: 'pointer', outline: 'none',
+              }}
+            >
+              <option value="">All designers</option>
+              <option value="__unassigned__" disabled style={{ color: '#B5AA99' }}>— Unassigned —</option>
+              {designers.map(d => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          )}
+
+          {activeFilterCount > 0 && (
+            <button
+              onClick={clearAllFilters}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                padding: '6px 12px', background: '#FBF6EE',
+                border: '1px solid #E8C87A', borderRadius: '6px',
+                fontSize: '12px', fontWeight: '500', color: '#A07830', cursor: 'pointer',
+              }}
+            >
+              <X size={11} />
+              Clear {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Table / Card list */}
@@ -650,7 +934,11 @@ export default function CustomRequestsPage() {
               </div>
             ))}
             {!loading && pageRows.length === 0 && (
-              <p style={{ padding: '40px', textAlign: 'center', color: '#B5AA99', fontSize: '13px' }}>No custom requests match the current filters.</p>
+              <p style={{ padding: '40px', textAlign: 'center', color: '#B5AA99', fontSize: '13px' }}>
+                {isDesigner && !isAdmin
+                  ? 'No custom requests assigned to you yet.'
+                  : 'No custom requests match the current filters.'}
+              </p>
             )}
             {!loading && pageRows.map((r, i) => <MobileCard key={r.id} r={r} i={i} />)}
           </div>
@@ -673,6 +961,11 @@ export default function CustomRequestsPage() {
                   <th style={{ padding: '9px 10px', background: '#FAFAF8', borderBottom: '1px solid #E8E3DA', whiteSpace: 'nowrap', fontSize: '11px', fontWeight: '600', color: '#8C8070', textAlign: 'left' }}>
                     Itinerary
                   </th>
+                  {isAdmin && (
+                    <th style={{ padding: '9px 10px', background: '#FAFAF8', borderBottom: '1px solid #E8E3DA', whiteSpace: 'nowrap', minWidth: '140px', fontSize: '11px', fontWeight: '600', color: '#8C8070', textAlign: 'left' }}>
+                      Designer
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -686,13 +979,16 @@ export default function CustomRequestsPage() {
                       </td>
                     ))}
                     <td style={TD} />
+                    {isAdmin && <td style={TD} />}
                   </tr>
                 ))}
 
                 {!loading && pageRows.length === 0 && (
                   <tr>
                     <td colSpan={COL_SPAN} style={{ padding: '48px', textAlign: 'center', color: '#B5AA99', fontSize: '13px' }}>
-                      No custom requests match the current filters.
+                      {isDesigner && !isAdmin
+                        ? 'No custom requests assigned to you yet.'
+                        : 'No custom requests match the current filters.'}
                     </td>
                   </tr>
                 )}
@@ -785,6 +1081,26 @@ export default function CustomRequestsPage() {
                           <span style={{ fontSize: '11px', color: '#C4BDB4' }}>—</span>
                         )}
                       </td>
+
+                      {/* Designer assignment — admin only */}
+                      {isAdmin && (
+                        <td style={{ ...TD, whiteSpace: 'nowrap' }}>
+                          {authToken ? (
+                            <DesignerCell
+                              requestId={r.id}
+                              designerId={r.designerId ?? null}
+                              designerName={r.designerName ?? null}
+                              designers={designers}
+                              token={authToken}
+                              onAssigned={handleDesignerAssigned}
+                            />
+                          ) : (
+                            <span style={{ fontSize: '11px', color: '#C4BDB4' }}>
+                              {r.designerName ?? 'Unassigned'}
+                            </span>
+                          )}
+                        </td>
+                      )}
                     </tr>,
 
                     isExpanded && (
@@ -796,14 +1112,14 @@ export default function CustomRequestsPage() {
                             borderBottom: '1px solid #EDE8DF',
                             padding: '14px 16px 14px 44px',
                           }}>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 40px', maxWidth: '560px' }}>
-                              {/* Left column: group type + budget */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 40px', maxWidth: '560px', marginBottom: '14px' }}>
+                              {/* Left column */}
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                 {r.phone     && <DetailField label="Phone"      value={r.phone} />}
                                 {r.groupType && <DetailField label="Group Type" value={r.groupType} />}
                                 {r.budget    && <DetailField label="Budget"     value={r.budget} />}
                               </div>
-                              {/* Right column: style + notes */}
+                              {/* Right column */}
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                 {styleText(r.style) && <DetailField label="Style" value={styleText(r.style)} />}
                                 {r.notes && (
@@ -814,6 +1130,25 @@ export default function CustomRequestsPage() {
                                 )}
                               </div>
                             </div>
+
+                            {/* Reply to client */}
+                            {authToken && (isAdmin || isDesigner) && (
+                              <div style={{ borderTop: '1px solid #EDE8DF', paddingTop: '12px' }}>
+                                <button
+                                  onClick={() => setReplyModal(r)}
+                                  style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                    padding: '6px 14px',
+                                    background: 'white', border: '1px solid #D4CCBF',
+                                    borderRadius: '6px', cursor: 'pointer',
+                                    fontSize: '12px', fontWeight: '500', color: '#4A433A',
+                                  }}
+                                >
+                                  <Send size={12} />
+                                  Reply to {r.fullName?.split(' ')[0] ?? 'client'}
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -854,6 +1189,15 @@ export default function CustomRequestsPage() {
           />
         ) : null;
       })()}
+
+      {/* Reply modal */}
+      {replyModal && (
+        <ReplyModal
+          request={replyModal}
+          token={authToken}
+          onClose={() => setReplyModal(null)}
+        />
+      )}
 
     </div>
   );

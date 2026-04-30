@@ -134,7 +134,7 @@ export async function sendPurchaseEmail({ to, itineraryTitle, slug, netAmount, g
 
   try {
     const result = await resend.emails.send({
-      from:    'HiddenAtlas <hello@hiddenatlas.travel>',
+      from:    process.env.EMAIL_FROM || 'HiddenAtlas <noreply@hiddenatlas.travel>',
       to:      [to],
       subject: `Your itinerary is ready — ${displayTitle}`,
       html,

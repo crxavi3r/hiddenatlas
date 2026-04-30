@@ -499,15 +499,15 @@ async function processCustomPayment(pool, session) {
       `INSERT INTO "CustomRequest"
          (id, "fullName", email, destination, dates, "groupSize", notes,
           phone, duration, "groupType", budget, style,
-          status, "userId", "itineraryId", "createdAt")
+          status, "userId", "itineraryId", "designerId", "createdAt")
        VALUES
          (gen_random_uuid(), $1, $2, $3, $4, $5, $6,
           $7, $8, $9, $10, $11,
-          'open', $12, $13, NOW())`,
+          'open', $12, $13, $14, NOW())`,
       [
         fullName, email, dest, dates, groupSize, notes,
         phone, duration, groupType, budget, JSON.stringify(style),
-        userId || null, itinId,
+        userId || null, itinId, designerUserId || null,
       ]
     );
     console.log('[processCustomPayment] CustomRequest created — sessionId:', session.id);
@@ -574,7 +574,8 @@ async function processCustomPayment(pool, session) {
       const { Resend } = await import('resend');
       const resend = new Resend(process.env.RESEND_API_KEY);
       const emailPayload = {
-        from:    'HiddenAtlas <brief@hiddenatlas.travel>',
+        from:    process.env.EMAIL_FROM || 'HiddenAtlas <noreply@hiddenatlas.travel>',
+        replyTo: [email.trim().toLowerCase()],
         to:      [primaryTo],
         subject: designerName
           ? `New custom trip request for ${designerName} (paid)`

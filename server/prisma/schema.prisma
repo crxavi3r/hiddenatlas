@@ -39,10 +39,11 @@ model User {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
-  purchases    Purchase[]
-  trips        Trip[]
-  events       TripEvent[]
-  pricingPlans DesignerPricingPlan[]
+  purchases        Purchase[]
+  trips            Trip[]
+  events           TripEvent[]
+  pricingPlans     DesignerPricingPlan[]
+  assignedRequests CustomRequest[]       @relation("AssignedDesigner")
 }
 
 // ─────────────────────────────────────────────
@@ -277,14 +278,18 @@ model CustomRequest {
   budget      String?
   style       Json     @default("[]")
   notes       String?
-  status      String   @default("open")  // open | in_progress | closed
+  status      String   @default("open")  // open | in_progress | done
   userId      String?  // internal User.id of the submitter (nullable: anonymous submissions)
   tripId      String?  // Trip.id once admin links an itinerary to this request
+  designerId  String?  // User.id of the assigned designer (nullable: unassigned)
   createdAt   DateTime @default(now())
+
+  designer    User?    @relation("AssignedDesigner", fields: [designerId], references: [id])
 
   @@index([status])
   @@index([createdAt])
   @@index([userId])
+  @@index([designerId])
 }
 
 // ─────────────────────────────────────────────

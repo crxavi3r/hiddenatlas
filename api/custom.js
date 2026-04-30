@@ -160,36 +160,16 @@ export default async function handler(req, res) {
     }
   }
 
-  if (insertedId) {
-    try {
-      await pool.query(
-        `UPDATE "CustomRequest"
-         SET phone=$1, duration=$2, "groupType"=$3, budget=$4, style=$5, status='open', "userId"=$6
-         WHERE id=$7`,
-        [
-          phone?.trim()     || null,
-          duration?.trim()  || null,
-          groupType?.trim() || null,
-          budget?.trim()    || null,
-          JSON.stringify(Array.isArray(style) ? style : []),
-          internalUserId,
-          insertedId,
-        ]
-      );
-    } catch (err) {
-      console.warn('[custom/post] extended fields UPDATE skipped:', err.message);
-    }
-  }
-
-  // Resolve designer email from DB
+  // Resolve designer before the UPDATE so designerId can be persisted
   const FALLBACK_EMAIL = 'contact@hiddenatlas.travel';
-  let designerEmail = null;
-  let designerName  = null;
+  let designerEmail  = null;
+  let designerName   = null;
+  let designerUserId = null;
 
   if (designerSlug?.trim()) {
     try {
       const { rows: creatorRows } = await pool.query(
-        `SELECT c.name, u.email
+        `SELECT c.name, u.email, u.id AS designer_user_id
          FROM "Creator" c
          LEFT JOIN "User" u ON u.id = c.user_id
          WHERE c.slug = $1 AND c.is_active = true
@@ -197,11 +177,34 @@ export default async function handler(req, res) {
         [designerSlug.trim()]
       );
       if (creatorRows.length && creatorRows[0].email) {
-        designerEmail = creatorRows[0].email.trim().toLowerCase();
-        designerName  = creatorRows[0].name;
+        designerEmail  = creatorRows[0].email.trim().toLowerCase();
+        designerName   = creatorRows[0].name;
+        designerUserId = creatorRows[0].designer_user_id ?? null;
       }
     } catch (err) {
-      console.warn('[custom/post] designer email lookup failed:', err.message);
+      console.warn('[custom/post] designer lookup failed:', err.message);
+    }
+  }
+
+  if (insertedId) {
+    try {
+      await pool.query(
+        `UPDATE "CustomRequest"
+         SET phone=$1, duration=$2, "groupType"=$3, budget=$4, style=$5, status='open', "userId"=$6, "designerId"=$7
+         WHERE id=$8`,
+        [
+          phone?.trim()     || null,
+          duration?.trim()  || null,
+          groupType?.trim() || null,
+          budget?.trim()    || null,
+          JSON.stringify(Array.isArray(style) ? style : []),
+          internalUserId,
+          designerUserId,
+          insertedId,
+        ]
+      );
+    } catch (err) {
+      console.warn('[custom/post] extended fields UPDATE skipped:', err.message);
     }
   }
 
@@ -218,7 +221,7 @@ export default async function handler(req, res) {
     const { Resend }   = await import('resend');
     const resend       = new Resend(process.env.RESEND_API_KEY);
     const travelStyle  = Array.isArray(style) && style.length ? style.join(', ') : 'None selected';
-    const FROM         = 'HiddenAtlas <brief@hiddenatlas.travel>';
+    const FROM         = process.env.EMAIL_FROM || 'HiddenAtlas <noreply@hiddenatlas.travel>';
     const primaryTo    = designerEmail ?? FALLBACK_EMAIL;
     const isFallback   = !designerEmail;
     const subjectLabel = designerName
@@ -228,6 +231,7 @@ export default async function handler(req, res) {
     try {
       const emailPayload = {
         from:    FROM,
+        replyTo: [email.trim().toLowerCase()],
         to:      [primaryTo],
         subject: subjectLabel,
         ...(isFallback ? {} : { bcc: [FALLBACK_EMAIL] }),

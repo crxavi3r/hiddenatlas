@@ -21,11 +21,20 @@ function parseCutoff(from, period) {
   return start;
 }
 
+// Actions accessible by designers (in addition to admins).
+const DESIGNER_ACCESSIBLE_ACTIONS = new Set([
+  'custom-requests',
+  'custom-request-status',
+  'custom-request-assign',
+  'custom-request-reply',
+]);
+
 // ── Auth guard ────────────────────────────────────────────────────────────────
-async function verifyAdmin(req, pool) {
+// Returns ctx. Allows designers for DESIGNER_ACCESSIBLE_ACTIONS; requires admin
+// for everything else.
+async function verifyAccess(req, pool) {
   const authHeader = req.headers.authorization;
 
-  // ── Debug: log incoming auth details ──────────────────────────────────────
   console.log('[api/admin] incoming request:', {
     action:        req.query?.action,
     hasAuthHeader: !!authHeader,
@@ -39,14 +48,25 @@ async function verifyAdmin(req, pool) {
 
   const ctx = await resolveUserCtx(authHeader, pool);
   if (!ctx) {
-    console.warn('[api/admin] verifyAdmin — UNAUTHORIZED: resolveUserCtx returned null (missing/invalid token or no user row and no admin email match)');
+    console.warn('[api/admin] verifyAccess — UNAUTHORIZED');
     throw Object.assign(new Error('Unauthorized'), { status: 401 });
   }
-  console.log(`[api/admin] verifyAdmin — userId=${ctx.userId} email=${ctx.email} isAdmin=${ctx.isAdmin} role=${ctx.role}`);
-  if (!ctx.isAdmin) {
-    console.warn(`[api/admin] verifyAdmin — FORBIDDEN: email=${ctx.email} role=${ctx.role} isAdmin=false`);
-    throw Object.assign(new Error('Forbidden'), { status: 403 });
+
+  console.log(`[api/admin] verifyAccess — userId=${ctx.userId} email=${ctx.email} isAdmin=${ctx.isAdmin} isDesigner=${ctx.isDesigner} role=${ctx.role}`);
+
+  const action = req.query?.action;
+  if (DESIGNER_ACCESSIBLE_ACTIONS.has(action)) {
+    if (!ctx.isAdmin && !ctx.isDesigner) {
+      console.warn(`[api/admin] verifyAccess — FORBIDDEN for designer action: email=${ctx.email}`);
+      throw Object.assign(new Error('Forbidden'), { status: 403 });
+    }
+  } else {
+    if (!ctx.isAdmin) {
+      console.warn(`[api/admin] verifyAccess — FORBIDDEN (admin only): email=${ctx.email} role=${ctx.role}`);
+      throw Object.assign(new Error('Forbidden'), { status: 403 });
+    }
   }
+
   return ctx;
 }
 
@@ -89,7 +109,7 @@ async function _handler(req, res) {
 
   let adminCtx;
   try {
-    adminCtx = await verifyAdmin(req, pool);
+    adminCtx = await verifyAccess(req, pool);
   } catch (err) {
     try { await pool.end(); } catch {}
     return res.status(err.status ?? 401).json({ error: err.message });
@@ -205,10 +225,65 @@ async function _handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
+      // ── Reply to client from a custom request (admin or assigned designer) ─
+      if (action === 'custom-request-reply') {
+        const { id: bodyId, message: replyMessage } = req.body ?? {};
+        const requestId = bodyId || id;
+        if (!requestId || !replyMessage?.trim()) {
+          return res.status(400).json({ error: 'id and message are required' });
+        }
+
+        const { rows: reqRows } = await pool.query(
+          `SELECT cr.email, cr."fullName", cr."designerId", d.name AS "designerName"
+           FROM "CustomRequest" cr
+           LEFT JOIN "User" d ON d.id = cr."designerId"
+           WHERE cr.id = $1 LIMIT 1`,
+          [requestId]
+        );
+        if (!reqRows.length) return res.status(404).json({ error: 'Request not found' });
+        const reqData = reqRows[0];
+
+        if (!adminCtx.isAdmin && adminCtx.userId !== reqData.designerId) {
+          return res.status(403).json({ error: 'Not your request' });
+        }
+        if (!process.env.RESEND_API_KEY) {
+          return res.status(503).json({ error: 'Email service not configured' });
+        }
+
+        const { Resend } = await import('resend');
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        const FROM = process.env.EMAIL_FROM || 'HiddenAtlas <noreply@hiddenatlas.travel>';
+        const senderLabel = reqData.designerName ?? 'The HiddenAtlas Team';
+        const firstName   = reqData.fullName?.split(' ')[0] ?? 'there';
+
+        const result = await resend.emails.send({
+          from:    FROM,
+          replyTo: adminCtx.email ? [adminCtx.email] : undefined,
+          to:      [reqData.email],
+          subject: `A message from ${senderLabel} — HiddenAtlas`,
+          html: `
+            <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;">
+              <h2 style="color:#1B6B65;">Hi ${esc(firstName)},</h2>
+              <p style="font-size:15px;line-height:1.7;white-space:pre-wrap;">${esc(replyMessage.trim())}</p>
+              <p style="font-size:14px;color:#8C8070;margin-top:24px;">— ${esc(senderLabel)}, HiddenAtlas</p>
+              <hr style="border:none;border-top:1px solid #E8E3DA;margin:24px 0;" />
+              <p style="color:#B5AA99;font-size:11px;">You are receiving this about your custom trip request on hiddenatlas.travel.</p>
+            </div>
+          `,
+        });
+
+        if (result.error) {
+          console.error('[api/admin] custom-request-reply email error:', JSON.stringify(result.error));
+          return res.status(502).json({ error: 'Email delivery failed', detail: JSON.stringify(result.error) });
+        }
+        console.log('[api/admin] custom-request-reply sent — to:', reqData.email, '| id:', result.data?.id);
+        return res.status(200).json({ ok: true, messageId: result.data?.id });
+      }
+
       return res.status(400).json({ error: 'Unknown action' });
     }
 
-    // ── PATCH: status updates ─────────────────────────────────────────────
+    // ── PATCH: status and assignment updates ─────────────────────────────
     if (req.method === 'PATCH') {
       if (action === 'custom-request-status') {
         const { id: bodyId, status: bodyStatus, confirm: confirmPublish } = req.body ?? {};
@@ -217,6 +292,17 @@ async function _handler(req, res) {
         const VALID_STATUS = ['open', 'in_progress', 'done'];
         if (!requestId) return res.status(400).json({ error: 'id is required' });
         if (!VALID_STATUS.includes(newStatus)) return res.status(400).json({ error: 'Invalid status' });
+
+        // Designers can only update requests assigned to them.
+        if (!adminCtx.isAdmin) {
+          const { rows: ownerRows } = await pool.query(
+            `SELECT "designerId" FROM "CustomRequest" WHERE id = $1 LIMIT 1`,
+            [requestId]
+          );
+          if (!ownerRows.length || ownerRows[0].designerId !== adminCtx.userId) {
+            return res.status(403).json({ error: 'Not your request' });
+          }
+        }
 
         // When marking done: check whether the linked itinerary is published.
         // If it's still a draft and the caller hasn't confirmed, return a flag
@@ -231,10 +317,8 @@ async function _handler(req, res) {
           const linked = linkRows[0] ?? null;
           if (linked && linked.status !== 'published') {
             if (!confirmPublish) {
-              // Ask the UI to confirm before we publish + mark ready
               return res.status(200).json({ needsConfirm: true, itineraryStatus: linked.status });
             }
-            // Confirmed — publish the itinerary first
             await pool.query(
               `UPDATE "Itinerary" SET status = 'published', "isPublished" = true WHERE id = $1`,
               [linked.id]
@@ -245,6 +329,21 @@ async function _handler(req, res) {
         const { rowCount } = await pool.query(
           `UPDATE "CustomRequest" SET status = $1 WHERE id = $2`,
           [newStatus, requestId]
+        );
+        if (rowCount === 0) return res.status(404).json({ error: 'Request not found' });
+        return res.status(200).json({ ok: true });
+      }
+
+      // ── Assign designer to a custom request (admin only) ────────────────
+      if (action === 'custom-request-assign') {
+        if (!adminCtx.isAdmin) return res.status(403).json({ error: 'Admin only' });
+        const { id: bodyId, designerId: newDesignerId } = req.body ?? {};
+        const requestId = bodyId || id;
+        if (!requestId) return res.status(400).json({ error: 'id is required' });
+
+        const { rowCount } = await pool.query(
+          `UPDATE "CustomRequest" SET "designerId" = $1 WHERE id = $2`,
+          [newDesignerId || null, requestId]
         );
         if (rowCount === 0) return res.status(404).json({ error: 'Request not found' });
         return res.status(200).json({ ok: true });
@@ -288,7 +387,7 @@ async function _handler(req, res) {
     }
     if (action === 'sales')     return res.status(200).json(await getSales(pool, cutoff, offset));
     if (action === 'downloads') return res.status(200).json(await getDownloads(pool, cutoff, offset));
-    if (action === 'custom-requests') return res.status(200).json(await getCustomRequests(pool, status, offset, req.query.all === 'true'));
+    if (action === 'custom-requests') return res.status(200).json(await getCustomRequests(pool, status, offset, req.query.all === 'true', adminCtx));
 
     if (action === 'designer-applications') {
       const filterStatus = status || 'all';
@@ -711,19 +810,16 @@ async function getSales(pool, cutoff, offset) {
 }
 
 // ── Custom Requests ───────────────────────────────────────────────────────────
-// noLimit=true: fetch all rows (used by admin table with client-side filtering).
-// When noLimit, status filter is skipped — the client handles it.
-// isPaid is derived from Purchase table, not from a column on CustomRequest.
-async function getCustomRequests(pool, statusParam, offset, noLimit = false) {
-  const VALID = ['open', 'in_progress', 'done'];
+// noLimit=true: fetch all rows (used by admin/designer table with client-side filtering).
+// ctx drives role-based filtering: designer sees only their own requests.
+async function getCustomRequests(pool, statusParam, offset, noLimit = false, ctx = null) {
+  const isAdmin        = ctx?.isAdmin ?? true;
+  const designerUserId = !isAdmin ? (ctx?.userId ?? null) : null;
 
+  const VALID = ['open', 'in_progress', 'done'];
   const statuses = (!noLimit && statusParam)
     ? statusParam.split(',').map(s => s.trim()).filter(s => VALID.includes(s))
     : [];
-  const useFilter = statuses.length > 0;
-
-  const limitClause = noLimit ? '' : `LIMIT 50 OFFSET ${useFilter ? '$2' : '$1'}`;
-  const params      = noLimit ? [] : (useFilter ? [statuses, offset] : [offset]);
 
   const PAID_EXISTS = `
     EXISTS (
@@ -732,31 +828,66 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false) {
         AND (p.status IS NULL OR p.status NOT IN ('refunded', 'cancelled', 'chargebacked'))
     )`;
 
+  // Build WHERE conditions and params dynamically.
+  const conditions = [];
+  const params     = [];
+
+  if (!noLimit && statuses.length > 0) {
+    params.push(statuses);
+    conditions.push(`cr.status = ANY($${params.length}::text[])`);
+  }
+  if (designerUserId) {
+    params.push(designerUserId);
+    conditions.push(`cr."designerId" = $${params.length}`);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  let limitClause = '';
+  if (!noLimit) {
+    params.push(offset);
+    limitClause = `LIMIT 50 OFFSET $${params.length}`;
+  }
+
+  // Join designer user for admin display
+  const designerSelect = isAdmin
+    ? `, d.name AS "designerName", d.email AS "designerEmail"`
+    : '';
+  const designerJoin = isAdmin
+    ? `LEFT JOIN "User" d ON d.id = cr."designerId"`
+    : '';
+
   const { rows: requests } = await pool.query(
     `SELECT
        cr.id, cr."fullName", cr.email, cr.phone, cr.destination, cr.dates, cr.duration,
        cr."groupSize", cr."groupType", cr.budget, cr.style, cr.notes, cr.status,
-       cr."itineraryId", cr."createdAt",
+       cr."itineraryId", cr."designerId", cr."createdAt",
        itin.slug   AS "linkedItinerarySlug",
        itin.status AS "linkedItineraryStatus",
        (cr."itineraryId" IS NOT NULL AND ${PAID_EXISTS}) AS "isPaid"
+       ${designerSelect}
      FROM "CustomRequest" cr
      LEFT JOIN "Itinerary" itin ON itin.id = cr."itineraryId"
-     ${useFilter ? `WHERE cr.status = ANY($1::text[])` : ''}
+     ${designerJoin}
+     ${whereClause}
      ORDER BY cr."createdAt" DESC
      ${limitClause}`,
     params
   );
 
+  // Count queries scoped to the same designer filter.
+  const countParams = designerUserId ? [designerUserId] : [];
+  const countWhere  = designerUserId ? `WHERE "designerId" = $1` : '';
+
   const countRes = await pool.query(
-    `SELECT COUNT(*) AS total FROM "CustomRequest"
-     ${useFilter ? `WHERE status = ANY($1::text[])` : ''}`,
-    useFilter ? [statuses] : []
+    `SELECT COUNT(*) AS total FROM "CustomRequest" ${countWhere}`,
+    countParams
   );
   const total = parseInt(countRes.rows[0].total, 10);
 
   const countsRes = await pool.query(
-    `SELECT status, COUNT(*) AS n FROM "CustomRequest" GROUP BY status`
+    `SELECT status, COUNT(*) AS n FROM "CustomRequest" ${countWhere} GROUP BY status`,
+    countParams
   );
   const counts = { open: 0, in_progress: 0, done: 0, all: 0 };
   for (const row of countsRes.rows) {
@@ -766,18 +897,29 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false) {
     counts.all += parseInt(row.n, 10);
   }
 
-  const paymentRes = await pool.query(
-    `SELECT
-       COUNT(*) FILTER (WHERE cr."itineraryId" IS NOT NULL AND ${PAID_EXISTS}) AS paid,
-       COUNT(*) FILTER (WHERE cr."itineraryId" IS NULL     OR  NOT ${PAID_EXISTS}) AS unpaid
-     FROM "CustomRequest" cr`
-  );
-  const paymentCounts = {
-    paid:   parseInt(paymentRes.rows[0].paid,   10) || 0,
-    unpaid: parseInt(paymentRes.rows[0].unpaid, 10) || 0,
-  };
+  // Payment counts and designers list — admin only (expensive / not needed by designer).
+  let paymentCounts = { paid: 0, unpaid: 0 };
+  let designers     = [];
 
-  return { requests, total, counts, paymentCounts };
+  if (isAdmin) {
+    const paymentRes = await pool.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE cr."itineraryId" IS NOT NULL AND ${PAID_EXISTS}) AS paid,
+         COUNT(*) FILTER (WHERE cr."itineraryId" IS NULL     OR  NOT ${PAID_EXISTS}) AS unpaid
+       FROM "CustomRequest" cr`
+    );
+    paymentCounts = {
+      paid:   parseInt(paymentRes.rows[0].paid,   10) || 0,
+      unpaid: parseInt(paymentRes.rows[0].unpaid, 10) || 0,
+    };
+
+    const { rows: designerRows } = await pool.query(
+      `SELECT id, name, email FROM "User" WHERE role = 'designer' ORDER BY name ASC`
+    );
+    designers = designerRows;
+  }
+
+  return { requests, total, counts, paymentCounts, designers };
 }
 
 // ── Downloads ─────────────────────────────────────────────────────────────────
@@ -825,7 +967,7 @@ async function sendApplicantEmail(email, fullName, verdict) {
        <p>Thank you for your interest in HiddenAtlas.</p>`;
 
   await resend.emails.send({
-    from:    'HiddenAtlas <noreply@hiddenatlas.travel>',
+    from:    process.env.EMAIL_FROM || 'HiddenAtlas <noreply@hiddenatlas.travel>',
     to:      [email],
     subject,
     html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;line-height:1.7;">${bodyHtml}<p style="margin-top:32px;color:#8C8070;font-size:13px;">The HiddenAtlas Team</p></div>`,

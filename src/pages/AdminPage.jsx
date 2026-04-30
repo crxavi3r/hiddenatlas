@@ -89,8 +89,9 @@ function SidebarContent({ onClose, isAdmin, creatorId }) {
     : [{
         label: 'My Work',
         items: [
-          { label: 'My Itineraries', path: '/admin/itineraries',  icon: Map },
-          { label: 'Pricing',        path: '/admin/pricing',       icon: Tag },
+          { label: 'My Itineraries',  path: '/admin/itineraries',      icon: Map },
+          { label: 'Custom Requests', path: '/admin/custom-requests',  icon: Inbox },
+          { label: 'Pricing',         path: '/admin/pricing',          icon: Tag },
           ...(creatorId ? [{ label: 'My Profile', path: `/admin/creators/${creatorId}`, icon: User }] : []),
         ],
       }];
