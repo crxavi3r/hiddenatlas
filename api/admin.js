@@ -338,7 +338,8 @@ async function _handler(req, res) {
               },
               quantity: 1,
             }],
-            customer_email: crData.email,
+            customer_email:        crData.email,
+            allow_promotion_codes: true,
             success_url: `${origin}/custom-request/${requestId}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
             cancel_url:  `${origin}/custom-request/${requestId}/payment-cancelled`,
             metadata: {
