@@ -28,6 +28,7 @@ const DESIGNER_ACCESSIBLE_ACTIONS = new Set([
   'custom-request-assign',
   'custom-request-reply',
   'create-itinerary-from-request',
+  'send-quote',
 ]);
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
@@ -284,6 +285,125 @@ async function _handler(req, res) {
         }
         console.log('[api/admin] custom-request-reply sent — to:', reqData.email, '| id:', result.data?.id);
         return res.status(200).json({ ok: true, messageId: result.data?.id });
+      }
+
+      // ── Send a custom price quote to the client ──────────────────────────
+      if (action === 'send-quote') {
+        const { id: bodyId, amount: bodyAmount, message: bodyMessage } = req.body ?? {};
+        const requestId  = bodyId || id;
+        const amountFloat = parseFloat(bodyAmount);
+        if (!requestId)                          return res.status(400).json({ error: 'id is required' });
+        if (!amountFloat || amountFloat <= 0)    return res.status(400).json({ error: 'amount must be greater than 0' });
+        if (!process.env.STRIPE_SECRET_KEY)      return res.status(500).json({ error: 'Stripe not configured' });
+
+        const { rows: crRows } = await pool.query(
+          `SELECT cr.id, cr."fullName", cr.email, cr.destination, cr.dates,
+                  cr."designerId", cr."userId", cr."paidAt", cr."quoteSentAt",
+                  d.name AS "designerName", d.email AS "designerEmail"
+           FROM "CustomRequest" cr
+           LEFT JOIN "User" d ON d.id = cr."designerId"
+           WHERE cr.id = $1 LIMIT 1`,
+          [requestId]
+        );
+        if (!crRows.length) return res.status(404).json({ error: 'Request not found' });
+        const crData = crRows[0];
+
+        if (!adminCtx.isAdmin && adminCtx.userId !== crData.designerId) {
+          return res.status(403).json({ error: 'Not your request' });
+        }
+        if (crData.paidAt) {
+          return res.status(409).json({ error: 'Request already paid' });
+        }
+
+        const amountCents = Math.round(amountFloat * 100);
+        const quoteMessage = bodyMessage?.trim() || null;
+        const dest = crData.destination || 'your destination';
+        const origin = req.headers.origin || 'https://hiddenatlas.travel';
+
+        // Create Stripe Checkout Session with a dynamic price
+        const Stripe = (await import('stripe')).default;
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+        let stripeSession;
+        try {
+          stripeSession = await stripe.checkout.sessions.create({
+            mode: 'payment',
+            line_items: [{
+              price_data: {
+                currency: 'eur',
+                product_data: {
+                  name: `HiddenAtlas Custom Trip Planning — ${dest}`,
+                  ...(quoteMessage ? { description: quoteMessage } : {}),
+                },
+                unit_amount: amountCents,
+              },
+              quantity: 1,
+            }],
+            customer_email: crData.email,
+            success_url: `${origin}/custom-request/${requestId}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url:  `${origin}/custom-request/${requestId}/payment-cancelled`,
+            metadata: {
+              type:              'custom_request_quote',
+              custom_request_id: requestId,
+              designer_id:       crData.designerId || '',
+              user_id:           crData.userId     || '',
+            },
+          });
+        } catch (stripeErr) {
+          console.error('[api/admin] send-quote Stripe error:', stripeErr.message);
+          return res.status(502).json({ error: `Stripe error: ${stripeErr.message}` });
+        }
+
+        // Persist quote data
+        await pool.query(
+          `UPDATE "CustomRequest"
+           SET "quoteAmount" = $1, "quoteCurrency" = 'eur', "quoteMessage" = $2,
+               "quoteSentAt" = NOW(), "stripeCheckoutSessionId" = $3, "stripePaymentUrl" = $4
+           WHERE id = $5`,
+          [amountCents, quoteMessage, stripeSession.id, stripeSession.url, requestId]
+        );
+
+        // Email client with payment link (non-fatal)
+        if (process.env.RESEND_API_KEY) {
+          const { Resend } = await import('resend');
+          const resend = new Resend(process.env.RESEND_API_KEY);
+          const FROM         = process.env.EMAIL_FROM || 'HiddenAtlas <noreply@hiddenatlas.travel>';
+          const replyToEmail = (crData.designerEmail || adminCtx.email || '').trim().toLowerCase() || null;
+          const senderLabel  = crData.designerName ?? 'The HiddenAtlas Team';
+          const firstName    = crData.fullName?.split(' ')[0] ?? 'there';
+          const amountFmt    = `€${(amountCents / 100).toFixed(2)}`;
+          try {
+            const emailResult = await resend.emails.send({
+              from:    FROM,
+              replyTo: replyToEmail ?? undefined,
+              to:      crData.email,
+              subject: `Your custom trip quote — ${amountFmt}`,
+              html: `
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;">
+                  <h2 style="color:#1B6B65;">Hi ${esc(firstName)},</h2>
+                  <p style="font-size:15px;line-height:1.7;">We've reviewed your request and prepared a personalised quote for your journey to <strong>${esc(dest)}</strong>.</p>
+                  ${quoteMessage ? `<div style="background:#F8F6F2;border-left:3px solid #1B6B65;padding:14px 18px;border-radius:0 6px 6px 0;margin:20px 0;"><p style="font-size:14px;line-height:1.7;margin:0;white-space:pre-wrap;">${esc(quoteMessage)}</p></div>` : ''}
+                  <table style="width:100%;border-collapse:collapse;font-size:14px;margin:20px 0;">
+                    ${crData.destination ? `<tr><td style="padding:6px 0;color:#8C8070;width:120px;">Destination</td><td style="padding:6px 0;font-weight:600;">${esc(crData.destination)}</td></tr>` : ''}
+                    ${crData.dates ? `<tr><td style="padding:6px 0;color:#8C8070;">Dates</td><td style="padding:6px 0;">${esc(crData.dates)}</td></tr>` : ''}
+                    <tr><td style="padding:6px 0;color:#8C8070;">Quote amount</td><td style="padding:6px 0;font-weight:700;color:#1B6B65;font-size:16px;">${amountFmt}</td></tr>
+                  </table>
+                  <p style="margin:28px 0 8px;"><a href="${stripeSession.url}" style="display:inline-block;background:#1B6B65;color:white;text-decoration:none;padding:14px 28px;border-radius:8px;font-size:15px;font-weight:600;">Accept quote and pay →</a></p>
+                  ${replyToEmail ? `<p style="font-size:13px;color:#8C8070;margin-top:20px;">You can reply directly to this email to contact ${esc(senderLabel)}.</p>` : ''}
+                  <p style="font-size:14px;color:#8C8070;margin-top:12px;">— ${esc(senderLabel)}, HiddenAtlas</p>
+                  <hr style="border:none;border-top:1px solid #E8E3DA;margin:24px 0;" />
+                  <p style="color:#B5AA99;font-size:11px;">You are receiving this because you submitted a custom trip request on hiddenatlas.travel. Payment is handled securely by Stripe.</p>
+                </div>
+              `,
+            });
+            if (emailResult.error) console.error('[api/admin] send-quote email error:', JSON.stringify(emailResult.error));
+            else console.log('[api/admin] send-quote email sent — to:', crData.email, '| Resend id:', emailResult.data?.id);
+          } catch (emailErr) {
+            console.error('[api/admin] send-quote email exception:', emailErr.message);
+          }
+        }
+
+        console.log('[api/admin] send-quote done — requestId:', requestId, '| amountCents:', amountCents, '| sessionId:', stripeSession.id);
+        return res.status(200).json({ ok: true, stripePaymentUrl: stripeSession.url, sessionId: stripeSession.id });
       }
 
       // ── Create an itinerary from a custom request ────────────────────────
@@ -978,10 +1098,16 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false, ctx
        cr.id, cr."fullName", cr.email, cr.phone, cr.destination, cr.dates, cr.duration,
        cr."groupSize", cr."groupType", cr.budget, cr.style, cr.notes, cr.status,
        cr."itineraryId", cr."designerId", cr."createdAt",
+       cr."paidAt", cr."quoteSentAt", cr."quoteAmount", cr."stripePaymentUrl",
+       CASE
+         WHEN cr."paidAt" IS NOT NULL THEN 'paid'
+         WHEN cr."quoteSentAt" IS NOT NULL THEN 'quote_sent'
+         ELSE 'unpaid'
+       END AS "paymentStatus",
        itin.slug   AS "linkedItinerarySlug",
        itin.status AS "linkedItineraryStatus",
        itin.title  AS "linkedItineraryTitle",
-       (cr."itineraryId" IS NOT NULL AND ${PAID_EXISTS}) AS "isPaid"
+       (cr."paidAt" IS NOT NULL OR (cr."itineraryId" IS NOT NULL AND ${PAID_EXISTS})) AS "isPaid"
        ${designerSelect}
      FROM "CustomRequest" cr
      LEFT JOIN "Itinerary" itin ON itin.id = cr."itineraryId"
@@ -1021,13 +1147,15 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false, ctx
   if (isAdmin) {
     const paymentRes = await pool.query(
       `SELECT
-         COUNT(*) FILTER (WHERE cr."itineraryId" IS NOT NULL AND ${PAID_EXISTS}) AS paid,
-         COUNT(*) FILTER (WHERE cr."itineraryId" IS NULL     OR  NOT ${PAID_EXISTS}) AS unpaid
+         COUNT(*) FILTER (WHERE cr."paidAt" IS NOT NULL OR (cr."itineraryId" IS NOT NULL AND ${PAID_EXISTS})) AS paid,
+         COUNT(*) FILTER (WHERE cr."quoteSentAt" IS NOT NULL AND cr."paidAt" IS NULL AND (cr."itineraryId" IS NULL OR NOT ${PAID_EXISTS})) AS quote_sent,
+         COUNT(*) FILTER (WHERE cr."quoteSentAt" IS NULL AND cr."paidAt" IS NULL AND (cr."itineraryId" IS NULL OR NOT ${PAID_EXISTS})) AS unpaid
        FROM "CustomRequest" cr`
     );
     paymentCounts = {
-      paid:   parseInt(paymentRes.rows[0].paid,   10) || 0,
-      unpaid: parseInt(paymentRes.rows[0].unpaid, 10) || 0,
+      paid:       parseInt(paymentRes.rows[0].paid,       10) || 0,
+      quote_sent: parseInt(paymentRes.rows[0].quote_sent, 10) || 0,
+      unpaid:     parseInt(paymentRes.rows[0].unpaid,     10) || 0,
     };
 
     const { rows: designerRows } = await pool.query(

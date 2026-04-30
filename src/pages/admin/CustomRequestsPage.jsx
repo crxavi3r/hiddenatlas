@@ -15,8 +15,9 @@ const ALL_STATUSES          = Object.keys(STATUS_META);
 const DEFAULT_STATUS_FILTER = ['open', 'in_progress'];
 
 const PAYMENT_META = {
-  unpaid: { label: 'Unpaid', color: '#8C8070', bg: '#F4F1EC' },
-  paid:   { label: 'Paid',   color: '#1B6B65', bg: '#EFF6F5' },
+  unpaid:     { label: 'Unpaid',     color: '#8C8070', bg: '#F4F1EC' },
+  quote_sent: { label: 'Quote sent', color: '#A07830', bg: '#FBF6EE' },
+  paid:       { label: 'Paid',       color: '#1B6B65', bg: '#EFF6F5' },
 };
 const ALL_PAYMENT_STATUSES = Object.keys(PAYMENT_META);
 
@@ -100,7 +101,7 @@ function matchesFilter(row, col, filterVal) {
   }
   if (col.type === 'payment') {
     if (!filterVal || filterVal.length === 0 || filterVal.length === ALL_PAYMENT_STATUSES.length) return true;
-    return filterVal.includes(row.isPaid ? 'paid' : 'unpaid');
+    return filterVal.includes(row.paymentStatus ?? 'unpaid');
   }
   if (!filterVal) return true;
   const search = String(filterVal).toLowerCase().trim();
@@ -420,8 +421,8 @@ function StatusAction({ requestId, current, linkedItineraryStatus, onUpdated, to
 }
 
 // ── PaymentBadge ──────────────────────────────────────────────────────────────
-function PaymentBadge({ isPaid }) {
-  const m = isPaid ? PAYMENT_META.paid : PAYMENT_META.unpaid;
+function PaymentBadge({ paymentStatus = 'unpaid' }) {
+  const m = PAYMENT_META[paymentStatus] ?? PAYMENT_META.unpaid;
   return (
     <span style={{
       fontSize: '11px', fontWeight: '600', color: m.color, background: m.bg,
@@ -654,6 +655,145 @@ function ReplyModal({ request, token, onClose }) {
   );
 }
 
+// ── QuoteModal ────────────────────────────────────────────────────────────────
+function QuoteModal({ request, token, onClose, onSent }) {
+  const [amount,  setAmount]  = useState('');
+  const [message, setMessage] = useState('We reviewed your request and prepared a custom trip planning quote. Please click below to confirm your booking.');
+  const [sending, setSending] = useState(false);
+  const [sent,    setSent]    = useState(false);
+  const [error,   setError]   = useState(null);
+  const amountRef             = useRef(null);
+
+  useEffect(() => { amountRef.current?.focus(); }, []);
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  async function send() {
+    const num = parseFloat(amount);
+    if (!num || num <= 0 || sending) return;
+    setSending(true);
+    setError(null);
+    try {
+      const res  = await fetch('/api/admin?action=send-quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id: request.id, amount: num, message: message.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send quote');
+      setSent(true);
+      onSent?.(request.id, data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const isResend = !!request.quoteSentAt;
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(15,26,24,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+    >
+      <div style={{ background: 'white', borderRadius: '12px', padding: '28px', width: '100%', maxWidth: '520px', boxShadow: '0 24px 60px rgba(0,0,0,0.25)' }}>
+        {sent ? (
+          <div style={{ textAlign: 'center', padding: '16px 0' }}>
+            <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#EFF6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+              <Check size={22} color="#1B6B65" />
+            </div>
+            <p style={{ fontWeight: '600', color: '#1C1A16', fontSize: '15px', marginBottom: '6px' }}>Quote sent</p>
+            <p style={{ fontSize: '13px', color: '#8C8070', marginBottom: '20px' }}>
+              Payment link delivered to <strong>{request.email}</strong>.
+            </p>
+            <button onClick={onClose} style={{ padding: '8px 20px', background: '#1B6B65', color: 'white', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+              Close
+            </button>
+          </div>
+        ) : (
+          <>
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '17px', fontWeight: '600', color: '#1C1A16', marginBottom: '4px' }}>
+                {isResend ? 'Resend quote' : 'Send quote'}
+              </h3>
+              <p style={{ fontSize: '12.5px', color: '#8C8070' }}>
+                Sending to <strong>{request.fullName}</strong> · {request.destination || 'no destination'}
+              </p>
+            </div>
+
+            {/* Amount */}
+            <label style={{ display: 'block', marginBottom: '16px' }}>
+              <p style={{ fontSize: '11px', fontWeight: '600', color: '#6B6156', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
+                Quote amount (EUR) *
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #D4CCBF', borderRadius: '6px', overflow: 'hidden' }}>
+                <span style={{ padding: '9px 12px', background: '#F8F6F2', color: '#6B6156', fontSize: '14px', fontWeight: '600', borderRight: '1px solid #D4CCBF', userSelect: 'none' }}>€</span>
+                <input
+                  ref={amountRef}
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={e => setAmount(e.target.value)}
+                  style={{ flex: 1, padding: '9px 12px', border: 'none', outline: 'none', fontSize: '15px', fontWeight: '600', color: '#1C1A16', background: 'white' }}
+                  onFocus={e => { e.target.parentElement.style.borderColor = '#1B6B65'; }}
+                  onBlur={e  => { e.target.parentElement.style.borderColor = '#D4CCBF'; }}
+                />
+              </div>
+            </label>
+
+            {/* Message */}
+            <label style={{ display: 'block', marginBottom: '16px' }}>
+              <p style={{ fontSize: '11px', fontWeight: '600', color: '#6B6156', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
+                Message to client
+              </p>
+              <textarea
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                rows={4}
+                style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #D4CCBF', borderRadius: '6px', fontSize: '13.5px', color: '#1C1A16', lineHeight: '1.6', resize: 'vertical', outline: 'none', fontFamily: 'inherit' }}
+                onFocus={e => { e.target.style.borderColor = '#1B6B65'; }}
+                onBlur={e  => { e.target.style.borderColor = '#D4CCBF'; }}
+              />
+            </label>
+
+            {error && <p style={{ fontSize: '12px', color: '#B91C1C', marginBottom: '12px' }}>{error}</p>}
+
+            <p style={{ fontSize: '11px', color: '#B5AA99', marginBottom: '16px' }}>
+              Client will receive a Stripe payment link by email. Reply-to will be set to the designer's email.
+            </p>
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button onClick={onClose} style={{ padding: '8px 16px', background: 'white', color: '#4A433A', border: '1px solid #E8E3DA', borderRadius: '6px', fontSize: '13px', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button
+                onClick={send}
+                disabled={!amount || parseFloat(amount) <= 0 || sending}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 18px', background: '#1B6B65', color: 'white',
+                  border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '600',
+                  cursor: (!amount || parseFloat(amount) <= 0 || sending) ? 'not-allowed' : 'pointer',
+                  opacity: (!amount || parseFloat(amount) <= 0 || sending) ? 0.6 : 1,
+                }}
+              >
+                <Send size={13} />
+                {sending ? 'Sending…' : (isResend ? 'Resend quote' : 'Send quote')}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ message, onDismiss }) {
   useEffect(() => {
@@ -703,6 +843,7 @@ export default function CustomRequestsPage() {
   const [replyModal, setReplyModal]               = useState(null);
   const [creatingItinerary, setCreatingItinerary] = useState(new Set());
   const [toast, setToast]                         = useState(null);
+  const [quoteModal, setQuoteModal]               = useState(null);
   const isMobile                                  = useIsMobile();
 
   // Extra columns rendered manually (not in PRIMARY_COLS filter system)
@@ -781,6 +922,16 @@ export default function CustomRequestsPage() {
     }
   }
 
+  function handleQuoteSent(requestId, data) {
+    setAllRows(prev => prev.map(r =>
+      r.id === requestId
+        ? { ...r, paymentStatus: 'quote_sent', stripePaymentUrl: data.stripePaymentUrl, quoteSentAt: new Date().toISOString() }
+        : r
+    ));
+    setQuoteModal(null);
+    setToast('Quote sent — payment link delivered to client.');
+  }
+
   function setFilter(colId, val) {
     setFilters(prev => ({ ...prev, [colId]: val }));
     setPage(1);
@@ -843,7 +994,7 @@ export default function CustomRequestsPage() {
   // ── Mobile card ───────────────────────────────────────────────────────────────
   function MobileCard({ r, i }) {
     const sm = STATUS_META[r.status] ?? STATUS_META.open;
-    const pm = PAYMENT_META[r.isPaid ? 'paid' : 'unpaid'];
+    const pm = PAYMENT_META[r.paymentStatus ?? 'unpaid'] ?? PAYMENT_META.unpaid;
     return (
       <div style={{ padding: '14px 16px', borderTop: i > 0 ? '1px solid #F4F1EC' : 'none', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
@@ -915,6 +1066,21 @@ export default function CustomRequestsPage() {
                 {creatingItinerary.has(r.id) ? '…' : <><Plus size={10} /> Itinerary</>}
               </button>
             ) : null}
+            {authToken && (isAdmin || isDesigner) && r.paymentStatus !== 'paid' && (
+              <button
+                onClick={() => setQuoteModal(r)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  fontSize: '11px', fontWeight: '500',
+                  color: r.paymentStatus === 'quote_sent' ? '#A07830' : '#4A433A',
+                  background: r.paymentStatus === 'quote_sent' ? '#FBF6EE' : 'white',
+                  border: `1px solid ${r.paymentStatus === 'quote_sent' ? '#E8C87A' : '#D4CCBF'}`,
+                  padding: '3px 9px', borderRadius: '6px', cursor: 'pointer',
+                }}
+              >
+                {r.paymentStatus === 'quote_sent' ? 'Resend quote' : 'Send quote'}
+              </button>
+            )}
             {authToken && (isAdmin || isDesigner) && (
               <button
                 onClick={() => setReplyModal(r)}
@@ -1128,9 +1294,25 @@ export default function CustomRequestsPage() {
                         }
                       </td>
 
-                      {/* Payment status */}
-                      <td style={TD}>
-                        <PaymentBadge isPaid={r.isPaid} />
+                      {/* Payment status + Send quote shortcut */}
+                      <td style={{ ...TD, whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap' }}>
+                          <PaymentBadge paymentStatus={r.paymentStatus} />
+                          {authToken && r.paymentStatus !== 'paid' && (isAdmin || r.designerId === authToken) && (
+                            <button
+                              onClick={() => setQuoteModal(r)}
+                              title={r.paymentStatus === 'quote_sent' ? 'Resend quote' : 'Send quote'}
+                              style={{
+                                fontSize: '10.5px', fontWeight: '500', color: '#6B6156',
+                                background: 'white', border: '1px solid #D4CCBF',
+                                padding: '2px 7px', borderRadius: '4px', cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {r.paymentStatus === 'quote_sent' ? 'Resend' : 'Quote'}
+                            </button>
+                          )}
+                        </div>
                       </td>
 
                       {/* Itinerary */}
@@ -1260,6 +1442,23 @@ export default function CustomRequestsPage() {
                                     {creatingItinerary.has(r.id) ? 'Creating…' : 'Create itinerary'}
                                   </button>
                                 )}
+                                {/* Quote button — only when not yet paid */}
+                                {r.paymentStatus !== 'paid' && (
+                                  <button
+                                    onClick={() => setQuoteModal(r)}
+                                    style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                      padding: '6px 14px',
+                                      background: r.paymentStatus === 'quote_sent' ? '#FBF6EE' : 'white',
+                                      border: `1px solid ${r.paymentStatus === 'quote_sent' ? '#E8C87A' : '#D4CCBF'}`,
+                                      borderRadius: '6px', cursor: 'pointer',
+                                      fontSize: '12px', fontWeight: '500',
+                                      color: r.paymentStatus === 'quote_sent' ? '#A07830' : '#4A433A',
+                                    }}
+                                  >
+                                    {r.paymentStatus === 'quote_sent' ? 'Resend quote' : 'Send quote'}
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => setReplyModal(r)}
                                   style={{
@@ -1322,6 +1521,16 @@ export default function CustomRequestsPage() {
           request={replyModal}
           token={authToken}
           onClose={() => setReplyModal(null)}
+        />
+      )}
+
+      {/* Quote modal */}
+      {quoteModal && (
+        <QuoteModal
+          request={quoteModal}
+          token={authToken}
+          onClose={() => setQuoteModal(null)}
+          onSent={handleQuoteSent}
         />
       )}
 

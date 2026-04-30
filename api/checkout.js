@@ -668,6 +668,116 @@ async function handleCustomVerify(req, res, body) {
   }
 }
 
+// ── HTML escape helper ────────────────────────────────────────────────────────
+function esc(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Process a completed quote payment (custom_request_quote) ──────────────────
+// Idempotent: guards on CustomRequest.paidAt.
+async function processQuotePayment(pool, session) {
+  const meta      = session.metadata || {};
+  const requestId = meta.custom_request_id;
+  if (!requestId) {
+    console.warn('[processQuotePayment] missing custom_request_id in metadata');
+    return;
+  }
+
+  const { rows: crRows } = await pool.query(
+    `SELECT cr.id, cr."fullName", cr.email, cr.destination, cr."designerId",
+            cr."userId", cr.status, cr."paidAt",
+            d.email AS "designerEmail", d.name AS "designerName"
+     FROM "CustomRequest" cr
+     LEFT JOIN "User" d ON d.id = cr."designerId"
+     WHERE cr.id = $1 LIMIT 1`,
+    [requestId]
+  );
+  if (!crRows.length) {
+    console.warn('[processQuotePayment] CustomRequest not found — id:', requestId);
+    return;
+  }
+  const cr = crRows[0];
+
+  // Idempotency
+  if (cr.paidAt) {
+    console.log('[processQuotePayment] already paid — requestId:', requestId);
+    return;
+  }
+
+  const now    = new Date();
+  const amount = (session.amount_total ?? 0) / 100;
+  const amountFmt = `€${amount.toFixed(2)}`;
+  const dest   = cr.destination || 'your destination';
+
+  await pool.query(
+    `UPDATE "CustomRequest"
+     SET "paidAt" = $1, "quoteAcceptedAt" = $1,
+         status = CASE WHEN status = 'open' THEN 'in_progress' ELSE status END
+     WHERE id = $2`,
+    [now, requestId]
+  );
+  console.log('[processQuotePayment] marked paid — requestId:', requestId, '| amount:', amount);
+
+  // Emails — non-fatal
+  if (!process.env.RESEND_API_KEY) return;
+  const { Resend } = await import('resend');
+  const resend   = new Resend(process.env.RESEND_API_KEY);
+  const FROM     = process.env.EMAIL_FROM || 'HiddenAtlas <noreply@hiddenatlas.travel>';
+  const FALLBACK = 'contact@hiddenatlas.travel';
+  const firstName = cr.fullName?.split(' ')[0] ?? 'there';
+  const senderLabel = cr.designerName ?? 'The HiddenAtlas Team';
+
+  // Notify designer/admin
+  try {
+    const designerTo = cr.designerEmail ?? FALLBACK;
+    await resend.emails.send({
+      from:    FROM,
+      replyTo: cr.email,
+      to:      designerTo,
+      ...(cr.designerEmail ? { bcc: [FALLBACK] } : {}),
+      subject: `Quote accepted — ${cr.fullName} paid ${amountFmt}`,
+      html: `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;">
+          <h2 style="color:#1B6B65;">Quote accepted — payment received</h2>
+          <p style="font-size:14px;color:#8C8070;">${esc(cr.fullName)} has paid the custom trip planning quote.</p>
+          <table style="width:100%;border-collapse:collapse;font-size:14px;margin:16px 0;">
+            <tr><td style="padding:6px 0;color:#8C8070;width:120px;">Client</td><td style="padding:6px 0;font-weight:600;">${esc(cr.fullName)}</td></tr>
+            <tr><td style="padding:6px 0;color:#8C8070;">Email</td><td style="padding:6px 0;"><a href="mailto:${esc(cr.email)}" style="color:#1B6B65;">${esc(cr.email)}</a></td></tr>
+            <tr><td style="padding:6px 0;color:#8C8070;">Destination</td><td style="padding:6px 0;">${esc(dest)}</td></tr>
+            <tr><td style="padding:6px 0;color:#8C8070;">Amount paid</td><td style="padding:6px 0;font-weight:700;color:#1B6B65;">${amountFmt}</td></tr>
+          </table>
+          <p><a href="https://hiddenatlas.travel/admin/custom-requests" style="display:inline-block;background:#1B6B65;color:white;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:13px;font-weight:600;">Open in Backoffice →</a></p>
+        </div>
+      `,
+    });
+  } catch (err) {
+    console.error('[processQuotePayment] designer notification error:', err.message);
+  }
+
+  // Confirm to client
+  try {
+    await resend.emails.send({
+      from:    FROM,
+      replyTo: cr.designerEmail ?? FALLBACK,
+      to:      cr.email,
+      subject: `Payment confirmed — your HiddenAtlas journey to ${dest}`,
+      html: `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;">
+          <h2 style="color:#1B6B65;">Hi ${esc(firstName)},</h2>
+          <p style="font-size:15px;line-height:1.7;">Your payment of <strong>${amountFmt}</strong> has been received. ${cr.designerName ? esc(cr.designerName) : 'Your travel designer'} will now start building your bespoke itinerary for <strong>${esc(dest)}</strong>.</p>
+          <p style="font-size:15px;line-height:1.7;">You'll receive your itinerary once it's ready. If you have any questions in the meantime, just reply to this email.</p>
+          <p style="font-size:14px;color:#8C8070;margin-top:24px;">— ${esc(senderLabel)}, HiddenAtlas</p>
+          <hr style="border:none;border-top:1px solid #E8E3DA;margin:24px 0;" />
+          <p style="color:#B5AA99;font-size:11px;">You are receiving this because you purchased a custom trip planning service on hiddenatlas.travel.</p>
+        </div>
+      `,
+    });
+  } catch (err) {
+    console.error('[processQuotePayment] client confirmation error:', err.message);
+  }
+}
+
 // ── POST /api/checkout (stripe-signature header present) ─────────────────────
 async function handleWebhook(req, res, rawBody) {
   if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET || !process.env.DATABASE_URL) {
@@ -702,6 +812,20 @@ async function handleWebhook(req, res, rawBody) {
   }
 
   // ── Route by session type ─────────────────────────────────────────────────
+  if (session.metadata?.type === 'custom_request_quote') {
+    console.log('[checkout/webhook] custom_request_quote payment — sessionId:', session.id);
+    const wpPool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      await processQuotePayment(wpPool, session);
+      console.log('[checkout/webhook] custom_request_quote processed — sessionId:', session.id);
+    } catch (err) {
+      console.error('[checkout/webhook] custom_request_quote DB error:', err.message);
+    } finally {
+      await wpPool.end();
+    }
+    return res.status(200).json({ received: true });
+  }
+
   if (session.metadata?.type === 'custom_planning') {
     console.log('[checkout/webhook] custom_planning payment — sessionId:', session.id);
     const wpPool = new Pool({ connectionString: process.env.DATABASE_URL });

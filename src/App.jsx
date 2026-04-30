@@ -41,6 +41,7 @@ import BecomeDesignerPage from './pages/BecomeDesignerPage';
 import DesignerPricingPage from './pages/DesignerPricingPage';
 import DesignerApplicationsPage from './pages/admin/DesignerApplicationsPage';
 import PricingPlansPage from './pages/admin/PricingPlansPage';
+import { CustomRequestPaymentSuccessPage, CustomRequestPaymentCancelledPage } from './pages/CustomRequestPaymentPage';
 
 // ── Scroll to top on route change ────────────────────────────────────────────
 function LegacyCustomRedirect() {
@@ -132,6 +133,8 @@ export default function App() {
           <Route path="/privacy" element={<PrivacyPolicyPage />} />
           <Route path="/terms" element={<TermsOfServicePage />} />
           <Route path="/refunds" element={<RefundPolicyPage />} />
+          <Route path="/custom-request/:id/payment-success"   element={<CustomRequestPaymentSuccessPage />} />
+          <Route path="/custom-request/:id/payment-cancelled" element={<CustomRequestPaymentCancelledPage />} />
           {/* Creator profile page — must be last: React Router v6 prefers static
               paths (higher specificity) over this dynamic catch-all */}
           <Route path="/:creatorSlug" element={<CreatorProfilePage />} />
