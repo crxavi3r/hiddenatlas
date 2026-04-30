@@ -415,10 +415,10 @@ async function _handler(req, res) {
         if (!requestId)                     return res.status(400).json({ error: 'id is required' });
         if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: 'Stripe not configured' });
 
-        // Explicit ::uuid cast avoids type-inference issues on UUID primary keys
+        // CustomRequest.id is TEXT — use ::text, never ::uuid
         const { rows: crRows } = await pool.query(
-          `SELECT id::text, "paidAt", "stripeCheckoutSessionId", "designerId"::text
-           FROM "CustomRequest" WHERE id = $1::uuid LIMIT 1`,
+          `SELECT id, "paidAt", "stripeCheckoutSessionId", "designerId"
+           FROM "CustomRequest" WHERE id = $1::text LIMIT 1`,
           [requestId]
         );
         if (!crRows.length) return res.status(404).json({ error: 'Request not found' });
@@ -473,7 +473,7 @@ async function _handler(req, res) {
                "quoteAcceptedAt"         = $2::timestamptz,
                "stripeCheckoutSessionId" = $3::text,
                status = CASE WHEN status = 'open' THEN 'in_progress' ELSE status END
-           WHERE id = $4::uuid AND "paidAt" IS NULL`,
+           WHERE id = $4::text AND "paidAt" IS NULL`,
           [nowISO, nowISO, stripeSession.id, requestId]
         );
 
