@@ -675,23 +675,44 @@ function esc(str) {
 }
 
 // ── Shared: mark a CustomRequest as paid from a Stripe session ────────────────
-// Used by processQuotePayment (webhook) and sync-payment (admin action).
-// Returns the updated CustomRequest row, or null if not found / already paid.
+// Used by processQuotePayment (webhook).
+// Returns the updated CustomRequest row (with designer info), or null if not
+// found / already paid.
+// NOTE: paidAt and quoteAcceptedAt use separate parameters ($1/$2) with
+// explicit ::timestamptz casts to avoid PostgreSQL "inconsistent types deduced
+// for parameter $N" when the two columns have different timestamp type variants.
 async function markQuotePaid(pool, requestId, session) {
-  const now    = new Date();
+  const nowISO = new Date().toISOString();
+  // Step 1: atomic UPDATE — only fires when paidAt IS NULL (idempotency guard)
   const result = await pool.query(
     `UPDATE "CustomRequest"
-     SET "paidAt"                  = $1,
-         "quoteAcceptedAt"         = $1,
-         "stripeCheckoutSessionId" = $2,
+     SET "paidAt"                  = $1::timestamptz,
+         "quoteAcceptedAt"         = $2::timestamptz,
+         "stripeCheckoutSessionId" = $3::text,
          status = CASE WHEN status = 'open' THEN 'in_progress' ELSE status END
-     WHERE id = $3 AND "paidAt" IS NULL
-     RETURNING id, "fullName", email, destination, "designerId",
-               (SELECT email FROM "User" WHERE id = "designerId") AS "designerEmail",
-               (SELECT name  FROM "User" WHERE id = "designerId") AS "designerName"`,
-    [now, session.id, requestId]
+     WHERE id = $4::uuid AND "paidAt" IS NULL
+     RETURNING id, "fullName", email, destination, "designerId"`,
+    [nowISO, nowISO, session.id, requestId]
   );
-  return result.rows[0] ?? null;
+  if (!result.rows[0]) return null;
+  const row = { ...result.rows[0] };
+
+  // Step 2: fetch designer contact separately (avoids correlated-subquery
+  // ambiguity in RETURNING when designerId/id column names overlap)
+  if (row.designerId) {
+    try {
+      const { rows: dRows } = await pool.query(
+        `SELECT email AS "designerEmail", name AS "designerName"
+         FROM "User" WHERE id = $1::uuid LIMIT 1`,
+        [row.designerId]
+      );
+      if (dRows[0]) {
+        row.designerEmail = dRows[0].designerEmail;
+        row.designerName  = dRows[0].designerName;
+      }
+    } catch { /* non-fatal — emails will use fallback address */ }
+  }
+  return row;
 }
 
 // ── Process a completed quote payment (custom_request_quote) ──────────────────
@@ -711,7 +732,7 @@ async function processQuotePayment(pool, session) {
   if (!requestId) {
     console.warn('[processQuotePayment] customRequestId missing from metadata — attempting lookup by stripeCheckoutSessionId');
     const { rows: fallback } = await pool.query(
-      `SELECT id FROM "CustomRequest" WHERE "stripeCheckoutSessionId" = $1 LIMIT 1`,
+      `SELECT id::text FROM "CustomRequest" WHERE "stripeCheckoutSessionId" = $1::text LIMIT 1`,
       [session.id]
     );
     requestId = fallback[0]?.id ?? null;
@@ -730,7 +751,7 @@ async function processQuotePayment(pool, session) {
   const cr = await markQuotePaid(pool, requestId, session);
   if (!cr) {
     // Either not found or already paid (UPDATE WHERE paidAt IS NULL returned 0 rows)
-    const { rows } = await pool.query(`SELECT id, "paidAt" FROM "CustomRequest" WHERE id = $1`, [requestId]);
+    const { rows } = await pool.query(`SELECT id::text, "paidAt" FROM "CustomRequest" WHERE id = $1::uuid`, [requestId]);
     if (rows[0]?.paidAt) {
       console.log('[processQuotePayment] already paid — requestId:', requestId);
     } else {

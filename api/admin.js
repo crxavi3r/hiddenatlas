@@ -415,13 +415,18 @@ async function _handler(req, res) {
         if (!requestId)                     return res.status(400).json({ error: 'id is required' });
         if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: 'Stripe not configured' });
 
+        // Explicit ::uuid cast avoids type-inference issues on UUID primary keys
         const { rows: crRows } = await pool.query(
-          `SELECT id, "paidAt", "stripeCheckoutSessionId", "designerId"
-           FROM "CustomRequest" WHERE id = $1 LIMIT 1`,
+          `SELECT id::text, "paidAt", "stripeCheckoutSessionId", "designerId"::text
+           FROM "CustomRequest" WHERE id = $1::uuid LIMIT 1`,
           [requestId]
         );
         if (!crRows.length) return res.status(404).json({ error: 'Request not found' });
         const crData = crRows[0];
+
+        console.log('[api/admin] sync-payment — requestId:', requestId,
+          '| paidAt:', crData.paidAt,
+          '| stripeCheckoutSessionId:', crData.stripeCheckoutSessionId);
 
         if (!adminCtx.isAdmin && adminCtx.userId !== crData.designerId) {
           return res.status(403).json({ error: 'Not your request' });
@@ -444,7 +449,8 @@ async function _handler(req, res) {
           return res.status(502).json({ error: `Stripe error: ${err.message}` });
         }
 
-        console.log('[api/admin] sync-payment — sessionId:', stripeSession.id,
+        console.log('[api/admin] sync-payment — Stripe session retrieved',
+          '| sessionId:', stripeSession.id,
           '| payment_status:', stripeSession.payment_status,
           '| amount_total:', stripeSession.amount_total);
 
@@ -454,18 +460,21 @@ async function _handler(req, res) {
           stripeSession.amount_total === 0;
 
         if (!isPaid) {
+          console.log('[api/admin] sync-payment — not yet paid, payment_status:', stripeSession.payment_status);
           return res.status(200).json({ ok: false, alreadyPaid: false, paymentStatus: stripeSession.payment_status, message: 'Stripe session not yet paid' });
         }
 
-        const now = new Date();
+        const nowISO = new Date().toISOString();
+        // Use separate $1/$2 for the two timestamp columns and explicit type casts
+        // to avoid "inconsistent types deduced for parameter $N" PostgreSQL error
         const { rowCount } = await pool.query(
           `UPDATE "CustomRequest"
-           SET "paidAt"                  = $1,
-               "quoteAcceptedAt"         = $1,
-               "stripeCheckoutSessionId" = $2,
+           SET "paidAt"                  = $1::timestamptz,
+               "quoteAcceptedAt"         = $2::timestamptz,
+               "stripeCheckoutSessionId" = $3::text,
                status = CASE WHEN status = 'open' THEN 'in_progress' ELSE status END
-           WHERE id = $3 AND "paidAt" IS NULL`,
-          [now, stripeSession.id, requestId]
+           WHERE id = $4::uuid AND "paidAt" IS NULL`,
+          [nowISO, nowISO, stripeSession.id, requestId]
         );
 
         console.log('[api/admin] sync-payment — marked paid requestId:', requestId, '| rowsUpdated:', rowCount);
