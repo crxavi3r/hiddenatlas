@@ -688,6 +688,52 @@ async function handleWebhook(req, res, rawBody) {
     return res.status(500).json({ error: 'Server misconfigured' });
   }
 
+  // ── WebhookLog setup ──────────────────────────────────────────────────────
+  const logPool = new Pool({ connectionString: process.env.DATABASE_URL });
+  let logId = null;
+
+  async function updateLog(fields) {
+    if (!logId) return;
+    try {
+      const keys = Object.keys(fields);
+      const params = keys.map(k => {
+        const v = fields[k];
+        return (v !== null && v !== undefined && typeof v === 'object') ? JSON.stringify(v) : v;
+      });
+      const sets = keys.map((k, i) => {
+        if (k === 'metadata' || k === 'rawSummary') return `"${k}" = $${i + 1}::jsonb`;
+        return `"${k}" = $${i + 1}`;
+      });
+      params.push(logId);
+      await logPool.query(
+        `UPDATE "WebhookLog" SET ${sets.join(', ')}, "updatedAt" = NOW() WHERE id = $${keys.length + 1}`,
+        params
+      );
+    } catch (err) {
+      console.warn('[checkout/webhook] WebhookLog update failed (non-fatal):', err.message);
+    }
+  }
+
+  // ── 1. Create initial log row before signature verification ───────────────
+  try {
+    const rawSummary = {
+      method: req.method,
+      hasStripeSignature: !!req.headers['stripe-signature'],
+      rawBodyLength: rawBody?.length ?? 0,
+    };
+    const { rows } = await logPool.query(
+      `INSERT INTO "WebhookLog"
+         (id, provider, endpoint, status, "rawSummary", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid(), 'stripe', $1, 'received', $2::jsonb, NOW(), NOW())
+       RETURNING id`,
+      [req.url || '/api/checkout', JSON.stringify(rawSummary)]
+    );
+    logId = rows[0]?.id ?? null;
+    console.log('[checkout/webhook] WebhookLog created — id:', logId);
+  } catch (err) {
+    console.warn('[checkout/webhook] WebhookLog insert failed (non-fatal):', err.message);
+  }
+
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
   const sig = req.headers['stripe-signature'];
 
@@ -696,14 +742,25 @@ async function handleWebhook(req, res, rawBody) {
     event = stripe.webhooks.constructEvent(rawBody, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     console.error('[checkout/webhook] signature error:', err.message);
+    await updateLog({ status: 'error', httpStatus: 400, errorMessage: `Signature error: ${err.message}` });
+    await logPool.end().catch(() => {});
     return res.status(400).send(`Webhook error: ${err.message}`);
   }
+
+  // ── 2. Update log with verified event details ─────────────────────────────
+  await updateLog({
+    eventId: event.id,
+    eventType: event.type,
+    ...(event.data?.object?.metadata ? { metadata: event.data.object.metadata } : {}),
+  });
 
   // Log every event — essential for diagnosing missed webhooks in production
   console.log('[checkout/webhook] event received — type:', event.type, '| id:', event.id);
 
   if (event.type !== 'checkout.session.completed') {
     console.log('[checkout/webhook] ignoring event type:', event.type);
+    await updateLog({ status: 'skipped', httpStatus: 200, errorMessage: `Unsupported event type: ${event.type}` });
+    await logPool.end().catch(() => {});
     return res.status(200).json({ received: true });
   }
 
@@ -715,6 +772,18 @@ async function handleWebhook(req, res, rawBody) {
     '| customer_email:', session.customer_email,
     '| metadata:', JSON.stringify(session.metadata));
 
+  // ── 3. Update log with session details ────────────────────────────────────
+  await updateLog({
+    stripeSessionId: session.id,
+    metadata: {
+      sessionId: session.id,
+      sessionMetadata: session.metadata,
+      customRequestId: session.metadata?.customRequestId || session.metadata?.custom_request_id || null,
+      paymentStatus: session.payment_status,
+      amountTotal: session.amount_total,
+    },
+  });
+
   // paid OR no_payment_required (100% coupon) OR amount_total === 0 → all treated as paid
   const sessionPaid =
     session.payment_status === 'paid' ||
@@ -722,6 +791,8 @@ async function handleWebhook(req, res, rawBody) {
     session.amount_total === 0;
   if (!sessionPaid) {
     console.warn('[checkout/webhook] payment not completed — payment_status:', session.payment_status, '— skipping');
+    await updateLog({ status: 'skipped', httpStatus: 200, errorMessage: `Payment not completed: payment_status=${session.payment_status}` });
+    await logPool.end().catch(() => {});
     return res.status(200).json({ received: true });
   }
 
@@ -755,19 +826,44 @@ async function handleWebhook(req, res, rawBody) {
       }
     }
 
-    if (requestId) {
-      const wpPool = new Pool({ connectionString: process.env.DATABASE_URL });
-      try {
-        const result = await reconcileCustomRequestPayment(wpPool, requestId, session.id);
-        console.log('[checkout/webhook] custom_request_quote reconciled — sessionId:', session.id,
-          '| ok:', result.ok, '| synced:', result.synced, '| alreadyPaid:', result.alreadyPaid);
-      } catch (err) {
-        console.error('[checkout/webhook] custom_request_quote reconcile error:', err.message);
-      } finally {
-        await wpPool.end();
-      }
+    if (!requestId) {
+      await updateLog({
+        status: 'error',
+        httpStatus: 200,
+        errorMessage: 'custom_request_quote: no customRequestId in metadata and fallback lookup found no match',
+      });
+      await logPool.end().catch(() => {});
+      return res.status(200).json({ received: true });
     }
 
+    const wpPool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      const result = await reconcileCustomRequestPayment(wpPool, requestId, session.id);
+      console.log('[checkout/webhook] custom_request_quote reconciled — sessionId:', session.id,
+        '| ok:', result.ok, '| synced:', result.synced, '| alreadyPaid:', result.alreadyPaid);
+      if (result.ok) {
+        await updateLog({ status: 'processed', httpStatus: 200, customRequestId: requestId });
+      } else {
+        await updateLog({
+          status: 'error',
+          httpStatus: 200,
+          customRequestId: requestId,
+          errorMessage: result.error || 'Reconciliation returned ok=false',
+        });
+      }
+    } catch (err) {
+      console.error('[checkout/webhook] custom_request_quote reconcile error:', err.message);
+      await updateLog({
+        status: 'error',
+        httpStatus: 200,
+        customRequestId: requestId,
+        errorMessage: err.message,
+      });
+    } finally {
+      await wpPool.end();
+    }
+
+    await logPool.end().catch(() => {});
     return res.status(200).json({ received: true });
   }
 
@@ -777,11 +873,14 @@ async function handleWebhook(req, res, rawBody) {
     try {
       await processCustomPayment(wpPool, session);
       console.log('[checkout/webhook] custom_planning processed — sessionId:', session.id);
+      await updateLog({ status: 'processed', httpStatus: 200 });
     } catch (err) {
       console.error('[checkout/webhook] custom_planning DB error:', err.message);
+      await updateLog({ status: 'error', httpStatus: 200, errorMessage: err.message });
     } finally {
       await wpPool.end();
     }
+    await logPool.end().catch(() => {});
     return res.status(200).json({ received: true });
   }
 
@@ -790,6 +889,12 @@ async function handleWebhook(req, res, rawBody) {
 
   if (!slug || !userId) {
     console.warn('[checkout/webhook] missing metadata — skipping');
+    await updateLog({
+      status: 'skipped',
+      httpStatus: 200,
+      errorMessage: `Missing metadata: ${!slug ? 'itinerary_slug' : ''}${!slug && !userId ? ', ' : ''}${!userId ? 'user_id' : ''}`,
+    });
+    await logPool.end().catch(() => {});
     return res.status(200).json({ received: true });
   }
 
@@ -862,12 +967,15 @@ async function handleWebhook(req, res, rawBody) {
     });
     // ─────────────────────────────────────────────────────────────────────────
 
+    await updateLog({ status: 'processed', httpStatus: 200 });
   } catch (err) {
     console.error('[checkout/webhook] DB error:', err.message);
+    await updateLog({ status: 'error', httpStatus: 200, errorMessage: err.message });
     // Return 200 so Stripe does not retry — /verify is the client-facing fallback
   } finally {
     await pool.end();
   }
 
+  await logPool.end().catch(() => {});
   return res.status(200).json({ received: true });
 }

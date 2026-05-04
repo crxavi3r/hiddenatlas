@@ -675,6 +675,17 @@ async function _handler(req, res) {
     if (action === 'downloads') return res.status(200).json(await getDownloads(pool, cutoff, offset));
     if (action === 'custom-requests') return res.status(200).json(await getCustomRequests(pool, status, offset, req.query.all === 'true', adminCtx));
 
+    if (action === 'webhook-logs') {
+      const { rows } = await pool.query(
+        `SELECT "createdAt", "eventId", "eventType", status, "customRequestId",
+                "stripeSessionId", "errorMessage", "rawSummary", metadata, "httpStatus", provider, endpoint
+         FROM "WebhookLog"
+         ORDER BY "createdAt" DESC
+         LIMIT 50`
+      );
+      return res.status(200).json({ logs: rows });
+    }
+
     if (action === 'designer-applications') {
       const filterStatus = status || 'all';
       const { rows } = await pool.query(
