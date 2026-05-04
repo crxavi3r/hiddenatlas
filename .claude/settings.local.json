@@ -117,7 +117,11 @@
       "Bash(awk 'NR>=2383 && NR<2979' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/src/pages/admin/ItineraryCMSEditorPage.jsx)",
       "WebFetch(domain:resend.com)",
       "WebFetch(domain:github.com)",
-      "Bash(echo \"exit:$?\")"
+      "Bash(echo \"exit:$?\")",
+      "Bash(stripe --version)",
+      "Bash(stripe config *)",
+      "Bash(vercel whoami *)",
+      "Bash(stripe webhook_endpoints list --api-key *)"
     ]
   }
 }
