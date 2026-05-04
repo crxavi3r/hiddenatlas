@@ -138,7 +138,7 @@ async function handleSession(req, res, body) {
   }
   const priceId = resolvedPriceId;
 
-  const origin = req.headers.origin || 'http://localhost:3000';
+  const origin = req.headers.origin || 'https://hiddenatlas.travel';
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
   try {
@@ -162,7 +162,7 @@ async function handleSession(req, res, body) {
     return res.status(200).json({ url: session.url });
   } catch (err) {
     console.error('[checkout/session] Stripe error:', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Payment session could not be created' });
   }
 }
 
@@ -378,7 +378,7 @@ async function handleCustomSession(req, res, body) {
     return res.status(200).json({ url: session.url });
   } catch (err) {
     console.error('[checkout/custom-session] Stripe error:', err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Payment session could not be created' });
   }
 }
 
@@ -595,26 +595,26 @@ async function processCustomPayment(pool, session) {
         ...(isFallback ? {} : { bcc: [FALLBACK_EMAIL] }),
         html: `
           <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;">
-            <h2 style="color:#1B6B65;margin-bottom:4px;">${designerName ? `New paid trip request for ${designerName}` : 'New Custom Journey Request'}</h2>
-            <p style="color:#8C8070;font-size:13px;margin-top:0;">Paid via Stripe · ${isFallback ? 'No designer selected' : `Designer: ${designerName}`}</p>
+            <h2 style="color:#1B6B65;margin-bottom:4px;">${designerName ? `New paid trip request for ${esc(designerName)}` : 'New Custom Journey Request'}</h2>
+            <p style="color:#8C8070;font-size:13px;margin-top:0;">Paid via Stripe · ${isFallback ? 'No designer selected' : `Designer: ${esc(designerName)}`}</p>
             <hr style="border:none;border-top:1px solid #E8E3DA;margin:16px 0;" />
             <table style="width:100%;border-collapse:collapse;font-size:14px;">
-              <tr><td style="padding:6px 0;color:#8C8070;width:140px;">Name</td><td style="padding:6px 0;font-weight:600;">${fullName}</td></tr>
-              <tr><td style="padding:6px 0;color:#8C8070;">Email</td><td style="padding:6px 0;"><a href="mailto:${email}" style="color:#1B6B65;">${email}</a></td></tr>
-              <tr><td style="padding:6px 0;color:#8C8070;">Phone</td><td style="padding:6px 0;">${phone || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;width:140px;">Name</td><td style="padding:6px 0;font-weight:600;">${esc(fullName)}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Email</td><td style="padding:6px 0;"><a href="mailto:${esc(email)}" style="color:#1B6B65;">${esc(email)}</a></td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Phone</td><td style="padding:6px 0;">${esc(phone) || '—'}</td></tr>
             </table>
             <hr style="border:none;border-top:1px solid #E8E3DA;margin:16px 0;" />
             <table style="width:100%;border-collapse:collapse;font-size:14px;">
-              <tr><td style="padding:6px 0;color:#8C8070;width:140px;">Destination</td><td style="padding:6px 0;font-weight:600;">${dest || '—'}</td></tr>
-              <tr><td style="padding:6px 0;color:#8C8070;">Dates</td><td style="padding:6px 0;">${dates || '—'}</td></tr>
-              <tr><td style="padding:6px 0;color:#8C8070;">Duration</td><td style="padding:6px 0;">${duration || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;width:140px;">Destination</td><td style="padding:6px 0;font-weight:600;">${esc(dest) || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Dates</td><td style="padding:6px 0;">${esc(dates) || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Duration</td><td style="padding:6px 0;">${esc(duration) || '—'}</td></tr>
               <tr><td style="padding:6px 0;color:#8C8070;">Group Size</td><td style="padding:6px 0;">${groupSize || '—'}</td></tr>
-              <tr><td style="padding:6px 0;color:#8C8070;">Trip Type</td><td style="padding:6px 0;">${groupType || '—'}</td></tr>
-              <tr><td style="padding:6px 0;color:#8C8070;">Travel Style</td><td style="padding:6px 0;">${travelStyle}</td></tr>
-              <tr><td style="padding:6px 0;color:#8C8070;">Budget</td><td style="padding:6px 0;">${budget || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Trip Type</td><td style="padding:6px 0;">${esc(groupType) || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Travel Style</td><td style="padding:6px 0;">${esc(travelStyle)}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Budget</td><td style="padding:6px 0;">${esc(budget) || '—'}</td></tr>
               <tr><td style="padding:6px 0;color:#8C8070;">Amount Paid</td><td style="padding:6px 0;font-weight:600;color:#1B6B65;">€${amount.toFixed(2)}</td></tr>
             </table>
-            ${notes ? `<hr style="border:none;border-top:1px solid #E8E3DA;margin:16px 0;" /><p style="color:#8C8070;font-size:13px;margin-bottom:6px;">Notes</p><p style="font-size:14px;margin:0;">${notes}</p>` : ''}
+            ${notes ? `<hr style="border:none;border-top:1px solid #E8E3DA;margin:16px 0;" /><p style="color:#8C8070;font-size:13px;margin-bottom:6px;">Notes</p><p style="font-size:14px;margin:0;">${esc(notes)}</p>` : ''}
             <hr style="border:none;border-top:1px solid #E8E3DA;margin:16px 0;" />
             <p><a href="https://hiddenatlas.travel/admin/custom-requests" style="display:inline-block;background:#1B6B65;color:white;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:13px;font-weight:600;">View in Backoffice →</a></p>
           </div>

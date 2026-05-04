@@ -3,6 +3,15 @@ import { verifyAuth } from './_lib/verifyAuth.js';
 
 const { Pool } = pg;
 
+function esc(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 // POST /api/custom
 //   Submit a custom trip planning request (was /api/custom-planning).
 //   Optional auth — works for anonymous users too.
@@ -237,25 +246,25 @@ export default async function handler(req, res) {
         ...(isFallback ? {} : { bcc: [FALLBACK_EMAIL] }),
         html: `
           <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;">
-            <h2 style="color:#1B6B65;margin-bottom:4px;">${designerName ? `New trip request for ${designerName}` : 'New Custom Journey Request'}</h2>
-            <p style="color:#8C8070;font-size:13px;margin-top:0;">Submitted via HiddenAtlas · ${isFallback ? 'No designer selected' : `Designer: ${designerName}`}</p>
+            <h2 style="color:#1B6B65;margin-bottom:4px;">${designerName ? `New trip request for ${esc(designerName)}` : 'New Custom Journey Request'}</h2>
+            <p style="color:#8C8070;font-size:13px;margin-top:0;">Submitted via HiddenAtlas · ${isFallback ? 'No designer selected' : `Designer: ${esc(designerName)}`}</p>
             <hr style="border:none;border-top:1px solid #E8E3DA;margin:16px 0;" />
             <table style="width:100%;border-collapse:collapse;font-size:14px;">
-              <tr><td style="padding:6px 0;color:#8C8070;width:140px;">Name</td><td style="padding:6px 0;font-weight:600;">${name}</td></tr>
-              <tr><td style="padding:6px 0;color:#8C8070;">Email</td><td style="padding:6px 0;"><a href="mailto:${email}" style="color:#1B6B65;">${email}</a></td></tr>
-              <tr><td style="padding:6px 0;color:#8C8070;">Phone</td><td style="padding:6px 0;">${phone || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;width:140px;">Name</td><td style="padding:6px 0;font-weight:600;">${esc(name)}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Email</td><td style="padding:6px 0;"><a href="mailto:${esc(email)}" style="color:#1B6B65;">${esc(email)}</a></td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Phone</td><td style="padding:6px 0;">${esc(phone) || '—'}</td></tr>
             </table>
             <hr style="border:none;border-top:1px solid #E8E3DA;margin:16px 0;" />
             <table style="width:100%;border-collapse:collapse;font-size:14px;">
-              <tr><td style="padding:6px 0;color:#8C8070;width:140px;">Destination</td><td style="padding:6px 0;font-weight:600;">${destination || '—'}</td></tr>
-              <tr><td style="padding:6px 0;color:#8C8070;">Dates</td><td style="padding:6px 0;">${dates || '—'}</td></tr>
-              <tr><td style="padding:6px 0;color:#8C8070;">Duration</td><td style="padding:6px 0;">${duration || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;width:140px;">Destination</td><td style="padding:6px 0;font-weight:600;">${esc(destination) || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Dates</td><td style="padding:6px 0;">${esc(dates) || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Duration</td><td style="padding:6px 0;">${esc(duration) || '—'}</td></tr>
               <tr><td style="padding:6px 0;color:#8C8070;">Group Size</td><td style="padding:6px 0;">${groupSize || '—'}</td></tr>
-              <tr><td style="padding:6px 0;color:#8C8070;">Trip Type</td><td style="padding:6px 0;">${groupType || '—'}</td></tr>
-              <tr><td style="padding:6px 0;color:#8C8070;">Travel Styles</td><td style="padding:6px 0;">${travelStyle}</td></tr>
-              <tr><td style="padding:6px 0;color:#8C8070;">Budget</td><td style="padding:6px 0;">${budget || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Trip Type</td><td style="padding:6px 0;">${esc(groupType) || '—'}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Travel Styles</td><td style="padding:6px 0;">${esc(travelStyle)}</td></tr>
+              <tr><td style="padding:6px 0;color:#8C8070;">Budget</td><td style="padding:6px 0;">${esc(budget) || '—'}</td></tr>
             </table>
-            ${notes ? `<hr style="border:none;border-top:1px solid #E8E3DA;margin:16px 0;" /><p style="color:#8C8070;font-size:13px;margin-bottom:6px;">Notes</p><p style="font-size:14px;margin:0;">${notes}</p>` : ''}
+            ${notes ? `<hr style="border:none;border-top:1px solid #E8E3DA;margin:16px 0;" /><p style="color:#8C8070;font-size:13px;margin-bottom:6px;">Notes</p><p style="font-size:14px;margin:0;">${esc(notes)}</p>` : ''}
             <hr style="border:none;border-top:1px solid #E8E3DA;margin:16px 0;" />
             <p><a href="https://hiddenatlas.travel/admin/custom-requests" style="display:inline-block;background:#1B6B65;color:white;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:13px;font-weight:600;">View in Backoffice →</a></p>
             <p style="color:#B5AA99;font-size:11px;margin-top:16px;">Record id: ${insertedId}</p>
@@ -281,9 +290,9 @@ export default async function handler(req, res) {
         subject: `Your HiddenAtlas journey request ✨`,
         html: `
           <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1C1A16;">
-            <h2 style="color:#1B6B65;">Hi ${name.split(' ')[0]},</h2>
-            <p style="font-size:15px;line-height:1.6;">We've received your travel brief${designerName ? ` for <strong>${designerName}</strong>` : ''} and will review it shortly.</p>
-            <p style="font-size:15px;line-height:1.6;">${designerName ? `${designerName} will` : 'A travel designer will'} be in touch within 48 hours to start planning your trip.</p>
+            <h2 style="color:#1B6B65;">Hi ${esc(name.split(' ')[0])},</h2>
+            <p style="font-size:15px;line-height:1.6;">We've received your travel brief${designerName ? ` for <strong>${esc(designerName)}</strong>` : ''} and will review it shortly.</p>
+            <p style="font-size:15px;line-height:1.6;">${designerName ? `${esc(designerName)} will` : 'A travel designer will'} be in touch within 48 hours to start planning your trip.</p>
             <p style="font-size:15px;line-height:1.6;">In the meantime you can explore our curated journeys here:<br/>
               <a href="https://hiddenatlas.travel/itineraries" style="color:#1B6B65;font-weight:600;">hiddenatlas.travel/itineraries</a>
             </p>
@@ -308,5 +317,5 @@ export default async function handler(req, res) {
   }
 
   const emailSent = adminEmailSent && clientEmailSent;
-  return res.status(200).json({ success: true, emailSent, adminEmailSent, clientEmailSent, emailError });
+  return res.status(200).json({ success: true, emailSent });
 }

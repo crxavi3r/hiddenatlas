@@ -84,7 +84,7 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('[api/admin] TOP-LEVEL UNHANDLED:', err.message, err.stack);
     if (!res.headersSent) {
-      res.status(500).json({ error: 'Internal server error', detail: err.message });
+      res.status(500).json({ error: 'Internal server error' });
     }
   }
 }
@@ -283,7 +283,7 @@ async function _handler(req, res) {
 
         if (result.error) {
           console.error('[api/admin] custom-request-reply email error:', JSON.stringify(result.error));
-          return res.status(502).json({ error: 'Email delivery failed', detail: JSON.stringify(result.error) });
+          return res.status(502).json({ error: 'Email delivery failed' });
         }
         console.log('[api/admin] custom-request-reply sent — to:', reqData.email, '| id:', result.data?.id);
         return res.status(200).json({ ok: true, messageId: result.data?.id });
@@ -353,7 +353,7 @@ async function _handler(req, res) {
           });
         } catch (stripeErr) {
           console.error('[api/admin] send-quote Stripe error:', stripeErr.message);
-          return res.status(502).json({ error: `Stripe error: ${stripeErr.message}` });
+          return res.status(502).json({ error: 'Quote could not be created. Please try again.' });
         }
 
         // Persist quote data
@@ -737,7 +737,7 @@ async function _handler(req, res) {
     return res.status(400).json({ error: 'Unknown action' });
   } catch (err) {
     console.error(`[api/admin] action=${action} error: ${err.message}`, err.stack);
-    return res.status(500).json({ error: 'Database error', detail: err.message });
+    return res.status(500).json({ error: 'Database error' });
   } finally {
     try { await pool.end(); } catch {}
   }
