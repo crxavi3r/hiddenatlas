@@ -744,6 +744,29 @@ async function handleWebhook(req, res, rawBody) {
   // Log every event — essential for diagnosing missed webhooks in production
   console.log('[checkout/webhook] event received — type:', event.type, '| id:', event.id);
 
+  // ── Idempotency: skip events we have already fully processed ─────────────
+  // WebhookLog has a unique index on eventId (WHERE NOT NULL), so a row here
+  // means the event completed successfully on a prior delivery.
+  let alreadyProcessed = false;
+  {
+    const idempPool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      const { rows } = await idempPool.query(
+        `SELECT id FROM "WebhookLog" WHERE "eventId" = $1 LIMIT 1`,
+        [event.id]
+      );
+      alreadyProcessed = rows.length > 0;
+    } catch (err) {
+      console.warn('[checkout/webhook] eventId dedup check failed (non-fatal):', err.message);
+    } finally {
+      await idempPool.end().catch(() => {});
+    }
+  }
+  if (alreadyProcessed) {
+    console.log('[checkout/webhook] duplicate event — already processed — eventId:', event.id);
+    return res.status(200).json({ received: true });
+  }
+
   if (event.type !== 'checkout.session.completed') {
     console.log('[checkout/webhook] ignoring event type:', event.type);
     await logWebhookEvent(event, {

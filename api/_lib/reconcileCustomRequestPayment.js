@@ -107,7 +107,10 @@ export async function reconcileCustomRequestPayment(pool, customRequestId, strip
     return { ok: false, error: `DB update error: ${err.message}` };
   }
 
-  // 5. Upsert Purchase — idempotent via ON CONFLICT
+  // 5. Upsert Purchase — primary idempotency key is customRequestId, not stripeSessionId.
+  //    Resend Quote creates a new Stripe session for the same CustomRequest, so
+  //    ON CONFLICT ("stripeSessionId") DO NOTHING would silently create a duplicate.
+  //    We always want exactly one Purchase per CustomRequest.
   try {
     const grossAmount    = (cr.quoteAmount ?? 0) / 100;
     const netAmount      = (session.amount_total ?? 0) / 100;
@@ -115,27 +118,86 @@ export async function reconcileCustomRequestPayment(pool, customRequestId, strip
       ? session.total_details.amount_discount / 100
       : Math.max(0, grossAmount - netAmount);
 
-    await pool.query(
-      `INSERT INTO "Purchase"
-         (id, "userId", "itineraryId", "customRequestId", "stripeSessionId", "stripePaymentIntentId",
-          amount, "grossAmount", "netAmount", "discountAmount",
-          "designerUserId", status, "purchasedAt", "createdAt")
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'paid', NOW(), NOW())
-       ON CONFLICT ("stripeSessionId") DO NOTHING`,
-      [
-        cr.userId      || null,
-        cr.itineraryId || null,
-        cr.id,
-        session.id,
-        session.payment_intent || null,
-        netAmount, grossAmount, netAmount, discountAmount,
-        cr.designerId  || null,
-      ]
+    if (alreadyPaid) {
+      console.log('[reconcile] CustomRequest already paid — ensuring Purchase exists — requestId:', customRequestId);
+    }
+
+    // Check if a Purchase already exists for this CustomRequest
+    const { rows: existingPurchase } = await pool.query(
+      `SELECT id FROM "Purchase" WHERE "customRequestId" = $1::text LIMIT 1`,
+      [cr.id]
     );
-    console.log('[reconcile] Purchase upserted — requestId:', customRequestId, '| sessionId:', stripeSessionId);
+
+    if (existingPurchase.length > 0) {
+      // UPDATE — sync latest session data, never create a duplicate
+      await pool.query(
+        `UPDATE "Purchase" SET
+           "stripeSessionId"       = $1,
+           "stripePaymentIntentId" = $2,
+           amount                  = $3,
+           "grossAmount"           = $4,
+           "netAmount"             = $5,
+           "discountAmount"        = $6,
+           status                  = 'paid',
+           "purchasedAt"           = COALESCE("purchasedAt", NOW())
+         WHERE "customRequestId" = $7::text`,
+        [
+          session.id,
+          session.payment_intent || null,
+          netAmount, grossAmount, netAmount, discountAmount,
+          cr.id,
+        ]
+      );
+      console.log('[reconcile] Purchase updated — requestId:', customRequestId, '| sessionId:', stripeSessionId);
+    } else {
+      // INSERT — protected against race conditions by unique index on customRequestId
+      try {
+        await pool.query(
+          `INSERT INTO "Purchase"
+             (id, "userId", "itineraryId", "customRequestId", "stripeSessionId", "stripePaymentIntentId",
+              amount, "grossAmount", "netAmount", "discountAmount",
+              "designerUserId", status, "purchasedAt", "createdAt")
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'paid', NOW(), NOW())`,
+          [
+            cr.userId      || null,
+            cr.itineraryId || null,
+            cr.id,
+            session.id,
+            session.payment_intent || null,
+            netAmount, grossAmount, netAmount, discountAmount,
+            cr.designerId  || null,
+          ]
+        );
+        console.log('[reconcile] Purchase created — requestId:', customRequestId, '| sessionId:', stripeSessionId);
+      } catch (insertErr) {
+        if (insertErr.code === '23505') {
+          // Race condition: another process inserted between our SELECT and INSERT — update instead
+          console.log('[reconcile] Purchase race condition resolved — updating — requestId:', customRequestId);
+          await pool.query(
+            `UPDATE "Purchase" SET
+               "stripeSessionId"       = $1,
+               "stripePaymentIntentId" = $2,
+               amount                  = $3,
+               "grossAmount"           = $4,
+               "netAmount"             = $5,
+               "discountAmount"        = $6,
+               status                  = 'paid',
+               "purchasedAt"           = COALESCE("purchasedAt", NOW())
+             WHERE "customRequestId" = $7::text`,
+            [
+              session.id,
+              session.payment_intent || null,
+              netAmount, grossAmount, netAmount, discountAmount,
+              cr.id,
+            ]
+          );
+        } else {
+          throw insertErr;
+        }
+      }
+    }
   } catch (err) {
-    console.error('[reconcile] Purchase INSERT failed (non-fatal):', err.message,
-      '| hint: ensure customRequestId column exists on Purchase table');
+    console.error('[reconcile] Purchase upsert failed (non-fatal):', err.message);
   }
 
   // 6. Emails — only on first reconciliation (alreadyPaid=false), non-fatal
