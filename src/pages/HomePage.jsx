@@ -72,9 +72,10 @@ const philippinesTimeline = [
    MAIN COMPONENT
 ════════════════════════════════════════ */
 export default function HomePage() {
-  const [heroLoaded,  setHeroLoaded]  = useState(false);
-  const [creators,    setCreators]    = useState([]);
-  const [creatorMap,  setCreatorMap]  = useState({});
+  const [heroLoaded,    setHeroLoaded]    = useState(false);
+  const [creators,      setCreators]      = useState([]);
+  const [creatorMap,    setCreatorMap]    = useState({});
+  const [heroOverrides, setHeroOverrides] = useState({});
   const purchasedSlugs = usePurchasedSlugs();
   const { isAdmin } = useUserCtx();
   const isPhilippinesPurchased = isAdmin || purchasedSlugs.has('philippines-island-journey');
@@ -88,6 +89,18 @@ export default function HomePage() {
       setCreatorMap(mapData.creators || {});
     });
   }, []);
+
+  useEffect(() => {
+    fetch('/api/itineraries?action=hero-images')
+      .then(r => r.ok ? r.json() : { heroes: {} })
+      .then(data => setHeroOverrides(data.heroes || {}))
+      .catch(() => {});
+  }, []);
+
+  const applyOverride = (it) => {
+    const heroUrl = heroOverrides[it.id];
+    return heroUrl ? { ...it, coverImage: heroUrl } : it;
+  };
 
   useSEO({
     title: 'HiddenAtlas — Travel itineraries designed by people who know the places',
@@ -292,14 +305,14 @@ export default function HomePage() {
           <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'stretch' }}>
             {/* Large featured card */}
             <Reveal delay={0} style={{ height: '100%' }}>
-              <ItineraryBigCard it={freeJourneys[0]} creator={creatorMap[freeJourneys[0]?.id]} />
+              <ItineraryBigCard it={applyOverride(freeJourneys[0])} creator={creatorMap[freeJourneys[0]?.id]} />
             </Reveal>
 
             {/* Stack of 3 smaller */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               {freeJourneys.slice(1, 4).map((it, i) => (
                 <Reveal key={it.id} delay={i * 0.08 + 0.08} style={{ flex: 1 }}>
-                  <ItinerarySmallCard it={it} creator={creatorMap[it.id]} />
+                  <ItinerarySmallCard it={applyOverride(it)} creator={creatorMap[it.id]} />
                 </Reveal>
               ))}
             </div>
@@ -335,7 +348,7 @@ export default function HomePage() {
           <div className="resp-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '24px', marginBottom: '48px' }}>
             {premiumJourneys.map((it, i) => (
               <Reveal key={it.id} delay={i * 0.08}>
-                <CuratedJourneyCard it={it} isPurchased={purchasedSlugs.has(it.id)} creator={creatorMap[it.id]} />
+                <CuratedJourneyCard it={applyOverride(it)} isPurchased={purchasedSlugs.has(it.id)} creator={creatorMap[it.id]} />
               </Reveal>
             ))}
           </div>
@@ -419,7 +432,7 @@ export default function HomePage() {
           <div className="dest-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             {itineraries.filter(it => it.status !== 'draft' && !it.parentId).map((it, i) => (
               <Reveal key={it.id} delay={i * 0.06} style={{ height: '100%' }}>
-                <DestinationCard it={it} creator={creatorMap[it.id]} />
+                <DestinationCard it={applyOverride(it)} creator={creatorMap[it.id]} />
               </Reveal>
             ))}
           </div>
@@ -613,7 +626,7 @@ export default function HomePage() {
             <Reveal delay={0}>
               <div style={{ position: 'relative', background: '#0D3834', height: '100%', minHeight: '540px' }}>
                 <img
-                  src={journeyImg('philippines-island-journey', 900)}
+                  src={heroOverrides['philippines-island-journey'] || journeyImg('philippines-island-journey', 900)}
                   alt="Philippines"
                   style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.35, position: 'absolute', inset: 0 }}
                 />
