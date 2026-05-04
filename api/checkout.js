@@ -47,6 +47,11 @@ function extractDiscount(session) {
 // POST /api/checkout?action=custom-session — custom planning checkout session
 // POST /api/checkout?action=custom-verify  — custom planning verify
 export default async function handler(req, res) {
+  // ── Webhook health check — allows browser verification before Stripe is pointed here ──
+  if (req.method === 'GET' && req.query.action === 'webhook') {
+    return res.status(200).json({ ok: true, route: 'checkout webhook', timestamp: new Date().toISOString() });
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -54,8 +59,7 @@ export default async function handler(req, res) {
   const rawBody = await getRawBody(req);
 
   // ── Webhook — raw body must not be parsed before signature verification ───
-  // Triggered either by the stripe-signature header (legacy) or ?action=webhook
-  // (the Stripe Dashboard URL: https://hiddenatlas.travel/api/checkout?action=webhook)
+  // Stripe Dashboard URL: https://hiddenatlas.travel/api/checkout?action=webhook
   if (req.headers['stripe-signature'] || req.query.action === 'webhook') {
     return handleWebhook(req, res, rawBody);
   }
