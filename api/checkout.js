@@ -47,9 +47,9 @@ function extractDiscount(session) {
 // POST /api/checkout?action=custom-session — custom planning checkout session
 // POST /api/checkout?action=custom-verify  — custom planning verify
 export default async function handler(req, res) {
-  // ── Webhook health check — allows browser verification before Stripe is pointed here ──
+  // ── Webhook health check — reachable at GET /api/checkout/webhook (rewritten) ──
   if (req.method === 'GET' && req.query.action === 'webhook') {
-    return res.status(200).json({ ok: true, route: 'checkout webhook', timestamp: new Date().toISOString() });
+    return res.status(200).json({ ok: true, route: 'stripe webhook', method: req.method });
   }
 
   if (req.method !== 'POST') {

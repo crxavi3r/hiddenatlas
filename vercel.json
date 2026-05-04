@@ -1,6 +1,15 @@
 {
   "buildCommand": "npm run migrate && npm run build",
+  "redirects": [
+    {
+      "source": "/((?!api(?:/|$)).*)",
+      "has": [{ "type": "host", "value": "hiddenatlas.travel" }],
+      "destination": "https://www.hiddenatlas.travel/$1",
+      "permanent": true
+    }
+  ],
   "rewrites": [
+    { "source": "/api/checkout/webhook", "destination": "/api/checkout?action=webhook" },
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
