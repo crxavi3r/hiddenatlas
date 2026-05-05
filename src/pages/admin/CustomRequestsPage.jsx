@@ -12,7 +12,8 @@ const STATUS_META = {
   done:        { label: 'Ready',                   color: '#166534', bg: '#DCFCE7' },
 };
 const ALL_STATUSES          = Object.keys(STATUS_META);
-const DEFAULT_STATUS_FILTER = ['open', 'in_progress'];
+// Show all statuses by default — no implicit filtering on load.
+const DEFAULT_STATUS_FILTER = ALL_STATUSES;
 
 const PAYMENT_META = {
   unpaid:     { label: 'Unpaid',     color: '#8C8070', bg: '#F4F1EC' },
@@ -878,10 +879,17 @@ export default function CustomRequestsPage() {
     try {
       const token = await getToken();
       if (!token) { setLoading(false); return; }
-      const res   = await fetch(`/api/admin?action=custom-requests&all=true`, {
+      const res = await fetch(`/api/admin?action=custom-requests&all=true`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        console.error('[admin/custom-requests] API error', res.status, errBody);
+        setLoading(false);
+        return;
+      }
       const data = await res.json();
+      console.log('[admin/custom-requests] loaded', data.requests?.length ?? 0, 'rows');
       setAllRows(data.requests       ?? []);
       setDesigners(data.designers    ?? []);
       setCounts(data.counts          ?? {});

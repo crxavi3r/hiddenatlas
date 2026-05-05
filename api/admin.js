@@ -1130,37 +1130,25 @@ async function getSales(pool, cutoff, offset) {
 // ── Custom Requests ───────────────────────────────────────────────────────────
 // noLimit=true: fetch all rows (used by admin/designer table with client-side filtering).
 // ctx drives role-based filtering: designer sees only their own requests.
+// No server-side status/payment/itinerary filtering — all filtering is client-side.
 async function getCustomRequests(pool, statusParam, offset, noLimit = false, ctx = null) {
   const isAdmin        = ctx?.isAdmin ?? true;
   const designerUserId = !isAdmin ? (ctx?.userId ?? null) : null;
 
-  const VALID = ['open', 'in_progress', 'done'];
-  const statuses = (!noLimit && statusParam)
-    ? statusParam.split(',').map(s => s.trim()).filter(s => VALID.includes(s))
-    : [];
+  console.log('[getCustomRequests] START | userId:', ctx?.userId,
+    '| role:', ctx?.role, '| isAdmin:', isAdmin, '| designerUserId:', designerUserId);
 
-  const PAID_EXISTS = `
-    EXISTS (
-      SELECT 1 FROM "Purchase" p
-      WHERE (p."customRequestId" = cr.id
-             OR (cr."itineraryId" IS NOT NULL AND p."itineraryId" = cr."itineraryId"))
-        AND (p.status IS NULL OR p.status NOT IN ('refunded', 'cancelled', 'chargebacked'))
-    )`;
-
-  // Build WHERE conditions and params dynamically.
+  // Build WHERE — admin sees ALL rows (no filters), designer sees only their own.
   const conditions = [];
   const params     = [];
 
-  if (!noLimit && statuses.length > 0) {
-    params.push(statuses);
-    conditions.push(`cr.status = ANY($${params.length}::text[])`);
-  }
   if (designerUserId) {
     params.push(designerUserId);
     conditions.push(`cr."designerId" = $${params.length}`);
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  console.log('[getCustomRequests] whereClause:', whereClause || '(none — returning all rows)');
 
   let limitClause = '';
   if (!noLimit) {
@@ -1168,7 +1156,6 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false, ctx
     limitClause = `LIMIT 50 OFFSET $${params.length}`;
   }
 
-  // Join designer user for admin display
   const designerSelect = isAdmin
     ? `, d.name AS "designerName", d.email AS "designerEmail"`
     : '';
@@ -1176,30 +1163,75 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false, ctx
     ? `LEFT JOIN "User" d ON d.id = cr."designerId"`
     : '';
 
-  const { rows: requests } = await pool.query(
-    `SELECT
-       cr.id, cr."fullName", cr.email, cr.phone, cr.destination, cr.dates, cr.duration,
-       cr."groupSize", cr."paxMin", cr."paxMax", cr."groupType", cr.budget, cr.style, cr.notes, cr.status,
-       cr."itineraryId", cr."designerId", cr."createdAt",
-       cr."paidAt", cr."quoteSentAt", cr."quoteAmount", cr."stripePaymentUrl",
-       CASE
-         WHEN cr."paidAt" IS NOT NULL THEN 'paid'
-         WHEN cr."quoteSentAt" IS NOT NULL THEN 'quote_sent'
-         ELSE 'unpaid'
-       END AS "paymentStatus",
-       itin.slug   AS "linkedItinerarySlug",
-       itin.status AS "linkedItineraryStatus",
-       itin.title  AS "linkedItineraryTitle",
-       (cr."paidAt" IS NOT NULL OR ${PAID_EXISTS}) AS "isPaid"
-       ${designerSelect}
-     FROM "CustomRequest" cr
-     LEFT JOIN "Itinerary" itin ON itin.id = cr."itineraryId"
-     ${designerJoin}
-     ${whereClause}
-     ORDER BY cr."createdAt" DESC
-     ${limitClause}`,
-    params
-  );
+  // Two variants of the paid-exists subquery:
+  // FULL uses Purchase.customRequestId added in migration 20260504 — may not exist in prod yet.
+  // SAFE falls back to itineraryId-only check for pre-migration databases.
+  const PAID_EXISTS_FULL = `
+    EXISTS (
+      SELECT 1 FROM "Purchase" p
+      WHERE (p."customRequestId" = cr.id
+             OR (cr."itineraryId" IS NOT NULL AND p."itineraryId" = cr."itineraryId"))
+        AND (p.status IS NULL OR p.status NOT IN ('refunded', 'cancelled', 'chargebacked'))
+    )`;
+
+  const PAID_EXISTS_SAFE = `
+    EXISTS (
+      SELECT 1 FROM "Purchase" p
+      WHERE cr."itineraryId" IS NOT NULL AND p."itineraryId" = cr."itineraryId"
+    )`;
+
+  async function runQuery(paidExists, paxCols) {
+    return pool.query(
+      `SELECT
+         cr.id, cr."fullName", cr.email, cr.phone, cr.destination, cr.dates, cr.duration,
+         cr."groupSize", ${paxCols}
+         cr."groupType", cr.budget, cr.style, cr.notes, cr.status,
+         cr."itineraryId", cr."designerId", cr."createdAt",
+         cr."paidAt", cr."quoteSentAt", cr."quoteAmount", cr."stripePaymentUrl",
+         CASE
+           WHEN cr."paidAt" IS NOT NULL THEN 'paid'
+           WHEN cr."quoteSentAt" IS NOT NULL THEN 'quote_sent'
+           ELSE 'unpaid'
+         END AS "paymentStatus",
+         itin.slug   AS "linkedItinerarySlug",
+         itin.status AS "linkedItineraryStatus",
+         itin.title  AS "linkedItineraryTitle",
+         (cr."paidAt" IS NOT NULL OR ${paidExists}) AS "isPaid"
+         ${designerSelect}
+       FROM "CustomRequest" cr
+       LEFT JOIN "Itinerary" itin ON itin.id = cr."itineraryId"
+       ${designerJoin}
+       ${whereClause}
+       ORDER BY cr."createdAt" DESC
+       ${limitClause}`,
+      params
+    );
+  }
+
+  // Try full query (with new columns from migration); fall back on column-not-found (code 42703)
+  let requests;
+  try {
+    const { rows } = await runQuery(PAID_EXISTS_FULL, `cr."paxMin", cr."paxMax",`);
+    requests = rows;
+    console.log('[getCustomRequests] full query OK | rows:', rows.length);
+  } catch (err) {
+    if (err.code !== '42703' && !err.message.toLowerCase().includes('column')) throw err;
+    console.warn('[getCustomRequests] column missing (code:', err.code, '):', err.message,
+      '— migration not yet applied, retrying with safe fallback');
+    const { rows } = await runQuery(
+      PAID_EXISTS_SAFE,
+      `NULL::integer AS "paxMin", NULL::integer AS "paxMax",`
+    );
+    requests = rows;
+    console.log('[getCustomRequests] safe fallback query OK | rows:', rows.length);
+  }
+
+  console.log('[getCustomRequests] returning', requests.length, 'rows | first 3:',
+    JSON.stringify(requests.slice(0, 3).map(r => ({
+      id: r.id, fullName: r.fullName, email: r.email,
+      destination: r.destination, dates: r.dates,
+      groupSize: r.groupSize, designerId: r.designerId, paymentStatus: r.paymentStatus,
+    }))));
 
   // Count queries scoped to the same designer filter.
   const countParams = designerUserId ? [designerUserId] : [];
@@ -1223,17 +1255,18 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false, ctx
     counts.all += parseInt(row.n, 10);
   }
 
-  // Payment counts and designers list — admin only (expensive / not needed by designer).
-  let paymentCounts = { paid: 0, unpaid: 0 };
+  // Payment counts — use paidAt/quoteSentAt directly; no dependency on Purchase.customRequestId.
+  // Designers list — admin only.
+  let paymentCounts = { paid: 0, quote_sent: 0, unpaid: 0 };
   let designers     = [];
 
   if (isAdmin) {
     const paymentRes = await pool.query(
       `SELECT
-         COUNT(*) FILTER (WHERE cr."paidAt" IS NOT NULL OR ${PAID_EXISTS}) AS paid,
-         COUNT(*) FILTER (WHERE cr."quoteSentAt" IS NOT NULL AND cr."paidAt" IS NULL AND NOT ${PAID_EXISTS}) AS quote_sent,
-         COUNT(*) FILTER (WHERE cr."quoteSentAt" IS NULL AND cr."paidAt" IS NULL AND NOT ${PAID_EXISTS}) AS unpaid
-       FROM "CustomRequest" cr`
+         COUNT(*) FILTER (WHERE "paidAt" IS NOT NULL) AS paid,
+         COUNT(*) FILTER (WHERE "quoteSentAt" IS NOT NULL AND "paidAt" IS NULL) AS quote_sent,
+         COUNT(*) FILTER (WHERE "quoteSentAt" IS NULL AND "paidAt" IS NULL) AS unpaid
+       FROM "CustomRequest"`
     );
     paymentCounts = {
       paid:       parseInt(paymentRes.rows[0].paid,       10) || 0,
