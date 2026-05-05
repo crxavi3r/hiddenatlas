@@ -121,7 +121,8 @@
       "Bash(stripe --version)",
       "Bash(stripe config *)",
       "Bash(vercel whoami *)",
-      "Bash(stripe webhook_endpoints list --api-key *)"
+      "Bash(stripe webhook_endpoints list --api-key *)",
+      "Bash(wait)"
     ]
   }
 }
