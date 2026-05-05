@@ -12,6 +12,20 @@ function esc(str) {
     .replace(/"/g, '&quot;');
 }
 
+// Parse group size strings like "1-2", "3-8", "13+" into [paxMin, paxMax].
+// Returns [null, null] when input is absent or unparseable.
+function parsePaxRange(str) {
+  if (!str) return [null, null];
+  const s = String(str).trim();
+  const range = s.match(/^(\d+)-(\d+)$/);
+  if (range) return [parseInt(range[1], 10), parseInt(range[2], 10)];
+  const plus = s.match(/^(\d+)\+$/);
+  if (plus) return [parseInt(plus[1], 10), null];
+  const num = parseInt(s, 10);
+  if (!isNaN(num)) return [num, num];
+  return [null, null];
+}
+
 // POST /api/custom
 //   Submit a custom trip planning request (was /api/custom-planning).
 //   Optional auth — works for anonymous users too.
@@ -126,23 +140,38 @@ export default async function handler(req, res) {
 
   let insertedId = null;
 
-  const coreParams = [
+  const [paxMin, paxMax] = parsePaxRange(groupSize);
+
+  // Params for the main INSERT (includes paxMin/paxMax)
+  const insertParams = [
     name.trim(),
     email.trim().toLowerCase(),
     destination?.trim() || null,
     dates?.trim()       || null,
-    groupSize ? parseInt(groupSize, 10) : null,
-    notes?.trim()       || null,
+    paxMin,     // $5 — "groupSize" stores paxMin for backward compat
+    paxMin,     // $6 — "paxMin"
+    paxMax,     // $7 — "paxMax"
+    notes?.trim() || null,  // $8
+  ];
+
+  // Legacy params for the status-column-absent fallback (smaller set)
+  const legacyInsertParams = [
+    name.trim(),
+    email.trim().toLowerCase(),
+    destination?.trim() || null,
+    dates?.trim()       || null,
+    paxMin,
+    notes?.trim() || null,
   ];
 
   try {
     const { rows } = await pool.query(
       `INSERT INTO "CustomRequest"
-         (id, "fullName", email, destination, dates, "groupSize", notes, status, "createdAt")
+         (id, "fullName", email, destination, dates, "groupSize", "paxMin", "paxMax", notes, status, "createdAt")
        VALUES
-         (gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'open', NOW())
+         (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, 'open', NOW())
        RETURNING id`,
-      coreParams
+      insertParams
     );
     insertedId = rows[0]?.id ?? null;
     console.log(`[custom/post] DB insert OK (with status='open') — id=${insertedId}`);
@@ -152,13 +181,13 @@ export default async function handler(req, res) {
       await pool.end().catch(() => {});
       return res.status(500).json({ error: 'Failed to save your request. Please try again.' });
     }
-    // status column not yet present — fall back to original schema
+    // Legacy fallback: schema predates paxMin/paxMax or status column
     try {
       const { rows } = await pool.query(
         `INSERT INTO "CustomRequest" (id, "fullName", email, destination, dates, "groupSize", notes, "createdAt")
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW())
          RETURNING id`,
-        coreParams
+        legacyInsertParams
       );
       insertedId = rows[0]?.id ?? null;
       console.log(`[custom/post] DB insert OK (fallback) — id=${insertedId}`);

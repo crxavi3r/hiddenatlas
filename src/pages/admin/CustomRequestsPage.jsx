@@ -35,7 +35,7 @@ const PRIMARY_COLS = [
   { id: 'destination',   label: 'Destination',  field: 'destination',   type: 'text',    minW: 100 },
   { id: 'dates',         label: 'Trip Date',    field: 'dates',         type: 'text',    minW: 88  },
   { id: 'duration',      label: 'Duration',     field: 'duration',      type: 'text',    minW: 64  },
-  { id: 'groupSize',     label: 'Pax',          field: 'groupSize',     type: 'number',  minW: 46  },
+  { id: 'groupSize',     label: 'Pax',          field: 'paxMin',        type: 'pax',     minW: 46  },
   { id: 'status',        label: 'Status',       field: 'status',        type: 'status',  minW: 190 },
   { id: 'paymentStatus', label: 'Payment',      field: 'paymentStatus', type: 'payment', minW: 150 },
 ];
@@ -67,8 +67,21 @@ function styleText(val) {
   return '';
 }
 
+function fmtPax(row) {
+  const min = row.paxMin;
+  const max = row.paxMax;
+  if (min != null) {
+    if (max == null) return `${min}+`;
+    if (min === max) return String(min);
+    return `${min}–${max}`;
+  }
+  if (row.groupSize != null) return String(row.groupSize);
+  return '—';
+}
+
 function getSortValue(row, col) {
   const raw = row[col.field];
+  if (col.type === 'pax')    return row.paxMin != null ? Number(row.paxMin) : (row.groupSize != null ? Number(row.groupSize) : -Infinity);
   if (col.type === 'style')  return styleText(raw).toLowerCase();
   if (col.type === 'number') return raw != null ? Number(raw) : -Infinity;
   if (col.type === 'date')   return raw ? new Date(raw).getTime() : 0;
@@ -106,6 +119,10 @@ function matchesFilter(row, col, filterVal) {
   if (!filterVal) return true;
   const search = String(filterVal).toLowerCase().trim();
   if (!search) return true;
+  if (col.type === 'pax') {
+    const display = fmtPax(row);
+    return display !== '—' && display.includes(search);
+  }
   const raw = row[col.field];
   const display = col.type === 'style' ? styleText(raw) : String(raw ?? '');
   return display.toLowerCase().includes(search);
@@ -247,7 +264,7 @@ function FilterPopover({ col, value, onChange, onClose, anchorRect }) {
         <>
           <input
             ref={inputRef}
-            type={col.type === 'number' ? 'number' : 'text'}
+            type={col.type === 'number' || col.type === 'pax' ? 'number' : 'text'}
             placeholder="Search…"
             value={value}
             onChange={e => onChange(e.target.value)}
@@ -1053,7 +1070,7 @@ export default function CustomRequestsPage() {
           </span>
           {r.dates     && <span style={{ fontSize: '12px', color: '#4A433A' }}>{r.dates}</span>}
           {r.duration  && <span style={{ fontSize: '12px', color: '#4A433A' }}>{r.duration}</span>}
-          {r.groupSize != null && <span style={{ fontSize: '12px', color: '#4A433A' }}>{r.groupSize} pax</span>}
+          {(r.paxMin != null || r.groupSize != null) && <span style={{ fontSize: '12px', color: '#4A433A' }}>{fmtPax(r)} pax</span>}
           {r.budget    && <span style={{ fontSize: '12px', color: '#4A433A' }}>{r.budget}</span>}
         </div>
         {r.notes && (
@@ -1309,7 +1326,7 @@ export default function CustomRequestsPage() {
                       <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.dates    || '—'}</td>
                       <td style={{ ...TD, color: '#4A433A', whiteSpace: 'nowrap' }}>{r.duration || '—'}</td>
                       <td style={{ ...TD, color: '#4A433A', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                        {r.groupSize != null ? r.groupSize : '—'}
+                        {fmtPax(r)}
                       </td>
 
                       {/* Workflow status */}

@@ -7,6 +7,19 @@ import { reconcileCustomRequestPayment } from './_lib/reconcileCustomRequestPaym
 
 const { Pool } = pg;
 
+// Parse group size strings like "1-2", "3-8", "13+" into [paxMin, paxMax].
+function parsePaxRange(str) {
+  if (!str) return [null, null];
+  const s = String(str).trim();
+  const range = s.match(/^(\d+)-(\d+)$/);
+  if (range) return [parseInt(range[1], 10), parseInt(range[2], 10)];
+  const plus = s.match(/^(\d+)\+$/);
+  if (plus) return [parseInt(plus[1], 10), null];
+  const num = parseInt(s, 10);
+  if (!isNaN(num)) return [num, num];
+  return [null, null];
+}
+
 // Disable Vercel's automatic body parsing — needed so the webhook action can
 // receive raw bytes for Stripe signature verification. Non-webhook actions
 // parse JSON manually from the raw body below.
@@ -408,7 +421,6 @@ async function processCustomPayment(pool, session) {
   const dest          = meta.destination || null;
   const dates         = meta.dates      || null;
   const duration      = meta.duration   || null;
-  const groupSize     = meta.group_size ? (parseInt(meta.group_size, 10) || null) : null;
   const groupType     = meta.group_type || null;
   const budget        = meta.budget     || null;
   const style         = meta.travel_style
@@ -426,6 +438,8 @@ async function processCustomPayment(pool, session) {
       designerUserId = planRows[0]?.designerUserId ?? null;
     } catch { /* non-fatal */ }
   }
+  const [paxMin, paxMax] = parsePaxRange(meta.group_size);
+  const groupSize = paxMin;   // backward compat — stored in groupSize column too
   const notes     = meta.notes      || null;
   const amount    = (session.amount_total ?? 0) / 100;
 
@@ -457,7 +471,7 @@ async function processCustomPayment(pool, session) {
       included: [],
     },
     tripFacts: {
-      groupSize: groupSize ? String(groupSize) : '',
+      groupSize: paxMax != null ? `${paxMin}–${paxMax}` : paxMin != null ? `${paxMin}+` : '',
       difficulty: 'Moderate',
       bestFor: groupType ? [groupType] : [],
       category: 'Custom Journey',
@@ -502,53 +516,58 @@ async function processCustomPayment(pool, session) {
 
   // ── 2. Create CustomRequest (linked to Itinerary) ────────────────────────
   // Check if a prior retry already created it for this itinerary.
+  let customRequestId = null;
   const { rows: existingCR } = await pool.query(
     `SELECT id FROM "CustomRequest" WHERE "itineraryId" = $1 LIMIT 1`,
     [itinId]
   );
   if (existingCR.length === 0) {
-    await pool.query(
+    const { rows: crRows } = await pool.query(
       `INSERT INTO "CustomRequest"
-         (id, "fullName", email, destination, dates, "groupSize", notes,
+         (id, "fullName", email, destination, dates, "groupSize", "paxMin", "paxMax", notes,
           phone, duration, "groupType", budget, style,
           status, "userId", "itineraryId", "designerId", "createdAt")
        VALUES
-         (gen_random_uuid(), $1, $2, $3, $4, $5, $6,
-          $7, $8, $9, $10, $11,
-          'open', $12, $13, $14, NOW())`,
+         (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8,
+          $9, $10, $11, $12, $13,
+          'open', $14, $15, $16, NOW())
+       RETURNING id`,
       [
-        fullName, email, dest, dates, groupSize, notes,
+        fullName, email, dest, dates, groupSize, paxMin, paxMax, notes,
         phone, duration, groupType, budget, JSON.stringify(style),
         userId || null, itinId, designerUserId || null,
       ]
     );
-    console.log('[processCustomPayment] CustomRequest created — sessionId:', session.id);
+    customRequestId = crRows[0]?.id ?? null;
+    console.log('[processCustomPayment] CustomRequest created — sessionId:', session.id, '| crId:', customRequestId);
+  } else {
+    customRequestId = existingCR[0].id;
   }
 
   // ── 3. Create Purchase ───────────────────────────────────────────────────
-  if (userId) {
+  // Always create, even for anonymous users — customRequestId is the idempotency key.
+  {
     const { grossAmount, discountAmount, couponCode, stripeCouponId } = extractDiscount(session);
     const netAmount = amount;
     try {
       await pool.query(
         `INSERT INTO "Purchase"
-           (id, "userId", "itineraryId", "stripeSessionId", "stripePaymentIntentId",
+           (id, "userId", "itineraryId", "customRequestId", "stripeSessionId", "stripePaymentIntentId",
             amount, "grossAmount", "netAmount", "discountAmount", "couponCode", "stripeCouponId",
-            "pricingPlanId", "designerUserId",
+            "pricingPlanId", "designerUserId", "currency",
             status, "purchasedAt", "createdAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'paid', NOW(), NOW())
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'paid', NOW(), NOW())
          ON CONFLICT ("stripeSessionId") DO NOTHING`,
         [
-          userId, itinId, session.id, session.payment_intent ?? null,
+          userId || null, itinId, customRequestId, session.id, session.payment_intent ?? null,
           netAmount, grossAmount, netAmount, discountAmount, couponCode, stripeCouponId,
-          pricingPlanId, designerUserId,
+          pricingPlanId, designerUserId, session.currency || 'eur',
         ]
       );
+      console.log('[processCustomPayment] Purchase created — sessionId:', session.id);
     } catch (err) {
       if (err.code !== '23505') throw err;
     }
-  } else {
-    console.warn('[processCustomPayment] no userId in metadata — Purchase skipped — sessionId:', session.id);
   }
 
   // ── 4. Designer notification email ──────────────────────────────────────────

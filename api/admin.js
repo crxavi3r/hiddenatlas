@@ -1142,7 +1142,8 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false, ctx
   const PAID_EXISTS = `
     EXISTS (
       SELECT 1 FROM "Purchase" p
-      WHERE p."itineraryId" = cr."itineraryId"
+      WHERE (p."customRequestId" = cr.id
+             OR (cr."itineraryId" IS NOT NULL AND p."itineraryId" = cr."itineraryId"))
         AND (p.status IS NULL OR p.status NOT IN ('refunded', 'cancelled', 'chargebacked'))
     )`;
 
@@ -1178,7 +1179,7 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false, ctx
   const { rows: requests } = await pool.query(
     `SELECT
        cr.id, cr."fullName", cr.email, cr.phone, cr.destination, cr.dates, cr.duration,
-       cr."groupSize", cr."groupType", cr.budget, cr.style, cr.notes, cr.status,
+       cr."groupSize", cr."paxMin", cr."paxMax", cr."groupType", cr.budget, cr.style, cr.notes, cr.status,
        cr."itineraryId", cr."designerId", cr."createdAt",
        cr."paidAt", cr."quoteSentAt", cr."quoteAmount", cr."stripePaymentUrl",
        CASE
@@ -1189,7 +1190,7 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false, ctx
        itin.slug   AS "linkedItinerarySlug",
        itin.status AS "linkedItineraryStatus",
        itin.title  AS "linkedItineraryTitle",
-       (cr."paidAt" IS NOT NULL OR (cr."itineraryId" IS NOT NULL AND ${PAID_EXISTS})) AS "isPaid"
+       (cr."paidAt" IS NOT NULL OR ${PAID_EXISTS}) AS "isPaid"
        ${designerSelect}
      FROM "CustomRequest" cr
      LEFT JOIN "Itinerary" itin ON itin.id = cr."itineraryId"
@@ -1229,9 +1230,9 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false, ctx
   if (isAdmin) {
     const paymentRes = await pool.query(
       `SELECT
-         COUNT(*) FILTER (WHERE cr."paidAt" IS NOT NULL OR (cr."itineraryId" IS NOT NULL AND ${PAID_EXISTS})) AS paid,
-         COUNT(*) FILTER (WHERE cr."quoteSentAt" IS NOT NULL AND cr."paidAt" IS NULL AND (cr."itineraryId" IS NULL OR NOT ${PAID_EXISTS})) AS quote_sent,
-         COUNT(*) FILTER (WHERE cr."quoteSentAt" IS NULL AND cr."paidAt" IS NULL AND (cr."itineraryId" IS NULL OR NOT ${PAID_EXISTS})) AS unpaid
+         COUNT(*) FILTER (WHERE cr."paidAt" IS NOT NULL OR ${PAID_EXISTS}) AS paid,
+         COUNT(*) FILTER (WHERE cr."quoteSentAt" IS NOT NULL AND cr."paidAt" IS NULL AND NOT ${PAID_EXISTS}) AS quote_sent,
+         COUNT(*) FILTER (WHERE cr."quoteSentAt" IS NULL AND cr."paidAt" IS NULL AND NOT ${PAID_EXISTS}) AS unpaid
        FROM "CustomRequest" cr`
     );
     paymentCounts = {

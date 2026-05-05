@@ -128,6 +128,8 @@ export async function reconcileCustomRequestPayment(pool, customRequestId, strip
       [cr.id]
     );
 
+    const currency = session.currency || 'eur';
+
     if (existingPurchase.length > 0) {
       // UPDATE — sync latest session data, never create a duplicate
       await pool.query(
@@ -138,13 +140,15 @@ export async function reconcileCustomRequestPayment(pool, customRequestId, strip
            "grossAmount"           = $4,
            "netAmount"             = $5,
            "discountAmount"        = $6,
+           currency                = $7,
            status                  = 'paid',
            "purchasedAt"           = COALESCE("purchasedAt", NOW())
-         WHERE "customRequestId" = $7::text`,
+         WHERE "customRequestId" = $8::text`,
         [
           session.id,
           session.payment_intent || null,
           netAmount, grossAmount, netAmount, discountAmount,
+          currency,
           cr.id,
         ]
       );
@@ -156,8 +160,8 @@ export async function reconcileCustomRequestPayment(pool, customRequestId, strip
           `INSERT INTO "Purchase"
              (id, "userId", "itineraryId", "customRequestId", "stripeSessionId", "stripePaymentIntentId",
               amount, "grossAmount", "netAmount", "discountAmount",
-              "designerUserId", status, "purchasedAt", "createdAt")
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'paid', NOW(), NOW())`,
+              currency, "designerUserId", status, "purchasedAt", "createdAt")
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'paid', NOW(), NOW())`,
           [
             cr.userId      || null,
             cr.itineraryId || null,
@@ -165,6 +169,7 @@ export async function reconcileCustomRequestPayment(pool, customRequestId, strip
             session.id,
             session.payment_intent || null,
             netAmount, grossAmount, netAmount, discountAmount,
+            currency,
             cr.designerId  || null,
           ]
         );
@@ -181,13 +186,15 @@ export async function reconcileCustomRequestPayment(pool, customRequestId, strip
                "grossAmount"           = $4,
                "netAmount"             = $5,
                "discountAmount"        = $6,
+               currency                = $7,
                status                  = 'paid',
                "purchasedAt"           = COALESCE("purchasedAt", NOW())
-             WHERE "customRequestId" = $7::text`,
+             WHERE "customRequestId" = $8::text`,
             [
               session.id,
               session.payment_intent || null,
               netAmount, grossAmount, netAmount, discountAmount,
+              currency,
               cr.id,
             ]
           );
