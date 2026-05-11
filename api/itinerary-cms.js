@@ -392,7 +392,7 @@ async function handleCreate(pool, body, ctx) {
         "accessType", price, "stripePriceId", "pricingKey", "pricingPlanId", "coverImage", description,
         type, "isPrivate", "isCollection", status, "isPublished", content, "schemaVersion", "updatedAt",
         creator_id, variant, "parentId")
-     VALUES (gen_random_uuid()::text,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,$16,$17,$18,1,NOW(),$19,$20,$21)
+     VALUES (gen_random_uuid()::text,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,false,$17,$18,$19,1,NOW(),$20,$21,$22)
      RETURNING *`,
     [
       title, subtitle, slug, destination, country, region, durationDays,
