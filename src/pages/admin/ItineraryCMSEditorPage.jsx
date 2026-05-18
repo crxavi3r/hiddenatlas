@@ -47,13 +47,16 @@ const iconBtn = {
   borderRadius: '4px', color: '#8C8070', display: 'flex', alignItems: 'center',
 };
 
+// Set to true to re-enable the AI Assistant tab in the itinerary editor.
+const ENABLE_AI_ASSISTANT = false;
+
 const TABS = [
   { key: 'basics',   label: 'Basics' },
   { key: 'hero',     label: 'Overview' },
   { key: 'days',     label: 'Days' },
   { key: 'sections', label: 'Sections' },
   { key: 'images',   label: 'Images' },
-  { key: 'ai',       label: 'AI Assistant' },
+  ...(ENABLE_AI_ASSISTANT ? [{ key: 'ai', label: 'AI Assistant' }] : []),
 ];
 
 const EMPTY_CONTENT = {
@@ -2068,7 +2071,7 @@ export default function ItineraryCMSEditorPage() {
             onCancel={() => { setNewAsset(a => ({ ...EMPTY_ASSET, assetType: a.assetType, dayNumber: a.dayNumber })); setAddError(null); }}
           />
         )}
-        {activeTab === 'ai'       && (
+        {ENABLE_AI_ASSISTANT && activeTab === 'ai' && (
           <AITab
             prompt={aiPrompt} setPrompt={setAiPrompt}
             generating={aiGenerating} output={aiOutput} history={aiHistory}
