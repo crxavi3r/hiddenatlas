@@ -219,7 +219,7 @@ export default function ItinerariesPage() {
   useSEO({
     title: 'Travel Itineraries — Free & Premium Journeys',
     description: 'Browse travel itineraries for Bali, Japan, Morocco, Italy, Albania and more. Designed by people who\'ve actually been there — free and premium guides.',
-    canonical: 'https://hiddenatlas.travel/itineraries',
+    canonical: 'https://www.hiddenatlas.travel/itineraries',
   });
 
   const matchesSearch = (it) => {

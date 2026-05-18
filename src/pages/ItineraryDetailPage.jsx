@@ -439,7 +439,7 @@ export default function ItineraryDetailPage() {
   const isPremium = itinerary?.isPremium;
 
   // ── SEO ───────────────────────────────────────────────────────────────────
-  const HA_DOMAIN = 'https://hiddenatlas.travel';
+  const HA_DOMAIN = 'https://www.hiddenatlas.travel';
   const seoTitle = itinerary
     ? `${itinerary.title}${itinerary.subtitle ? ': ' + itinerary.subtitle : ''}`
     : null;

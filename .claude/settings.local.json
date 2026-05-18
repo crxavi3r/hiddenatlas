@@ -123,7 +123,11 @@
       "Bash(vercel whoami *)",
       "Bash(stripe webhook_endpoints list --api-key *)",
       "Bash(wait)",
-      "Bash(read d *)"
+      "Bash(read d *)",
+      "WebFetch(domain:www.hiddenatlas.travel)",
+      "Bash(xargs sed -i '' 's|https://hiddenatlas\\\\.travel|https://www.hiddenatlas.travel|g')",
+      "Bash(sed -n '11,16p' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/src/hooks/useSEO.js)",
+      "Bash(sed -n '1,35p' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/index.html)"
     ]
   }
 }

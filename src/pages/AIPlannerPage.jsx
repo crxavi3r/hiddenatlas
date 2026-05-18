@@ -66,7 +66,7 @@ export default function AIPlannerPage() {
   useSEO({
     title: 'AI Trip Planner — Build a Custom Travel Itinerary Instantly',
     description: 'Describe your destination, travel dates, and style — HiddenAtlas AI builds a personalised day-by-day travel itinerary in seconds.',
-    canonical: 'https://hiddenatlas.travel/ai-planner',
+    canonical: 'https://www.hiddenatlas.travel/ai-planner',
   });
   const [searchParams] = useSearchParams();
   const { isLoaded, isSignedIn } = useAuth();

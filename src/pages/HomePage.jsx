@@ -105,15 +105,15 @@ export default function HomePage() {
   useSEO({
     title: 'HiddenAtlas — Travel itineraries designed by people who know the places',
     description: 'Travel itineraries designed by people who know the places. Real routes, boutique stays, and local knowledge from designers who\'ve actually been there.',
-    canonical: 'https://hiddenatlas.travel/',
+    canonical: 'https://www.hiddenatlas.travel/',
     ogImage: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1200&q=80',
     schemas: [
       {
         '@context': 'https://schema.org',
         '@type': 'Organization',
         name: 'HiddenAtlas',
-        url: 'https://hiddenatlas.travel',
-        logo: 'https://hiddenatlas.travel/assets/logo-hiddenatlas.svg',
+        url: 'https://www.hiddenatlas.travel',
+        logo: 'https://www.hiddenatlas.travel/assets/logo-hiddenatlas.svg',
         description: 'Travel itineraries designed by people who know the places. Real routes, boutique stays, and local knowledge from designers who\'ve actually been there.',
         contactPoint: {
           '@type': 'ContactPoint',

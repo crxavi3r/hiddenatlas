@@ -15,7 +15,7 @@ export default function PricingPage() {
   useSEO({
     title: 'Pricing — Digital Itineraries & Custom Trip Planning',
     description: 'Premium travel itineraries from €29. Custom trip planning from €600 for couples to €1,400+ for large groups. One-time purchase, no subscriptions.',
-    canonical: 'https://hiddenatlas.travel/pricing',
+    canonical: 'https://www.hiddenatlas.travel/pricing',
   });
 
   return (

@@ -9,10 +9,12 @@
 import { useEffect } from 'react';
 
 const SITE_NAME = 'HiddenAtlas';
+export const SITE_URL = 'https://www.hiddenatlas.travel';
 const DEFAULT_TITLE = 'HiddenAtlas — Curated Luxury Travel Itineraries';
 const DEFAULT_DESCRIPTION =
   'Expert-crafted travel itineraries for discerning travelers. Boutique stays, hidden routes, real local knowledge. No tourist traps, no guesswork.';
-const DEFAULT_OG_IMAGE = '/assets/logo-hiddenatlas.svg';
+// Absolute URL required — relative paths are not resolved by social/OG crawlers.
+const DEFAULT_OG_IMAGE = `${SITE_URL}/assets/logo-hiddenatlas.svg`;
 
 /** Create or update a <meta> tag matched by a CSS attribute selector. */
 function upsertMeta(selector, value) {

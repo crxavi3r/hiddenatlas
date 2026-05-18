@@ -1,5 +1,13 @@
 {
   "buildCommand": "npm run migrate && npm run build",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "max-image-preview:large" }
+      ]
+    }
+  ],
   "redirects": [
     {
       "source": "/((?!api(?:/|$)).*)",

@@ -319,7 +319,7 @@ export default function CreatorEditorPage() {
 
   const initials   = getInitials(form.name);
   const cleanSlug  = form.slug.replace(/^-+|-+$/g, '').trim();
-  const publicUrl  = cleanSlug ? `https://hiddenatlas.travel/${cleanSlug}` : null;
+  const publicUrl  = cleanSlug ? `https://www.hiddenatlas.travel/${cleanSlug}` : null;
 
   return (
     <div style={{ padding: isMobile ? '16px' : '28px 32px', maxWidth: '640px' }}>

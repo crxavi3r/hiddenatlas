@@ -159,7 +159,7 @@ export function JournalListPage() {
   useSEO({
     title: 'Travel Journal — Destination Guides & Planning Advice',
     description: 'Honest destination guides, stay recommendations, and practical travel advice from HiddenAtlas. Written by people who have actually been there.',
-    canonical: 'https://hiddenatlas.travel/journal',
+    canonical: 'https://www.hiddenatlas.travel/journal',
   });
 
   return (
@@ -234,7 +234,7 @@ export function JournalPostPage() {
   useSEO({
     title: post ? post.title : null,
     description: post ? post.excerpt : null,
-    canonical: post ? `https://hiddenatlas.travel/journal/${post.id}` : null,
+    canonical: post ? `https://www.hiddenatlas.travel/journal/${post.id}` : null,
     ogImage: post ? post.image : null,
   });
 

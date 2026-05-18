@@ -38,7 +38,7 @@ function toAbsoluteUrl(url) {
   if (!url) return null;
   if (url.startsWith('data:')) return url;
   if (url.startsWith('http')) return url;
-  return `https://hiddenatlas.travel${url.startsWith('/') ? url : `/${url}`}`;
+  return `https://www.hiddenatlas.travel${url.startsWith('/') ? url : `/${url}`}`;
 }
 
 function resolveImg(url, resolvedImages) {

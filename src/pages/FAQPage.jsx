@@ -136,7 +136,7 @@ export default function FAQPage() {
   useSEO({
     title: 'Frequently Asked Questions — Travel Planning, Itineraries & Custom Trips',
     description: 'Answers to common questions about HiddenAtlas itineraries, custom trip planning, pricing, refunds, and who our travel guides are designed for.',
-    canonical: 'https://hiddenatlas.travel/faq',
+    canonical: 'https://www.hiddenatlas.travel/faq',
     schemas: [
       {
         '@context': 'https://schema.org',

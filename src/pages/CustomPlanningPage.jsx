@@ -234,7 +234,7 @@ export default function CustomPlanningPage() {
   useSEO({
     title: 'Custom Trip Planning — Bespoke Travel Itineraries for Groups & Couples',
     description: 'Get a fully personalised travel itinerary designed for your group, dates, and style. Custom trip planning for couples, families, and groups of 2 to 13+ people.',
-    canonical: 'https://hiddenatlas.travel/custom',
+    canonical: 'https://www.hiddenatlas.travel/custom',
   });
 
   const [formData, setFormData] = useState({

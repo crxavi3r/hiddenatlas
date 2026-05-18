@@ -15,4 +15,4 @@ Disallow: /api/
 # All other public pages are allowed
 Allow: /
 
-Sitemap: https://hiddenatlas.travel/sitemap.xml
+Sitemap: https://www.hiddenatlas.travel/sitemap.xml

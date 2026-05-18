@@ -6,7 +6,7 @@ export default function AboutPage() {
   useSEO({
     title: 'About HiddenAtlas — Independent Travel Itineraries Built on Real Experience',
     description: 'HiddenAtlas is an independent travel planning platform built on real travel experience. No sponsored placements, no affiliate commissions. Just honest, well-researched itineraries.',
-    canonical: 'https://hiddenatlas.travel/about',
+    canonical: 'https://www.hiddenatlas.travel/about',
   });
   const values = [
     { title: 'Depth over breadth', desc: 'Three places done brilliantly beats six places done adequately. Every itinerary is designed for depth of experience, not passport stamp counts.' },
