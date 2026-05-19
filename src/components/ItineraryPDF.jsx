@@ -1401,6 +1401,76 @@ function CTAPage({ itinerary }) {
   );
 }
 
+// ── Route overview page ────────────────────────────────────────────────────────
+//
+// Controlled by pdfConfig.showRouteMap. Added AFTER the "Expedition Route"
+// (RouteMapPage) and BEFORE Day 1. Shows the overall route string and a
+// per-day location breakdown using day.route || day.title.
+
+function RouteOverviewPage({ itinerary }) {
+  const { title, country, routeOverview, days = [] } = itinerary;
+
+  return (
+    <Page size="A4" style={{ backgroundColor: C.stone }}>
+      <RunHeader country={country} title={title} />
+
+      <View style={{ paddingHorizontal: 48, paddingTop: 36, paddingBottom: 40 }}>
+        {/* Eyebrow + rule */}
+        <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 2.5, color: C.teal, marginBottom: 14 }}>
+          ROUTE OVERVIEW
+        </Text>
+        <View style={{ width: 32, height: 1.5, backgroundColor: C.gold, marginBottom: 26 }} />
+
+        {/* Overall route string — editorial callout box */}
+        {routeOverview ? (
+          <View style={{
+            marginBottom: 28, padding: 14,
+            backgroundColor: C.cream,
+            borderLeftWidth: 2.5, borderLeftColor: C.teal,
+          }}>
+            <Text style={{ fontFamily: 'Times-Roman', fontSize: 11, color: C.charcoal, lineHeight: 1.75 }}>
+              {routeOverview}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Day-by-day breakdown */}
+        {days.length > 0 ? (
+          <View>
+            <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 1.5, color: C.muted, marginBottom: 16 }}>
+              DAY BY DAY
+            </Text>
+            {days.map((day, i) => {
+              const routeText = day.route || day.title;
+              if (!routeText) return null;
+              const isLast = i === days.length - 1;
+              return (
+                <View key={i} wrap={false} style={{
+                  flexDirection: 'row', alignItems: 'flex-start',
+                  paddingVertical: 9,
+                  borderBottomWidth: isLast ? 0 : 0.5,
+                  borderBottomColor: C.border,
+                }}>
+                  <View style={{ width: 42, flexShrink: 0 }}>
+                    <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 8, color: C.teal, letterSpacing: 0.5 }}>
+                      DAY {day.day}
+                    </Text>
+                  </View>
+                  <Text style={{ fontFamily: 'Times-Roman', fontSize: 11, color: C.charcoal, flex: 1, lineHeight: 1.5 }}>
+                    {routeText}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+      </View>
+
+      <Text style={s.pageNum} render={({ pageNumber }) => String(pageNumber)} fixed />
+    </Page>
+  );
+}
+
 // ── Accommodation page ─────────────────────────────────────────────────────────
 //
 // Rendered when pdfConfig.showHotels is true and the itinerary has at least
@@ -1462,9 +1532,13 @@ function AccommodationPage({ itinerary }) {
 export default function ItineraryPDF({ itinerary }) {
   const { days = [] } = itinerary;
 
-  // pdfConfig toggles — default true so existing PDFs are unaffected.
-  const showRouteMap = itinerary.showRouteMap !== false;
-  const showHotels   = itinerary.showHotels   !== false;
+  // pdfConfig toggles.
+  // showRouteMap adds a RouteOverviewPage (day-by-day route breakdown) AFTER the
+  // always-present RouteMapPage ("Expedition Route") and BEFORE Day 1.
+  // showHotels adds an AccommodationPage after the day pages.
+  // Both default to false so legacy PDFs don't gain unexpected pages.
+  const showRouteMap = itinerary.showRouteMap === true;
+  const showHotels   = itinerary.showHotels   === true;
 
   // Conditions mirror each optional component's own early-return guard so we
   // never invoke a component that would return null.
@@ -1479,7 +1553,8 @@ export default function ItineraryPDF({ itinerary }) {
   // no nulls, no false values, no conditional JSX that could resolve to nothing.
   const pages = [
     <CoverPage    key="cover"          itinerary={itinerary} />,
-    ...(showRouteMap ? [<RouteMapPage key="route-overview" itinerary={itinerary} />] : []),
+    <RouteMapPage key="route-overview" itinerary={itinerary} />,
+    ...(showRouteMap ? [<RouteOverviewPage key="route-detail" itinerary={itinerary} />] : []),
     ...(hasMapPng    ? [<DestinationMapPage    key="map"       itinerary={itinerary} />] : []),
     ...(hasSvgMap    ? [<DestinationSvgMapPage key="svg-map"   itinerary={itinerary} />] : []),
     ...days.map((day, i) => <DayPage key={`day-${i}`} day={day} index={i} itinerary={itinerary} />),

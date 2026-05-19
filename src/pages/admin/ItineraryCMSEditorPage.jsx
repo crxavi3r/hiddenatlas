@@ -3555,8 +3555,8 @@ function SectionsTab({ c, setContent }) {
       <div style={sectionCard}>
         <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>PDF Config</p>
         {[
-          { key: 'showRouteMap', label: 'Include route map page' },
-          { key: 'showHotels',  label: 'Include accommodation section' },
+          { key: 'showRouteMap', label: 'Include route map page in PDF' },
+          { key: 'showHotels',  label: 'Include accommodation section in PDF' },
         ].map(({ key, label }) => (
           <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', cursor: 'pointer' }}>
             <input type="checkbox"

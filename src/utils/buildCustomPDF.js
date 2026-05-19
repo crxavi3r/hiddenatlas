@@ -228,8 +228,8 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
     days,
     pdfVersion,
     pdfDate,
-    showRouteMap: pdfConfig.showRouteMap !== false,
-    showHotels:   pdfConfig.showHotels   !== false,
+    showRouteMap: pdfConfig.showRouteMap === true,
+    showHotels:   pdfConfig.showHotels   === true,
   };
 
   // ── Render PDF ──────────────────────────────────────────────────────────────
