@@ -16,7 +16,9 @@ import PhilippinesRouteMap from '../components/PhilippinesRouteMap';
 import AmericanWestRouteMap from '../components/AmericanWestRouteMap';
 import AmericanWest12DaysRouteMap from '../components/AmericanWest12DaysRouteMap';
 import AmericanWest8DaysRouteMap from '../components/AmericanWest8DaysRouteMap';
+import TuscanyRouteMap from '../components/TuscanyRouteMap';
 
+// Always-on route maps for curated/static itineraries
 const ROUTE_MAP_COMPONENTS = {
   'japan-grand-cultural-journey': JapanRouteMap,
   'morocco-motorcycle-expedition': MoroccoRouteMap,
@@ -25,6 +27,11 @@ const ROUTE_MAP_COMPONENTS = {
   'california-american-west-16-days': AmericanWestRouteMap,
   'california-american-west-12-days': AmericanWest12DaysRouteMap,
   'california-american-west-8-days': AmericanWest8DaysRouteMap,
+};
+
+// DB-controlled route maps — shown only when content.routeMap.showOnSite === true
+const DB_ROUTE_MAP_COMPONENTS = {
+  'tuscany-wine-roads-in-7-days': TuscanyRouteMap,
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -352,13 +359,14 @@ function normalizeDbItinerary(row) {
     groupSize:        content?.tripFacts?.groupSize  || content?.summary?.groupSize || '',
     difficulty:       content?.tripFacts?.difficulty || '',
     category:         content?.tripFacts?.category   || '',
-    status:           row.status       || 'published',
-    type:             row.type         || 'free',
-    accessType:       row.accessType   || 'free',
-    isPrivate:        row.isPrivate    ?? false,
-    parentId:         row.parentId     || null,
-    isCollection:     row.isCollection ?? false,
-    variant:          row.variant      || null,
+    status:             row.status       || 'published',
+    type:               row.type         || 'free',
+    accessType:         row.accessType   || 'free',
+    isPrivate:          row.isPrivate    ?? false,
+    parentId:           row.parentId     || null,
+    isCollection:       row.isCollection ?? false,
+    variant:            row.variant      || null,
+    showRouteMapOnSite: content?.routeMap?.showOnSite === true,
   };
 }
 
@@ -1248,6 +1256,28 @@ export default function ItineraryDetailPage() {
                 ))}
               </div>
             </section>
+
+            {/* DB-controlled Route Map — shown when content.routeMap.showOnSite === true */}
+            {itinerary.showRouteMapOnSite && DB_ROUTE_MAP_COMPONENTS[itinerary.id] && (() => {
+              const DbRouteMapComponent = DB_ROUTE_MAP_COMPONENTS[itinerary.id];
+              return (
+                <section style={{ marginBottom: '60px' }}>
+                  <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '6px' }}>
+                    Route Map
+                  </h2>
+                  <p style={{ fontSize: '13px', color: '#8C8070', letterSpacing: '0.3px', marginBottom: '24px' }}>
+                    {itinerary.subtitle}
+                  </p>
+                  <DbRouteMapComponent
+                    isUnlocked={hasAccess}
+                    onDaySelect={dayNum => {
+                      const el = document.getElementById(`day-${dayNum}`);
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                  />
+                </section>
+              );
+            })()}
 
             {/* Destination Gallery */}
             {galleryImages.length > 0 && (

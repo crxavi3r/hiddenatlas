@@ -65,7 +65,8 @@ const EMPTY_CONTENT = {
   tripFacts: { groupSize: '', difficulty: 'Moderate', bestFor: [], category: '' },
   days:      [],
   sections:  { hotels: [], practicalNotes: '', faq: [] },
-  pdfConfig: { showRouteMap: true, showHotels: true },
+  routeMap:  { showOnSite: false },
+  pdfConfig: { showRouteMap: false, showHotels: false },
   seo:       { metaTitle: '', metaDescription: '' },
 };
 
@@ -3553,20 +3554,35 @@ function SectionsTab({ c, setContent }) {
       </div>
 
       <div style={sectionCard}>
-        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>PDF Config</p>
+        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '4px' }}>Route Map</p>
+        <p style={{ fontSize: '11.5px', color: '#8C8070', marginBottom: '18px' }}>
+          Controls where the visual route map appears. Requires a map component registered for this itinerary slug.
+        </p>
         {[
-          { key: 'showRouteMap', label: 'Include route map page in PDF' },
-          { key: 'showHotels',  label: 'Include accommodation section in PDF' },
-        ].map(({ key, label }) => (
-          <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', cursor: 'pointer' }}>
+          { path: 'routeMap.showOnSite',     label: 'Show route map on itinerary page' },
+          { path: 'pdfConfig.showRouteMap',  label: 'Include route map in PDF' },
+        ].map(({ path, label }) => (
+          <label key={path} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', cursor: 'pointer' }}>
             <input type="checkbox"
-              checked={c(`pdfConfig.${key}`) !== false}
-              onChange={e => setContent(`pdfConfig.${key}`, e.target.checked)}
+              checked={c(path) === true}
+              onChange={e => setContent(path, e.target.checked)}
               style={{ width: '15px', height: '15px', accentColor: '#1B6B65' }}
             />
             <span style={{ fontSize: '13.5px', color: '#4A433A' }}>{label}</span>
           </label>
         ))}
+      </div>
+
+      <div style={sectionCard}>
+        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '18px' }}>PDF Sections</p>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+          <input type="checkbox"
+            checked={c('pdfConfig.showHotels') === true}
+            onChange={e => setContent('pdfConfig.showHotels', e.target.checked)}
+            style={{ width: '15px', height: '15px', accentColor: '#1B6B65' }}
+          />
+          <span style={{ fontSize: '13.5px', color: '#4A433A' }}>Include accommodation section in PDF</span>
+        </label>
       </div>
     </div>
   );
@@ -4103,6 +4119,7 @@ function mergeContent(content) {
     summary:   { ...EMPTY_CONTENT.summary,   ...(content.summary   ?? {}) },
     tripFacts: { ...EMPTY_CONTENT.tripFacts, ...(content.tripFacts ?? {}) },
     sections:  { ...EMPTY_CONTENT.sections,  ...(content.sections  ?? {}) },
+    routeMap:  { ...EMPTY_CONTENT.routeMap,  ...(content.routeMap  ?? {}) },
     pdfConfig: { ...EMPTY_CONTENT.pdfConfig, ...(content.pdfConfig ?? {}) },
     seo:       { ...EMPTY_CONTENT.seo,       ...(content.seo       ?? {}) },
     days:      Array.isArray(content.days) ? content.days : [],
