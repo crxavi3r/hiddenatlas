@@ -400,8 +400,21 @@ export default function ItineraryDetailPage() {
   const [dbLoading,     setDbLoading]     = useState(!staticItinerary);
   const [dbFetchError,  setDbFetchError]  = useState(null);
 
-  // Effective itinerary — static takes priority, DB fills the gap
-  const itinerary = staticItinerary || dbItinerary;
+  // CMS-only fields fetched for static-bundle itineraries (route map config, etc.)
+  const [dbRouteMap, setDbRouteMap] = useState(null);
+
+  // Effective itinerary — static takes priority, DB fills the gap.
+  // For static itineraries, overlay CMS-only fields (route map) from the DB.
+  const itinerary = staticItinerary
+    ? {
+        ...staticItinerary,
+        showRouteMapOnSite: dbRouteMap?.showOnSite === true,
+        routeMapStops:      dbRouteMap?.stops       || [],
+        routeMapImageUrl:   dbRouteMap?.imageUrl    || null,
+        routeMapAlt:        dbRouteMap?.alt         || null,
+        routeMapCaption:    dbRouteMap?.caption     || null,
+      }
+    : dbItinerary;
 
   const [accessState, setAccessState] = useState('checking'); // 'checking' | 'locked' | 'unlocked' | 'unauthenticated' | 'verifying'
   const [pdfUrl, setPdfUrl]           = useState(null);
@@ -508,7 +521,7 @@ export default function ItineraryDetailPage() {
       .catch(() => {});
   }, [itinerary?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load published day content from DB — overrides static itineraries.js data.
+  // Load published day content + route map from DB — overrides static itineraries.js data.
   // Skipped for DB-only itineraries: their content already comes from action=public.
   useEffect(() => {
     if (!staticItinerary) return;
@@ -519,6 +532,15 @@ export default function ItineraryDetailPage() {
       .then(data => {
         if (data?.days?.length) setDbDays(data.days);
         if (data?.coverImage)   setDbCoverImage(data.coverImage);
+        if (data?.routeMap)     setDbRouteMap(data.routeMap);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[ItineraryDetail] content fetch —', slug, {
+            showRouteMapOnSite: data?.routeMap?.showOnSite,
+            routeMapStopsCount: data?.routeMap?.stops?.length ?? 0,
+            visibleStops: (data?.routeMap?.stops || [])
+              .filter(s => s.visible !== false && s.latitude != null && s.longitude != null).length,
+          });
+        }
       })
       .catch(() => {}); // silent — static data remains active
   }, [itinerary?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1266,36 +1288,7 @@ export default function ItineraryDetailPage() {
               </div>
             </section>
 
-            {/* Destination Gallery */}
-            {galleryImages.length > 0 && (
-              <section style={{ marginBottom: '60px' }}>
-                <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '24px' }}>
-                  The Destination
-                </h2>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(3, 1fr)',
-                  gap: '8px',
-                }}>
-                  {galleryImages.map((img, i) => (
-                    <div key={i} style={{
-                      aspectRatio: i === 0 ? '16/10' : '1/1',
-                      gridColumn: i === 0 ? '1 / -1' : 'auto',
-                      overflow: 'hidden',
-                      borderRadius: '6px',
-                    }}>
-                      <img
-                        src={img.src}
-                        alt={`${title} — ${img.filename.replace(/[-_]/g, ' ').replace(/\.\w+$/, '')}`}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* DB-controlled Route Map — after gallery, before Day by Day.
+            {/* DB-controlled Route Map — after highlights, before gallery.
                 Shown when showOnSite === true (or admin preview). Never renders empty. */}
             {(() => {
               const DbRouteMapComponent = DB_ROUTE_MAP_COMPONENTS[itinerary.id];
@@ -1305,7 +1298,6 @@ export default function ItineraryDetailPage() {
               const hasValidStops = validStops.length >= 2;
               const hasContent = DbRouteMapComponent || hasValidStops || itinerary.routeMapImageUrl;
               if (!hasContent) return null;
-              // Show to admins even when not yet enabled (preview), hide for public if disabled
               if (!itinerary.showRouteMapOnSite && !isAdmin) return null;
 
               const scrollToDay = dayNum => {
@@ -1313,13 +1305,15 @@ export default function ItineraryDetailPage() {
                 if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
               };
 
-              console.log('[ItineraryDetail] route map —', itinerary.id, {
-                enabledOnSite: itinerary.showRouteMapOnSite,
-                adminPreview: isAdmin && !itinerary.showRouteMapOnSite,
-                registeredComponent: !!DbRouteMapComponent,
-                validStopsCount: validStops.length,
-                hasImage: !!itinerary.routeMapImageUrl,
-              });
+              if (process.env.NODE_ENV === 'development') {
+                console.log('[ItineraryDetail] route map section —', itinerary.id, {
+                  enabledOnSite:       itinerary.showRouteMapOnSite,
+                  adminPreview:        isAdmin && !itinerary.showRouteMapOnSite,
+                  registeredComponent: !!DbRouteMapComponent,
+                  validStopsCount:     validStops.length,
+                  hasImage:            !!itinerary.routeMapImageUrl,
+                });
+              }
 
               return (
                 <section style={{ marginBottom: '60px' }}>
@@ -1352,6 +1346,35 @@ export default function ItineraryDetailPage() {
                 </section>
               );
             })()}
+
+            {/* Destination Gallery */}
+            {galleryImages.length > 0 && (
+              <section style={{ marginBottom: '60px' }}>
+                <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '24px' }}>
+                  The Destination
+                </h2>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: '8px',
+                }}>
+                  {galleryImages.map((img, i) => (
+                    <div key={i} style={{
+                      aspectRatio: i === 0 ? '16/10' : '1/1',
+                      gridColumn: i === 0 ? '1 / -1' : 'auto',
+                      overflow: 'hidden',
+                      borderRadius: '6px',
+                    }}>
+                      <img
+                        src={img.src}
+                        alt={`${title} — ${img.filename.replace(/[-_]/g, ' ').replace(/\.\w+$/, '')}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* Day by Day */}
             <section style={{ marginBottom: '60px' }}>

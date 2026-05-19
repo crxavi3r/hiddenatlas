@@ -166,7 +166,8 @@ export default async function handler(req, res) {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
       const { rows } = await pool.query(
-        `SELECT (content::jsonb)->'days' AS days,
+        `SELECT (content::jsonb)->'days'     AS days,
+                (content::jsonb)->'routeMap' AS "routeMap",
                 "coverImage"
          FROM   "Itinerary"
          WHERE  slug = $1
@@ -175,8 +176,12 @@ export default async function handler(req, res) {
         [slug]
       );
       if (!rows.length) return res.status(404).json({ error: 'not found' });
-      res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60');
-      return res.json({ days: rows[0].days ?? [], coverImage: rows[0].coverImage ?? null });
+      res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=30');
+      return res.json({
+        days:       rows[0].days     ?? [],
+        routeMap:   rows[0].routeMap ?? null,
+        coverImage: rows[0].coverImage ?? null,
+      });
     } catch (err) {
       console.error('[itineraries/content]', err.message);
       return res.status(500).json({ error: err.message });
