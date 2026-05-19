@@ -138,7 +138,14 @@ export default function InteractiveRouteMap({ stops = [], onDaySelect, isUnlocke
   };
 
   const activeCity = validStops[activeStop];
-  const n          = validStops.length;
+  const n = validStops.length;
+
+  // Resolve tier from stored type, falling back to position-based default for legacy data.
+  const resolveTier = (stop, i) => {
+    if (stop.type === 'major') return 1;
+    if (stop.type === 'stop')  return 2;
+    return (i === 0 || i === n - 1) ? 1 : 2;
+  };
 
   return (
     <div ref={containerRef} style={{ position: 'relative', userSelect: 'none', fontFamily: 'Inter, system-ui, sans-serif' }}>
@@ -191,7 +198,7 @@ export default function InteractiveRouteMap({ stops = [], onDaySelect, isUnlocke
           const [cx, cy] = proj(stop.longitude, stop.latitude);
           const isActive = i === activeStop;
           const isFuture = i > activeStop;
-          const tier     = (i === 0 || i === n - 1) ? 1 : 2;
+          const tier     = resolveTier(stop, i);
           const cfg      = TIER[tier];
           const r        = isActive ? cfg.rActive : cfg.r;
           const dx       = cx <= VW * 0.55 ? 14 : -12;

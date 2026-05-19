@@ -3668,7 +3668,7 @@ function RouteMapSection({ c, setContent, slug = '', onUpload, onGenerate }) {
     const next = stops.length + 1;
     setContent('routeMap.stops', [
       ...stops,
-      { id: `stop-${Date.now()}`, order: next, name: '', latitude: null, longitude: null, dayNumber: null, source: 'manual', visible: true },
+      { id: `stop-${Date.now()}`, order: next, name: '', latitude: null, longitude: null, dayNumber: null, type: 'stop', source: 'manual', visible: true },
     ]);
   }
   function updateStop(idx, patch) {
@@ -3817,6 +3817,7 @@ function RouteMapSection({ c, setContent, slug = '', onUpload, onGenerate }) {
                   <th style={{ ...tdStyle, color: '#8C8070', fontWeight: '600', textAlign: 'center', paddingBottom: '6px' }}>Day</th>
                   <th style={{ ...tdStyle, color: '#8C8070', fontWeight: '600', textAlign: 'center', paddingBottom: '6px' }}>Lat</th>
                   <th style={{ ...tdStyle, color: '#8C8070', fontWeight: '600', textAlign: 'center', paddingBottom: '6px' }}>Lng</th>
+                  <th style={{ ...tdStyle, color: '#8C8070', fontWeight: '600', textAlign: 'left', paddingBottom: '6px' }}>Type</th>
                   <th style={{ ...tdStyle, color: '#8C8070', fontWeight: '600', textAlign: 'center', paddingBottom: '6px' }}>Vis</th>
                   <th style={{ ...tdStyle, width: '56px' }} />
                 </tr>
@@ -3867,6 +3868,16 @@ function RouteMapSection({ c, setContent, slug = '', onUpload, onGenerate }) {
                         placeholder="lng"
                         onChange={e => updateStop(i, { longitude: e.target.value ? parseFloat(e.target.value) : null })}
                       />
+                    </td>
+                    <td style={tdStyle}>
+                      <select
+                        value={stop.type || (i === 0 || i === stops.length - 1 ? 'major' : 'stop')}
+                        onChange={e => updateStop(i, { type: e.target.value })}
+                        style={{ fontSize: '12px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #E8E3DA', color: '#1C1A16', background: 'white', cursor: 'pointer', minWidth: '90px' }}
+                      >
+                        <option value="major">Major stop</option>
+                        <option value="stop">Route stop</option>
+                      </select>
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       <input type="checkbox"

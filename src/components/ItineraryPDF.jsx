@@ -1096,32 +1096,34 @@ function DynamicRouteSvgMap({ stops = [] }) {
       <Path d={routeD} fill="none" stroke="#1C1A16" strokeWidth="3.5" opacity={0.06} strokeLinecap="round" />
       <Path d={routeD} fill="none" stroke="#C9A96E" strokeWidth="3" strokeOpacity="0.28" strokeLinecap="round" />
       <Path d={routeD} fill="none" stroke="#1B6B65" strokeWidth="1.6" strokeDasharray="8,4" strokeLinecap="round" />
-      {/* Stop markers — white backing disc + Morocco-style dot */}
+      {/* Stop markers — type-aware, matching Morocco-style */}
       {pts.map((p, i) => {
         const [cx, cy] = p;
-        const isEnd = i === 0 || i === pts.length - 1;
-        const r = isEnd ? 6 : 4.5;
+        const stop = valid[i];
+        const isMajor = stop.type === 'major' || (stop.type == null && (i === 0 || i === valid.length - 1));
+        const r = isMajor ? 6 : 4.5;
         return (
           <G key={`m${i}`}>
             <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r + 2.5} fill="#FFFFFF" fillOpacity="0.85" />
             <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r}
-              fill={isEnd ? '#F2E4CB' : '#C8D9D5'}
-              stroke={isEnd ? '#C9A96E' : '#1B6B65'}
-              strokeWidth={isEnd ? 1.5 : 1.2}
+              fill={isMajor ? '#F2E4CB' : '#C8D9D5'}
+              stroke={isMajor ? '#C9A96E' : '#1B6B65'}
+              strokeWidth={isMajor ? 1.5 : 1.2}
             />
-            {isEnd && <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r + 5} fill="none" stroke="#1B6B65" strokeWidth="0.8" strokeOpacity="0.4" />}
+            {isMajor && <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r + 5} fill="none" stroke="#C9A96E" strokeWidth="0.8" strokeOpacity="0.4" />}
           </G>
         );
       })}
       {/* Labels — rendered after markers so they sit on top */}
       {pts.map((p, i) => {
         const [cx, cy] = p;
-        const isEnd = i === 0 || i === pts.length - 1;
-        const r = isEnd ? 6 : 4.5;
+        const stop = valid[i];
+        const isMajor = stop.type === 'major' || (stop.type == null && (i === 0 || i === valid.length - 1));
+        const r = isMajor ? 6 : 4.5;
         const labelRight = cx <= SW * 0.55;
         const tx = labelRight ? cx + r + 5 : cx - r - 5;
         const anchor = labelRight ? 'start' : 'end';
-        const fs = isEnd ? 10 : 8.5;
+        const fs = isMajor ? 10 : 8.5;
         return (
           <Text key={`l${i}`}
             x={tx.toFixed(1)} y={(cy + 3.5).toFixed(1)}
@@ -1130,7 +1132,7 @@ function DynamicRouteSvgMap({ stops = [] }) {
             fontSize={fs}
             fill="#1C1A16"
           >
-            {valid[i].name}
+            {stop.name}
           </Text>
         );
       })}

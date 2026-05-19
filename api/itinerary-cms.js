@@ -1504,7 +1504,7 @@ Rules:
     throw Object.assign(new Error('AI returned invalid route map data — try again'), { status: 502 });
   }
 
-  const stops = (parsed.stops).map((s, i) => ({
+  const rawStops = (parsed.stops).map((s, i) => ({
     id:        s.id        || `stop-${i + 1}`,
     order:     typeof s.order === 'number' ? s.order : i + 1,
     name:      String(s.name || '').trim(),
@@ -1514,6 +1514,12 @@ Rules:
     source:    'generated',
     visible:   s.visible !== false,
   })).filter(s => s.name);
+
+  // Assign stop type: first and last are major landmarks; all others are route stops.
+  const stops = rawStops.map((s, i, arr) => ({
+    ...s,
+    type: (i === 0 || i === arr.length - 1) ? 'major' : 'stop',
+  }));
 
   console.log(`[generate-route-map] slug: ${slug} | generated ${stops.length} stops |`,
     stops.filter(s => s.latitude != null).length, 'with coordinates');

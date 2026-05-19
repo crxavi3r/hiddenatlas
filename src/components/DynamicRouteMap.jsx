@@ -119,9 +119,10 @@ export default function DynamicRouteMap({ stops = [], onDaySelect }) {
 
         {/* Stop markers */}
         {pts.map((pt, i) => {
-          const isEnd   = i === 0 || i === pts.length - 1;
+          const n   = pts.length;
+          const isMajor = pt.type === 'major' || (pt.type == null && (i === 0 || i === n - 1));
           const isHov   = hovered === i;
-          const r       = isEnd ? 7 : 5;
+          const r       = isMajor ? 7 : 5;
           const canClick = !!onDaySelect && !!pt.dayNumber;
           return (
             <g
@@ -131,13 +132,14 @@ export default function DynamicRouteMap({ stops = [], onDaySelect }) {
               onMouseLeave={() => setHovered(null)}
               onClick={() => canClick && onDaySelect(pt.dayNumber)}
             >
-              {/* white backing disc */}
-              <circle cx={pt.x} cy={pt.y} r={r + 3.5} fill="white" opacity="0.8" />
-              {/* main marker */}
-              <circle cx={pt.x} cy={pt.y} r={r} fill={isHov ? C.gold : C.teal} />
-              {/* outer ring for endpoints */}
-              {isEnd && (
-                <circle cx={pt.x} cy={pt.y} r={r + 5} fill="none" stroke={C.teal} strokeWidth="1" opacity="0.4" />
+              <circle cx={pt.x} cy={pt.y} r={r + 3} fill="white" opacity="0.85" />
+              <circle cx={pt.x} cy={pt.y} r={r}
+                fill={isMajor ? '#F2E4CB' : '#C8D9D5'}
+                stroke={isHov ? C.gold : (isMajor ? C.gold : C.teal)}
+                strokeWidth={isMajor ? 1.8 : 1.4}
+              />
+              {isMajor && (
+                <circle cx={pt.x} cy={pt.y} r={r + 5} fill="none" stroke={C.gold} strokeWidth="0.8" opacity="0.4" />
               )}
             </g>
           );
