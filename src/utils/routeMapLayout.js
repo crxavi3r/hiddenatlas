@@ -14,8 +14,8 @@ export const ROUTE_MAP_TIER = {
 };
 
 export function resolveStopTier(stop, i, n) {
-  if (stop.type === 'major') return 1;
-  if (stop.type === 'stop')  return 2;
+  if (stop.type === 'major' || stop.type === 'major_stop') return 1;
+  if (stop.type === 'stop'  || stop.type === 'route_stop') return 2;
   return (i === 0 || i === n - 1) ? 1 : 2;
 }
 

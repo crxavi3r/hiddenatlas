@@ -376,6 +376,8 @@ function normalizeDbItinerary(row) {
     routeMapAlt:        content?.routeMap?.alt         || null,
     routeMapCaption:    content?.routeMap?.caption     || null,
     routeMapStops:      content?.routeMap?.stops       || [],
+    showRouteMap:       content?.pdfConfig?.showRouteMap === true,
+    showHotels:         content?.pdfConfig?.showHotels   === true,
   };
 }
 
@@ -1241,35 +1243,41 @@ export default function ItineraryDetailPage() {
               </div>
             </section>
 
-            {/* Route Map */}
-            {(mapImage || ROUTE_MAP_COMPONENTS[itinerary.id]) && (
-              <section style={{ marginBottom: '60px' }}>
-                <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '6px' }}>
-                  Route Map
-                </h2>
-                <p style={{ fontSize: '13px', color: '#8C8070', letterSpacing: '0.3px', marginBottom: '24px' }}>
-                  {subtitle}
-                </p>
-                {ROUTE_MAP_COMPONENTS[itinerary.id] ? (() => {
-                  const RouteMapComponent = ROUTE_MAP_COMPONENTS[itinerary.id];
-                  return (
-                    <RouteMapComponent
-                      isUnlocked={hasAccess}
-                      onDaySelect={dayNum => {
-                        const el = document.getElementById(`day-${dayNum}`);
-                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                      }}
+            {/* Route Map — always-on for curated itineraries.
+                CMS stops override hardcoded component when ≥2 valid stops exist. */}
+            {(() => {
+              const RouteMapComponent = ROUTE_MAP_COMPONENTS[itinerary.id];
+              const cmsStops = (itinerary.routeMapStops || [])
+                .filter(s => s.visible !== false && s.latitude != null && s.longitude != null)
+                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+              const hasCMSStops = cmsStops.length >= 2;
+              if (!mapImage && !RouteMapComponent && !hasCMSStops) return null;
+              const scrollToDay = dayNum => {
+                const el = document.getElementById(`day-${dayNum}`);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              };
+              return (
+                <section style={{ marginBottom: '60px' }}>
+                  <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '6px' }}>
+                    Route Map
+                  </h2>
+                  <p style={{ fontSize: '13px', color: '#8C8070', letterSpacing: '0.3px', marginBottom: '24px' }}>
+                    {subtitle}
+                  </p>
+                  {hasCMSStops ? (
+                    <InteractiveRouteMap stops={cmsStops} isUnlocked={hasAccess} onDaySelect={scrollToDay} />
+                  ) : RouteMapComponent ? (
+                    <RouteMapComponent isUnlocked={hasAccess} onDaySelect={scrollToDay} />
+                  ) : (
+                    <img
+                      src={mapImage}
+                      alt={`${title} route map`}
+                      style={{ width: '100%', display: 'block', borderRadius: '6px', border: '1px solid #E8E3DA' }}
                     />
-                  );
-                })() : (
-                  <img
-                    src={mapImage}
-                    alt={`${title} route map`}
-                    style={{ width: '100%', display: 'block', borderRadius: '6px', border: '1px solid #E8E3DA' }}
-                  />
-                )}
-              </section>
-            )}
+                  )}
+                </section>
+              );
+            })()}
 
             {/* Highlights */}
             <section style={{ marginBottom: '60px' }}>
@@ -1288,15 +1296,19 @@ export default function ItineraryDetailPage() {
               </div>
             </section>
 
-            {/* DB-controlled Route Map — after highlights, before gallery.
+            {/* CMS-controlled Route Map — after highlights, before gallery.
+                CMS stops always take priority over any registered legacy component.
                 Shown when showOnSite === true (or admin preview). Never renders empty. */}
             {(() => {
+              // Section 1 (above) handles always-on itineraries — skip here to avoid duplicates.
+              if (ROUTE_MAP_COMPONENTS[itinerary.id]) return null;
+
               const DbRouteMapComponent = DB_ROUTE_MAP_COMPONENTS[itinerary.id];
               const validStops = (itinerary.routeMapStops || [])
                 .filter(s => s.visible !== false && s.latitude != null && s.longitude != null)
-                .sort((a, b) => a.order - b.order);
+                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
               const hasValidStops = validStops.length >= 2;
-              const hasContent = DbRouteMapComponent || hasValidStops || itinerary.routeMapImageUrl;
+              const hasContent = hasValidStops || DbRouteMapComponent || itinerary.routeMapImageUrl;
               if (!hasContent) return null;
               if (!itinerary.showRouteMapOnSite && !isAdmin) return null;
 
@@ -1309,9 +1321,9 @@ export default function ItineraryDetailPage() {
                 console.log('[ItineraryDetail] route map section —', itinerary.id, {
                   enabledOnSite:       itinerary.showRouteMapOnSite,
                   adminPreview:        isAdmin && !itinerary.showRouteMapOnSite,
-                  registeredComponent: !!DbRouteMapComponent,
+                  source:              hasValidStops ? 'CMS stops' : DbRouteMapComponent ? 'legacy component' : 'static image',
                   validStopsCount:     validStops.length,
-                  hasImage:            !!itinerary.routeMapImageUrl,
+                  legacyOverridden:    hasValidStops && !!DbRouteMapComponent,
                 });
               }
 
@@ -1323,10 +1335,10 @@ export default function ItineraryDetailPage() {
                   <p style={{ fontSize: '13px', color: '#8C8070', letterSpacing: '0.3px', marginBottom: '24px' }}>
                     {itinerary.subtitle}
                   </p>
-                  {DbRouteMapComponent ? (
-                    <DbRouteMapComponent isUnlocked={hasAccess} onDaySelect={scrollToDay} />
-                  ) : hasValidStops ? (
+                  {hasValidStops ? (
                     <InteractiveRouteMap stops={validStops} onDaySelect={scrollToDay} isUnlocked={hasAccess || !isPremium} />
+                  ) : DbRouteMapComponent ? (
+                    <DbRouteMapComponent isUnlocked={hasAccess} onDaySelect={scrollToDay} />
                   ) : (
                     <div>
                       <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #E8E3DA' }}>

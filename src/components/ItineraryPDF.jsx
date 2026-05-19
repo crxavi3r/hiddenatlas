@@ -1708,6 +1708,8 @@ function RouteOverviewPage({ itinerary }) {
   const { title, country, duration, days = [], routeMapImageUrl, routeMapAlt, routeMapCaption } = itinerary;
   const entry       = PDF_ROUTE_MAPS[itinerary.id];
   const routeStops  = itinerary.routeMapStops || [];
+  // CMS stops take priority over any hardcoded SVG component.
+  const hasValidStops = routeStops.filter(s => s.latitude != null && s.longitude != null).length >= 2;
 
   // Stops strip: prefer structured routeMapStops, fall back to parsing day titles
   let displayStops;
@@ -1752,15 +1754,15 @@ function RouteOverviewPage({ itinerary }) {
         ) : null}
       </View>
 
-      {/* Priority 1: registered hardcoded SVG component */}
-      {entry ? (
-        <View style={{ alignItems: 'center', backgroundColor: C.stone }}>
-          <entry.Component />
-        </View>
-      ) : routeStops.length >= 2 ? (
-        /* Priority 2: dynamic SVG generated from structured stops */
+      {/* Priority 1: CMS structured stops — always used when available */}
+      {hasValidStops ? (
         <View style={{ paddingHorizontal: 48, paddingTop: 16, paddingBottom: 8, alignItems: 'center' }}>
           <DynamicRouteSvgMap stops={routeStops} />
+        </View>
+      ) : entry ? (
+        /* Priority 2: hardcoded SVG (fallback when no CMS stops exist) */
+        <View style={{ alignItems: 'center', backgroundColor: C.stone }}>
+          <entry.Component />
         </View>
       ) : routeMapImageUrl ? (
         /* Priority 3: static image from content.routeMap.imageUrl */
@@ -1879,22 +1881,24 @@ export default function ItineraryPDF({ itinerary }) {
   const showHotels       = itinerary.showHotels   === true;
   const routeMapImageUrl = itinerary.routeMapImageUrl || null;
 
+  // CMS stops — evaluated first so all conditions below can reference hasValidStops.
+  const routeMapStops  = itinerary.routeMapStops || [];
+  const hasValidStops  = routeMapStops.filter(s => s.latitude != null && s.longitude != null).length >= 2;
+
   // Conditions mirror each optional component's own early-return guard so we
   // never invoke a component that would return null.
   const mapImageUrl   = itinerary.mapImage || null;
   const hasMapPng     = !!(mapImageUrl && !mapImageUrl.endsWith('.svg'));
-  // hasSvgMap: only show DestinationSvgMapPage when RouteOverviewPage won't cover it
-  const hasSvgMap     = !mapImageUrl && !!PDF_ROUTE_MAPS[itinerary.id] && !showRouteMap;
+  // hasSvgMap: show DestinationSvgMapPage only when there is no RouteOverviewPage AND
+  // no CMS stops have been defined (CMS stops → use RouteOverviewPage with showRouteMap instead).
+  const hasSvgMap     = !mapImageUrl && !!PDF_ROUTE_MAPS[itinerary.id] && !showRouteMap && !hasValidStops;
   const hasTransport  = !!itinerary.transport;
   const hasClosing    = !!(itinerary.whySpecial || itinerary.routeOverview);
   const hasHotels     = showHotels && (itinerary.accommodation || []).some(h => h.name);
 
   // Only include RouteOverviewPage when there is a visual to render.
-  // routeOverview text alone is NOT sufficient — it produces a blank-looking page
-  // with malformed stop names. A visual (SVG component, dynamic stops, or image) is required.
-  const routeMapStops    = itinerary.routeMapStops || [];
-  const hasValidStops    = routeMapStops.filter(s => s.latitude != null && s.longitude != null).length >= 2;
-  const hasRouteMapContent = !!PDF_ROUTE_MAPS[itinerary.id] || hasValidStops || !!routeMapImageUrl;
+  // routeOverview text alone is NOT sufficient — it produces a blank-looking page.
+  const hasRouteMapContent = hasValidStops || !!PDF_ROUTE_MAPS[itinerary.id] || !!routeMapImageUrl;
   const showRouteOverview  = showRouteMap && hasRouteMapContent;
 
   console.log('[ItineraryPDF]', {
@@ -1904,10 +1908,12 @@ export default function ItineraryPDF({ itinerary }) {
     showRouteOverview,
     routeMapStopsCount:   routeMapStops.length,
     validStopsCount:      routeMapStops.filter(s => s.latitude != null).length,
-    routeMapType: PDF_ROUTE_MAPS[itinerary.id] ? 'svgComponent'
-                : hasValidStops               ? 'dynamicStops'
-                : routeMapImageUrl            ? 'image'
-                : 'none — page will be skipped',
+    // Priority order: CMS stops > hardcoded SVG > static image
+    routeMapSource: hasValidStops               ? 'CMS stops (normalized)'
+                  : PDF_ROUTE_MAPS[itinerary.id] ? 'legacy hardcoded SVG'
+                  : routeMapImageUrl            ? 'static image'
+                  : 'none — page will be skipped',
+    legacyOverridden: hasValidStops && !!PDF_ROUTE_MAPS[itinerary.id],
   });
 
   // Build an explicit array so the Document receives only valid Page elements —
