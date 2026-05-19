@@ -369,6 +369,7 @@ function normalizeDbItinerary(row) {
     showRouteMapOnSite: content?.routeMap?.showOnSite === true,
     routeMapImageUrl:   content?.routeMap?.imageUrl   || null,
     routeMapAlt:        content?.routeMap?.alt         || null,
+    routeMapCaption:    content?.routeMap?.caption     || null,
   };
 }
 
@@ -1280,12 +1281,19 @@ export default function ItineraryDetailPage() {
                       }}
                     />
                   ) : (
-                    <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #E8E3DA' }}>
-                      <img
-                        src={itinerary.routeMapImageUrl}
-                        alt={itinerary.routeMapAlt || `${itinerary.title} route map`}
-                        style={{ width: '100%', display: 'block', objectFit: 'contain' }}
-                      />
+                    <div>
+                      <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #E8E3DA' }}>
+                        <img
+                          src={itinerary.routeMapImageUrl}
+                          alt={itinerary.routeMapAlt || `${itinerary.title} route map`}
+                          style={{ width: '100%', display: 'block', objectFit: 'contain' }}
+                        />
+                      </div>
+                      {itinerary.routeMapCaption && (
+                        <p style={{ fontSize: '12px', color: '#8C8070', marginTop: '8px', textAlign: 'center' }}>
+                          {itinerary.routeMapCaption}
+                        </p>
+                      )}
                     </div>
                   )}
                 </section>

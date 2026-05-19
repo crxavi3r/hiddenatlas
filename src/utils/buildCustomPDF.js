@@ -230,7 +230,8 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
     // Passed as absolute URL for @react-pdf to fetch directly — no base64 needed
     // since Vercel Blob CDN URLs are publicly accessible.
     routeMapImageUrl: toAbsoluteUrl(routeMap.imageUrl || null),
-    routeMapAlt:      routeMap.alt || '',
+    routeMapAlt:      routeMap.alt     || '',
+    routeMapCaption:  routeMap.caption || '',
     days,
     pdfVersion,
     pdfDate,

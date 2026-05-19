@@ -1511,7 +1511,7 @@ function CTAPage({ itinerary }) {
 // per-day location breakdown using day.route || day.title.
 
 function RouteOverviewPage({ itinerary }) {
-  const { title, country, routeOverview, duration, days = [], routeMapImageUrl, routeMapAlt } = itinerary;
+  const { title, country, routeOverview, duration, days = [], routeMapImageUrl, routeMapAlt, routeMapCaption } = itinerary;
   const entry = PDF_ROUTE_MAPS[itinerary.id];
 
   // Build deduplicated stops strip
@@ -1564,9 +1564,9 @@ function RouteOverviewPage({ itinerary }) {
             src={routeMapImageUrl}
             style={{ width: PAGE_W - 64, maxHeight: 460, objectFit: 'contain' }}
           />
-          {routeMapAlt ? (
+          {(routeMapCaption || routeMapAlt) ? (
             <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: C.muted, marginTop: 6, textAlign: 'center' }}>
-              {routeMapAlt}
+              {routeMapCaption || routeMapAlt}
             </Text>
           ) : null}
         </View>

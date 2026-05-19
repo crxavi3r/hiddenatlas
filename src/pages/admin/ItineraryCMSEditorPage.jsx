@@ -4,7 +4,7 @@ import { useAuth } from '@clerk/clerk-react';
 import { useUserCtx } from '../../lib/useUserCtx';
 import {
   ArrowLeft, Save, Globe, EyeOff, Eye, Plus, Trash2, ChevronDown, ChevronUp,
-  Wand2, Image as ImageIcon, Clock, Check, User, Upload, FileText, ExternalLink, Edit2, X, Loader2,
+  Wand2, Image as ImageIcon, Clock, Check, User, Upload, FileText, ExternalLink, Edit2, X, Loader2, MapPin,
 } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { resolveCoverImage } from '../../lib/resolveCoverImage';
@@ -65,7 +65,7 @@ const EMPTY_CONTENT = {
   tripFacts: { groupSize: '', difficulty: 'Moderate', bestFor: [], category: '' },
   days:      [],
   sections:  { hotels: [], practicalNotes: '', faq: [] },
-  routeMap:  { showOnSite: false, imageUrl: '', alt: '' },
+  routeMap:  { showOnSite: false, imageUrl: '', alt: '', caption: '' },
   pdfConfig: { showRouteMap: false, showHotels: false },
   seo:       { metaTitle: '', metaDescription: '' },
 };
@@ -1894,6 +1894,33 @@ export default function ItineraryCMSEditorPage() {
     return json.asset.url;
   }
 
+  // ── Upload route map image — stores URL in content.routeMap.imageUrl ─────────
+  async function handleUploadRouteMap(file) {
+    let targetId = savedId.current || (isNew ? null : id);
+    if (!targetId) {
+      targetId = await createDraftIfNeeded();
+    }
+    const slug = slugRef.current || form.slug;
+    if (!slug) throw new Error('Add a slug or title first.');
+
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = e => resolve(e.target.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    const token = await getToken();
+    const res = await fetch(`/api/itinerary-cms?action=upload-route-map&id=${targetId}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug, filename: file.name, data: base64 }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.error) throw new Error(json.error || 'Upload failed');
+    return json.url;
+  }
+
   // ── Set hero image (shared by HeroTab picker and Images tab "Set as hero") ───
   function handleHeroCoverImage(url) {
     setContent('hero.coverImage', url);
@@ -2148,7 +2175,7 @@ export default function ItineraryCMSEditorPage() {
         {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} setPricingOptions={setPricingOptions} creators={allCreators} isAdmin={isAdmin} myCreatorId={myCreatorId} dayCount={(form.content?.days || []).length} currentId={savedId.current || (isNew ? null : id)} isNew={isNew} hasSavedId={!!savedId.current} slugOverride={slugOverride} onSlugOverride={handleSlugOverride} />}
         {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} onCoverImageChange={handleHeroCoverImage} />}
         {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} dayImages={dayImages} durationDays={form.durationDays} />}
-        {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} slug={form.slug || ''} />}
+        {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} slug={form.slug || ''} onUploadRouteMap={handleUploadRouteMap} />}
         {activeTab === 'images'   && (
           <ImagesTab
             assets={assets} loading={assetsLoading}
@@ -3599,7 +3626,182 @@ function DaysTab({ c, addDay, updateDay, deleteDay, moveDay, assets, onUpload, d
 }
 
 // ── Sections ──────────────────────────────────────────────────────────────────
-function SectionsTab({ c, setContent, slug = '' }) {
+// ── Route Map section — inside SectionsTab ────────────────────────────────────
+// Slugs that have a hardcoded SVG map component registered in the codebase.
+const COMPONENT_MAP_SLUGS = new Set([
+  'tuscany-wine-roads-in-7-days',
+  'morocco-motorcycle-expedition',
+  'philippines-island-journey',
+  'japan-grand-cultural-journey',
+  'california-american-west',
+  'california-american-west-16-days',
+  'california-american-west-12-days',
+  'california-american-west-8-days',
+]);
+
+function RouteMapSection({ c, setContent, slug = '', onUpload }) {
+  const [uploading,    setUploading]    = useState(false);
+  const [uploadError,  setUploadError]  = useState(null);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const fileRef = useRef(null);
+
+  const imageUrl     = (c('routeMap.imageUrl') || '').trim();
+  const hasComponent = COMPONENT_MAP_SLUGS.has(slug);
+  const hasImage     = !!imageUrl;
+  const mapAvailable = hasComponent || hasImage;
+  const siteEnabled  = c('routeMap.showOnSite') === true;
+  const pdfEnabled   = c('pdfConfig.showRouteMap') === true;
+  const showWarning  = (siteEnabled || pdfEnabled) && !mapAvailable;
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const VALID = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
+    if (!VALID.includes(file.type)) { setUploadError('Unsupported format. Use JPG, PNG or WebP.'); return; }
+    if (file.size > 8 * 1024 * 1024) { setUploadError('File too large. Max 8 MB.'); return; }
+    setUploadError(null);
+    setUploading(true);
+    try {
+      const url = await onUpload(file);
+      setContent('routeMap.imageUrl', url);
+      setShowUrlInput(false);
+    } catch (err) {
+      setUploadError(err.message || 'Upload failed. Try again.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const checkboxes = [
+    { path: 'routeMap.showOnSite',    label: 'Show on itinerary page' },
+    { path: 'pdfConfig.showRouteMap', label: 'Include in PDF' },
+  ];
+
+  return (
+    <div style={sectionCard}>
+      <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '16px' }}>Route Map</p>
+
+      {/* ── State A: hardcoded component registered ── */}
+      {hasComponent && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', padding: '10px 14px', background: '#EFF6F5', borderRadius: '8px', border: '1px solid #B5D8D5' }}>
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#1B6B65', flexShrink: 0 }} />
+          <div>
+            <p style={{ fontSize: '12.5px', fontWeight: '600', color: '#1B6B65', marginBottom: '2px' }}>Route map configured</p>
+            <p style={{ fontSize: '11.5px', color: '#2A7A74' }}>This itinerary has a visual route map.</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── State B: image configured ── */}
+      {!hasComponent && hasImage && (
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E8E3DA', marginBottom: '10px', background: '#F4F1EC', maxHeight: '200px' }}>
+            <img src={imageUrl} alt={c('routeMap.alt') || 'Route map'} style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', display: 'block' }} />
+          </div>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            <button type="button" onClick={() => fileRef.current?.click()} style={{ ...btnGhost, fontSize: '12px' }} disabled={uploading}>
+              <Upload size={12} /> Change image
+            </button>
+            <button type="button" onClick={() => { setContent('routeMap.imageUrl', ''); setContent('routeMap.alt', ''); }} style={{ ...btnGhost, fontSize: '12px', color: '#C0392B', borderColor: '#E8B4AE' }}>
+              Remove
+            </button>
+          </div>
+          <div style={{ marginBottom: '10px' }}>
+            <label style={labelStyle}>Alt text</label>
+            <input value={c('routeMap.alt') || ''} style={inputStyle} placeholder="e.g. Croatia by Sea route map" onChange={e => setContent('routeMap.alt', e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Caption (optional)</label>
+            <input value={c('routeMap.caption') || ''} style={inputStyle} placeholder="Optional caption shown below the map" onChange={e => setContent('routeMap.caption', e.target.value)} />
+          </div>
+        </div>
+      )}
+
+      {/* ── State C: empty — no component, no image ── */}
+      {!hasComponent && !hasImage && (
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{
+            border: '2px dashed #D8D0BE', borderRadius: '10px', padding: '28px 20px',
+            textAlign: 'center', background: '#FAFAF8', marginBottom: '10px',
+          }}>
+            {uploading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '22px', height: '22px', border: '2.5px solid #E8E3DA', borderTopColor: '#1B6B65', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                <p style={{ fontSize: '12.5px', color: '#8C8070' }}>Uploading…</p>
+              </div>
+            ) : (
+              <>
+                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#EFF6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                  <MapPin size={18} color="#1B6B65" />
+                </div>
+                <p style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16', marginBottom: '4px' }}>No route map configured</p>
+                <p style={{ fontSize: '12px', color: '#8C8070', marginBottom: '16px', lineHeight: '1.5' }}>
+                  Upload a route map image to display a visual journey overview on the itinerary page and in the PDF.
+                </p>
+                <button type="button" onClick={() => fileRef.current?.click()} style={{ ...btnPrimary, display: 'inline-flex', padding: '8px 18px' }}>
+                  <Upload size={13} /> Upload route map image
+                </button>
+              </>
+            )}
+          </div>
+
+          {uploadError && (
+            <p style={{ fontSize: '12px', color: '#C0392B', marginBottom: '10px' }}>{uploadError}</p>
+          )}
+
+          {/* URL fallback — collapsed by default */}
+          {!showUrlInput ? (
+            <button type="button" onClick={() => setShowUrlInput(true)} style={{ background: 'none', border: 'none', color: '#8C8070', fontSize: '12px', cursor: 'pointer', padding: '0', textDecoration: 'underline' }}>
+              or enter image URL manually
+            </button>
+          ) : (
+            <div>
+              <label style={labelStyle}>Image URL</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  autoFocus
+                  value={c('routeMap.imageUrl') || ''}
+                  style={{ ...inputStyle, flex: 1 }}
+                  placeholder="https://..."
+                  onChange={e => setContent('routeMap.imageUrl', e.target.value)}
+                />
+                <button type="button" onClick={() => setShowUrlInput(false)} style={btnGhost}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml" style={{ display: 'none' }} onChange={handleFile} />
+
+      {/* Visibility checkboxes */}
+      <div style={{ paddingTop: '12px', borderTop: '1px solid #F0EBE2' }}>
+        {checkboxes.map(({ path, label }) => (
+          <label key={path} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px', cursor: 'pointer' }}>
+            <input type="checkbox"
+              checked={c(path) === true}
+              onChange={e => setContent(path, e.target.checked)}
+              style={{ width: '15px', height: '15px', accentColor: '#1B6B65' }}
+            />
+            <span style={{ fontSize: '13.5px', color: '#4A433A' }}>{label}</span>
+          </label>
+        ))}
+      </div>
+
+      {/* Warning: enabled but no map */}
+      {showWarning && (
+        <div style={{ marginTop: '6px', padding: '10px 14px', borderRadius: '6px', background: '#FFF8E1', border: '1px solid #F5D060' }}>
+          <p style={{ fontSize: '12px', color: '#7A5C00', lineHeight: '1.5' }}>
+            Visibility is enabled but no route map image is configured. Nothing will appear on the public page or in the PDF until you upload or link a route map image.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SectionsTab({ c, setContent, slug = '', onUploadRouteMap }) {
   return (
     <div style={{ maxWidth: '720px' }}>
       <div style={sectionCard}>
@@ -3628,102 +3830,7 @@ function SectionsTab({ c, setContent, slug = '' }) {
         />
       </div>
 
-      {(() => {
-        // Slugs that have a hardcoded SVG map component registered for the site/PDF
-        const COMPONENT_MAP_SLUGS = new Set([
-          'tuscany-wine-roads-in-7-days',
-          'morocco-motorcycle-expedition',
-          'philippines-island-journey',
-          'japan-grand-cultural-journey',
-          'california-american-west',
-          'california-american-west-16-days',
-          'california-american-west-12-days',
-          'california-american-west-8-days',
-        ]);
-        const hasComponent = COMPONENT_MAP_SLUGS.has(slug);
-        const hasImage = !!(c('routeMap.imageUrl') || '').trim();
-        const mapAvailable = hasComponent || hasImage;
-        const siteEnabled = c('routeMap.showOnSite') === true;
-        const pdfEnabled  = c('pdfConfig.showRouteMap') === true;
-        const showWarning = (siteEnabled || pdfEnabled) && !mapAvailable;
-
-        return (
-          <div style={sectionCard}>
-            <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '4px' }}>Route Map</p>
-
-            {/* Availability status */}
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              padding: '4px 10px', borderRadius: '6px', marginBottom: '16px',
-              background: mapAvailable ? '#EFF6F5' : '#FFF8E1',
-              border: `1px solid ${mapAvailable ? '#B5D8D5' : '#F5D060'}`,
-            }}>
-              <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: mapAvailable ? '#1B6B65' : '#B8860B' }} />
-              <span style={{ fontSize: '11.5px', fontWeight: '600', color: mapAvailable ? '#1B6B65' : '#B8860B' }}>
-                {mapAvailable
-                  ? (hasComponent ? 'Map component registered' : 'Route map image configured')
-                  : 'No route map configured'}
-              </span>
-            </div>
-
-            {!mapAvailable && (
-              <p style={{ fontSize: '11.5px', color: '#8C8070', marginBottom: '16px', lineHeight: '1.5' }}>
-                Add a route map image URL below, or register an SVG map component for this slug in the codebase.
-              </p>
-            )}
-
-            {/* Image URL + alt */}
-            <div style={{ marginBottom: '16px' }}>
-              <label style={labelStyle}>Route map image URL</label>
-              <input
-                value={c('routeMap.imageUrl') || ''}
-                style={inputStyle}
-                placeholder="https://... (public image URL — used on site and in PDF)"
-                onChange={e => setContent('routeMap.imageUrl', e.target.value)}
-              />
-            </div>
-            {(c('routeMap.imageUrl') || '').trim() && (
-              <div style={{ marginBottom: '16px' }}>
-                <label style={labelStyle}>Alt text</label>
-                <input
-                  value={c('routeMap.alt') || ''}
-                  style={inputStyle}
-                  placeholder="e.g. Croatia by Sea route map"
-                  onChange={e => setContent('routeMap.alt', e.target.value)}
-                />
-              </div>
-            )}
-
-            {/* Checkboxes */}
-            {[
-              { path: 'routeMap.showOnSite',    label: 'Show route map on itinerary page' },
-              { path: 'pdfConfig.showRouteMap', label: 'Include route map in PDF' },
-            ].map(({ path, label }) => (
-              <label key={path} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', cursor: 'pointer' }}>
-                <input type="checkbox"
-                  checked={c(path) === true}
-                  onChange={e => setContent(path, e.target.checked)}
-                  style={{ width: '15px', height: '15px', accentColor: '#1B6B65' }}
-                />
-                <span style={{ fontSize: '13.5px', color: '#4A433A' }}>{label}</span>
-              </label>
-            ))}
-
-            {/* Warning when enabled but no map */}
-            {showWarning && (
-              <div style={{
-                marginTop: '8px', padding: '10px 14px', borderRadius: '6px',
-                background: '#FFF8E1', border: '1px solid #F5D060',
-              }}>
-                <p style={{ fontSize: '12px', color: '#7A5C00', lineHeight: '1.5' }}>
-                  Route map visibility is enabled, but no map is configured for this itinerary.
-                  The map will not appear on the public page or in the PDF until a route map image URL is added above.
-                </p>
-              </div>
-            )}
-          </div>
-        );
-      })()}
+      <RouteMapSection c={c} setContent={setContent} slug={slug} onUpload={onUploadRouteMap} />
 
       <div style={sectionCard}>
         <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '18px' }}>PDF Sections</p>

@@ -159,7 +159,8 @@ export default async function handler(req, res) {
       if (action === 'seed')         { adminOnly(); return res.json(await handleSeed(pool, body)); }
       if (action === 'bulk-publish') { adminOnly(); return res.json(await handleBulkPublish(pool)); }
       if (action === 'save-asset')   return res.json(await handleSaveAsset(pool, body, ctx));
-      if (action === 'upload-asset') return res.json(await handleUploadAsset(pool, body, ctx));
+      if (action === 'upload-asset')     return res.json(await handleUploadAsset(pool, body, ctx));
+      if (action === 'upload-route-map') { await assertOwnership(pool, id, ctx); return res.json(await handleUploadRouteMap(pool, id, body)); }
       if (action === 'delete-asset') return res.json(await handleDeleteAsset(pool, id, ctx));
       if (action === 'toggle-asset') return res.json(await handleToggleAsset(pool, id, ctx));
       if (action === 'save-pdf-url')      { await assertOwnership(pool, id, ctx); return res.json(await handleSavePdfUrl(pool, id, body)); }
@@ -1357,6 +1358,51 @@ async function handleUploadAsset(pool, body, ctx) {
     return { asset: existing[0], url: blobUrl };
   }
   return { asset: rows[0], url: blobUrl };
+}
+
+// ── Route map image upload ─────────────────────────────────────────────────────
+// Uploads a route map image to Vercel Blob and returns { url }.
+// Does NOT create an ItineraryAsset record — the URL is stored in content.routeMap.imageUrl
+// by the frontend after a successful upload.
+async function handleUploadRouteMap(pool, id, body) {
+  const { slug, filename, data: base64Data } = body;
+  if (!id)        throw Object.assign(new Error('id is required'), { status: 400 });
+  if (!slug)      throw Object.assign(new Error('slug is required'), { status: 400 });
+  if (!filename)  throw Object.assign(new Error('filename is required'), { status: 400 });
+  if (!base64Data) throw Object.assign(new Error('data is required'), { status: 400 });
+
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    throw Object.assign(new Error('Image uploads are not configured (missing BLOB_READ_WRITE_TOKEN)'), { status: 503 });
+  }
+
+  const rawBase = path.basename(filename);
+  const ext     = rawBase.split('.').pop().toLowerCase();
+  const VALID_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'];
+  if (!VALID_EXTS.includes(ext)) {
+    throw Object.assign(new Error(`Unsupported format. Use: ${VALID_EXTS.join(', ')}`), { status: 400 });
+  }
+
+  const base    = rawBase.replace(/\.[^.]+$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'route-map';
+  const ts      = Date.now().toString(36).slice(-5);
+  const safeName = `${base}-${ts}.${ext}`;
+  const blobPath = `itineraries/${slug}/route-map/${safeName}`;
+
+  const MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml' };
+  const contentType = MIME[ext] ?? 'application/octet-stream';
+
+  let blobUrl;
+  try {
+    const result = await blobPut(blobPath, Buffer.from(base64Data, 'base64'), {
+      access: 'public', contentType, addRandomSuffix: false,
+    });
+    blobUrl = result.url;
+  } catch (err) {
+    console.error('[upload-route-map] Vercel Blob put failed:', err);
+    throw Object.assign(new Error('Upload failed. Please try again.'), { status: 502 });
+  }
+
+  console.log('[upload-route-map] uploaded — slug:', slug, '| path:', blobPath);
+  return { url: blobUrl };
 }
 
 // ── Assets: delete ────────────────────────────────────────────────────────────
