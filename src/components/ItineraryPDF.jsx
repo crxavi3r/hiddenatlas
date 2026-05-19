@@ -4,7 +4,7 @@
 
 import {
   Document, Page, Text, View, Image, StyleSheet,
-  Svg, Polygon, Path, Rect, Circle,
+  Svg, Polygon, Path, Rect, Circle, G,
 } from '@react-pdf/renderer';
 
 // ── Colour tokens ─────────────────────────────────────────────────────────────
@@ -1049,6 +1049,70 @@ function NorthernEnglandRouteSvgMap() {
   );
 }
 
+// ── Dynamic route SVG map — built at render time from structured stops data ────
+//
+// Used when no hardcoded PDF_ROUTE_MAPS entry exists for the itinerary.
+// Projects lat/lng stops to pixel coordinates (equirectangular), draws a route
+// line + circular markers. No SVG text labels — the stops strip below handles that.
+function DynamicRouteSvgMap({ stops = [] }) {
+  const valid = (stops || []).filter(s => s.latitude != null && s.longitude != null);
+  if (valid.length < 2) return null;
+
+  const SW = PAGE_W - 96; // SVG width: page minus horizontal padding
+  const SH = Math.round(SW * 0.44);
+  const MARGIN = 18;
+  const iW = SW - MARGIN * 2;
+  const iH = SH - MARGIN * 2;
+
+  const lats = valid.map(s => s.latitude);
+  const lngs = valid.map(s => s.longitude);
+  const latMin = Math.min(...lats), latMax = Math.max(...lats);
+  const lngMin = Math.min(...lngs), lngMax = Math.max(...lngs);
+  const latSpan = latMax - latMin || 1;
+  const lngSpan = lngMax - lngMin || 1;
+  const PAD = 0.2;
+  const bMinLat = latMin - latSpan * PAD;
+  const bMaxLat = latMax + latSpan * PAD;
+  const bMinLng = lngMin - lngSpan * PAD;
+  const bMaxLng = lngMax + lngSpan * PAD;
+
+  function proj(lat, lng) {
+    return {
+      x: +(MARGIN + ((lng - bMinLng) / (bMaxLng - bMinLng)) * iW).toFixed(1),
+      y: +(MARGIN + (1 - (lat - bMinLat) / (bMaxLat - bMinLat)) * iH).toFixed(1),
+    };
+  }
+
+  const pts = valid.map(s => proj(s.latitude, s.longitude));
+  const lineD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x} ${p.y}`).join(' ');
+
+  return (
+    <Svg width={SW} height={SH} viewBox={`0 0 ${SW} ${SH}`}>
+      <Rect x="0" y="0" width={SW} height={SH} fill="#F0EDE6" />
+      {/* Grid lines */}
+      <Path d={`M${SW * 0.25} 0 L${SW * 0.25} ${SH} M${SW * 0.5} 0 L${SW * 0.5} ${SH} M${SW * 0.75} 0 L${SW * 0.75} ${SH}`}
+        stroke="#E2DDD4" strokeWidth="0.4" fill="none" />
+      <Path d={`M0 ${SH * 0.33} L${SW} ${SH * 0.33} M0 ${SH * 0.67} L${SW} ${SH * 0.67}`}
+        stroke="#E2DDD4" strokeWidth="0.4" fill="none" />
+      {/* Route: gold glow + teal line */}
+      <Path d={lineD} fill="none" stroke="#C9A96E" strokeWidth="2.5" />
+      <Path d={lineD} fill="none" stroke="#1B6B65" strokeWidth="1" />
+      {/* Stop markers */}
+      {pts.map((p, i) => {
+        const isEnd = i === 0 || i === pts.length - 1;
+        const r = isEnd ? 5 : 3.5;
+        return (
+          <G key={i}>
+            <Circle cx={p.x} cy={p.y} r={r + 2.5} fill="#FFFFFF" />
+            <Circle cx={p.x} cy={p.y} r={r} fill="#1B6B65" />
+            {isEnd && <Circle cx={p.x} cy={p.y} r={r + 4} fill="none" stroke="#1B6B65" strokeWidth="0.8" />}
+          </G>
+        );
+      })}
+    </Svg>
+  );
+}
+
 // Lookup: itinerary ID → PDF SVG map component + natural dimensions
 const PDF_ROUTE_MAPS = {
   'morocco-motorcycle-expedition':                    { Component: MoroccoRouteSvgMap,           svgW: PAGE_W,                       svgH: Math.round(PAGE_W * 720 / 800) },
@@ -1654,18 +1718,24 @@ function CTAPage({ itinerary }) {
 // per-day location breakdown using day.route || day.title.
 
 function RouteOverviewPage({ itinerary }) {
-  const { title, country, routeOverview, duration, days = [], routeMapImageUrl, routeMapAlt, routeMapCaption } = itinerary;
-  const entry = PDF_ROUTE_MAPS[itinerary.id];
+  const { title, country, duration, days = [], routeMapImageUrl, routeMapAlt, routeMapCaption } = itinerary;
+  const entry       = PDF_ROUTE_MAPS[itinerary.id];
+  const routeStops  = itinerary.routeMapStops || [];
 
-  // Build deduplicated stops strip
-  const stops = [];
-  const seen = new Set();
-  for (const d of days) {
-    const city = (d.route || d.title || '').split(/[·–\-]/)[0].trim();
-    if (city && !seen.has(city)) { seen.add(city); stops.push(city); }
+  // Stops strip: prefer structured routeMapStops, fall back to parsing day titles
+  let displayStops;
+  if (routeStops.length > 0) {
+    displayStops = routeStops.slice(0, 10).map(s => s.name);
+  } else {
+    const seen = new Set();
+    displayStops = [];
+    for (const d of days) {
+      const city = (d.route || d.title || '').split(/[·–\-]/)[0].trim();
+      if (city && !seen.has(city)) { seen.add(city); displayStops.push(city); }
+      if (displayStops.length >= 10) break;
+    }
   }
-  const displayStops = stops.slice(0, 10);
-  const hasMore = stops.length > 10;
+  const hasMore = routeStops.length > 10;
 
   return (
     <Page size="A4" style={{ backgroundColor: C.stone }}>
@@ -1695,13 +1765,18 @@ function RouteOverviewPage({ itinerary }) {
         ) : null}
       </View>
 
-      {/* Priority 1: registered SVG component */}
+      {/* Priority 1: registered hardcoded SVG component */}
       {entry ? (
         <View style={{ alignItems: 'center', backgroundColor: C.stone }}>
           <entry.Component />
         </View>
+      ) : routeStops.length >= 2 ? (
+        /* Priority 2: dynamic SVG generated from structured stops */
+        <View style={{ paddingHorizontal: 48, paddingTop: 16, paddingBottom: 8, alignItems: 'center' }}>
+          <DynamicRouteSvgMap stops={routeStops} />
+        </View>
       ) : routeMapImageUrl ? (
-        /* Priority 2: static image from content.routeMap.imageUrl */
+        /* Priority 3: static image from content.routeMap.imageUrl */
         <View style={{ paddingHorizontal: 32, paddingTop: 20, paddingBottom: 8, alignItems: 'center' }}>
           <Image
             src={routeMapImageUrl}
@@ -1712,15 +1787,6 @@ function RouteOverviewPage({ itinerary }) {
               {routeMapCaption || routeMapAlt}
             </Text>
           ) : null}
-        </View>
-      ) : routeOverview ? (
-        /* Priority 3: plain text fallback */
-        <View style={{ paddingHorizontal: 48, paddingTop: 28, paddingBottom: 28 }}>
-          <View style={{ padding: 18, backgroundColor: C.cream, borderLeftWidth: 2.5, borderLeftColor: C.teal }}>
-            <Text style={{ fontFamily: 'Times-Roman', fontSize: 12, color: C.charcoal, lineHeight: 1.75 }}>
-              {routeOverview}
-            </Text>
-          </View>
         </View>
       ) : null}
 
@@ -1742,7 +1808,7 @@ function RouteOverviewPage({ itinerary }) {
           ))}
           {hasMore && (
             <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: C.muted, fontStyle: 'italic' }}>
-              +{stops.length - 10} more
+              +{routeStops.length - 10} more
             </Text>
           )}
         </View>
@@ -1836,9 +1902,12 @@ export default function ItineraryPDF({ itinerary }) {
   const hasClosing    = !!(itinerary.whySpecial || itinerary.routeOverview);
   const hasHotels     = showHotels && (itinerary.accommodation || []).some(h => h.name);
 
-  // Only include RouteOverviewPage when there is something to render.
-  // No map SVG registered AND no image URL AND no routeOverview text = skip the page.
-  const hasRouteMapContent = !!PDF_ROUTE_MAPS[itinerary.id] || !!routeMapImageUrl || !!itinerary.routeOverview;
+  // Only include RouteOverviewPage when there is a visual to render.
+  // routeOverview text alone is NOT sufficient — it produces a blank-looking page
+  // with malformed stop names. A visual (SVG component, dynamic stops, or image) is required.
+  const routeMapStops    = itinerary.routeMapStops || [];
+  const hasValidStops    = routeMapStops.filter(s => s.latitude != null && s.longitude != null).length >= 2;
+  const hasRouteMapContent = !!PDF_ROUTE_MAPS[itinerary.id] || hasValidStops || !!routeMapImageUrl;
   const showRouteOverview  = showRouteMap && hasRouteMapContent;
 
   console.log('[ItineraryPDF]', {
@@ -1846,10 +1915,12 @@ export default function ItineraryPDF({ itinerary }) {
     showRouteMap,
     hasRouteMapContent,
     showRouteOverview,
+    routeMapStopsCount:   routeMapStops.length,
+    validStopsCount:      routeMapStops.filter(s => s.latitude != null).length,
     routeMapType: PDF_ROUTE_MAPS[itinerary.id] ? 'svgComponent'
-                : routeMapImageUrl             ? 'image'
-                : itinerary.routeOverview      ? 'text'
-                : 'none',
+                : hasValidStops               ? 'dynamicStops'
+                : routeMapImageUrl            ? 'image'
+                : 'none — page will be skipped',
   });
 
   // Build an explicit array so the Document receives only valid Page elements —

@@ -232,6 +232,11 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
     routeMapImageUrl: toAbsoluteUrl(routeMap.imageUrl || null),
     routeMapAlt:      routeMap.alt     || '',
     routeMapCaption:  routeMap.caption || '',
+    // Structured route stops (generated or manually set in CMS).
+    // Only stops with valid coordinates and visible=true are passed to the PDF.
+    routeMapStops: (routeMap.stops || [])
+      .filter(s => s.visible !== false && s.latitude != null && s.longitude != null)
+      .sort((a, b) => a.order - b.order),
     days,
     pdfVersion,
     pdfDate,

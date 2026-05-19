@@ -12,6 +12,7 @@ import { resolveAssetIdentity } from '../../lib/resolveAssetIdentity';
 import { resolveGalleryImages, resolveDayImages, resolveResearchImages } from '../../lib/resolveItineraryImages';
 import PlanModal from '../../components/admin/PlanModal.jsx';
 import { ROUTE_MAP_REGISTRY } from '../../lib/routeMapRegistry.js';
+import DynamicRouteMap from '../../components/DynamicRouteMap.jsx';
 
 // ── Shared style tokens ───────────────────────────────────────────────────────
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
@@ -1437,65 +1438,64 @@ export default function ItineraryCMSEditorPage() {
         }
       }
 
-      // ── 3d. Convert unsupported image formats to JPEG ─────────────────────
-      // @react-pdf/renderer silently fails on WebP, AVIF, HEIC, and other
-      // formats — it reserves the layout space but renders blank pixels.
-      // Use the browser's Canvas API to convert any such format to JPEG.
+      // ── 3d. Normalise ALL images to a capped JPEG via Canvas ──────────────
+      // Two problems this solves:
+      //   1. @react-pdf/renderer silently fails on WebP, AVIF, HEIC — blank pixels.
+      //   2. Large uncompressed JPEG/PNG from Vercel Blob (2-5 MB each) make the
+      //      PDF exceed the 50 MB Blob upload limit on itineraries with 10+ days.
       //
-      // The server's detectMimeFromBytes() now uses magic bytes rather than
-      // the HTTP Content-Type, so the MIME in the data URI is correct even
-      // for files uploaded with the wrong extension (e.g. WebP bytes as .jpg).
+      // Every resolved data URI goes through Canvas regardless of format.
+      // MAX 1200 px on the longest edge, JPEG at 0.82 quality keeps each image
+      // under ~250 kb while preserving enough fidelity for print.
       //
-      // This runs after ALL resolution steps (3, 3b, 3c).
-      const PDF_SAFE_MIMES = new Set(['image/jpeg', 'image/jpg', 'image/png']);
-      const formatConversions = Object.entries(enrichedResolved).filter(([, v]) => {
-        if (!v?.startsWith('data:')) return false;
-        const mime = v.match(/^data:([^;,]+)/)?.[1]?.toLowerCase();
-        return mime && !PDF_SAFE_MIMES.has(mime);
-      });
+      // The server's detectMimeFromBytes() already corrects the MIME in the data
+      // URI via magic bytes, so this step fires correctly even for files uploaded
+      // with a wrong extension.
+      const canvasEntries = Object.entries(enrichedResolved).filter(([, v]) => v?.startsWith('data:'));
+      const beforeTotalKb = canvasEntries.reduce((s, [, v]) => s + v.length / 1024, 0);
+      console.log(`[CMS] 3d — Canvas resize ALL ${canvasEntries.length} image(s); estimated raw payload ${Math.round(beforeTotalKb)}kb`);
 
-      if (formatConversions.length) {
-        console.warn(`[CMS] ⚠ ${formatConversions.length} image(s) need Canvas conversion to JPEG`);
-        await Promise.all(formatConversions.map(([url, dataUri]) => {
-          const mime = dataUri.match(/^data:([^;,]+)/)?.[1] || 'unknown';
-          console.log(`[CMS] Converting ${mime} → JPEG via Canvas — ${url.slice(0, 70)}`);
-          return new Promise(resolve => {
-            const img = new window.Image();
-            img.onload = () => {
-              const nw = img.naturalWidth, nh = img.naturalHeight;
-              if (!nw || !nh) {
-                console.error(`[CMS] Canvas: image decoded with 0 dimensions (${nw}×${nh}) for ${mime} — conversion skipped`);
+      await Promise.all(canvasEntries.map(([url, dataUri]) => {
+        const mime = dataUri.match(/^data:([^;,]+)/)?.[1] || 'unknown';
+        return new Promise(resolve => {
+          const img = new window.Image();
+          img.onload = () => {
+            const nw = img.naturalWidth, nh = img.naturalHeight;
+            if (!nw || !nh) {
+              console.error(`[CMS] Canvas: 0-dimension decode (${nw}×${nh}) for ${mime} — skipped — ${url.slice(0, 70)}`);
+              resolve(); return;
+            }
+            try {
+              const MAX = 1200;
+              const scale = (nw > MAX || nh > MAX) ? Math.min(MAX / nw, MAX / nh) : 1;
+              const w = Math.round(nw * scale), h = Math.round(nh * scale);
+              const canvas = document.createElement('canvas');
+              canvas.width = w; canvas.height = h;
+              canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+              const jpeg = canvas.toDataURL('image/jpeg', 0.82);
+              if (!jpeg || jpeg === 'data:,' || jpeg.length < 200) {
+                console.error(`[CMS] Canvas toDataURL empty for ${mime} — url: ${url.slice(0, 70)}`);
                 resolve(); return;
               }
-              try {
-                const MAX = 1600;
-                const scale = (nw > MAX || nh > MAX) ? Math.min(MAX / nw, MAX / nh) : 1;
-                const w = Math.round(nw * scale), h = Math.round(nh * scale);
-                const canvas = document.createElement('canvas');
-                canvas.width = w; canvas.height = h;
-                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                const jpeg = canvas.toDataURL('image/jpeg', 0.92);
-                if (!jpeg || jpeg === 'data:,' || jpeg.length < 200) {
-                  console.error(`[CMS] Canvas toDataURL returned empty result for ${mime} — url: ${url.slice(0, 70)}`);
-                  resolve(); return;
-                }
-                enrichedResolved[url] = jpeg;
-                console.log(`[CMS] ✓ ${mime} → JPEG ${w}×${h} (${Math.round(jpeg.length / 1024)}kb) — ${url.slice(0, 70)}`);
-              } catch (convErr) {
-                console.error(`[CMS] Canvas threw for ${mime}:`, convErr.message, '— url:', url.slice(0, 70));
-              }
-              resolve();
-            };
-            img.onerror = () => {
-              console.error(`[CMS] img.onerror — browser cannot decode ${mime} — url: ${url.slice(0, 70)}`);
-              resolve();
-            };
-            img.src = dataUri;
-          });
-        }));
-      } else {
-        console.log('[CMS] All resolved images are JPEG/PNG — no Canvas conversion needed');
-      }
+              const beforeKb = Math.round(dataUri.length / 1024);
+              const afterKb  = Math.round(jpeg.length / 1024);
+              enrichedResolved[url] = jpeg;
+              console.log(`[CMS] ✓ ${mime} → JPEG ${w}×${h} | ${beforeKb}kb → ${afterKb}kb — ${url.slice(0, 70)}`);
+            } catch (convErr) {
+              console.error(`[CMS] Canvas threw for ${mime}:`, convErr.message, '— url:', url.slice(0, 70));
+            }
+            resolve();
+          };
+          img.onerror = () => {
+            console.error(`[CMS] img.onerror — browser cannot decode ${mime} — url: ${url.slice(0, 70)}`);
+            resolve();
+          };
+          img.src = dataUri;
+        });
+      }));
+
+      const afterTotalKb = Object.values(enrichedResolved).reduce((s, v) => s + (v?.startsWith('data:') ? v.length / 1024 : 0), 0);
+      console.log(`[CMS] 3d done — estimated payload after resize: ${Math.round(afterTotalKb)}kb (was ${Math.round(beforeTotalKb)}kb)`);
 
       // ── 4. Generate PDF from form state + pre-resolved images ────────────
       // Final diagnostic: show what image source each day resolved to.
@@ -1536,8 +1536,8 @@ export default function ItineraryCMSEditorPage() {
       if (d11val?.startsWith('data:')) {
         const d11mime = d11val.match(/^data:([^;,]+)/)?.[1] || '?';
         console.log(`[CMS] ▶ Day 11 FINAL — MIME: ${d11mime}, size: ${Math.round(d11val.length / 1024)}kb, url: ${d11url.slice(0, 70)}`);
-        if (!PDF_SAFE_MIMES.has(d11mime)) {
-          console.error(`[CMS] ▶ Day 11 ⚠ UNSUPPORTED MIME "${d11mime}" entering renderer — PDF will be blank! Canvas conversion must have failed.`);
+        if (d11mime !== 'image/jpeg' && d11mime !== 'image/jpg') {
+          console.error(`[CMS] ▶ Day 11 ⚠ MIME "${d11mime}" is not JPEG — Canvas conversion in step 3d must have failed.`);
         }
       } else {
         console.warn(`[CMS] ▶ Day 11 FINAL — no data URI found (url="${d11url.slice(0, 70)}", resolved="${String(d11val).slice(0, 60)}")`);
@@ -1895,6 +1895,22 @@ export default function ItineraryCMSEditorPage() {
     return json.asset.url;
   }
 
+  // ── Generate route map stops via AI — populates content.routeMap.stops ───────
+  async function handleGenerateRouteMap() {
+    let targetId = savedId.current || (isNew ? null : id);
+    if (!targetId) {
+      targetId = await createDraftIfNeeded();
+    }
+    const token = await getToken();
+    const res = await fetch(`/api/itinerary-cms?action=generate-route-map&id=${targetId}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    });
+    const json = await res.json();
+    if (!res.ok || json.error) throw new Error(json.error || 'Generation failed');
+    return json.stops;
+  }
+
   // ── Upload route map image — stores URL in content.routeMap.imageUrl ─────────
   async function handleUploadRouteMap(file) {
     let targetId = savedId.current || (isNew ? null : id);
@@ -2176,7 +2192,7 @@ export default function ItineraryCMSEditorPage() {
         {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} setPricingOptions={setPricingOptions} creators={allCreators} isAdmin={isAdmin} myCreatorId={myCreatorId} dayCount={(form.content?.days || []).length} currentId={savedId.current || (isNew ? null : id)} isNew={isNew} hasSavedId={!!savedId.current} slugOverride={slugOverride} onSlugOverride={handleSlugOverride} />}
         {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} onCoverImageChange={handleHeroCoverImage} />}
         {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} dayImages={dayImages} durationDays={form.durationDays} />}
-        {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} slug={form.slug || ''} onUploadRouteMap={handleUploadRouteMap} />}
+        {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} slug={form.slug || ''} onUploadRouteMap={handleUploadRouteMap} onGenerateRouteMap={handleGenerateRouteMap} />}
         {activeTab === 'images'   && (
           <ImagesTab
             assets={assets} loading={assetsLoading}
@@ -3628,22 +3644,62 @@ function DaysTab({ c, addDay, updateDay, deleteDay, moveDay, assets, onUpload, d
 
 // ── Sections ──────────────────────────────────────────────────────────────────
 // ── Route Map section — inside SectionsTab ────────────────────────────────────
-// Slugs that have a hardcoded SVG map component registered in the codebase.
-function RouteMapSection({ c, setContent, slug = '', onUpload }) {
+function RouteMapSection({ c, setContent, slug = '', onUpload, onGenerate }) {
+  const [generating,        setGenerating]        = useState(false);
+  const [genError,          setGenError]          = useState(null);
   const [uploading,         setUploading]         = useState(false);
-  const [uploadError,       setUploadError]        = useState(null);
-  const [showImageOverride, setShowImageOverride]  = useState(false);
-  const [showUrlInput,      setShowUrlInput]       = useState(false);
+  const [uploadError,       setUploadError]       = useState(null);
+  const [showAdvanced,      setShowAdvanced]      = useState(false);
+  const [showUrlInput,      setShowUrlInput]      = useState(false);
   const fileRef = useRef(null);
 
-  const imageUrl     = (c('routeMap.imageUrl') || '').trim();
+  const stops         = c('routeMap.stops') || [];
+  const imageUrl      = (c('routeMap.imageUrl') || '').trim();
   const registryEntry = ROUTE_MAP_REGISTRY[slug] || null;
-  const hasAutoMap   = !!registryEntry;
-  const hasImageOverride = !!imageUrl;
-  const mapAvailable = hasAutoMap || hasImageOverride;
-  const siteEnabled  = c('routeMap.showOnSite') === true;
-  const pdfEnabled   = c('pdfConfig.showRouteMap') === true;
+  const siteEnabled   = c('routeMap.showOnSite') === true;
+  const pdfEnabled    = c('pdfConfig.showRouteMap') === true;
 
+  const validStops = stops.filter(s => s.latitude != null && s.longitude != null);
+  const hasStops   = stops.length > 0;
+  const hasMap     = hasStops || !!registryEntry || !!imageUrl;
+
+  // ── Stop helpers ──
+  function addStop() {
+    const next = stops.length + 1;
+    setContent('routeMap.stops', [
+      ...stops,
+      { id: `stop-${Date.now()}`, order: next, name: '', latitude: null, longitude: null, dayNumber: null, source: 'manual', visible: true },
+    ]);
+  }
+  function updateStop(idx, patch) {
+    const updated = stops.map((s, i) => i === idx ? { ...s, ...patch } : s);
+    setContent('routeMap.stops', updated);
+  }
+  function removeStop(idx) {
+    setContent('routeMap.stops', stops.filter((_, i) => i !== idx).map((s, i) => ({ ...s, order: i + 1 })));
+  }
+  function moveStop(idx, dir) {
+    const next = [...stops];
+    const swap = idx + dir;
+    if (swap < 0 || swap >= next.length) return;
+    [next[idx], next[swap]] = [next[swap], next[idx]];
+    setContent('routeMap.stops', next.map((s, i) => ({ ...s, order: i + 1 })));
+  }
+
+  // ── Generate ──
+  async function doGenerate() {
+    setGenerating(true); setGenError(null);
+    try {
+      const newStops = await onGenerate();
+      setContent('routeMap.stops', newStops);
+    } catch (err) {
+      setGenError(err.message || 'Generation failed. Try again.');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  // ── Image upload ──
   async function handleFile(e) {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -3651,8 +3707,7 @@ function RouteMapSection({ c, setContent, slug = '', onUpload }) {
     const VALID = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
     if (!VALID.includes(file.type)) { setUploadError('Unsupported format. Use JPG, PNG or WebP.'); return; }
     if (file.size > 8 * 1024 * 1024) { setUploadError('File too large. Max 8 MB.'); return; }
-    setUploadError(null);
-    setUploading(true);
+    setUploadError(null); setUploading(true);
     try {
       const url = await onUpload(file);
       setContent('routeMap.imageUrl', url);
@@ -3664,186 +3719,187 @@ function RouteMapSection({ c, setContent, slug = '', onUpload }) {
     }
   }
 
-  const checkboxes = [
-    { path: 'routeMap.showOnSite',    label: 'Show on itinerary page' },
-    { path: 'pdfConfig.showRouteMap', label: 'Include in PDF' },
-  ];
+  // ── Stop row styles ──
+  const tdStyle  = { padding: '4px 6px', verticalAlign: 'middle' };
+  const numInput = { ...inputStyle, width: '64px', padding: '5px 8px', fontSize: '12.5px', textAlign: 'center' };
+  const coordInput = { ...inputStyle, width: '90px', padding: '5px 8px', fontSize: '12px', fontFamily: 'monospace' };
+  const nameInput  = { ...inputStyle, minWidth: '140px', padding: '5px 8px', fontSize: '12.5px' };
 
   return (
     <div style={sectionCard}>
-      <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '16px' }}>Route Map</p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16' }}>Route Map</p>
+        {hasStops && (
+          <button type="button" onClick={doGenerate} disabled={generating}
+            style={{ background: 'none', border: 'none', color: '#8C8070', fontSize: '12px', cursor: generating ? 'not-allowed' : 'pointer', padding: '0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            {generating
+              ? <><span style={{ width: '10px', height: '10px', borderRadius: '50%', border: '1.5px solid #E8E3DA', borderTopColor: '#1B6B65', animation: 'spin 0.6s linear infinite', display: 'inline-block' }} /> Regenerating…</>
+              : '↺ Regenerate from itinerary'}
+          </button>
+        )}
+      </div>
 
-      {/* ── State A: auto-generated map (component registered) ── */}
-      {hasAutoMap && (
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 14px', background: '#EFF6F5', borderRadius: '8px', border: '1px solid #B5D8D5', marginBottom: '12px' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#1B6B65', flexShrink: 0, marginTop: '4px' }} />
-            <div>
-              <p style={{ fontSize: '12.5px', fontWeight: '600', color: '#1B6B65', marginBottom: '3px' }}>
-                Route map available — {registryEntry.points.length} route points
-              </p>
-              <p style={{ fontSize: '11.5px', color: '#2A7A74', lineHeight: '1.5', marginBottom: '8px' }}>
-                Generated automatically from the itinerary route data.
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                {registryEntry.points.map((pt, i) => (
-                  <span key={i} style={{ fontSize: '11px', color: '#1B6B65', background: '#D8EFED', borderRadius: '4px', padding: '2px 7px', fontWeight: '500' }}>
-                    {pt}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Optional image override — collapsed by default */}
-          {!showImageOverride && !hasImageOverride && (
-            <button type="button" onClick={() => setShowImageOverride(true)}
-              style={{ background: 'none', border: 'none', color: '#8C8070', fontSize: '12px', cursor: 'pointer', padding: '0', textDecoration: 'underline' }}>
-              Override with a custom image
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ── State B: no auto map, but image override configured ── */}
-      {!hasAutoMap && hasImageOverride && (
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E8E3DA', marginBottom: '10px', background: '#F4F1EC', maxHeight: '200px' }}>
-            <img src={imageUrl} alt={c('routeMap.alt') || 'Route map'} style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', display: 'block' }} />
-          </div>
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-            <button type="button" onClick={() => fileRef.current?.click()} style={{ ...btnGhost, fontSize: '12px' }} disabled={uploading}>
-              <Upload size={12} /> Change image
-            </button>
-            <button type="button" onClick={() => { setContent('routeMap.imageUrl', ''); setContent('routeMap.alt', ''); setContent('routeMap.caption', ''); }}
-              style={{ ...btnGhost, fontSize: '12px', color: '#C0392B', borderColor: '#E8B4AE' }}>
-              Remove
-            </button>
-          </div>
-          <div style={{ marginBottom: '10px' }}>
-            <label style={labelStyle}>Alt text</label>
-            <input value={c('routeMap.alt') || ''} style={inputStyle} placeholder="e.g. Croatia by Sea route map" onChange={e => setContent('routeMap.alt', e.target.value)} />
-          </div>
-          <div>
-            <label style={labelStyle}>Caption (optional)</label>
-            <input value={c('routeMap.caption') || ''} style={inputStyle} placeholder="Optional caption shown below the map" onChange={e => setContent('routeMap.caption', e.target.value)} />
+      {/* ── Legacy hardcoded map info (registry entry, no stops yet) ── */}
+      {registryEntry && !hasStops && (
+        <div style={{ padding: '12px 14px', background: '#EFF6F5', borderRadius: '8px', border: '1px solid #B5D8D5', marginBottom: '14px' }}>
+          <p style={{ fontSize: '12.5px', fontWeight: '600', color: '#1B6B65', marginBottom: '4px' }}>
+            Built-in route map — {registryEntry.points.length} points
+          </p>
+          <p style={{ fontSize: '11.5px', color: '#2A7A74', lineHeight: '1.5', marginBottom: '8px' }}>
+            This itinerary uses a hardcoded SVG map. Generate stops to enable dynamic editing and a consistent data source for CMS, site, and PDF.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+            {registryEntry.points.map((pt, i) => (
+              <span key={i} style={{ fontSize: '11px', color: '#1B6B65', background: '#D8EFED', borderRadius: '4px', padding: '2px 7px', fontWeight: '500' }}>{pt}</span>
+            ))}
           </div>
         </div>
       )}
 
-      {/* ── State C: no auto map, no image — route data not configured ── */}
-      {!hasAutoMap && !hasImageOverride && (
+      {/* ── State: no stops ── */}
+      {!hasStops && (
         <div style={{ marginBottom: '16px' }}>
-          <div style={{ padding: '14px 16px', background: '#FAF8F4', borderRadius: '8px', border: '1px solid #E8E3DA', marginBottom: '12px' }}>
+          <div style={{ padding: '16px 18px', background: '#FAF8F4', borderRadius: '8px', border: '1px solid #E8E3DA', marginBottom: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
               <MapPin size={14} color="#8C8070" />
-              <p style={{ fontSize: '12.5px', fontWeight: '600', color: '#6B6156' }}>
-                {slug ? 'Route data not configured for this itinerary' : 'Route map unavailable'}
-              </p>
+              <p style={{ fontSize: '12.5px', fontWeight: '600', color: '#6B6156' }}>No route map configured yet</p>
             </div>
-            <p style={{ fontSize: '12px', color: '#8C8070', lineHeight: '1.5' }}>
-              Route maps are generated automatically from the itinerary route data. This itinerary does not yet have a registered route map.
+            <p style={{ fontSize: '12px', color: '#8C8070', lineHeight: '1.6' }}>
+              Generate one automatically from the itinerary content, then review and adjust the stops if needed.
             </p>
           </div>
-
-          {/* Image as fallback — upload-first, URL secondary */}
-          <p style={{ fontSize: '12px', fontWeight: '600', color: '#4A433A', marginBottom: '8px' }}>
-            Fallback: upload a static map image
-          </p>
-          <div style={{ border: '1px dashed #D8D0BE', borderRadius: '8px', padding: '20px', textAlign: 'center', background: '#FAFAF8', marginBottom: '8px' }}>
-            {uploading ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '20px', height: '20px', border: '2.5px solid #E8E3DA', borderTopColor: '#1B6B65', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-                <p style={{ fontSize: '12px', color: '#8C8070' }}>Uploading…</p>
-              </div>
-            ) : (
-              <>
-                <button type="button" onClick={() => fileRef.current?.click()}
-                  style={{ ...btnGhost, display: 'inline-flex', marginBottom: '6px' }}>
-                  <Upload size={13} /> Upload image
-                </button>
-                <p style={{ fontSize: '11px', color: '#A09080', margin: 0 }}>JPG, PNG or WebP, max 8 MB</p>
-              </>
-            )}
-          </div>
-          {uploadError && <p style={{ fontSize: '12px', color: '#C0392B', marginBottom: '8px' }}>{uploadError}</p>}
-
-          {!showUrlInput ? (
-            <button type="button" onClick={() => setShowUrlInput(true)}
-              style={{ background: 'none', border: 'none', color: '#8C8070', fontSize: '11.5px', cursor: 'pointer', padding: '0', textDecoration: 'underline' }}>
-              or enter image URL
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button type="button" onClick={doGenerate} disabled={generating}
+              style={{ ...btnPrimary, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', opacity: generating ? 0.7 : 1 }}>
+              {generating
+                ? <><span style={{ width: '12px', height: '12px', borderRadius: '50%', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', animation: 'spin 0.6s linear infinite', display: 'inline-block' }} /> Generating…</>
+                : <><MapPin size={14} /> Generate route map</>}
             </button>
-          ) : (
-            <div>
-              <label style={labelStyle}>Image URL</label>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input autoFocus value={c('routeMap.imageUrl') || ''} style={{ ...inputStyle, flex: 1 }}
-                  placeholder="https://..." onChange={e => setContent('routeMap.imageUrl', e.target.value)} />
-                <button type="button" onClick={() => setShowUrlInput(false)} style={btnGhost}>Cancel</button>
-              </div>
-            </div>
+            <button type="button" onClick={addStop}
+              style={{ ...btnGhost, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Plus size={13} /> Add locations manually
+            </button>
+          </div>
+          {genError && (
+            <p style={{ fontSize: '12px', color: '#C0392B', marginTop: '10px' }}>{genError}</p>
           )}
         </div>
       )}
 
-      {/* ── Image override panel (shown when hasAutoMap and override is open/active) ── */}
-      {hasAutoMap && (showImageOverride || hasImageOverride) && (
-        <div style={{ marginBottom: '16px', padding: '14px', background: '#FAF8F4', borderRadius: '8px', border: '1px solid #E8E3DA' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-            <p style={{ fontSize: '12px', fontWeight: '600', color: '#4A433A' }}>Custom image override</p>
-            {!hasImageOverride && (
-              <button type="button" onClick={() => setShowImageOverride(false)}
-                style={{ background: 'none', border: 'none', color: '#8C8070', fontSize: '11px', cursor: 'pointer', padding: '0' }}>
-                Cancel
-              </button>
-            )}
-          </div>
-          {hasImageOverride ? (
-            <>
-              <div style={{ borderRadius: '6px', overflow: 'hidden', border: '1px solid #E8E3DA', marginBottom: '8px', maxHeight: '160px' }}>
-                <img src={imageUrl} alt={c('routeMap.alt') || 'Route map override'} style={{ width: '100%', maxHeight: '160px', objectFit: 'contain', display: 'block' }} />
-              </div>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-                <button type="button" onClick={() => fileRef.current?.click()} style={{ ...btnGhost, fontSize: '12px' }} disabled={uploading}>
-                  <Upload size={12} /> Change
-                </button>
-                <button type="button" onClick={() => { setContent('routeMap.imageUrl', ''); setContent('routeMap.alt', ''); setContent('routeMap.caption', ''); setShowImageOverride(false); }}
-                  style={{ ...btnGhost, fontSize: '12px', color: '#C0392B', borderColor: '#E8B4AE' }}>
-                  Remove override
-                </button>
-              </div>
-            </>
-          ) : (
-            <div style={{ border: '1px dashed #D8D0BE', borderRadius: '6px', padding: '16px', textAlign: 'center', background: '#FAFAF8', marginBottom: '8px' }}>
-              {uploading ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '18px', height: '18px', border: '2px solid #E8E3DA', borderTopColor: '#1B6B65', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-                  <p style={{ fontSize: '12px', color: '#8C8070' }}>Uploading…</p>
-                </div>
-              ) : (
-                <button type="button" onClick={() => fileRef.current?.click()} style={{ ...btnGhost, display: 'inline-flex' }}>
-                  <Upload size={13} /> Upload image
-                </button>
-              )}
+      {/* ── State: has stops — editable table + preview ── */}
+      {hasStops && (
+        <div style={{ marginBottom: '16px' }}>
+          {genError && (
+            <p style={{ fontSize: '12px', color: '#C0392B', marginBottom: '10px' }}>{genError}</p>
+          )}
+
+          {/* Preview map */}
+          {validStops.length >= 2 && (
+            <div style={{ marginBottom: '16px' }}>
+              <DynamicRouteMap stops={stops} />
             </div>
           )}
-          {uploadError && <p style={{ fontSize: '12px', color: '#C0392B', marginBottom: '8px' }}>{uploadError}</p>}
-          <div style={{ marginBottom: '8px' }}>
-            <label style={labelStyle}>Alt text</label>
-            <input value={c('routeMap.alt') || ''} style={inputStyle} placeholder="e.g. Croatia sailing route" onChange={e => setContent('routeMap.alt', e.target.value)} />
+          {validStops.length < 2 && (
+            <div style={{ padding: '10px 14px', background: '#FFF8E1', border: '1px solid #F5D060', borderRadius: '6px', marginBottom: '12px' }}>
+              <p style={{ fontSize: '12px', color: '#7A5C00' }}>
+                Add at least 2 stops with coordinates to preview the map.
+              </p>
+            </div>
+          )}
+
+          {/* Stop table */}
+          <div style={{ overflowX: 'auto', marginBottom: '10px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #E8E3DA' }}>
+                  <th style={{ ...tdStyle, width: '28px', color: '#8C8070', fontWeight: '600', textAlign: 'left', paddingBottom: '6px' }}>#</th>
+                  <th style={{ ...tdStyle, color: '#8C8070', fontWeight: '600', textAlign: 'left', paddingBottom: '6px' }}>Location name</th>
+                  <th style={{ ...tdStyle, color: '#8C8070', fontWeight: '600', textAlign: 'center', paddingBottom: '6px' }}>Day</th>
+                  <th style={{ ...tdStyle, color: '#8C8070', fontWeight: '600', textAlign: 'center', paddingBottom: '6px' }}>Lat</th>
+                  <th style={{ ...tdStyle, color: '#8C8070', fontWeight: '600', textAlign: 'center', paddingBottom: '6px' }}>Lng</th>
+                  <th style={{ ...tdStyle, color: '#8C8070', fontWeight: '600', textAlign: 'center', paddingBottom: '6px' }}>Vis</th>
+                  <th style={{ ...tdStyle, width: '56px' }} />
+                </tr>
+              </thead>
+              <tbody>
+                {stops.map((stop, i) => (
+                  <tr key={stop.id || i} style={{ borderBottom: '1px solid #F4F0EA' }}>
+                    <td style={tdStyle}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <button type="button" onClick={() => moveStop(i, -1)} disabled={i === 0}
+                          style={{ background: 'none', border: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? '#D8D0BE' : '#8C8070', padding: '0', lineHeight: 1, fontSize: '10px' }}>▲</button>
+                        <span style={{ fontSize: '11px', color: '#8C8070', textAlign: 'center' }}>{i + 1}</span>
+                        <button type="button" onClick={() => moveStop(i, 1)} disabled={i === stops.length - 1}
+                          style={{ background: 'none', border: 'none', cursor: i === stops.length - 1 ? 'default' : 'pointer', color: i === stops.length - 1 ? '#D8D0BE' : '#8C8070', padding: '0', lineHeight: 1, fontSize: '10px' }}>▼</button>
+                      </div>
+                    </td>
+                    <td style={tdStyle}>
+                      <input
+                        value={stop.name || ''}
+                        style={nameInput}
+                        placeholder="Location name"
+                        onChange={e => updateStop(i, { name: e.target.value })}
+                      />
+                    </td>
+                    <td style={tdStyle}>
+                      <input
+                        type="number" min="1" max="99"
+                        value={stop.dayNumber ?? ''}
+                        style={numInput}
+                        placeholder="—"
+                        onChange={e => updateStop(i, { dayNumber: e.target.value ? parseInt(e.target.value, 10) : null })}
+                      />
+                    </td>
+                    <td style={tdStyle}>
+                      <input
+                        type="number" step="0.00001"
+                        value={stop.latitude ?? ''}
+                        style={coordInput}
+                        placeholder="lat"
+                        onChange={e => updateStop(i, { latitude: e.target.value ? parseFloat(e.target.value) : null })}
+                      />
+                    </td>
+                    <td style={tdStyle}>
+                      <input
+                        type="number" step="0.00001"
+                        value={stop.longitude ?? ''}
+                        style={coordInput}
+                        placeholder="lng"
+                        onChange={e => updateStop(i, { longitude: e.target.value ? parseFloat(e.target.value) : null })}
+                      />
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      <input type="checkbox"
+                        checked={stop.visible !== false}
+                        onChange={e => updateStop(i, { visible: e.target.checked })}
+                        style={{ width: '14px', height: '14px', accentColor: '#1B6B65', cursor: 'pointer' }}
+                      />
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>
+                      <button type="button" onClick={() => removeStop(i)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C0392B', padding: '2px 4px', borderRadius: '3px' }}>
+                        <X size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div>
-            <label style={labelStyle}>Caption (optional)</label>
-            <input value={c('routeMap.caption') || ''} style={inputStyle} placeholder="Optional caption" onChange={e => setContent('routeMap.caption', e.target.value)} />
-          </div>
+
+          <button type="button" onClick={addStop}
+            style={{ ...btnGhost, fontSize: '12.5px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+            <Plus size={12} /> Add location
+          </button>
         </div>
       )}
 
-      <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml" style={{ display: 'none' }} onChange={handleFile} />
-
-      {/* Visibility controls */}
-      <div style={{ paddingTop: '12px', borderTop: '1px solid #F0EBE2' }}>
-        {checkboxes.map(({ path, label }) => (
+      {/* ── Visibility toggles ── */}
+      <div style={{ paddingTop: '12px', borderTop: '1px solid #F0EBE2', marginBottom: '6px' }}>
+        {[
+          { path: 'routeMap.showOnSite',    label: 'Show on itinerary page' },
+          { path: 'pdfConfig.showRouteMap', label: 'Include in PDF'          },
+        ].map(({ path, label }) => (
           <label key={path} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px', cursor: 'pointer' }}>
             <input type="checkbox"
               checked={c(path) === true}
@@ -3855,19 +3911,100 @@ function RouteMapSection({ c, setContent, slug = '', onUpload }) {
         ))}
       </div>
 
-      {/* Warning: enabled but no map */}
-      {(siteEnabled || pdfEnabled) && !mapAvailable && (
-        <div style={{ marginTop: '6px', padding: '10px 14px', borderRadius: '6px', background: '#FFF8E1', border: '1px solid #F5D060' }}>
+      {/* Warning: enabled but no valid map */}
+      {(siteEnabled || pdfEnabled) && !hasMap && (
+        <div style={{ marginTop: '4px', padding: '10px 14px', borderRadius: '6px', background: '#FFF8E1', border: '1px solid #F5D060', marginBottom: '12px' }}>
           <p style={{ fontSize: '12px', color: '#7A5C00', lineHeight: '1.5' }}>
-            Visibility is enabled but no route map is available. Nothing will appear on the public page or in the PDF.
+            Visibility is enabled but no route map data exists. The map will not appear on the public page or in the PDF until stops are added.
           </p>
         </div>
       )}
+      {(siteEnabled || pdfEnabled) && hasStops && validStops.length < 2 && (
+        <div style={{ marginTop: '4px', padding: '10px 14px', borderRadius: '6px', background: '#FFF8E1', border: '1px solid #F5D060', marginBottom: '12px' }}>
+          <p style={{ fontSize: '12px', color: '#7A5C00', lineHeight: '1.5' }}>
+            At least 2 stops with valid coordinates are required to render the map.
+          </p>
+        </div>
+      )}
+
+      {/* ── Advanced: static image override ── */}
+      <div style={{ borderTop: '1px solid #F0EBE2', paddingTop: '10px' }}>
+        <button type="button" onClick={() => setShowAdvanced(v => !v)}
+          style={{ background: 'none', border: 'none', color: '#8C8070', fontSize: '12px', cursor: 'pointer', padding: '0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {showAdvanced ? '▾' : '▸'} Advanced: static image override
+        </button>
+        {showAdvanced && (
+          <div style={{ marginTop: '12px', padding: '14px', background: '#FAF8F4', borderRadius: '8px', border: '1px solid #E8E3DA' }}>
+            <p style={{ fontSize: '12px', color: '#6B6156', marginBottom: '10px', lineHeight: '1.5' }}>
+              Upload a custom static image to override all generated route maps. Not recommended for normal itineraries.
+            </p>
+            {imageUrl ? (
+              <>
+                <div style={{ borderRadius: '6px', overflow: 'hidden', border: '1px solid #E8E3DA', marginBottom: '8px', maxHeight: '160px' }}>
+                  <img src={imageUrl} alt={c('routeMap.alt') || 'Route map'} style={{ width: '100%', maxHeight: '160px', objectFit: 'contain', display: 'block' }} />
+                </div>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                  <button type="button" onClick={() => fileRef.current?.click()} style={{ ...btnGhost, fontSize: '12px' }} disabled={uploading}>
+                    <Upload size={12} /> Change
+                  </button>
+                  <button type="button"
+                    onClick={() => { setContent('routeMap.imageUrl', ''); setContent('routeMap.alt', ''); setContent('routeMap.caption', ''); }}
+                    style={{ ...btnGhost, fontSize: '12px', color: '#C0392B', borderColor: '#E8B4AE' }}>
+                    Remove
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div style={{ border: '1px dashed #D8D0BE', borderRadius: '6px', padding: '16px', textAlign: 'center', background: '#FAFAF8', marginBottom: '8px' }}>
+                {uploading ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '18px', height: '18px', border: '2px solid #E8E3DA', borderTopColor: '#1B6B65', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                    <p style={{ fontSize: '12px', color: '#8C8070' }}>Uploading…</p>
+                  </div>
+                ) : (
+                  <>
+                    <button type="button" onClick={() => fileRef.current?.click()} style={{ ...btnGhost, display: 'inline-flex' }} disabled={uploading}>
+                      <Upload size={13} /> Upload image
+                    </button>
+                    <p style={{ fontSize: '11px', color: '#A09080', marginTop: '4px', marginBottom: 0 }}>JPG, PNG or WebP, max 8 MB</p>
+                  </>
+                )}
+              </div>
+            )}
+            {uploadError && <p style={{ fontSize: '12px', color: '#C0392B', marginBottom: '8px' }}>{uploadError}</p>}
+            {!showUrlInput ? (
+              <button type="button" onClick={() => setShowUrlInput(true)}
+                style={{ background: 'none', border: 'none', color: '#8C8070', fontSize: '11.5px', cursor: 'pointer', padding: '0', textDecoration: 'underline' }}>
+                or enter image URL
+              </button>
+            ) : (
+              <div style={{ marginTop: '8px' }}>
+                <label style={labelStyle}>Image URL</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input autoFocus value={c('routeMap.imageUrl') || ''} style={{ ...inputStyle, flex: 1 }}
+                    placeholder="https://..." onChange={e => setContent('routeMap.imageUrl', e.target.value)} />
+                  <button type="button" onClick={() => setShowUrlInput(false)} style={btnGhost}>Cancel</button>
+                </div>
+              </div>
+            )}
+            <div style={{ marginTop: '10px' }}>
+              <label style={labelStyle}>Alt text</label>
+              <input value={c('routeMap.alt') || ''} style={inputStyle} placeholder="e.g. Croatia by Sea route map" onChange={e => setContent('routeMap.alt', e.target.value)} />
+            </div>
+            <div style={{ marginTop: '8px' }}>
+              <label style={labelStyle}>Caption (optional)</label>
+              <input value={c('routeMap.caption') || ''} style={inputStyle} placeholder="Optional caption" onChange={e => setContent('routeMap.caption', e.target.value)} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml" style={{ display: 'none' }} onChange={handleFile} />
     </div>
   );
 }
 
-function SectionsTab({ c, setContent, slug = '', onUploadRouteMap }) {
+function SectionsTab({ c, setContent, slug = '', onUploadRouteMap, onGenerateRouteMap }) {
   return (
     <div style={{ maxWidth: '720px' }}>
       <div style={sectionCard}>
@@ -3896,7 +4033,7 @@ function SectionsTab({ c, setContent, slug = '', onUploadRouteMap }) {
         />
       </div>
 
-      <RouteMapSection c={c} setContent={setContent} slug={slug} onUpload={onUploadRouteMap} />
+      <RouteMapSection c={c} setContent={setContent} slug={slug} onUpload={onUploadRouteMap} onGenerate={onGenerateRouteMap} />
 
       <div style={sectionCard}>
         <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '18px' }}>PDF Sections</p>

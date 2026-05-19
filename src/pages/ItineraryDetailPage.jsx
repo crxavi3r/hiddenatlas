@@ -19,6 +19,7 @@ import AmericanWest8DaysRouteMap from '../components/AmericanWest8DaysRouteMap';
 import TuscanyRouteMap from '../components/TuscanyRouteMap';
 import CroatiaRouteMap from '../components/CroatiaRouteMap';
 import NorthernEnglandRouteMap from '../components/NorthernEnglandRouteMap';
+import DynamicRouteMap from '../components/DynamicRouteMap';
 
 // Always-on route maps for curated/static itineraries (no CMS toggle required)
 const ROUTE_MAP_COMPONENTS = {
@@ -374,6 +375,7 @@ function normalizeDbItinerary(row) {
     routeMapImageUrl:   content?.routeMap?.imageUrl   || null,
     routeMapAlt:        content?.routeMap?.alt         || null,
     routeMapCaption:    content?.routeMap?.caption     || null,
+    routeMapStops:      content?.routeMap?.stops       || [],
   };
 }
 
@@ -1264,10 +1266,31 @@ export default function ItineraryDetailPage() {
               </div>
             </section>
 
-            {/* DB-controlled Route Map — shown when content.routeMap.showOnSite === true
-                Renders a registered SVG component (priority) or a static image URL fallback. */}
-            {itinerary.showRouteMapOnSite && (DB_ROUTE_MAP_COMPONENTS[itinerary.id] || itinerary.routeMapImageUrl) && (() => {
+            {/* DB-controlled Route Map — shown when content.routeMap.showOnSite === true.
+                Priority: registered SVG component → dynamic stops map → static image fallback.
+                Never renders an empty section — at least one visual source must exist. */}
+            {(() => {
+              if (!itinerary.showRouteMapOnSite) return null;
               const DbRouteMapComponent = DB_ROUTE_MAP_COMPONENTS[itinerary.id];
+              const validStops = (itinerary.routeMapStops || [])
+                .filter(s => s.visible !== false && s.latitude != null && s.longitude != null)
+                .sort((a, b) => a.order - b.order);
+              const hasValidStops = validStops.length >= 2;
+              const hasContent = DbRouteMapComponent || hasValidStops || itinerary.routeMapImageUrl;
+              if (!hasContent) return null;
+
+              const scrollToDay = dayNum => {
+                const el = document.getElementById(`day-${dayNum}`);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              };
+
+              console.log('[ItineraryDetail] route map —', itinerary.id, {
+                enabledOnSite: true,
+                registeredComponent: !!DbRouteMapComponent,
+                validStopsCount: validStops.length,
+                hasImage: !!itinerary.routeMapImageUrl,
+              });
+
               return (
                 <section style={{ marginBottom: '60px' }}>
                   <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '6px' }}>
@@ -1277,13 +1300,9 @@ export default function ItineraryDetailPage() {
                     {itinerary.subtitle}
                   </p>
                   {DbRouteMapComponent ? (
-                    <DbRouteMapComponent
-                      isUnlocked={hasAccess}
-                      onDaySelect={dayNum => {
-                        const el = document.getElementById(`day-${dayNum}`);
-                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                      }}
-                    />
+                    <DbRouteMapComponent isUnlocked={hasAccess} onDaySelect={scrollToDay} />
+                  ) : hasValidStops ? (
+                    <DynamicRouteMap stops={validStops} isUnlocked={hasAccess} onDaySelect={scrollToDay} />
                   ) : (
                     <div>
                       <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #E8E3DA' }}>

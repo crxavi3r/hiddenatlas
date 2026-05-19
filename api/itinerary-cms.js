@@ -20,6 +20,7 @@
 // GET  /api/itinerary-cms?action=upload-pdf-token&id=:id  — returns scoped client token for direct blob upload
 // POST /api/itinerary-cms?action=save-pdf-url&id=:id      — saves blob URL + increments version after client upload
 // POST /api/itinerary-cms?action=ai-generate
+// POST /api/itinerary-cms?action=generate-route-map&id=:id — AI-extracts route stops with coordinates from itinerary content
 
 import pg                         from 'pg';
 import { resolveUserCtx }         from './_lib/resolveUserCtx.js';
@@ -165,7 +166,8 @@ export default async function handler(req, res) {
       if (action === 'toggle-asset') return res.json(await handleToggleAsset(pool, id, ctx));
       if (action === 'save-pdf-url')      { await assertOwnership(pool, id, ctx); return res.json(await handleSavePdfUrl(pool, id, body)); }
       if (action === 'update-pdf-status') { await assertOwnership(pool, id, ctx); return res.json(await handleUpdatePDFStatus(pool, id, body)); }
-      if (action === 'ai-generate')       { adminOnly(); return res.json(await handleAIGenerate(pool, body, ctx.email)); }
+      if (action === 'ai-generate')          { adminOnly(); return res.json(await handleAIGenerate(pool, body, ctx.email)); }
+      if (action === 'generate-route-map')   { await assertOwnership(pool, id, ctx); return res.json(await handleGenerateRouteMap(pool, id)); }
       if (action === 'backfill-pricing')  { adminOnly(); return res.json(await handleBackfillPricing(pool)); }
       if (action === 'resolve-images')    return res.json(await handleResolveImages(body));
       return res.status(400).json({ error: 'Unknown POST action' });
@@ -982,7 +984,7 @@ async function handleUploadPDFToken(pool, id) {
     token: process.env.BLOB_READ_WRITE_TOKEN,
     pathname,
     allowedContentTypes: ['application/pdf'],
-    maximumSizeInBytes: 30 * 1024 * 1024,
+    maximumSizeInBytes: 50 * 1024 * 1024,
     validUntil: Date.now() + 5 * 60 * 1000,
     allowOverwrite: true,
   });
@@ -1405,6 +1407,119 @@ async function handleUploadRouteMap(pool, id, body) {
   return { url: blobUrl };
 }
 
+// ── Generate route map stops from itinerary content via AI ────────────────────
+//
+// Calls the Anthropic API to extract distinct geographic locations (with
+// lat/lng) from the itinerary's days, highlights, and route overview.
+// Returns { stops: [...] } — the caller saves these into content.routeMap.stops.
+async function handleGenerateRouteMap(pool, id) {
+  if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
+
+  const { rows } = await pool.query(
+    `SELECT slug, title, country, content FROM "Itinerary" WHERE id = $1 LIMIT 1`, [id]
+  );
+  if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+
+  const { slug, title, country } = rows[0];
+  const rawContent = rows[0].content;
+  const content = typeof rawContent === 'string'
+    ? (() => { try { return JSON.parse(rawContent); } catch { return {}; } })()
+    : (rawContent ?? {});
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw Object.assign(new Error('AI service not configured — add ANTHROPIC_API_KEY to environment'), { status: 503 });
+  }
+
+  const days           = content.days || [];
+  const highlights     = (content.summary?.highlights || []).join(', ');
+  const routeOverview  = content.summary?.routeOverview || '';
+  const destination    = country || '';
+
+  const daysText = days.slice(0, 20)
+    .map(d => `Day ${d.day || d.dayNumber || '?'}: ${d.title || ''} — ${(d.desc || d.description || '').slice(0, 300)}`)
+    .join('\n');
+
+  const systemPrompt = `You are a travel cartographer for HiddenAtlas. Extract distinct geographic route stops from a travel itinerary and return accurate coordinates. Use your knowledge of real locations to provide precise latitude/longitude values.`;
+
+  const userPrompt = `Extract the route stops for this travel itinerary and return JSON.
+
+Itinerary: ${title}${destination ? ` (${destination})` : ''}
+${routeOverview ? `Route: ${routeOverview}` : ''}
+${highlights ? `Highlights: ${highlights}` : ''}
+
+Days:
+${daysText}
+
+Rules:
+- Extract distinct geographic locations in travel order (cities, towns, islands, specific areas)
+- Deduplicate: if a place appears on multiple days, include it once using the first day number
+- Skip generic words ("beach", "market", "restaurant", "city center", "old town" alone, etc.)
+- Include accurate real-world latitude and longitude for each location
+- Return at most 12 stops
+- Return ONLY valid JSON, no markdown, no commentary
+
+{
+  "stops": [
+    { "id": "stop-1", "order": 1, "name": "string", "latitude": number, "longitude": number, "dayNumber": number_or_null, "source": "generated", "visible": true }
+  ]
+}`;
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key':          process.env.ANTHROPIC_API_KEY,
+      'anthropic-version':  '2023-06-01',
+      'content-type':       'application/json',
+    },
+    body: JSON.stringify({
+      model:      'claude-opus-4-6',
+      max_tokens: 2048,
+      system:     systemPrompt,
+      messages:   [{ role: 'user', content: userPrompt }],
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw Object.assign(new Error(`AI API error: ${response.status} — ${errText.slice(0, 200)}`), { status: 502 });
+  }
+
+  const aiJson  = await response.json();
+  const rawText = (aiJson.content?.[0]?.text || '').trim();
+
+  let parsed;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    // Extract JSON object if model added surrounding text despite instructions
+    const match = rawText.match(/\{[\s\S]*\}/);
+    try {
+      parsed = match ? JSON.parse(match[0]) : null;
+    } catch {
+      parsed = null;
+    }
+  }
+
+  if (!parsed?.stops) {
+    throw Object.assign(new Error('AI returned invalid route map data — try again'), { status: 502 });
+  }
+
+  const stops = (parsed.stops).map((s, i) => ({
+    id:        s.id        || `stop-${i + 1}`,
+    order:     typeof s.order === 'number' ? s.order : i + 1,
+    name:      String(s.name || '').trim(),
+    latitude:  typeof s.latitude  === 'number' ? Math.round(s.latitude  * 100000) / 100000 : null,
+    longitude: typeof s.longitude === 'number' ? Math.round(s.longitude * 100000) / 100000 : null,
+    dayNumber: typeof s.dayNumber === 'number'  ? s.dayNumber : null,
+    source:    'generated',
+    visible:   s.visible !== false,
+  })).filter(s => s.name);
+
+  console.log(`[generate-route-map] slug: ${slug} | generated ${stops.length} stops |`,
+    stops.filter(s => s.latitude != null).length, 'with coordinates');
+  return { stops };
+}
+
 // ── Assets: delete ────────────────────────────────────────────────────────────
 async function handleDeleteAsset(pool, id, ctx) {
   if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
@@ -1596,6 +1711,7 @@ const EMPTY_CONTENT = {
   sections:  { hotels: [], practicalNotes: '', faq: [] },
   pdfConfig: { showRouteMap: true, showHotels: true },
   seo:       { metaTitle: '', metaDescription: '' },
+  routeMap:  { showOnSite: false, stops: [], imageUrl: '', alt: '', caption: '' },
 };
 
 // ── PDF image resolution ──────────────────────────────────────────────────────
@@ -1621,20 +1737,35 @@ function detectMimeFromBytes(buf) {
   return null; // unknown — fall back to HTTP header
 }
 
+const RESOLVE_IMAGES_MAX_BYTES  = 8 * 1024 * 1024; // 8 MB per image — anything larger will bloat the PDF
+const RESOLVE_IMAGES_TIMEOUT_MS = 10_000;           // 10 s per image
+
 async function handleResolveImages({ urls = [] }) {
   const resolved = {};
   await Promise.all(urls.map(async url => {
     if (!url || typeof url !== 'string') return;
     // Strip query params — Vercel Blob ignores them
     const cleanUrl = url.replace(/\?.*/, '');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), RESOLVE_IMAGES_TIMEOUT_MS);
     try {
-      const r = await fetch(cleanUrl);
+      const r = await fetch(cleanUrl, { signal: controller.signal });
+      clearTimeout(timer);
       if (!r.ok) {
         console.error('[resolve-images] fetch failed:', r.status, cleanUrl.slice(0, 80));
         resolved[url] = null;
         return;
       }
-      const buf         = await r.arrayBuffer();
+      const buf = await r.arrayBuffer();
+      if (buf.byteLength > RESOLVE_IMAGES_MAX_BYTES) {
+        console.error(
+          `[resolve-images] SKIPPED — image too large (${Math.round(buf.byteLength / 1024 / 1024 * 10) / 10} MB > 8 MB cap).`,
+          'Canvas resize on the client will not fire because this URL was not resolved.',
+          'URL:', cleanUrl.slice(0, 80)
+        );
+        resolved[url] = null;
+        return;
+      }
       const headerMime  = (r.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
       const detectedMime = detectMimeFromBytes(new Uint8Array(buf.slice(0, 16)));
       const effectiveMime = detectedMime || headerMime;
@@ -1651,7 +1782,9 @@ async function handleResolveImages({ urls = [] }) {
       resolved[url] = `data:${effectiveMime};base64,${Buffer.from(buf).toString('base64')}`;
       console.log(`[resolve-images] ok — ${effectiveMime} (header: ${headerMime}) ${Math.round(buf.byteLength / 1024)}kb — ${cleanUrl.slice(0, 60)}`);
     } catch (err) {
-      console.error('[resolve-images] exception:', err.message, cleanUrl.slice(0, 80));
+      clearTimeout(timer);
+      const label = err.name === 'AbortError' ? 'TIMEOUT (10 s)' : err.message;
+      console.error('[resolve-images] exception:', label, cleanUrl.slice(0, 80));
       resolved[url] = null;
     }
   }));
@@ -1668,6 +1801,7 @@ function mergeEmptyContent(content) {
     sections:  { ...EMPTY_CONTENT.sections,  ...(content.sections  ?? {}) },
     pdfConfig: { ...EMPTY_CONTENT.pdfConfig, ...(content.pdfConfig ?? {}) },
     seo:       { ...EMPTY_CONTENT.seo,       ...(content.seo       ?? {}) },
+    routeMap:  { ...EMPTY_CONTENT.routeMap,  ...(content.routeMap  ?? {}) },
     days:      Array.isArray(content.days) ? content.days : [],
   };
 }
