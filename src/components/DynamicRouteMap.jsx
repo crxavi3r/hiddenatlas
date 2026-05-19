@@ -69,32 +69,25 @@ export default function DynamicRouteMap({ stops = [], onDaySelect }) {
   const routePath = smoothPath(pts);
 
   return (
-    <div style={{ borderRadius: '12px', overflow: 'hidden', border: `1px solid ${C.border}`, background: '#BDD5E0' }}>
+    <div style={{ borderRadius: '12px', overflow: 'hidden', border: `1px solid ${C.border}`, background: C.bg }}>
       <svg
         viewBox={`0 0 ${VW} ${VH}`}
         style={{ width: '100%', height: 'auto', display: 'block' }}
         aria-label={`Route map: ${validStops.map(s => s.name).join(' → ')}`}
       >
-        {/* Ocean */}
-        <rect width={VW} height={VH} fill="#BDD5E0" />
-        {/* Land mass */}
-        <rect
-          x={VW * 0.055} y={VH * 0.06}
-          width={VW * 0.89} height={VH * 0.88}
-          rx={VH * 0.10} ry={VH * 0.10}
-          fill="#D8CBAA" stroke="#B5A48A" strokeWidth="0.7"
-        />
-        {/* Terrain tint */}
-        <rect
-          x={VW * 0.28} y={VH * 0.50}
-          width={VW * 0.62} height={VH * 0.44}
-          rx={VH * 0.07} ry={VH * 0.07}
-          fill="#C8A96A" fillOpacity="0.16"
-        />
+        {/* Neutral editorial background — no fake geography */}
+        <rect width={VW} height={VH} fill={C.bg} />
+        {/* Subtle reference grid */}
+        {[0.25, 0.5, 0.75].map(t => (
+          <g key={t}>
+            <line x1={VW * t} y1={0} x2={VW * t} y2={VH} stroke={C.grid} strokeWidth="0.5" />
+            <line x1={0} y1={VH * t} x2={VW} y2={VH * t} stroke={C.grid} strokeWidth="0.5" />
+          </g>
+        ))}
 
-        {/* Route: Morocco-style solid dark line */}
-        <path d={routePath} fill="none" stroke="#1F3D3A" strokeWidth="1.2" opacity="0.07" strokeLinecap="round" />
-        <path d={routePath} fill="none" stroke="#1B3D39" strokeWidth="2.0" strokeLinecap="round" strokeLinejoin="round" opacity="0.88" />
+        {/* Route: gold glow + teal dashed */}
+        <path d={routePath} fill="none" stroke={C.gold} strokeWidth="3.5" strokeOpacity="0.3" strokeLinecap="round" />
+        <path d={routePath} fill="none" stroke={C.teal} strokeWidth="1.5" strokeDasharray="9,5" strokeOpacity="0.7" strokeLinecap="round" />
 
         {/* Stop labels — drawn before markers so markers sit on top */}
         {pts.map((pt, i) => {
@@ -117,7 +110,7 @@ export default function DynamicRouteMap({ stops = [], onDaySelect }) {
               fontWeight={isEnd ? '700' : '400'}
               fill={isHov ? C.teal : C.charcoal}
               opacity={isHov ? 1 : 0.85}
-              style={{ pointerEvents: 'none', userSelect: 'none', paintOrder: 'stroke', stroke: '#D8CBAA', strokeWidth: '3', strokeLinejoin: 'round' }}
+              style={{ pointerEvents: 'none', userSelect: 'none' }}
             >
               {pt.name}
             </text>

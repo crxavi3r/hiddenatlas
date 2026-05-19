@@ -1087,25 +1087,12 @@ function DynamicRouteSvgMap({ stops = [] }) {
 
   return (
     <Svg width={SW} height={SH} viewBox={`0 0 ${SW} ${SH}`}>
-      {/* Ocean background — same as Morocco */}
-      <Rect x="0" y="0" width={SW} height={SH} fill="#BDD5E0" />
-      {/* Land mass */}
-      <Rect
-        x={(SW * 0.055).toFixed(1)} y={(SH * 0.06).toFixed(1)}
-        width={(SW * 0.89).toFixed(1)} height={(SH * 0.88).toFixed(1)}
-        rx={(SH * 0.10).toFixed(1)} ry={(SH * 0.10).toFixed(1)}
-        fill="#D8CBAA" stroke="#B5A48A" strokeWidth="0.7"
-      />
-      {/* Secondary terrain tint */}
-      <Rect
-        x={(SW * 0.28).toFixed(1)} y={(SH * 0.50).toFixed(1)}
-        width={(SW * 0.62).toFixed(1)} height={(SH * 0.44).toFixed(1)}
-        rx={(SH * 0.07).toFixed(1)} ry={(SH * 0.07).toFixed(1)}
-        fill="#C8A96A" fillOpacity="0.16"
-      />
-      {/* Route: Morocco-style dark solid */}
-      <Path d={routeD} fill="none" stroke="#1F3D3A" strokeWidth="1.5" opacity={0.08} strokeLinecap="round" />
-      <Path d={routeD} fill="none" stroke="#1B3D39" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.88" />
+      {/* Neutral editorial background — no fake geography */}
+      <Rect x="0" y="0" width={SW} height={SH} fill="#F4F1E8" />
+      {/* Route: depth shadow + teal dashed (editorial schematic style) */}
+      <Path d={routeD} fill="none" stroke="#1C1A16" strokeWidth="3" opacity={0.06} strokeLinecap="round" />
+      <Path d={routeD} fill="none" stroke="#C9A96E" strokeWidth="2.5" strokeOpacity="0.30" strokeLinecap="round" />
+      <Path d={routeD} fill="none" stroke="#1B6B65" strokeWidth="1.4" strokeDasharray="7,4" strokeLinecap="round" />
       {/* Stop markers — type-aware, matching Morocco-style */}
       {pts.map((p, i) => {
         const [cx, cy] = p;
