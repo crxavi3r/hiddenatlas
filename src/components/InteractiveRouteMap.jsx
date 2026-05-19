@@ -11,60 +11,9 @@
  *   isUnlocked   — whether the user has purchased the itinerary (controls day labels / Jump button)
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { buildRouteMapLayout, ROUTE_MAP_TIER as TIER } from '../utils/routeMapLayout';
 
 const VW = 800, VH = 440;
-
-function makeProj(stops) {
-  const lats = stops.map(s => s.latitude);
-  const lngs = stops.map(s => s.longitude);
-  const latMin = Math.min(...lats), latMax = Math.max(...lats);
-  const lngMin = Math.min(...lngs), lngMax = Math.max(...lngs);
-  const latSpan = latMax - latMin || 1;
-  const lngSpan = lngMax - lngMin || 1;
-  const PAD = 0.22;
-  const X0 = lngMin - lngSpan * PAD;
-  const X1 = lngMax + lngSpan * PAD;
-  const Y0 = latMin - latSpan * PAD;
-  const Y1 = latMax + latSpan * PAD;
-  return (lon, lat) => [
-    (lon - X0) / (X1 - X0) * VW,
-    (1 - (lat - Y0) / (Y1 - Y0)) * VH,
-  ];
-}
-
-function catmullPath(lonlats, proj, tension = 0.22) {
-  const pts = lonlats.map(([lon, lat]) => proj(lon, lat));
-  const n = pts.length;
-  let d = `M ${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
-  for (let i = 0; i < n - 1; i++) {
-    const p0 = pts[Math.max(0, i - 1)];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[Math.min(n - 1, i + 2)];
-    const cp1 = [p1[0] + (p2[0] - p0[0]) * tension, p1[1] + (p2[1] - p0[1]) * tension];
-    const cp2 = [p2[0] - (p3[0] - p1[0]) * tension, p2[1] - (p3[1] - p1[1]) * tension];
-    d += ` C ${cp1[0].toFixed(1)},${cp1[1].toFixed(1)} ${cp2[0].toFixed(1)},${cp2[1].toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
-  }
-  return d;
-}
-
-function computeStopFractions(stops, proj) {
-  if (stops.length <= 1) return [0];
-  const pts = stops.map(s => proj(s.longitude, s.latitude));
-  const dists = [0];
-  for (let i = 1; i < pts.length; i++) {
-    const dx = pts[i][0] - pts[i - 1][0];
-    const dy = pts[i][1] - pts[i - 1][1];
-    dists.push(dists[i - 1] + Math.sqrt(dx * dx + dy * dy));
-  }
-  const total = dists[dists.length - 1] || 1;
-  return dists.map(d => d / total);
-}
-
-const TIER = {
-  1: { r: 7,   rActive: 10,  sw: 2.0, fill: '#F2E4CB', edge: '#C9A96E', halo: '#C9A96E', lFs: 11.5, dFs: 8   },
-  2: { r: 4.5, rActive: 6.5, sw: 1.5, fill: '#C8D9D5', edge: '#2A5248', halo: '#2A5248', lFs: 9.5,  dFs: 7.5 },
-};
 
 export default function InteractiveRouteMap({ stops = [], onDaySelect, isUnlocked = true }) {
   const validStops = (stops || [])
@@ -73,9 +22,9 @@ export default function InteractiveRouteMap({ stops = [], onDaySelect, isUnlocke
 
   if (validStops.length < 2) return null;
 
-  const proj         = makeProj(validStops);
-  const fractions    = computeStopFractions(validStops, proj);
-  const routePathD   = catmullPath(validStops.map(s => [s.longitude, s.latitude]), proj);
+  const layout = buildRouteMapLayout(validStops, VW, VH);
+  if (!layout) return null;
+  const { fractions, routePathD, labeledStops } = layout;
 
   const [activeStop, setActiveStop] = useState(0);
   const [animating, setAnimating]   = useState(true);
@@ -140,13 +89,6 @@ export default function InteractiveRouteMap({ stops = [], onDaySelect, isUnlocke
   const activeCity = validStops[activeStop];
   const n = validStops.length;
 
-  // Resolve tier from stored type, falling back to position-based default for legacy data.
-  const resolveTier = (stop, i) => {
-    if (stop.type === 'major') return 1;
-    if (stop.type === 'stop')  return 2;
-    return (i === 0 || i === n - 1) ? 1 : 2;
-  };
-
   return (
     <div ref={containerRef} style={{ position: 'relative', userSelect: 'none', fontFamily: 'Inter, system-ui, sans-serif' }}>
 
@@ -196,15 +138,10 @@ export default function InteractiveRouteMap({ stops = [], onDaySelect, isUnlocke
         />
 
         {/* Stop markers + labels */}
-        {validStops.map((stop, i) => {
-          const [cx, cy] = proj(stop.longitude, stop.latitude);
+        {labeledStops.map(({ stop, tier, cfg, cx, cy, r: baseR, labelAnchor, labelX, labelY, fs }, i) => {
           const isActive = i === activeStop;
           const isFuture = i > activeStop;
-          const tier     = resolveTier(stop, i);
-          const cfg      = TIER[tier];
-          const r        = isActive ? cfg.rActive : cfg.r;
-          const dx       = cx <= VW * 0.55 ? 14 : -12;
-          const anchor   = dx > 0 ? 'start' : 'end';
+          const r        = isActive ? cfg.rActive : baseR;
 
           return (
             <g key={stop.id || i} opacity={isFuture ? 0.28 : 1} style={{ transition: 'opacity 0.4s ease', cursor: 'pointer' }}>
@@ -221,9 +158,9 @@ export default function InteractiveRouteMap({ stops = [], onDaySelect, isUnlocke
               />
               {/* City name label */}
               <text
-                x={cx + dx} y={cy - 1}
-                textAnchor={anchor} dominantBaseline="auto"
-                fontSize={cfg.lFs} fontFamily="Georgia, serif"
+                x={labelX} y={labelY}
+                textAnchor={labelAnchor} dominantBaseline="auto"
+                fontSize={fs} fontFamily="Georgia, serif"
                 fontWeight={tier === 1 ? '800' : '500'}
                 fill={isFuture ? '#9A9080' : tier === 1 ? '#131210' : '#1C1A16'}
                 style={{ paintOrder: 'stroke', stroke: '#F4F1E8', strokeWidth: '4', strokeLinejoin: 'round', pointerEvents: 'none' }}
@@ -233,8 +170,8 @@ export default function InteractiveRouteMap({ stops = [], onDaySelect, isUnlocke
               {/* Day label (unlocked only) */}
               {isUnlocked && stop.dayNumber && (
                 <text
-                  x={cx + dx} y={cy + cfg.lFs * 0.9 + 1}
-                  textAnchor={anchor}
+                  x={labelX} y={labelY + fs * 0.9 + 1}
+                  textAnchor={labelAnchor}
                   fontSize={cfg.dFs} fontFamily="Helvetica, sans-serif"
                   fill={isFuture ? '#C0B8AC' : '#9C9284'}
                   style={{ paintOrder: 'stroke', stroke: '#F4F1E8', strokeWidth: '2.5', pointerEvents: 'none' }}
@@ -243,7 +180,7 @@ export default function InteractiveRouteMap({ stops = [], onDaySelect, isUnlocke
                 </text>
               )}
               {/* Invisible hit area */}
-              <circle cx={cx} cy={cy} r={Math.max(r + 14, 20)} fill="transparent"
+              <circle cx={cx} cy={cy} r={Math.max(baseR + 14, 20)} fill="transparent"
                 onMouseEnter={() => !isMobile && !animating && setHovered(i)}
                 onMouseLeave={() => setHovered(null)}
                 onClick={() => handleStopInteract(stop, i)}
@@ -266,8 +203,7 @@ export default function InteractiveRouteMap({ stops = [], onDaySelect, isUnlocke
 
       {/* ── Desktop tooltip ──────────────────────────────────────────────── */}
       {hovered !== null && !isMobile && (() => {
-        const stop = validStops[hovered];
-        const [cx, cy] = proj(stop.longitude, stop.latitude);
+        const { stop, cx, cy } = labeledStops[hovered];
         const pos = getTooltipPos(cx, cy);
         const onRight = cx <= VW * 0.55;
         return (

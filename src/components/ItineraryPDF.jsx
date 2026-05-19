@@ -6,6 +6,7 @@ import {
   Document, Page, Text, View, Image, StyleSheet,
   Svg, Polygon, Path, Rect, Circle, G,
 } from '@react-pdf/renderer';
+import { buildRouteMapLayout } from '../utils/routeMapLayout';
 
 // ── Colour tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -1059,80 +1060,42 @@ function DynamicRouteSvgMap({ stops = [] }) {
   if (valid.length < 2) return null;
 
   const SW = PAGE_W - 96;
-  const SH = Math.round(SW * 0.50);
-  const MARGIN = 28;
-  const iW = SW - MARGIN * 2;
-  const iH = SH - MARGIN * 2;
+  const SH = Math.round(SW * 0.62);
 
-  const lats = valid.map(s => s.latitude);
-  const lngs = valid.map(s => s.longitude);
-  const latMin = Math.min(...lats), latMax = Math.max(...lats);
-  const lngMin = Math.min(...lngs), lngMax = Math.max(...lngs);
-  const latSpan = latMax - latMin || 1;
-  const lngSpan = lngMax - lngMin || 1;
-  const PAD = 0.25;
-  const X0 = lngMin - lngSpan * PAD;
-  const X1 = lngMax + lngSpan * PAD;
-  const Y0 = latMin - latSpan * PAD;
-  const Y1 = latMax + latSpan * PAD;
-
-  // proj(lon, lat) → [x, y] — matching _pdfCatmull signature
-  const proj = (lon, lat) => [
-    MARGIN + ((lon - X0) / (X1 - X0)) * iW,
-    MARGIN + (1 - (lat - Y0) / (Y1 - Y0)) * iH,
-  ];
-
-  const pts    = valid.map(s => proj(s.longitude, s.latitude));
-  const routeD = _pdfCatmull(valid.map(s => [s.longitude, s.latitude]), proj);
+  const layout = buildRouteMapLayout(valid, SW, SH, { pad: 0.25, margin: 28 });
+  if (!layout) return null;
+  const { routePathD, labeledStops } = layout;
 
   return (
     <Svg width={SW} height={SH} viewBox={`0 0 ${SW} ${SH}`}>
-      {/* Neutral editorial background — no fake geography */}
+      {/* Neutral editorial background */}
       <Rect x="0" y="0" width={SW} height={SH} fill="#F4F1E8" />
-      {/* Route: depth shadow + teal dashed (editorial schematic style) */}
-      <Path d={routeD} fill="none" stroke="#1C1A16" strokeWidth="3" opacity={0.06} strokeLinecap="round" />
-      <Path d={routeD} fill="none" stroke="#C9A96E" strokeWidth="2.5" strokeOpacity="0.30" strokeLinecap="round" />
-      <Path d={routeD} fill="none" stroke="#1B6B65" strokeWidth="1.4" strokeDasharray="7,4" strokeLinecap="round" />
-      {/* Stop markers — type-aware, matching Morocco-style */}
-      {pts.map((p, i) => {
-        const [cx, cy] = p;
-        const stop = valid[i];
-        const isMajor = stop.type === 'major' || (stop.type == null && (i === 0 || i === valid.length - 1));
-        const r = isMajor ? 6 : 4.5;
-        return (
-          <G key={`m${i}`}>
-            <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r + 2.5} fill="#FFFFFF" fillOpacity="0.85" />
-            <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r}
-              fill={isMajor ? '#F2E4CB' : '#C8D9D5'}
-              stroke={isMajor ? '#C9A96E' : '#1B6B65'}
-              strokeWidth={isMajor ? 1.5 : 1.2}
-            />
-            {isMajor && <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r + 5} fill="none" stroke="#C9A96E" strokeWidth="0.8" strokeOpacity="0.4" />}
-          </G>
-        );
-      })}
-      {/* Labels — rendered after markers so they sit on top */}
-      {pts.map((p, i) => {
-        const [cx, cy] = p;
-        const stop = valid[i];
-        const isMajor = stop.type === 'major' || (stop.type == null && (i === 0 || i === valid.length - 1));
-        const r = isMajor ? 6 : 4.5;
-        const labelRight = cx <= SW * 0.55;
-        const tx = labelRight ? cx + r + 5 : cx - r - 5;
-        const anchor = labelRight ? 'start' : 'end';
-        const fs = isMajor ? 10 : 8.5;
-        return (
-          <Text key={`l${i}`}
-            x={tx.toFixed(1)} y={(cy + 3.5).toFixed(1)}
-            textAnchor={anchor}
-            fontFamily="Helvetica-Bold"
-            fontSize={fs}
-            fill="#1C1A16"
-          >
-            {stop.name}
-          </Text>
-        );
-      })}
+      {/* Route: depth shadow + teal dashed */}
+      <Path d={routePathD} fill="none" stroke="#1C1A16" strokeWidth="3" opacity={0.06} strokeLinecap="round" />
+      <Path d={routePathD} fill="none" stroke="#C9A96E" strokeWidth="2.5" strokeOpacity="0.30" strokeLinecap="round" />
+      <Path d={routePathD} fill="none" stroke="#1B6B65" strokeWidth="1.4" strokeDasharray="7,4" strokeLinecap="round" />
+      {/* Stop markers */}
+      {labeledStops.map(({ tier, cfg, cx, cy, r }, i) => (
+        <G key={`m${i}`}>
+          <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r + 2.5} fill="#FFFFFF" fillOpacity="0.85" />
+          <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r}
+            fill={cfg.fill} stroke={cfg.edge} strokeWidth={cfg.sw}
+          />
+          {tier === 1 && <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r + 5} fill="none" stroke={cfg.edge} strokeWidth="0.8" strokeOpacity="0.4" />}
+        </G>
+      ))}
+      {/* Labels — collision-resolved positions, rendered after markers */}
+      {labeledStops.map(({ stop, tier, labelAnchor, labelX, labelY, fs }, i) => (
+        <Text key={`l${i}`}
+          x={labelX.toFixed(1)} y={labelY.toFixed(1)}
+          textAnchor={labelAnchor}
+          fontFamily={tier === 1 ? 'Helvetica-Bold' : 'Helvetica'}
+          fontSize={fs}
+          fill="#1C1A16"
+        >
+          {stop.name}
+        </Text>
+      ))}
     </Svg>
   );
 }
