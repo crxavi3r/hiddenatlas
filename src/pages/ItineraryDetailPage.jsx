@@ -19,7 +19,7 @@ import AmericanWest8DaysRouteMap from '../components/AmericanWest8DaysRouteMap';
 import TuscanyRouteMap from '../components/TuscanyRouteMap';
 import CroatiaRouteMap from '../components/CroatiaRouteMap';
 import NorthernEnglandRouteMap from '../components/NorthernEnglandRouteMap';
-import DynamicRouteMap from '../components/DynamicRouteMap';
+import InteractiveRouteMap from '../components/InteractiveRouteMap';
 
 // Always-on route maps for curated/static itineraries (no CMS toggle required)
 const ROUTE_MAP_COMPONENTS = {
@@ -1326,7 +1326,7 @@ export default function ItineraryDetailPage() {
                   {DbRouteMapComponent ? (
                     <DbRouteMapComponent isUnlocked={hasAccess} onDaySelect={scrollToDay} />
                   ) : hasValidStops ? (
-                    <DynamicRouteMap stops={validStops} onDaySelect={scrollToDay} />
+                    <InteractiveRouteMap stops={validStops} onDaySelect={scrollToDay} isUnlocked={hasAccess || !isPremium} />
                   ) : (
                     <div>
                       <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #E8E3DA' }}>
