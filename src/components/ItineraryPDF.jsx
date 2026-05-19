@@ -1511,7 +1511,7 @@ function CTAPage({ itinerary }) {
 // per-day location breakdown using day.route || day.title.
 
 function RouteOverviewPage({ itinerary }) {
-  const { title, country, routeOverview, duration, days = [] } = itinerary;
+  const { title, country, routeOverview, duration, days = [], routeMapImageUrl, routeMapAlt } = itinerary;
   const entry = PDF_ROUTE_MAPS[itinerary.id];
 
   // Build deduplicated stops strip
@@ -1528,7 +1528,7 @@ function RouteOverviewPage({ itinerary }) {
     <Page size="A4" style={{ backgroundColor: C.stone }}>
       <RunHeader country={country} title={title} />
 
-      {/* Editorial header — mirrors DestinationSvgMapPage */}
+      {/* Editorial header */}
       <View style={{
         paddingHorizontal: 48, paddingTop: 16, paddingBottom: 14,
         flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between',
@@ -1552,22 +1552,34 @@ function RouteOverviewPage({ itinerary }) {
         ) : null}
       </View>
 
-      {/* SVG map or text fallback */}
+      {/* Priority 1: registered SVG component */}
       {entry ? (
         <View style={{ alignItems: 'center', backgroundColor: C.stone }}>
           <entry.Component />
         </View>
-      ) : (
-        routeOverview ? (
-          <View style={{ paddingHorizontal: 48, paddingTop: 28, paddingBottom: 28 }}>
-            <View style={{ padding: 18, backgroundColor: C.cream, borderLeftWidth: 2.5, borderLeftColor: C.teal }}>
-              <Text style={{ fontFamily: 'Times-Roman', fontSize: 12, color: C.charcoal, lineHeight: 1.75 }}>
-                {routeOverview}
-              </Text>
-            </View>
+      ) : routeMapImageUrl ? (
+        /* Priority 2: static image from content.routeMap.imageUrl */
+        <View style={{ paddingHorizontal: 32, paddingTop: 20, paddingBottom: 8, alignItems: 'center' }}>
+          <Image
+            src={routeMapImageUrl}
+            style={{ width: PAGE_W - 64, maxHeight: 460, objectFit: 'contain' }}
+          />
+          {routeMapAlt ? (
+            <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: C.muted, marginTop: 6, textAlign: 'center' }}>
+              {routeMapAlt}
+            </Text>
+          ) : null}
+        </View>
+      ) : routeOverview ? (
+        /* Priority 3: plain text fallback */
+        <View style={{ paddingHorizontal: 48, paddingTop: 28, paddingBottom: 28 }}>
+          <View style={{ padding: 18, backgroundColor: C.cream, borderLeftWidth: 2.5, borderLeftColor: C.teal }}>
+            <Text style={{ fontFamily: 'Times-Roman', fontSize: 12, color: C.charcoal, lineHeight: 1.75 }}>
+              {routeOverview}
+            </Text>
           </View>
-        ) : null
-      )}
+        </View>
+      ) : null}
 
       {/* Compact stops strip */}
       {displayStops.length > 0 && (
@@ -1661,28 +1673,48 @@ export default function ItineraryPDF({ itinerary }) {
 
   // pdfConfig toggles.
   // showRouteMap adds a RouteOverviewPage (SVG map if PDF_ROUTE_MAPS has an entry,
-  // otherwise routeOverview text callout) AFTER RouteMapPage and BEFORE Day 1.
-  // When showRouteMap is true, DestinationSvgMapPage is suppressed to avoid duplication.
+  // image if routeMapImageUrl set, otherwise routeOverview text callout) AFTER
+  // RouteMapPage and BEFORE Day 1.
+  // IMPORTANT: RouteOverviewPage is only added when it has content — never create
+  // an empty Route Map page.
   // showHotels adds an AccommodationPage after the day pages.
   // Both default to false so legacy PDFs don't gain unexpected pages.
-  const showRouteMap = itinerary.showRouteMap === true;
-  const showHotels   = itinerary.showHotels   === true;
+  const showRouteMap     = itinerary.showRouteMap === true;
+  const showHotels       = itinerary.showHotels   === true;
+  const routeMapImageUrl = itinerary.routeMapImageUrl || null;
 
   // Conditions mirror each optional component's own early-return guard so we
   // never invoke a component that would return null.
   const mapImageUrl   = itinerary.mapImage || null;
   const hasMapPng     = !!(mapImageUrl && !mapImageUrl.endsWith('.svg'));
+  // hasSvgMap: only show DestinationSvgMapPage when RouteOverviewPage won't cover it
   const hasSvgMap     = !mapImageUrl && !!PDF_ROUTE_MAPS[itinerary.id] && !showRouteMap;
   const hasTransport  = !!itinerary.transport;
   const hasClosing    = !!(itinerary.whySpecial || itinerary.routeOverview);
   const hasHotels     = showHotels && (itinerary.accommodation || []).some(h => h.name);
+
+  // Only include RouteOverviewPage when there is something to render.
+  // No map SVG registered AND no image URL AND no routeOverview text = skip the page.
+  const hasRouteMapContent = !!PDF_ROUTE_MAPS[itinerary.id] || !!routeMapImageUrl || !!itinerary.routeOverview;
+  const showRouteOverview  = showRouteMap && hasRouteMapContent;
+
+  console.log('[ItineraryPDF]', {
+    slug:              itinerary.id,
+    showRouteMap,
+    hasRouteMapContent,
+    showRouteOverview,
+    routeMapType: PDF_ROUTE_MAPS[itinerary.id] ? 'svgComponent'
+                : routeMapImageUrl             ? 'image'
+                : itinerary.routeOverview      ? 'text'
+                : 'none',
+  });
 
   // Build an explicit array so the Document receives only valid Page elements —
   // no nulls, no false values, no conditional JSX that could resolve to nothing.
   const pages = [
     <CoverPage    key="cover"          itinerary={itinerary} />,
     <RouteMapPage key="route-overview" itinerary={itinerary} />,
-    ...(showRouteMap ? [<RouteOverviewPage key="route-detail" itinerary={itinerary} />] : []),
+    ...(showRouteOverview ? [<RouteOverviewPage key="route-detail" itinerary={itinerary} />] : []),
     ...(hasMapPng    ? [<DestinationMapPage    key="map"       itinerary={itinerary} />] : []),
     ...(hasSvgMap    ? [<DestinationSvgMapPage key="svg-map"   itinerary={itinerary} />] : []),
     ...days.map((day, i) => <DayPage key={`day-${i}`} day={day} index={i} itinerary={itinerary} />),

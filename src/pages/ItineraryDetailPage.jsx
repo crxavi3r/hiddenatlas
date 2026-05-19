@@ -367,6 +367,8 @@ function normalizeDbItinerary(row) {
     isCollection:       row.isCollection ?? false,
     variant:            row.variant      || null,
     showRouteMapOnSite: content?.routeMap?.showOnSite === true,
+    routeMapImageUrl:   content?.routeMap?.imageUrl   || null,
+    routeMapAlt:        content?.routeMap?.alt         || null,
   };
 }
 
@@ -1257,8 +1259,9 @@ export default function ItineraryDetailPage() {
               </div>
             </section>
 
-            {/* DB-controlled Route Map — shown when content.routeMap.showOnSite === true */}
-            {itinerary.showRouteMapOnSite && DB_ROUTE_MAP_COMPONENTS[itinerary.id] && (() => {
+            {/* DB-controlled Route Map — shown when content.routeMap.showOnSite === true
+                Renders a registered SVG component (priority) or a static image URL fallback. */}
+            {itinerary.showRouteMapOnSite && (DB_ROUTE_MAP_COMPONENTS[itinerary.id] || itinerary.routeMapImageUrl) && (() => {
               const DbRouteMapComponent = DB_ROUTE_MAP_COMPONENTS[itinerary.id];
               return (
                 <section style={{ marginBottom: '60px' }}>
@@ -1268,13 +1271,23 @@ export default function ItineraryDetailPage() {
                   <p style={{ fontSize: '13px', color: '#8C8070', letterSpacing: '0.3px', marginBottom: '24px' }}>
                     {itinerary.subtitle}
                   </p>
-                  <DbRouteMapComponent
-                    isUnlocked={hasAccess}
-                    onDaySelect={dayNum => {
-                      const el = document.getElementById(`day-${dayNum}`);
-                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }}
-                  />
+                  {DbRouteMapComponent ? (
+                    <DbRouteMapComponent
+                      isUnlocked={hasAccess}
+                      onDaySelect={dayNum => {
+                        const el = document.getElementById(`day-${dayNum}`);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }}
+                    />
+                  ) : (
+                    <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #E8E3DA' }}>
+                      <img
+                        src={itinerary.routeMapImageUrl}
+                        alt={itinerary.routeMapAlt || `${itinerary.title} route map`}
+                        style={{ width: '100%', display: 'block', objectFit: 'contain' }}
+                      />
+                    </div>
+                  )}
                 </section>
               );
             })()}

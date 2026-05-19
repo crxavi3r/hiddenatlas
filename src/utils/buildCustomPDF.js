@@ -94,6 +94,7 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
   const tripFacts = content.tripFacts || {};
   const pdfConfig = content.pdfConfig || {};
   const sections  = content.sections  || {};
+  const routeMap  = content.routeMap  || {};
 
   const durationStr = itinerary.durationDays
     ? `${itinerary.durationDays} Day${itinerary.durationDays !== 1 ? 's' : ''}`
@@ -224,7 +225,12 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
     routeOverview: summary.routeOverview || content.routeOverview || '',
     transport,
     accommodation: sections.hotels || [],
-    mapImage:     null,
+    mapImage:        null,
+    // Route map image URL (stored in content.routeMap.imageUrl by the CMS).
+    // Passed as absolute URL for @react-pdf to fetch directly — no base64 needed
+    // since Vercel Blob CDN URLs are publicly accessible.
+    routeMapImageUrl: toAbsoluteUrl(routeMap.imageUrl || null),
+    routeMapAlt:      routeMap.alt || '',
     days,
     pdfVersion,
     pdfDate,

@@ -65,7 +65,7 @@ const EMPTY_CONTENT = {
   tripFacts: { groupSize: '', difficulty: 'Moderate', bestFor: [], category: '' },
   days:      [],
   sections:  { hotels: [], practicalNotes: '', faq: [] },
-  routeMap:  { showOnSite: false },
+  routeMap:  { showOnSite: false, imageUrl: '', alt: '' },
   pdfConfig: { showRouteMap: false, showHotels: false },
   seo:       { metaTitle: '', metaDescription: '' },
 };
@@ -3628,25 +3628,102 @@ function SectionsTab({ c, setContent }) {
         />
       </div>
 
-      <div style={sectionCard}>
-        <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '4px' }}>Route Map</p>
-        <p style={{ fontSize: '11.5px', color: '#8C8070', marginBottom: '18px' }}>
-          Controls where the visual route map appears. Requires a map component registered for this itinerary slug.
-        </p>
-        {[
-          { path: 'routeMap.showOnSite',     label: 'Show route map on itinerary page' },
-          { path: 'pdfConfig.showRouteMap',  label: 'Include route map in PDF' },
-        ].map(({ path, label }) => (
-          <label key={path} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', cursor: 'pointer' }}>
-            <input type="checkbox"
-              checked={c(path) === true}
-              onChange={e => setContent(path, e.target.checked)}
-              style={{ width: '15px', height: '15px', accentColor: '#1B6B65' }}
-            />
-            <span style={{ fontSize: '13.5px', color: '#4A433A' }}>{label}</span>
-          </label>
-        ))}
-      </div>
+      {(() => {
+        // Slugs that have a hardcoded SVG map component registered for the site/PDF
+        const COMPONENT_MAP_SLUGS = new Set([
+          'tuscany-wine-roads-in-7-days',
+          'morocco-motorcycle-expedition',
+          'philippines-island-journey',
+          'japan-grand-cultural-journey',
+          'california-american-west',
+          'california-american-west-16-days',
+          'california-american-west-12-days',
+          'california-american-west-8-days',
+        ]);
+        const hasComponent = COMPONENT_MAP_SLUGS.has(form.slug);
+        const hasImage = !!(c('routeMap.imageUrl') || '').trim();
+        const mapAvailable = hasComponent || hasImage;
+        const siteEnabled = c('routeMap.showOnSite') === true;
+        const pdfEnabled  = c('pdfConfig.showRouteMap') === true;
+        const showWarning = (siteEnabled || pdfEnabled) && !mapAvailable;
+
+        return (
+          <div style={sectionCard}>
+            <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '4px' }}>Route Map</p>
+
+            {/* Availability status */}
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '4px 10px', borderRadius: '6px', marginBottom: '16px',
+              background: mapAvailable ? '#EFF6F5' : '#FFF8E1',
+              border: `1px solid ${mapAvailable ? '#B5D8D5' : '#F5D060'}`,
+            }}>
+              <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: mapAvailable ? '#1B6B65' : '#B8860B' }} />
+              <span style={{ fontSize: '11.5px', fontWeight: '600', color: mapAvailable ? '#1B6B65' : '#B8860B' }}>
+                {mapAvailable
+                  ? (hasComponent ? 'Map component registered' : 'Route map image configured')
+                  : 'No route map configured'}
+              </span>
+            </div>
+
+            {!mapAvailable && (
+              <p style={{ fontSize: '11.5px', color: '#8C8070', marginBottom: '16px', lineHeight: '1.5' }}>
+                Add a route map image URL below, or register an SVG map component for this slug in the codebase.
+              </p>
+            )}
+
+            {/* Image URL + alt */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={labelStyle}>Route map image URL</label>
+              <input
+                value={c('routeMap.imageUrl') || ''}
+                style={inputStyle}
+                placeholder="https://... (public image URL — used on site and in PDF)"
+                onChange={e => setContent('routeMap.imageUrl', e.target.value)}
+              />
+            </div>
+            {(c('routeMap.imageUrl') || '').trim() && (
+              <div style={{ marginBottom: '16px' }}>
+                <label style={labelStyle}>Alt text</label>
+                <input
+                  value={c('routeMap.alt') || ''}
+                  style={inputStyle}
+                  placeholder="e.g. Croatia by Sea route map"
+                  onChange={e => setContent('routeMap.alt', e.target.value)}
+                />
+              </div>
+            )}
+
+            {/* Checkboxes */}
+            {[
+              { path: 'routeMap.showOnSite',    label: 'Show route map on itinerary page' },
+              { path: 'pdfConfig.showRouteMap', label: 'Include route map in PDF' },
+            ].map(({ path, label }) => (
+              <label key={path} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', cursor: 'pointer' }}>
+                <input type="checkbox"
+                  checked={c(path) === true}
+                  onChange={e => setContent(path, e.target.checked)}
+                  style={{ width: '15px', height: '15px', accentColor: '#1B6B65' }}
+                />
+                <span style={{ fontSize: '13.5px', color: '#4A433A' }}>{label}</span>
+              </label>
+            ))}
+
+            {/* Warning when enabled but no map */}
+            {showWarning && (
+              <div style={{
+                marginTop: '8px', padding: '10px 14px', borderRadius: '6px',
+                background: '#FFF8E1', border: '1px solid #F5D060',
+              }}>
+                <p style={{ fontSize: '12px', color: '#7A5C00', lineHeight: '1.5' }}>
+                  Route map visibility is enabled, but no map is configured for this itinerary.
+                  The map will not appear on the public page or in the PDF until a route map image URL is added above.
+                </p>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <div style={sectionCard}>
         <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '18px' }}>PDF Sections</p>
