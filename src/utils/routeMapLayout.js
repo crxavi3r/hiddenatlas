@@ -26,13 +26,22 @@ export function resolveStopTier(stop, i, n) {
  * @param {number}   canvasW  SVG canvas width in user units
  * @param {number}   canvasH  SVG canvas height in user units
  * @param {object}   [opts]
- * @param {number}   [opts.pad=0.25]    Extra geographic padding (fraction of lat/lng span)
- * @param {number}   [opts.margin=0]    Fixed pixel inset inside the SVG canvas
+ * @param {number}   [opts.pad=0.25]              Extra geographic padding (fraction of lat/lng span)
+ * @param {number}   [opts.margin=0]              Fixed pixel inset inside the SVG canvas
+ * @param {object}   [opts.tiers=null]            Override tier config (defaults to ROUTE_MAP_TIER)
+ * @param {boolean}  [opts.prioritizeMajor=false] Place tier-1 labels before tier-2 (PDF mode)
  * @returns {{ proj, pts, fractions, routePathD, labeledStops } | null}
  */
-export function buildRouteMapLayout(stops, canvasW, canvasH, { pad = 0.25, margin = 0 } = {}) {
+export function buildRouteMapLayout(stops, canvasW, canvasH, {
+  pad = 0.25,
+  margin = 0,
+  tiers = null,
+  prioritizeMajor = false,
+} = {}) {
   const n = stops.length;
   if (n < 2) return null;
+
+  const TIER = tiers || ROUTE_MAP_TIER;
 
   // ── Projection ───────────────────────────────────────────────────────────
   const lats    = stops.map(s => s.latitude);
@@ -82,9 +91,8 @@ export function buildRouteMapLayout(stops, canvasW, canvasH, { pad = 0.25, margi
   const fractions = dists.map(d => d / totalDist);
 
   // ── Label collision avoidance (greedy) ───────────────────────────────────
-  // Approximate text metrics
-  const CHAR_W = 0.60;   // char width as fraction of font size
-  const LINE_H = 1.40;   // line height as fraction of font size
+  const CHAR_W = 0.58;   // Helvetica char width as fraction of font size
+  const LINE_H = 1.30;   // line height as fraction of font size
   const GAP    = 5;      // px gap between marker edge and label start
   const SLOP   = 2;      // px tolerance added to each side when testing overlap
 
@@ -96,36 +104,40 @@ export function buildRouteMapLayout(stops, canvasW, canvasH, { pad = 0.25, margi
   }
 
   function makeLabelBox(cx, cy, side, yOff, name, fs, r) {
-    const textW   = Math.min(name.length * fs * CHAR_W + 8, 155);
+    const textW   = Math.min(name.length * fs * CHAR_W + 6, 140);
     const textH   = fs * LINE_H;
     const anchorX = side === 'right' ? cx + r + GAP : cx - r - GAP;
     const x1      = side === 'right' ? anchorX           : anchorX - textW;
     const x2      = side === 'right' ? anchorX + textW   : anchorX;
-    return { x1, y1: cy + yOff - textH * 0.85, x2, y2: cy + yOff + textH * 0.30 };
+    return { x1, y1: cy + yOff - textH * 0.82, x2, y2: cy + yOff + textH * 0.28 };
   }
 
-  const labeledStops = stops.map((stop, i) => {
-    const [cx, cy] = pts[i];
-    const tier     = resolveStopTier(stop, i, n);
-    const cfg      = ROUTE_MAP_TIER[tier];
+  // Also reserve a box for the marker circle itself so labels dodge markers
+  function markerBox(cx, cy, r) {
+    return { x1: cx - r - SLOP, y1: cy - r - SLOP, x2: cx + r + SLOP, y2: cy + r + SLOP };
+  }
+
+  function placeLabel(stopObj, idx) {
+    const [cx, cy] = pts[idx];
+    const tierNum  = resolveStopTier(stopObj, idx, n);
+    const cfg      = TIER[tierNum];
     const r        = cfg.r;
     const fs       = cfg.lFs;
 
-    // Preferred placement: right when stop is in the left 55% of the canvas
     const prefRight = cx <= canvasW * 0.55;
-    const STEP      = fs * 1.85; // vertical nudge increment
+    const STEP      = fs * 1.65;
 
-    // Generate candidates: for each y-offset, try preferred side then other side.
-    // This keeps the preferred side strongly preferred while allowing vertical escape.
     const candidates = [];
-    for (const yOff of [0, -STEP, STEP, -STEP * 2, STEP * 2, -STEP * 3, STEP * 3]) {
+    for (const yOff of [0, -STEP, STEP, -STEP * 2, STEP * 2, -STEP * 3, STEP * 3, -STEP * 4, STEP * 4]) {
       candidates.push({ side: prefRight ? 'right' : 'left',  yOff });
       candidates.push({ side: prefRight ? 'left'  : 'right', yOff });
     }
 
     let chosen = null;
     for (const c of candidates) {
-      const box = makeLabelBox(cx, cy, c.side, c.yOff, stop.name, fs, r);
+      const box = makeLabelBox(cx, cy, c.side, c.yOff, stopObj.name, fs, r);
+      // Check clipping: label must stay within canvas (with small margin)
+      if (box.x1 < 2 || box.x2 > canvasW - 2 || box.y1 < 2 || box.y2 > canvasH - 2) continue;
       if (!placedBoxes.some(p => boxesOverlap(p, box))) {
         placedBoxes.push(box);
         chosen = c;
@@ -133,20 +145,42 @@ export function buildRouteMapLayout(stops, canvasW, canvasH, { pad = 0.25, margi
       }
     }
     if (!chosen) {
-      // Last resort: use first candidate regardless of collision
+      // Last resort: first candidate ignoring in-bounds and collision
       chosen = candidates[0];
-      placedBoxes.push(makeLabelBox(cx, cy, chosen.side, chosen.yOff, stop.name, fs, r));
+      placedBoxes.push(makeLabelBox(cx, cy, chosen.side, chosen.yOff, stopObj.name, fs, r));
     }
 
     return {
-      stop, tier, cfg,
-      cx, cy, r,
+      stop: stopObj,
+      tier: tierNum,
+      cfg,
+      cx, cy,
+      r,
       labelAnchor: chosen.side === 'right' ? 'start' : 'end',
       labelX:      chosen.side === 'right' ? cx + r + GAP : cx - r - GAP,
       labelY:      cy + chosen.yOff,
       fs,
     };
+  }
+
+  // Pre-register all marker boxes so labels don't overlap any marker
+  stops.forEach((stop, idx) => {
+    const tierNum = resolveStopTier(stop, idx, n);
+    placedBoxes.push(markerBox(pts[idx][0], pts[idx][1], TIER[tierNum].r));
   });
+
+  let labeledStops;
+  if (prioritizeMajor) {
+    // Two-pass: major stops first so they get best placement
+    const majorIndices = stops.map((s, i) => ({ s, i })).filter(({ s, i }) => resolveStopTier(s, i, n) === 1);
+    const minorIndices = stops.map((s, i) => ({ s, i })).filter(({ s, i }) => resolveStopTier(s, i, n) !== 1);
+    const results = new Array(n);
+    for (const { s, i } of majorIndices) results[i] = placeLabel(s, i);
+    for (const { s, i } of minorIndices) results[i] = placeLabel(s, i);
+    labeledStops = results;
+  } else {
+    labeledStops = stops.map((stop, i) => placeLabel(stop, i));
+  }
 
   return { proj, pts, fractions, routePathD, labeledStops };
 }

@@ -1052,17 +1052,24 @@ function NorthernEnglandRouteSvgMap() {
 
 // ── Dynamic route SVG map — built at render time from structured stops data ────
 //
-// Used when no hardcoded PDF_ROUTE_MAPS entry exists for the itinerary.
-// Projects lat/lng stops to pixel coordinates (equirectangular), draws a route
-// line + circular markers. No SVG text labels — the stops strip below handles that.
+// PDF-specific tier config: smaller markers and fonts than web defaults
+const PDF_TIER = {
+  1: { r: 5,   rActive: 5,   sw: 1.8, fill: '#F2E4CB', edge: '#C9A96E', halo: '#C9A96E', lFs: 9,  dFs: 6 },
+  2: { r: 3.5, rActive: 3.5, sw: 1.2, fill: '#C8D9D5', edge: '#2A5248', halo: '#2A5248', lFs: 7,  dFs: 5 },
+};
+
+// Projects lat/lng stops to pixel coordinates, draws a route line + markers + labels.
+// Uses buildRouteMapLayout with PDF-specific tiers and tighter bounds.
 function DynamicRouteSvgMap({ stops = [] }) {
   const valid = (stops || []).filter(s => s.latitude != null && s.longitude != null);
   if (valid.length < 2) return null;
 
-  const SW = PAGE_W - 96;
-  const SH = Math.round(SW * 0.62);
+  const SW = PAGE_W - 80;
+  const SH = Math.round(SW * 0.67);
 
-  const layout = buildRouteMapLayout(valid, SW, SH, { pad: 0.25, margin: 28 });
+  const layout = buildRouteMapLayout(valid, SW, SH, {
+    pad: 0.12, margin: 18, tiers: PDF_TIER, prioritizeMajor: true,
+  });
   if (!layout) return null;
   const { routePathD, labeledStops } = layout;
 
@@ -1070,21 +1077,37 @@ function DynamicRouteSvgMap({ stops = [] }) {
     <Svg width={SW} height={SH} viewBox={`0 0 ${SW} ${SH}`}>
       {/* Neutral editorial background */}
       <Rect x="0" y="0" width={SW} height={SH} fill="#F4F1E8" />
-      {/* Route: depth shadow + teal dashed */}
-      <Path d={routePathD} fill="none" stroke="#1C1A16" strokeWidth="3" opacity={0.06} strokeLinecap="round" />
-      <Path d={routePathD} fill="none" stroke="#C9A96E" strokeWidth="2.5" strokeOpacity="0.30" strokeLinecap="round" />
-      <Path d={routePathD} fill="none" stroke="#1B6B65" strokeWidth="1.4" strokeDasharray="7,4" strokeLinecap="round" />
+      {/* Route: depth shadow + gold glow + teal dashed line */}
+      <Path d={routePathD} fill="none" stroke="#1C1A16" strokeWidth="2.5" opacity={0.06} strokeLinecap="round" />
+      <Path d={routePathD} fill="none" stroke="#C9A96E" strokeWidth="2" strokeOpacity="0.28" strokeLinecap="round" />
+      <Path d={routePathD} fill="none" stroke="#1B6B65" strokeWidth="1.2" strokeDasharray="6,3.5" strokeLinecap="round" />
       {/* Stop markers */}
       {labeledStops.map(({ tier, cfg, cx, cy, r }, i) => (
         <G key={`m${i}`}>
-          <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r + 2.5} fill="#FFFFFF" fillOpacity="0.85" />
+          <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r + 2} fill="#FFFFFF" fillOpacity="0.80" />
           <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r}
             fill={cfg.fill} stroke={cfg.edge} strokeWidth={cfg.sw}
           />
-          {tier === 1 && <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r + 5} fill="none" stroke={cfg.edge} strokeWidth="0.8" strokeOpacity="0.4" />}
+          {tier === 1 && (
+            <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r + 4} fill="none" stroke={cfg.edge} strokeWidth="0.7" strokeOpacity="0.35" />
+          )}
         </G>
       ))}
-      {/* Labels — collision-resolved positions, rendered after markers */}
+      {/* Label halos — white backing rendered before label text */}
+      {labeledStops.map(({ stop, tier, labelAnchor, labelX, labelY, fs }, i) => (
+        <Text key={`h${i}`}
+          x={labelX.toFixed(1)} y={labelY.toFixed(1)}
+          textAnchor={labelAnchor}
+          fontFamily={tier === 1 ? 'Helvetica-Bold' : 'Helvetica'}
+          fontSize={fs}
+          fill="#F4F1E8"
+          stroke="#F4F1E8"
+          strokeWidth="2.5"
+        >
+          {stop.name}
+        </Text>
+      ))}
+      {/* Labels — collision-resolved positions */}
       {labeledStops.map(({ stop, tier, labelAnchor, labelX, labelY, fs }, i) => (
         <Text key={`l${i}`}
           x={labelX.toFixed(1)} y={labelY.toFixed(1)}
@@ -1714,17 +1737,17 @@ function RouteOverviewPage({ itinerary }) {
   // Stops strip: prefer structured routeMapStops, fall back to parsing day titles
   let displayStops;
   if (routeStops.length > 0) {
-    displayStops = routeStops.slice(0, 10).map(s => s.name);
+    displayStops = routeStops.slice(0, 24).map(s => s.name);
   } else {
     const seen = new Set();
     displayStops = [];
     for (const d of days) {
       const city = (d.route || d.title || '').split(/[·–\-]/)[0].trim();
       if (city && !seen.has(city)) { seen.add(city); displayStops.push(city); }
-      if (displayStops.length >= 10) break;
+      if (displayStops.length >= 24) break;
     }
   }
-  const hasMore = routeStops.length > 10;
+  const hasMore = routeStops.length > 24;
 
   return (
     <Page size="A4" style={{ backgroundColor: C.stone }}>
@@ -1797,7 +1820,7 @@ function RouteOverviewPage({ itinerary }) {
           ))}
           {hasMore && (
             <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: C.muted, fontStyle: 'italic' }}>
-              +{routeStops.length - 10} more
+              +{routeStops.length - 24} more
             </Text>
           )}
         </View>
