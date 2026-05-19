@@ -92,6 +92,8 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
 
   const summary   = content.summary   || {};
   const tripFacts = content.tripFacts || {};
+  const pdfConfig = content.pdfConfig || {};
+  const sections  = content.sections  || {};
 
   const durationStr = itinerary.durationDays
     ? `${itinerary.durationDays} Day${itinerary.durationDays !== 1 ? 's' : ''}`
@@ -221,11 +223,13 @@ export async function buildCustomPDFBlob(itinerary, dbAssets = [], resolvedImage
     whySpecial:   summary.whySpecial   || content.whySpecial   || '',
     routeOverview: summary.routeOverview || content.routeOverview || '',
     transport,
-    accommodation: [],
+    accommodation: sections.hotels || [],
     mapImage:     null,
     days,
     pdfVersion,
     pdfDate,
+    showRouteMap: pdfConfig.showRouteMap !== false,
+    showHotels:   pdfConfig.showHotels   !== false,
   };
 
   // ── Render PDF ──────────────────────────────────────────────────────────────

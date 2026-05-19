@@ -1401,6 +1401,58 @@ function CTAPage({ itinerary }) {
   );
 }
 
+// ── Accommodation page ─────────────────────────────────────────────────────────
+//
+// Rendered when pdfConfig.showHotels is true and the itinerary has at least
+// one hotel with a name in content.sections.hotels.
+
+function AccommodationPage({ itinerary }) {
+  const { title, country, accommodation = [] } = itinerary;
+  const hotels = accommodation.filter(h => h.name);
+  if (hotels.length === 0) return null;
+
+  return (
+    <Page size="A4" style={{ backgroundColor: C.stone }}>
+      <RunHeader country={country} title={title} />
+
+      <View style={{ paddingHorizontal: 48, paddingTop: 36, paddingBottom: 40 }}>
+        <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 2.5, color: C.teal, marginBottom: 14 }}>
+          WHERE YOU WILL STAY
+        </Text>
+        <View style={{ width: 32, height: 1.5, backgroundColor: C.gold, marginBottom: 28 }} />
+
+        {hotels.map((hotel, i) => (
+          <View key={i} wrap={false} style={{
+            marginBottom: i < hotels.length - 1 ? 24 : 0,
+            paddingBottom: i < hotels.length - 1 ? 24 : 0,
+            borderBottomWidth: i < hotels.length - 1 ? 0.5 : 0,
+            borderBottomColor: C.border,
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: hotel.note ? 8 : 0 }}>
+              <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: C.gold, marginRight: 10 }} />
+              <Text style={{ fontFamily: 'Times-Bold', fontSize: 14, color: C.charcoal, flex: 1 }}>
+                {hotel.name}
+              </Text>
+              {hotel.type ? (
+                <Text style={{ fontFamily: 'Helvetica', fontSize: 8, color: C.muted, marginLeft: 8 }}>
+                  {hotel.type}
+                </Text>
+              ) : null}
+            </View>
+            {hotel.note ? (
+              <Text style={{ fontFamily: 'Times-Roman', fontSize: 11, color: C.muted, lineHeight: 1.7, marginLeft: 15 }}>
+                {hotel.note}
+              </Text>
+            ) : null}
+          </View>
+        ))}
+      </View>
+
+      <Text style={s.pageNum} render={({ pageNumber }) => String(pageNumber)} fixed />
+    </Page>
+  );
+}
+
 // ── Main document ─────────────────────────────────────────────────────────────
 //
 // @react-pdf/renderer v4 calls each component function and then processes its
@@ -1410,6 +1462,10 @@ function CTAPage({ itinerary }) {
 export default function ItineraryPDF({ itinerary }) {
   const { days = [] } = itinerary;
 
+  // pdfConfig toggles — default true so existing PDFs are unaffected.
+  const showRouteMap = itinerary.showRouteMap !== false;
+  const showHotels   = itinerary.showHotels   !== false;
+
   // Conditions mirror each optional component's own early-return guard so we
   // never invoke a component that would return null.
   const mapImageUrl   = itinerary.mapImage || null;
@@ -1417,15 +1473,17 @@ export default function ItineraryPDF({ itinerary }) {
   const hasSvgMap     = !mapImageUrl && !!PDF_ROUTE_MAPS[itinerary.id];
   const hasTransport  = !!itinerary.transport;
   const hasClosing    = !!(itinerary.whySpecial || itinerary.routeOverview);
+  const hasHotels     = showHotels && (itinerary.accommodation || []).some(h => h.name);
 
   // Build an explicit array so the Document receives only valid Page elements —
   // no nulls, no false values, no conditional JSX that could resolve to nothing.
   const pages = [
     <CoverPage    key="cover"          itinerary={itinerary} />,
-    <RouteMapPage key="route-overview" itinerary={itinerary} />,
+    ...(showRouteMap ? [<RouteMapPage key="route-overview" itinerary={itinerary} />] : []),
     ...(hasMapPng    ? [<DestinationMapPage    key="map"       itinerary={itinerary} />] : []),
     ...(hasSvgMap    ? [<DestinationSvgMapPage key="svg-map"   itinerary={itinerary} />] : []),
     ...days.map((day, i) => <DayPage key={`day-${i}`} day={day} index={i} itinerary={itinerary} />),
+    ...(hasHotels    ? [<AccommodationPage key="accommodation" itinerary={itinerary} />] : []),
     ...(hasTransport ? [<TransportPage key="transport"          itinerary={itinerary} />] : []),
     ...(hasClosing   ? [<ClosingPage   key="closing"            itinerary={itinerary} />] : []),
     <CTAPage key="cta" itinerary={itinerary} />,
