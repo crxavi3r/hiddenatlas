@@ -365,8 +365,31 @@ function FAQEditor({ faq = [], onChange }) {
 const ASSET_TYPES = ['hero', 'gallery', 'day', 'research', 'manual'];
 const ASSET_TYPE_LABELS = { hero: 'Hero', gallery: 'Gallery', day: 'Day Images', research: 'Research', ai_suggested: 'AI Suggested', manual: 'Manual' };
 
+function fmtBytes(n) {
+  if (n == null) return null;
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  if (n >= 1024)        return `${Math.round(n / 1024)} KB`;
+  return `${n} B`;
+}
+
+function SizeBadge({ sizeBytes }) {
+  if (sizeBytes == null) return null;
+  const mb = sizeBytes / (1024 * 1024);
+  let bg, color, label;
+  if (mb >= 3)       { bg = '#FFF0F0'; color = '#C0392B'; label = 'Too large'; }
+  else if (mb >= 1)  { bg = '#FFF8E1'; color = '#B8860B'; label = 'Large'; }
+  else if (mb >= 0.3){ bg = '#FFF3E0'; color = '#E67E22'; label = 'Medium'; }
+  else               { bg = '#EFF6F5'; color = '#1B6B65'; label = 'OK'; }
+  return (
+    <span style={{ fontSize: '10px', fontWeight: '600', color, background: bg, padding: '2px 7px', borderRadius: '8px' }}>
+      {fmtBytes(sizeBytes)} · {label}
+    </span>
+  );
+}
+
 function AssetRow({ asset, onToggle, onDelete, usedAs, onSetHero, onPreview }) {
   const isFilesystem = !asset.id;
+  const filename = asset.url?.split('/').pop() || '';
   return (
     <div style={{
       display: 'flex', gap: '12px', alignItems: 'flex-start',
@@ -389,15 +412,24 @@ function AssetRow({ asset, onToggle, onDelete, usedAs, onSetHero, onPreview }) {
           <span style={{ fontSize: '10px', color: '#B5AA99', padding: '2px 7px', background: '#F4F1EC', borderRadius: '8px' }}>
             {asset.source}
           </span>
+          <SizeBadge sizeBytes={asset.sizeBytes} />
           {usedAs && (
             <span style={{ fontSize: '10px', fontWeight: '600', color: '#C9A96E', background: 'rgba(201,169,110,0.1)', border: '1px solid rgba(201,169,110,0.3)', padding: '2px 7px', borderRadius: '8px' }}>
               ● {usedAs}
             </span>
           )}
         </div>
-        <p style={{ fontSize: '12px', color: '#4A433A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {asset.alt || asset.caption || asset.url}
+        <p style={{ fontSize: '12px', color: '#4A433A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+           title={asset.url}>
+          {filename || asset.alt || asset.caption || asset.url}
         </p>
+        {(asset.width || asset.mimeType) && (
+          <p style={{ fontSize: '11px', color: '#B5AA99', marginTop: '2px' }}>
+            {asset.width && asset.height ? `${asset.width}×${asset.height}` : ''}
+            {asset.width && asset.mimeType ? ' · ' : ''}
+            {asset.mimeType ?? ''}
+          </p>
+        )}
         {onSetHero && !usedAs && (
           <button onClick={() => onSetHero(asset.url)}
             style={{ ...btnGhost, fontSize: '11px', padding: '3px 8px', marginTop: '4px', color: '#1B6B65', borderColor: '#1B6B65' }}>
@@ -1522,29 +1554,55 @@ export default function ItineraryCMSEditorPage() {
       const pdfBlob = await buildCustomPDFBlob(freshItinerary, freshAssets, enrichedResolved);
       console.log('[CMS] PDF blob ready — size:', pdfBlob.size, 'bytes');
 
-      // ── 5. POST PDF binary to our API — server uploads to Vercel Blob ──────────
-      // The browser never PUTs to Vercel Blob directly. The API uses
-      // BLOB_READ_WRITE_TOKEN server-side to upload, then saves the URL to DB.
-      console.log('[CMS] Sending PDF to server — size:', pdfBlob.size, 'bytes');
-      const uploadRes = await fetch(
-        `/api/itinerary-cms?action=upload-pdf&id=${targetId}`,
+      // ── 5. Upload PDF directly to Vercel Blob (bypasses 4.5 MB Function body limit) ──
+      // Step A: get a scoped client token + target pathname from the server
+      console.log('[CMS] Requesting upload token — size:', pdfBlob.size, 'bytes');
+      const tokenRes = await fetch(
+        `/api/itinerary-cms?action=upload-pdf-token&id=${targetId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!tokenRes.ok) {
+        const errText = await tokenRes.text();
+        throw new Error(`Failed to get upload token: ${tokenRes.status} — ${errText.slice(0, 200)}`);
+      }
+      const { token: clientToken, pathname } = await tokenRes.json();
+
+      // Step B: PUT the PDF binary directly to Vercel Blob (no Function body involved)
+      console.log('[CMS] Uploading PDF directly to Blob — pathname:', pathname);
+      const blobRes = await fetch(`https://blob.vercel-storage.com/${pathname}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${clientToken}`,
+          'Content-Type': 'application/pdf',
+          'x-api-version': '12',
+        },
+        body: pdfBlob,
+      });
+      if (!blobRes.ok) {
+        const errText = await blobRes.text();
+        throw new Error(`Blob upload failed: ${blobRes.status} — ${errText.slice(0, 200)}`);
+      }
+      const blobJson = await blobRes.json();
+      const directBlobUrl = blobJson.url;
+      if (!directBlobUrl) throw new Error('Blob upload returned no URL');
+
+      // Step C: save the URL to DB and increment the PDF version
+      const saveRes = await fetch(
+        `/api/itinerary-cms?action=save-pdf-url&id=${targetId}`,
         {
           method:  'POST',
-          headers: {
-            Authorization:  `Bearer ${token}`,
-            'Content-Type': 'application/pdf',
-          },
-          body: pdfBlob,
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: directBlobUrl }),
         }
       );
-      if (!uploadRes.ok) {
-        const errText = await uploadRes.text();
-        throw new Error(`PDF upload failed: ${uploadRes.status} — ${errText.slice(0, 200)}`);
+      if (!saveRes.ok) {
+        const errText = await saveRes.text();
+        throw new Error(`PDF save failed: ${saveRes.status} — ${errText.slice(0, 200)}`);
       }
-      const uploadJson = await uploadRes.json();
-      if (uploadJson.error) throw new Error(uploadJson.error);
+      const saveJson = await saveRes.json();
+      if (saveJson.error) throw new Error(saveJson.error);
 
-      const { url: blobUrl, pdfVersion } = uploadJson;
+      const { pdfUrl: blobUrl, pdfVersion } = saveJson;
       console.log('[CMS] PDF uploaded —', blobUrl, '| version:', pdfVersion);
 
       setForm(f => ({ ...f, pdfUrl: blobUrl, pdf_url: blobUrl, pdf_version: pdfVersion || f.pdf_version }));
@@ -3871,6 +3929,45 @@ function ImagesTab({ assets, loading, newAsset, setNewAsset, onAdd, onToggle, on
           </div>
         )}
       </div>
+
+      {/* ── Summary panel ─────────────────────────────────────────────────── */}
+      {!loading && assets.length > 0 && (() => {
+        const withSize = assets.filter(a => a.sizeBytes != null);
+        const totalBytes = withSize.reduce((s, a) => s + a.sizeBytes, 0);
+        const largeCount    = assets.filter(a => a.sizeBytes != null && a.sizeBytes >= 1024*1024).length;
+        const tooLargeCount = assets.filter(a => a.sizeBytes != null && a.sizeBytes >= 3*1024*1024).length;
+        return (
+          <div style={{ ...sectionCard, display: 'flex', gap: '24px', flexWrap: 'wrap', padding: '14px 16px', background: '#F8F5F0' }}>
+            <div>
+              <p style={{ fontSize: '11px', color: '#B5AA99', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total images</p>
+              <p style={{ fontSize: '16px', fontWeight: '700', color: '#1C1A16' }}>{assets.length}</p>
+            </div>
+            {withSize.length > 0 && (
+              <div>
+                <p style={{ fontSize: '11px', color: '#B5AA99', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Known size</p>
+                <p style={{ fontSize: '16px', fontWeight: '700', color: '#1C1A16' }}>{fmtBytes(totalBytes)}</p>
+              </div>
+            )}
+            {largeCount > 0 && (
+              <div>
+                <p style={{ fontSize: '11px', color: '#B5AA99', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Large ({'>'}1 MB)</p>
+                <p style={{ fontSize: '16px', fontWeight: '700', color: '#E67E22' }}>{largeCount}</p>
+              </div>
+            )}
+            {tooLargeCount > 0 && (
+              <div>
+                <p style={{ fontSize: '11px', color: '#B5AA99', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Too large ({'>'}3 MB)</p>
+                <p style={{ fontSize: '16px', fontWeight: '700', color: '#C0392B' }}>{tooLargeCount}</p>
+              </div>
+            )}
+            {tooLargeCount > 0 && (
+              <p style={{ fontSize: '12px', color: '#C0392B', alignSelf: 'center', lineHeight: '1.4' }}>
+                Images over 3 MB may cause slow PDF generation or upload failures.
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Asset list by type ─────────────────────────────────────────────── */}
       {loading ? (

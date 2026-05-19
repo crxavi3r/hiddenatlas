@@ -24,10 +24,11 @@
 import pg                         from 'pg';
 import { resolveUserCtx }         from './_lib/resolveUserCtx.js';
 import { existsSync }             from 'fs';
-import { readFile }               from 'fs/promises';
+import { readFile, stat }         from 'fs/promises';
 import path                       from 'path';
 import { put as blobPut }         from '@vercel/blob';
 import { generateClientTokenFromReadWriteToken } from '@vercel/blob/client';
+import { imageSize }              from 'image-size';
 
 const { Pool } = pg;
 
@@ -1009,6 +1010,7 @@ async function handleUpdatePDFStatus(pool, id, body) {
 }
 
 // ── Assets: list ──────────────────────────────────────────────────────────────
+// Enriches blob-sourced rows with sizeBytes via a HEAD request (best-effort, 3s timeout).
 async function handleListAssets(pool, itineraryId) {
   if (!itineraryId) throw Object.assign(new Error('id is required'), { status: 400 });
   try {
@@ -1018,7 +1020,28 @@ async function handleListAssets(pool, itineraryId) {
        ORDER BY "assetType", "dayNumber" NULLS LAST, "sortOrder", "createdAt"`,
       [itineraryId]
     );
-    return { assets: rows };
+
+    // Enrich blob rows with sizeBytes via HEAD (fire all in parallel, ignore failures)
+    const enriched = await Promise.all(rows.map(async row => {
+      if (!row.url || !row.url.startsWith('https://')) return row;
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 3000);
+        const head = await fetch(row.url, { method: 'HEAD', signal: ctrl.signal });
+        clearTimeout(timer);
+        const cl = head.headers.get('content-length');
+        const ct = head.headers.get('content-type');
+        return {
+          ...row,
+          sizeBytes: cl ? parseInt(cl, 10) : null,
+          mimeType:  ct ? ct.split(';')[0].trim() : null,
+        };
+      } catch {
+        return row;
+      }
+    }));
+
+    return { assets: enriched };
   } catch (err) {
     if (err.message?.includes('does not exist')) {
       console.error('[itinerary-cms] ItineraryAsset table missing — run: npm run migrate');
@@ -1159,7 +1182,31 @@ async function handleScanAssets(slug, variant, durationDays = null) {
     }));
   }
 
-  return { assets };
+  // ── Enrich filesystem assets with sizeBytes + dimensions (best-effort, parallel) ──
+  const cwd = process.cwd();
+  const enriched = await Promise.all(assets.map(async a => {
+    if (!a.url || !a.url.startsWith('/itineraries/')) return a;
+    const fullPath = path.join(cwd, 'public', a.url);
+    try {
+      const [fileStat, buf] = await Promise.all([
+        stat(fullPath),
+        readFile(fullPath),
+      ]);
+      const dims = imageSize(buf);
+      const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif', svg: 'image/svg+xml' };
+      return {
+        ...a,
+        sizeBytes: fileStat.size,
+        width:     dims.width  ?? null,
+        height:    dims.height ?? null,
+        mimeType:  mimeMap[dims.type] ?? `image/${dims.type}`,
+      };
+    } catch {
+      return a;
+    }
+  }));
+
+  return { assets: enriched };
 }
 
 // ── Assets: save (create or update) ──────────────────────────────────────────
