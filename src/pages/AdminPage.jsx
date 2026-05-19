@@ -5,6 +5,7 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import { LayoutDashboard, Users, CreditCard, Download, Inbox, Menu, X, Map, UserCheck, User, ArrowUpRight, ClipboardList, Tag } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useUserCtx } from '../lib/useUserCtx.jsx';
+import UserAccountMenu from '../components/UserAccountMenu';
 
 // Must stay in sync with src/components/Navbar.jsx — same list, same logic.
 const HARDCODED_ADMIN_EMAILS = new Set([
@@ -147,11 +148,8 @@ function SidebarContent({ onClose, isAdmin, creatorId }) {
   );
 }
 
-function TopBar({ isMobile, onMenuOpen, user }) {
+function TopBar({ isMobile, onMenuOpen }) {
   const [viewSiteHovered, setViewSiteHovered] = useState(false);
-  const initials = [user?.firstName?.[0], user?.lastName?.[0]]
-    .filter(Boolean).join('').toUpperCase()
-    || (user?.emailAddresses?.[0]?.emailAddress?.[0] ?? '?').toUpperCase();
 
   return (
     <div style={{
@@ -214,17 +212,8 @@ function TopBar({ isMobile, onMenuOpen, user }) {
         <ArrowUpRight size={12} />
       </a>
 
-      {/* Avatar */}
-      <div style={{
-        width: '30px', height: '30px', borderRadius: '50%',
-        background: '#1B6B65',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: '11px', fontWeight: '700', color: 'white',
-        flexShrink: 0,
-        userSelect: 'none',
-      }}>
-        {initials}
-      </div>
+      {/* Avatar with account menu */}
+      <UserAccountMenu context="backoffice" avatarSize={30} avatarBg="#1B6B65" dropdownZIndex={500} />
     </div>
   );
 }
@@ -278,7 +267,7 @@ export default function AdminPage() {
     <div style={{ display: 'flex', minHeight: '100vh', background: '#F4F1EC' }}>
 
       {/* ── Top bar ── */}
-      <TopBar isMobile={isMobile} onMenuOpen={() => setMenuOpen(true)} user={user} />
+      <TopBar isMobile={isMobile} onMenuOpen={() => setMenuOpen(true)} />
 
       {/* ── Mobile drawer overlay ── */}
       {isMobile && menuOpen && (
