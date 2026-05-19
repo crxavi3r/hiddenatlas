@@ -1058,9 +1058,9 @@ function DynamicRouteSvgMap({ stops = [] }) {
   const valid = (stops || []).filter(s => s.latitude != null && s.longitude != null);
   if (valid.length < 2) return null;
 
-  const SW = PAGE_W - 96; // SVG width: page minus horizontal padding
-  const SH = Math.round(SW * 0.44);
-  const MARGIN = 18;
+  const SW = PAGE_W - 96;
+  const SH = Math.round(SW * 0.50);
+  const MARGIN = 28;
   const iW = SW - MARGIN * 2;
   const iH = SH - MARGIN * 2;
 
@@ -1070,43 +1070,68 @@ function DynamicRouteSvgMap({ stops = [] }) {
   const lngMin = Math.min(...lngs), lngMax = Math.max(...lngs);
   const latSpan = latMax - latMin || 1;
   const lngSpan = lngMax - lngMin || 1;
-  const PAD = 0.2;
-  const bMinLat = latMin - latSpan * PAD;
-  const bMaxLat = latMax + latSpan * PAD;
-  const bMinLng = lngMin - lngSpan * PAD;
-  const bMaxLng = lngMax + lngSpan * PAD;
+  const PAD = 0.25;
+  const X0 = lngMin - lngSpan * PAD;
+  const X1 = lngMax + lngSpan * PAD;
+  const Y0 = latMin - latSpan * PAD;
+  const Y1 = latMax + latSpan * PAD;
 
-  function proj(lat, lng) {
-    return {
-      x: +(MARGIN + ((lng - bMinLng) / (bMaxLng - bMinLng)) * iW).toFixed(1),
-      y: +(MARGIN + (1 - (lat - bMinLat) / (bMaxLat - bMinLat)) * iH).toFixed(1),
-    };
-  }
+  // proj(lon, lat) → [x, y] — matching _pdfCatmull signature
+  const proj = (lon, lat) => [
+    MARGIN + ((lon - X0) / (X1 - X0)) * iW,
+    MARGIN + (1 - (lat - Y0) / (Y1 - Y0)) * iH,
+  ];
 
-  const pts = valid.map(s => proj(s.latitude, s.longitude));
-  const lineD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x} ${p.y}`).join(' ');
+  const pts = valid.map(s => proj(s.longitude, s.latitude));
+  const routeD = _pdfCatmull(valid.map(s => [s.longitude, s.latitude]), proj);
+  const gridD = [0.25, 0.5, 0.75].map(t =>
+    `M${(SW * t).toFixed(1)} 0 L${(SW * t).toFixed(1)} ${SH} M0 ${(SH * t).toFixed(1)} L${SW} ${(SH * t).toFixed(1)}`
+  ).join(' ');
 
   return (
     <Svg width={SW} height={SH} viewBox={`0 0 ${SW} ${SH}`}>
       <Rect x="0" y="0" width={SW} height={SH} fill="#F0EDE6" />
-      {/* Grid lines */}
-      <Path d={`M${SW * 0.25} 0 L${SW * 0.25} ${SH} M${SW * 0.5} 0 L${SW * 0.5} ${SH} M${SW * 0.75} 0 L${SW * 0.75} ${SH}`}
-        stroke="#E2DDD4" strokeWidth="0.4" fill="none" />
-      <Path d={`M0 ${SH * 0.33} L${SW} ${SH * 0.33} M0 ${SH * 0.67} L${SW} ${SH * 0.67}`}
-        stroke="#E2DDD4" strokeWidth="0.4" fill="none" />
-      {/* Route: gold glow + teal line */}
-      <Path d={lineD} fill="none" stroke="#C9A96E" strokeWidth="2.5" />
-      <Path d={lineD} fill="none" stroke="#1B6B65" strokeWidth="1" />
-      {/* Stop markers */}
+      <Path d={gridD} stroke="#E2DDD4" strokeWidth="0.4" fill="none" />
+      {/* Route: depth shadow + gold glow + teal dashed */}
+      <Path d={routeD} fill="none" stroke="#1C1A16" strokeWidth="3.5" opacity={0.06} strokeLinecap="round" />
+      <Path d={routeD} fill="none" stroke="#C9A96E" strokeWidth="3" strokeOpacity="0.28" strokeLinecap="round" />
+      <Path d={routeD} fill="none" stroke="#1B6B65" strokeWidth="1.6" strokeDasharray="8,4" strokeLinecap="round" />
+      {/* Stop markers — white backing disc + Morocco-style dot */}
       {pts.map((p, i) => {
+        const [cx, cy] = p;
         const isEnd = i === 0 || i === pts.length - 1;
-        const r = isEnd ? 5 : 3.5;
+        const r = isEnd ? 6 : 4.5;
         return (
-          <G key={i}>
-            <Circle cx={p.x} cy={p.y} r={r + 2.5} fill="#FFFFFF" />
-            <Circle cx={p.x} cy={p.y} r={r} fill="#1B6B65" />
-            {isEnd && <Circle cx={p.x} cy={p.y} r={r + 4} fill="none" stroke="#1B6B65" strokeWidth="0.8" />}
+          <G key={`m${i}`}>
+            <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r + 2.5} fill="#FFFFFF" fillOpacity="0.85" />
+            <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r}
+              fill={isEnd ? '#F2E4CB' : '#C8D9D5'}
+              stroke={isEnd ? '#C9A96E' : '#1B6B65'}
+              strokeWidth={isEnd ? 1.5 : 1.2}
+            />
+            {isEnd && <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r + 5} fill="none" stroke="#1B6B65" strokeWidth="0.8" strokeOpacity="0.4" />}
           </G>
+        );
+      })}
+      {/* Labels — rendered after markers so they sit on top */}
+      {pts.map((p, i) => {
+        const [cx, cy] = p;
+        const isEnd = i === 0 || i === pts.length - 1;
+        const r = isEnd ? 6 : 4.5;
+        const labelRight = cx <= SW * 0.55;
+        const tx = labelRight ? cx + r + 5 : cx - r - 5;
+        const anchor = labelRight ? 'start' : 'end';
+        const fs = isEnd ? 10 : 8.5;
+        return (
+          <Text key={`l${i}`}
+            x={tx.toFixed(1)} y={(cy + 3.5).toFixed(1)}
+            textAnchor={anchor}
+            fontFamily="Helvetica-Bold"
+            fontSize={fs}
+            fill="#1C1A16"
+          >
+            {valid[i].name}
+          </Text>
         );
       })}
     </Svg>

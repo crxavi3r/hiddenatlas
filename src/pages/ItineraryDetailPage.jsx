@@ -1266,63 +1266,6 @@ export default function ItineraryDetailPage() {
               </div>
             </section>
 
-            {/* DB-controlled Route Map — shown when content.routeMap.showOnSite === true.
-                Priority: registered SVG component → dynamic stops map → static image fallback.
-                Never renders an empty section — at least one visual source must exist. */}
-            {(() => {
-              if (!itinerary.showRouteMapOnSite) return null;
-              const DbRouteMapComponent = DB_ROUTE_MAP_COMPONENTS[itinerary.id];
-              const validStops = (itinerary.routeMapStops || [])
-                .filter(s => s.visible !== false && s.latitude != null && s.longitude != null)
-                .sort((a, b) => a.order - b.order);
-              const hasValidStops = validStops.length >= 2;
-              const hasContent = DbRouteMapComponent || hasValidStops || itinerary.routeMapImageUrl;
-              if (!hasContent) return null;
-
-              const scrollToDay = dayNum => {
-                const el = document.getElementById(`day-${dayNum}`);
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              };
-
-              console.log('[ItineraryDetail] route map —', itinerary.id, {
-                enabledOnSite: true,
-                registeredComponent: !!DbRouteMapComponent,
-                validStopsCount: validStops.length,
-                hasImage: !!itinerary.routeMapImageUrl,
-              });
-
-              return (
-                <section style={{ marginBottom: '60px' }}>
-                  <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '6px' }}>
-                    Route Map
-                  </h2>
-                  <p style={{ fontSize: '13px', color: '#8C8070', letterSpacing: '0.3px', marginBottom: '24px' }}>
-                    {itinerary.subtitle}
-                  </p>
-                  {DbRouteMapComponent ? (
-                    <DbRouteMapComponent isUnlocked={hasAccess} onDaySelect={scrollToDay} />
-                  ) : hasValidStops ? (
-                    <DynamicRouteMap stops={validStops} isUnlocked={hasAccess} onDaySelect={scrollToDay} />
-                  ) : (
-                    <div>
-                      <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #E8E3DA' }}>
-                        <img
-                          src={itinerary.routeMapImageUrl}
-                          alt={itinerary.routeMapAlt || `${itinerary.title} route map`}
-                          style={{ width: '100%', display: 'block', objectFit: 'contain' }}
-                        />
-                      </div>
-                      {itinerary.routeMapCaption && (
-                        <p style={{ fontSize: '12px', color: '#8C8070', marginTop: '8px', textAlign: 'center' }}>
-                          {itinerary.routeMapCaption}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </section>
-              );
-            })()}
-
             {/* Destination Gallery */}
             {galleryImages.length > 0 && (
               <section style={{ marginBottom: '60px' }}>
@@ -1351,6 +1294,64 @@ export default function ItineraryDetailPage() {
                 </div>
               </section>
             )}
+
+            {/* DB-controlled Route Map — after gallery, before Day by Day.
+                Shown when showOnSite === true (or admin preview). Never renders empty. */}
+            {(() => {
+              const DbRouteMapComponent = DB_ROUTE_MAP_COMPONENTS[itinerary.id];
+              const validStops = (itinerary.routeMapStops || [])
+                .filter(s => s.visible !== false && s.latitude != null && s.longitude != null)
+                .sort((a, b) => a.order - b.order);
+              const hasValidStops = validStops.length >= 2;
+              const hasContent = DbRouteMapComponent || hasValidStops || itinerary.routeMapImageUrl;
+              if (!hasContent) return null;
+              // Show to admins even when not yet enabled (preview), hide for public if disabled
+              if (!itinerary.showRouteMapOnSite && !isAdmin) return null;
+
+              const scrollToDay = dayNum => {
+                const el = document.getElementById(`day-${dayNum}`);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              };
+
+              console.log('[ItineraryDetail] route map —', itinerary.id, {
+                enabledOnSite: itinerary.showRouteMapOnSite,
+                adminPreview: isAdmin && !itinerary.showRouteMapOnSite,
+                registeredComponent: !!DbRouteMapComponent,
+                validStopsCount: validStops.length,
+                hasImage: !!itinerary.routeMapImageUrl,
+              });
+
+              return (
+                <section style={{ marginBottom: '60px' }}>
+                  <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '6px' }}>
+                    Route Map
+                  </h2>
+                  <p style={{ fontSize: '13px', color: '#8C8070', letterSpacing: '0.3px', marginBottom: '24px' }}>
+                    {itinerary.subtitle}
+                  </p>
+                  {DbRouteMapComponent ? (
+                    <DbRouteMapComponent isUnlocked={hasAccess} onDaySelect={scrollToDay} />
+                  ) : hasValidStops ? (
+                    <DynamicRouteMap stops={validStops} onDaySelect={scrollToDay} />
+                  ) : (
+                    <div>
+                      <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #E8E3DA' }}>
+                        <img
+                          src={itinerary.routeMapImageUrl}
+                          alt={itinerary.routeMapAlt || `${itinerary.title} route map`}
+                          style={{ width: '100%', display: 'block', objectFit: 'contain' }}
+                        />
+                      </div>
+                      {itinerary.routeMapCaption && (
+                        <p style={{ fontSize: '12px', color: '#8C8070', marginTop: '8px', textAlign: 'center' }}>
+                          {itinerary.routeMapCaption}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </section>
+              );
+            })()}
 
             {/* Day by Day */}
             <section style={{ marginBottom: '60px' }}>
