@@ -11,6 +11,7 @@ import { resolveCoverImage } from '../../lib/resolveCoverImage';
 import { resolveAssetIdentity } from '../../lib/resolveAssetIdentity';
 import { resolveGalleryImages, resolveDayImages, resolveResearchImages } from '../../lib/resolveItineraryImages';
 import PlanModal from '../../components/admin/PlanModal.jsx';
+import { ROUTE_MAP_REGISTRY } from '../../lib/routeMapRegistry.js';
 
 // ── Shared style tokens ───────────────────────────────────────────────────────
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
@@ -3628,30 +3629,20 @@ function DaysTab({ c, addDay, updateDay, deleteDay, moveDay, assets, onUpload, d
 // ── Sections ──────────────────────────────────────────────────────────────────
 // ── Route Map section — inside SectionsTab ────────────────────────────────────
 // Slugs that have a hardcoded SVG map component registered in the codebase.
-const COMPONENT_MAP_SLUGS = new Set([
-  'tuscany-wine-roads-in-7-days',
-  'morocco-motorcycle-expedition',
-  'philippines-island-journey',
-  'japan-grand-cultural-journey',
-  'california-american-west',
-  'california-american-west-16-days',
-  'california-american-west-12-days',
-  'california-american-west-8-days',
-]);
-
 function RouteMapSection({ c, setContent, slug = '', onUpload }) {
-  const [uploading,    setUploading]    = useState(false);
-  const [uploadError,  setUploadError]  = useState(null);
-  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [uploading,         setUploading]         = useState(false);
+  const [uploadError,       setUploadError]        = useState(null);
+  const [showImageOverride, setShowImageOverride]  = useState(false);
+  const [showUrlInput,      setShowUrlInput]       = useState(false);
   const fileRef = useRef(null);
 
   const imageUrl     = (c('routeMap.imageUrl') || '').trim();
-  const hasComponent = COMPONENT_MAP_SLUGS.has(slug);
-  const hasImage     = !!imageUrl;
-  const mapAvailable = hasComponent || hasImage;
+  const registryEntry = ROUTE_MAP_REGISTRY[slug] || null;
+  const hasAutoMap   = !!registryEntry;
+  const hasImageOverride = !!imageUrl;
+  const mapAvailable = hasAutoMap || hasImageOverride;
   const siteEnabled  = c('routeMap.showOnSite') === true;
   const pdfEnabled   = c('pdfConfig.showRouteMap') === true;
-  const showWarning  = (siteEnabled || pdfEnabled) && !mapAvailable;
 
   async function handleFile(e) {
     const file = e.target.files?.[0];
@@ -3682,19 +3673,40 @@ function RouteMapSection({ c, setContent, slug = '', onUpload }) {
     <div style={sectionCard}>
       <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '16px' }}>Route Map</p>
 
-      {/* ── State A: hardcoded component registered ── */}
-      {hasComponent && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', padding: '10px 14px', background: '#EFF6F5', borderRadius: '8px', border: '1px solid #B5D8D5' }}>
-          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#1B6B65', flexShrink: 0 }} />
-          <div>
-            <p style={{ fontSize: '12.5px', fontWeight: '600', color: '#1B6B65', marginBottom: '2px' }}>Route map configured</p>
-            <p style={{ fontSize: '11.5px', color: '#2A7A74' }}>This itinerary has a visual route map.</p>
+      {/* ── State A: auto-generated map (component registered) ── */}
+      {hasAutoMap && (
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 14px', background: '#EFF6F5', borderRadius: '8px', border: '1px solid #B5D8D5', marginBottom: '12px' }}>
+            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#1B6B65', flexShrink: 0, marginTop: '4px' }} />
+            <div>
+              <p style={{ fontSize: '12.5px', fontWeight: '600', color: '#1B6B65', marginBottom: '3px' }}>
+                Route map available — {registryEntry.points.length} route points
+              </p>
+              <p style={{ fontSize: '11.5px', color: '#2A7A74', lineHeight: '1.5', marginBottom: '8px' }}>
+                Generated automatically from the itinerary route data.
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {registryEntry.points.map((pt, i) => (
+                  <span key={i} style={{ fontSize: '11px', color: '#1B6B65', background: '#D8EFED', borderRadius: '4px', padding: '2px 7px', fontWeight: '500' }}>
+                    {pt}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
+
+          {/* Optional image override — collapsed by default */}
+          {!showImageOverride && !hasImageOverride && (
+            <button type="button" onClick={() => setShowImageOverride(true)}
+              style={{ background: 'none', border: 'none', color: '#8C8070', fontSize: '12px', cursor: 'pointer', padding: '0', textDecoration: 'underline' }}>
+              Override with a custom image
+            </button>
+          )}
         </div>
       )}
 
-      {/* ── State B: image configured ── */}
-      {!hasComponent && hasImage && (
+      {/* ── State B: no auto map, but image override configured ── */}
+      {!hasAutoMap && hasImageOverride && (
         <div style={{ marginBottom: '16px' }}>
           <div style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E8E3DA', marginBottom: '10px', background: '#F4F1EC', maxHeight: '200px' }}>
             <img src={imageUrl} alt={c('routeMap.alt') || 'Route map'} style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', display: 'block' }} />
@@ -3703,7 +3715,8 @@ function RouteMapSection({ c, setContent, slug = '', onUpload }) {
             <button type="button" onClick={() => fileRef.current?.click()} style={{ ...btnGhost, fontSize: '12px' }} disabled={uploading}>
               <Upload size={12} /> Change image
             </button>
-            <button type="button" onClick={() => { setContent('routeMap.imageUrl', ''); setContent('routeMap.alt', ''); }} style={{ ...btnGhost, fontSize: '12px', color: '#C0392B', borderColor: '#E8B4AE' }}>
+            <button type="button" onClick={() => { setContent('routeMap.imageUrl', ''); setContent('routeMap.alt', ''); setContent('routeMap.caption', ''); }}
+              style={{ ...btnGhost, fontSize: '12px', color: '#C0392B', borderColor: '#E8B4AE' }}>
               Remove
             </button>
           </div>
@@ -3718,54 +3731,54 @@ function RouteMapSection({ c, setContent, slug = '', onUpload }) {
         </div>
       )}
 
-      {/* ── State C: empty — no component, no image ── */}
-      {!hasComponent && !hasImage && (
+      {/* ── State C: no auto map, no image — route data not configured ── */}
+      {!hasAutoMap && !hasImageOverride && (
         <div style={{ marginBottom: '16px' }}>
-          <div style={{
-            border: '2px dashed #D8D0BE', borderRadius: '10px', padding: '28px 20px',
-            textAlign: 'center', background: '#FAFAF8', marginBottom: '10px',
-          }}>
+          <div style={{ padding: '14px 16px', background: '#FAF8F4', borderRadius: '8px', border: '1px solid #E8E3DA', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <MapPin size={14} color="#8C8070" />
+              <p style={{ fontSize: '12.5px', fontWeight: '600', color: '#6B6156' }}>
+                {slug ? 'Route data not configured for this itinerary' : 'Route map unavailable'}
+              </p>
+            </div>
+            <p style={{ fontSize: '12px', color: '#8C8070', lineHeight: '1.5' }}>
+              Route maps are generated automatically from the itinerary route data. This itinerary does not yet have a registered route map.
+            </p>
+          </div>
+
+          {/* Image as fallback — upload-first, URL secondary */}
+          <p style={{ fontSize: '12px', fontWeight: '600', color: '#4A433A', marginBottom: '8px' }}>
+            Fallback: upload a static map image
+          </p>
+          <div style={{ border: '1px dashed #D8D0BE', borderRadius: '8px', padding: '20px', textAlign: 'center', background: '#FAFAF8', marginBottom: '8px' }}>
             {uploading ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '22px', height: '22px', border: '2.5px solid #E8E3DA', borderTopColor: '#1B6B65', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-                <p style={{ fontSize: '12.5px', color: '#8C8070' }}>Uploading…</p>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '20px', height: '20px', border: '2.5px solid #E8E3DA', borderTopColor: '#1B6B65', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                <p style={{ fontSize: '12px', color: '#8C8070' }}>Uploading…</p>
               </div>
             ) : (
               <>
-                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#EFF6F5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-                  <MapPin size={18} color="#1B6B65" />
-                </div>
-                <p style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16', marginBottom: '4px' }}>No route map configured</p>
-                <p style={{ fontSize: '12px', color: '#8C8070', marginBottom: '16px', lineHeight: '1.5' }}>
-                  Upload a route map image to display a visual journey overview on the itinerary page and in the PDF.
-                </p>
-                <button type="button" onClick={() => fileRef.current?.click()} style={{ ...btnPrimary, display: 'inline-flex', padding: '8px 18px' }}>
-                  <Upload size={13} /> Upload route map image
+                <button type="button" onClick={() => fileRef.current?.click()}
+                  style={{ ...btnGhost, display: 'inline-flex', marginBottom: '6px' }}>
+                  <Upload size={13} /> Upload image
                 </button>
+                <p style={{ fontSize: '11px', color: '#A09080', margin: 0 }}>JPG, PNG or WebP, max 8 MB</p>
               </>
             )}
           </div>
+          {uploadError && <p style={{ fontSize: '12px', color: '#C0392B', marginBottom: '8px' }}>{uploadError}</p>}
 
-          {uploadError && (
-            <p style={{ fontSize: '12px', color: '#C0392B', marginBottom: '10px' }}>{uploadError}</p>
-          )}
-
-          {/* URL fallback — collapsed by default */}
           {!showUrlInput ? (
-            <button type="button" onClick={() => setShowUrlInput(true)} style={{ background: 'none', border: 'none', color: '#8C8070', fontSize: '12px', cursor: 'pointer', padding: '0', textDecoration: 'underline' }}>
-              or enter image URL manually
+            <button type="button" onClick={() => setShowUrlInput(true)}
+              style={{ background: 'none', border: 'none', color: '#8C8070', fontSize: '11.5px', cursor: 'pointer', padding: '0', textDecoration: 'underline' }}>
+              or enter image URL
             </button>
           ) : (
             <div>
               <label style={labelStyle}>Image URL</label>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  autoFocus
-                  value={c('routeMap.imageUrl') || ''}
-                  style={{ ...inputStyle, flex: 1 }}
-                  placeholder="https://..."
-                  onChange={e => setContent('routeMap.imageUrl', e.target.value)}
-                />
+                <input autoFocus value={c('routeMap.imageUrl') || ''} style={{ ...inputStyle, flex: 1 }}
+                  placeholder="https://..." onChange={e => setContent('routeMap.imageUrl', e.target.value)} />
                 <button type="button" onClick={() => setShowUrlInput(false)} style={btnGhost}>Cancel</button>
               </div>
             </div>
@@ -3773,9 +3786,62 @@ function RouteMapSection({ c, setContent, slug = '', onUpload }) {
         </div>
       )}
 
+      {/* ── Image override panel (shown when hasAutoMap and override is open/active) ── */}
+      {hasAutoMap && (showImageOverride || hasImageOverride) && (
+        <div style={{ marginBottom: '16px', padding: '14px', background: '#FAF8F4', borderRadius: '8px', border: '1px solid #E8E3DA' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <p style={{ fontSize: '12px', fontWeight: '600', color: '#4A433A' }}>Custom image override</p>
+            {!hasImageOverride && (
+              <button type="button" onClick={() => setShowImageOverride(false)}
+                style={{ background: 'none', border: 'none', color: '#8C8070', fontSize: '11px', cursor: 'pointer', padding: '0' }}>
+                Cancel
+              </button>
+            )}
+          </div>
+          {hasImageOverride ? (
+            <>
+              <div style={{ borderRadius: '6px', overflow: 'hidden', border: '1px solid #E8E3DA', marginBottom: '8px', maxHeight: '160px' }}>
+                <img src={imageUrl} alt={c('routeMap.alt') || 'Route map override'} style={{ width: '100%', maxHeight: '160px', objectFit: 'contain', display: 'block' }} />
+              </div>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                <button type="button" onClick={() => fileRef.current?.click()} style={{ ...btnGhost, fontSize: '12px' }} disabled={uploading}>
+                  <Upload size={12} /> Change
+                </button>
+                <button type="button" onClick={() => { setContent('routeMap.imageUrl', ''); setContent('routeMap.alt', ''); setContent('routeMap.caption', ''); setShowImageOverride(false); }}
+                  style={{ ...btnGhost, fontSize: '12px', color: '#C0392B', borderColor: '#E8B4AE' }}>
+                  Remove override
+                </button>
+              </div>
+            </>
+          ) : (
+            <div style={{ border: '1px dashed #D8D0BE', borderRadius: '6px', padding: '16px', textAlign: 'center', background: '#FAFAF8', marginBottom: '8px' }}>
+              {uploading ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '18px', height: '18px', border: '2px solid #E8E3DA', borderTopColor: '#1B6B65', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                  <p style={{ fontSize: '12px', color: '#8C8070' }}>Uploading…</p>
+                </div>
+              ) : (
+                <button type="button" onClick={() => fileRef.current?.click()} style={{ ...btnGhost, display: 'inline-flex' }}>
+                  <Upload size={13} /> Upload image
+                </button>
+              )}
+            </div>
+          )}
+          {uploadError && <p style={{ fontSize: '12px', color: '#C0392B', marginBottom: '8px' }}>{uploadError}</p>}
+          <div style={{ marginBottom: '8px' }}>
+            <label style={labelStyle}>Alt text</label>
+            <input value={c('routeMap.alt') || ''} style={inputStyle} placeholder="e.g. Croatia sailing route" onChange={e => setContent('routeMap.alt', e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Caption (optional)</label>
+            <input value={c('routeMap.caption') || ''} style={inputStyle} placeholder="Optional caption" onChange={e => setContent('routeMap.caption', e.target.value)} />
+          </div>
+        </div>
+      )}
+
       <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml" style={{ display: 'none' }} onChange={handleFile} />
 
-      {/* Visibility checkboxes */}
+      {/* Visibility controls */}
       <div style={{ paddingTop: '12px', borderTop: '1px solid #F0EBE2' }}>
         {checkboxes.map(({ path, label }) => (
           <label key={path} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px', cursor: 'pointer' }}>
@@ -3790,10 +3856,10 @@ function RouteMapSection({ c, setContent, slug = '', onUpload }) {
       </div>
 
       {/* Warning: enabled but no map */}
-      {showWarning && (
+      {(siteEnabled || pdfEnabled) && !mapAvailable && (
         <div style={{ marginTop: '6px', padding: '10px 14px', borderRadius: '6px', background: '#FFF8E1', border: '1px solid #F5D060' }}>
           <p style={{ fontSize: '12px', color: '#7A5C00', lineHeight: '1.5' }}>
-            Visibility is enabled but no route map image is configured. Nothing will appear on the public page or in the PDF until you upload or link a route map image.
+            Visibility is enabled but no route map is available. Nothing will appear on the public page or in the PDF.
           </p>
         </div>
       )}

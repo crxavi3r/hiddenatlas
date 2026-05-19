@@ -908,11 +908,154 @@ function TuscanyWineRoadsRouteSvgMap() {
   );
 }
 
+function CroatiaRouteSvgMap() {
+  const VW = 800, VH = 543;
+  const X0 = 15.7, X1 = 18.5, Y0 = 42.2, Y1 = 44.1;
+  const proj = (ln, lt) => _pdfProj(ln, lt, X0, X1, Y0, Y1, VW, VH);
+  const svgH = Math.round(PAGE_W * VH / VW);
+
+  const MAINLAND = [
+    [16.15,43.58],[16.30,43.55],[16.44,43.51],[16.70,43.44],[17.02,43.30],
+    [17.43,43.05],[17.60,42.93],[17.85,42.78],[18.09,42.66],[18.22,42.57],
+    [18.5,42.2],[18.5,44.1],[15.7,44.1],[15.7,43.85],[15.85,43.72],[16.05,43.63],[16.15,43.58],
+  ];
+  const BRAC = [
+    [16.25,43.37],[16.50,43.42],[16.80,43.40],[17.02,43.32],
+    [16.95,43.27],[16.65,43.27],[16.35,43.30],[16.25,43.37],
+  ];
+  const HVAR_I = [
+    [16.07,43.21],[16.25,43.22],[16.44,43.21],[16.70,43.18],[17.00,43.15],
+    [17.20,43.09],[17.44,43.02],[17.44,42.99],[17.20,43.05],[16.95,43.12],
+    [16.65,43.15],[16.44,43.16],[16.20,43.17],[16.07,43.19],[16.07,43.21],
+  ];
+  const VIS_I = [
+    [15.97,43.10],[16.06,43.14],[16.22,43.11],[16.26,43.05],
+    [16.19,43.01],[16.07,43.03],[15.97,43.07],[15.97,43.10],
+  ];
+  const KORCUL = [
+    [16.70,42.97],[16.88,43.02],[17.12,43.02],[17.40,42.93],
+    [17.43,42.88],[17.22,42.88],[17.02,42.93],[16.80,42.93],[16.70,42.97],
+  ];
+  const MLJET = [
+    [17.42,42.79],[17.52,42.83],[17.66,42.79],[17.72,42.74],
+    [17.58,42.72],[17.44,42.75],[17.42,42.79],
+  ];
+  const CITIES = [
+    { name:'Dubrovnik',       lon:18.09, lat:42.65, tier:1, dx: 12 },
+    { name:'Hvar',            lon:16.44, lat:43.17, tier:1, dx: 12 },
+    { name:'Pakleni Islands', lon:16.35, lat:43.13, tier:2, dx:-12 },
+    { name:'Vis / Komiža',   lon:16.09, lat:43.06, tier:1, dx:-12 },
+    { name:'Split',           lon:16.44, lat:43.51, tier:1, dx:-12 },
+  ];
+
+  const mainD  = _pdfPoly(MAINLAND, proj);
+  const bracD  = _pdfPoly(BRAC,     proj);
+  const hvarD  = _pdfPoly(HVAR_I,   proj);
+  const visD   = _pdfPoly(VIS_I,    proj);
+  const korD   = _pdfPoly(KORCUL,   proj);
+  const mljD   = _pdfPoly(MLJET,    proj);
+  const routeD = _pdfCatmull(CITIES.map(c => [c.lon, c.lat]), proj, 0.20);
+  const pts    = CITIES.map(c => ({ ...c, pt: proj(c.lon, c.lat) }));
+
+  return (
+    <Svg viewBox={`0 0 ${VW} ${VH}`} width={PAGE_W} height={svgH}>
+      <Rect x={0} y={0} width={VW} height={VH} fill="#BDD5E0" />
+      <Path d={mainD} fill="#D8CBAA" stroke="#B5A48A" strokeWidth={0.8} />
+      <Path d={bracD} fill="#D4C8A0" stroke="#B0A080" strokeWidth={0.7} />
+      <Path d={hvarD} fill="#D4C8A0" stroke="#B0A080" strokeWidth={0.7} />
+      <Path d={visD}  fill="#D4C8A0" stroke="#B0A080" strokeWidth={0.7} />
+      <Path d={korD}  fill="#D4C8A0" stroke="#B0A080" strokeWidth={0.7} />
+      <Path d={mljD}  fill="#D4C8A0" stroke="#B0A080" strokeWidth={0.7} />
+      <Path d={routeD} fill="none" stroke="#1F3D3A" strokeWidth={3.5} opacity={0.08} />
+      <Path d={routeD} fill="none" stroke="#1B3D39" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+      {pts.map((c, i) => {
+        const [cx, cy] = c.pt;
+        const r = c.tier === 1 ? 8 : 5;
+        return <Circle key={`d${i}`} cx={cx} cy={cy} r={r}
+          fill={c.tier === 1 ? '#F2E4CB' : '#C8D9D5'}
+          stroke={c.tier === 1 ? '#C9A96E' : '#2A5248'}
+          strokeWidth={c.tier === 1 ? 2 : 1.5} />;
+      })}
+      {pts.map((c, i) => {
+        const [cx, cy] = c.pt;
+        const r = c.tier === 1 ? 8 : 5;
+        const tx = c.dx > 0 ? cx + r + 6 : cx - r - 6;
+        const anchor = c.dx > 0 ? 'start' : 'end';
+        const fs = c.tier === 1 ? 11 : 9.5;
+        return <Text key={`l${i}`} x={tx} y={cy + 4}
+          textAnchor={anchor} fontFamily="Helvetica-Bold" fontSize={fs} fill="#1C1A16">
+          {c.name}
+        </Text>;
+      })}
+    </Svg>
+  );
+}
+
+function NorthernEnglandRouteSvgMap() {
+  const VW = 800, VH = 400;
+  const X0 = -3.5, X1 = 0.3, Y0 = 53.4, Y1 = 55.3;
+  const proj = (ln, lt) => _pdfProj(ln, lt, X0, X1, Y0, Y1, VW, VH);
+  const svgH = Math.round(PAGE_W * VH / VW);
+
+  const LAND = [
+    [-3.5,53.4],[-2.0,53.4],[-0.5,53.4],
+    [0.2,53.7],[0.2,54.1],[0.1,54.4],[0.0,54.8],
+    [-0.4,55.1],[-0.8,55.3],
+    [-1.5,55.3],[-2.5,55.3],
+    [-3.0,55.1],[-3.2,55.0],
+    [-3.5,54.7],[-3.5,54.3],[-3.4,54.0],[-3.3,53.8],[-3.5,53.5],[-3.5,53.4],
+  ];
+  const CITIES = [
+    { name:'Leeds',       lon:-1.55, lat:53.80, tier:2, dx: 12 },
+    { name:'Malham',      lon:-2.16, lat:54.07, tier:2, dx:-12 },
+    { name:'Ambleside',   lon:-2.96, lat:54.43, tier:1, dx:-12 },
+    { name:'Grasmere',    lon:-3.02, lat:54.46, tier:2, dx:-12 },
+    { name:'Durham',      lon:-1.57, lat:54.78, tier:1, dx: 12 },
+    { name:'Whitby',      lon:-0.62, lat:54.49, tier:1, dx: 12 },
+    { name:'Scarborough', lon:-0.40, lat:54.28, tier:2, dx: 12 },
+    { name:'York',        lon:-1.08, lat:53.96, tier:1, dx: 12 },
+  ];
+
+  const landD  = _pdfPoly(LAND, proj);
+  const routeD = _pdfCatmull(CITIES.map(c => [c.lon, c.lat]), proj, 0.22);
+  const pts    = CITIES.map(c => ({ ...c, pt: proj(c.lon, c.lat) }));
+
+  return (
+    <Svg viewBox={`0 0 ${VW} ${VH}`} width={PAGE_W} height={svgH}>
+      <Rect x={0} y={0} width={VW} height={VH} fill="#BDD5E0" />
+      <Path d={landD} fill="#D8CBAA" stroke="#B5A48A" strokeWidth={0.8} />
+      <Path d={routeD} fill="none" stroke="#1F3D3A" strokeWidth={3.5} opacity={0.08} />
+      <Path d={routeD} fill="none" stroke="#1B3D39" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+      {pts.map((c, i) => {
+        const [cx, cy] = c.pt;
+        const r = c.tier === 1 ? 8 : 5;
+        return <Circle key={`d${i}`} cx={cx} cy={cy} r={r}
+          fill={c.tier === 1 ? '#F2E4CB' : '#C8D9D5'}
+          stroke={c.tier === 1 ? '#C9A96E' : '#2A5248'}
+          strokeWidth={c.tier === 1 ? 2 : 1.5} />;
+      })}
+      {pts.map((c, i) => {
+        const [cx, cy] = c.pt;
+        const r = c.tier === 1 ? 8 : 5;
+        const tx = c.dx > 0 ? cx + r + 6 : cx - r - 6;
+        const anchor = c.dx > 0 ? 'start' : 'end';
+        const fs = c.tier === 1 ? 11 : 9.5;
+        return <Text key={`l${i}`} x={tx} y={cy + 4}
+          textAnchor={anchor} fontFamily="Helvetica-Bold" fontSize={fs} fill="#1C1A16">
+          {c.name}
+        </Text>;
+      })}
+    </Svg>
+  );
+}
+
 // Lookup: itinerary ID → PDF SVG map component + natural dimensions
 const PDF_ROUTE_MAPS = {
-  'morocco-motorcycle-expedition':    { Component: MoroccoRouteSvgMap,           svgW: PAGE_W,                       svgH: Math.round(PAGE_W * 720 / 800) },
-  'philippines-island-journey':       { Component: PhilippinesRouteSvgMap,       svgW: Math.round(650 * 660 / 800),  svgH: 650 },
-  'tuscany-wine-roads-in-7-days':     { Component: TuscanyWineRoadsRouteSvgMap,  svgW: PAGE_W,                       svgH: Math.round(PAGE_W * 395 / 500) },
+  'morocco-motorcycle-expedition':                    { Component: MoroccoRouteSvgMap,           svgW: PAGE_W,                       svgH: Math.round(PAGE_W * 720 / 800) },
+  'philippines-island-journey':                       { Component: PhilippinesRouteSvgMap,       svgW: Math.round(650 * 660 / 800),  svgH: 650 },
+  'tuscany-wine-roads-in-7-days':                     { Component: TuscanyWineRoadsRouteSvgMap,  svgW: PAGE_W,                       svgH: Math.round(PAGE_W * 395 / 500) },
+  'croatia-by-sea-dubrovnik-hvar-and-split':          { Component: CroatiaRouteSvgMap,           svgW: PAGE_W,                       svgH: Math.round(PAGE_W * 543 / 800) },
+  'northern-england-roadtrip':                        { Component: NorthernEnglandRouteSvgMap,   svgW: PAGE_W,                       svgH: Math.round(PAGE_W * 400 / 800) },
 };
 
 /** Thin running header shared by all inner pages */

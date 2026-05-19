@@ -17,8 +17,10 @@ import AmericanWestRouteMap from '../components/AmericanWestRouteMap';
 import AmericanWest12DaysRouteMap from '../components/AmericanWest12DaysRouteMap';
 import AmericanWest8DaysRouteMap from '../components/AmericanWest8DaysRouteMap';
 import TuscanyRouteMap from '../components/TuscanyRouteMap';
+import CroatiaRouteMap from '../components/CroatiaRouteMap';
+import NorthernEnglandRouteMap from '../components/NorthernEnglandRouteMap';
 
-// Always-on route maps for curated/static itineraries
+// Always-on route maps for curated/static itineraries (no CMS toggle required)
 const ROUTE_MAP_COMPONENTS = {
   'japan-grand-cultural-journey': JapanRouteMap,
   'morocco-motorcycle-expedition': MoroccoRouteMap,
@@ -27,11 +29,13 @@ const ROUTE_MAP_COMPONENTS = {
   'california-american-west-16-days': AmericanWestRouteMap,
   'california-american-west-12-days': AmericanWest12DaysRouteMap,
   'california-american-west-8-days': AmericanWest8DaysRouteMap,
+  'northern-england-roadtrip': NorthernEnglandRouteMap,
 };
 
 // DB-controlled route maps — shown only when content.routeMap.showOnSite === true
 const DB_ROUTE_MAP_COMPONENTS = {
   'tuscany-wine-roads-in-7-days': TuscanyRouteMap,
+  'croatia-by-sea-dubrovnik-hvar-and-split': CroatiaRouteMap,
 };
 
 // ─────────────────────────────────────────────────────────────
