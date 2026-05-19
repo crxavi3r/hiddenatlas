@@ -2148,7 +2148,7 @@ export default function ItineraryCMSEditorPage() {
         {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} setPricingOptions={setPricingOptions} creators={allCreators} isAdmin={isAdmin} myCreatorId={myCreatorId} dayCount={(form.content?.days || []).length} currentId={savedId.current || (isNew ? null : id)} isNew={isNew} hasSavedId={!!savedId.current} slugOverride={slugOverride} onSlugOverride={handleSlugOverride} />}
         {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} onCoverImageChange={handleHeroCoverImage} />}
         {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} dayImages={dayImages} durationDays={form.durationDays} />}
-        {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} />}
+        {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} slug={form.slug || ''} />}
         {activeTab === 'images'   && (
           <ImagesTab
             assets={assets} loading={assetsLoading}
@@ -3599,7 +3599,7 @@ function DaysTab({ c, addDay, updateDay, deleteDay, moveDay, assets, onUpload, d
 }
 
 // ── Sections ──────────────────────────────────────────────────────────────────
-function SectionsTab({ c, setContent }) {
+function SectionsTab({ c, setContent, slug = '' }) {
   return (
     <div style={{ maxWidth: '720px' }}>
       <div style={sectionCard}>
@@ -3640,7 +3640,7 @@ function SectionsTab({ c, setContent }) {
           'california-american-west-12-days',
           'california-american-west-8-days',
         ]);
-        const hasComponent = COMPONENT_MAP_SLUGS.has(form.slug);
+        const hasComponent = COMPONENT_MAP_SLUGS.has(slug);
         const hasImage = !!(c('routeMap.imageUrl') || '').trim();
         const mapAvailable = hasComponent || hasImage;
         const siteEnabled = c('routeMap.showOnSite') === true;
