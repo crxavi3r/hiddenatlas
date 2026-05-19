@@ -4,7 +4,7 @@ import { useAuth } from '@clerk/clerk-react';
 import { useUserCtx } from '../../lib/useUserCtx';
 import {
   ArrowLeft, Save, Globe, EyeOff, Eye, Plus, Trash2, ChevronDown, ChevronUp,
-  Wand2, Image as ImageIcon, Clock, Check, User, Upload, FileText, ExternalLink, Edit2, X,
+  Wand2, Image as ImageIcon, Clock, Check, User, Upload, FileText, ExternalLink, Edit2, X, Loader2,
 } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { resolveCoverImage } from '../../lib/resolveCoverImage';
@@ -1113,15 +1113,17 @@ export default function ItineraryCMSEditorPage() {
         // (JSONB may arrive as string in some pg/Vercel configurations)
       }));
 
-      setSaveMsg({ ok: true, text: 'Saved.' });
       if (isNew) {
+        setSaveMsg({ ok: true, text: 'Saved.' });
         navigate(`/admin/itineraries/${json.itinerary.id}`, { replace: true });
       } else {
-        // Auto-regenerate PDF after every save (fire-and-forget, does not block save)
-        setTimeout(() => handleGeneratePDF({ silent: true }), 0);
+        // Await PDF generation — keeps saving=true and button busy until upload completes
+        setSaveMsg({ ok: true, text: 'Saved. Generating PDF…' });
+        const pdfOk = await handleGeneratePDF({ silent: true });
+        setSaveMsg({ ok: pdfOk, text: pdfOk ? 'Saved & PDF updated.' : 'Saved. PDF generation failed — try manually.' });
       }
     } catch (e) { setSaveMsg({ ok: false, text: e.message }); }
-    finally { setSaving(false); setTimeout(() => setSaveMsg(null), 4000); }
+    finally { setSaving(false); setTimeout(() => setSaveMsg(null), 5000); }
   }
 
   // ── Toggle publish ────────────────────────────────────────────────────────────
@@ -1547,6 +1549,7 @@ export default function ItineraryCMSEditorPage() {
       setForm(f => ({ ...f, pdfUrl: blobUrl, pdf_url: blobUrl, pdf_version: pdfVersion || f.pdf_version }));
       setPdfState('done');
       setTimeout(() => setPdfState('idle'), 4000);
+      return true;
     } catch (e) {
       console.error('[CMS] PDF generation failed:', e.message);
       if (silent) {
@@ -1571,6 +1574,7 @@ export default function ItineraryCMSEditorPage() {
           });
         } catch { /* best-effort — don't surface secondary errors */ }
       }
+      return false;
     } finally {
       pdfInFlight.current = false;
     }
@@ -1990,27 +1994,34 @@ export default function ItineraryCMSEditorPage() {
           {(form.pdf_url || form.pdfUrl) && !isNew && (
             <button
               type="button"
-              onClick={handleViewPDF}
-              title={`pdf_url: ${form.pdf_url || form.pdfUrl}`}
-              style={{ ...btnSecondary, display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#1B6B65', cursor: 'pointer' }}
+              onClick={saving ? undefined : handleViewPDF}
+              disabled={saving}
+              title={saving ? 'PDF is being updated…' : `pdf_url: ${form.pdf_url || form.pdfUrl}`}
+              style={{ ...btnSecondary, display: 'inline-flex', alignItems: 'center', gap: '6px', color: saving ? '#8C8070' : '#1B6B65', cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.55 : 1 }}
             >
-              <ExternalLink size={12} /> View PDF {form.pdf_version ? `(${form.pdf_version})` : ''}
+              {saving && pdfState === 'generating'
+                ? <><Loader2 size={12} style={{ animation: 'spin 0.9s linear infinite' }} /> Updating PDF…</>
+                : <><ExternalLink size={12} /> View PDF {form.pdf_version ? `(${form.pdf_version})` : ''}</>
+              }
             </button>
           )}
 
           {/* Sync days from static source — only for non-custom itineraries */}
           {form.type !== 'custom' && !isNew && (
-            <button onClick={handleSyncDaysFromStatic} style={btnSecondary} title="Reset all day content from src/data/itineraries.js">
+            <button onClick={saving ? undefined : handleSyncDaysFromStatic} disabled={saving} style={{ ...btnSecondary, opacity: saving ? 0.5 : 1, cursor: saving ? 'default' : 'pointer' }} title="Reset all day content from src/data/itineraries.js">
               <Check size={12} /> Sync days
             </button>
           )}
 
-          <button onClick={handleTogglePublish} style={btnSecondary}>
+          <button onClick={saving ? undefined : handleTogglePublish} disabled={saving} style={{ ...btnSecondary, opacity: saving ? 0.5 : 1, cursor: saving ? 'default' : 'pointer' }}>
             {isPublished ? <><EyeOff size={12} /> Unpublish</> : <><Globe size={12} /> Publish</>}
           </button>
 
-          <button onClick={handleSave} disabled={saving} style={btnPrimary}>
-            <Save size={12} /> {saving ? 'Saving…' : 'Save'}
+          <button onClick={handleSave} disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.85 : 1 }}>
+            {saving
+              ? <><Loader2 size={12} style={{ animation: 'spin 0.9s linear infinite' }} /> {pdfState === 'generating' ? 'Generating PDF…' : 'Saving…'}</>
+              : <><Save size={12} /> Save</>
+            }
           </button>
         </div>
       </div>
