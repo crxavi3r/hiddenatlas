@@ -154,7 +154,8 @@ export default function InteractiveRouteMap({ stops = [], onDaySelect, isUnlocke
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VW} ${VH}`}
-        style={{ width: '100%', height: 'auto', display: 'block', borderRadius: '8px', border: '1px solid #E8E3DA', background: '#F0EDE6' }}
+        style={{ width: '100%', height: 'auto', display: 'block', borderRadius: '8px', border: '1px solid #E8E3DA', background: '#BDD5E0' }}
+        aria-label={`Route map: ${validStops.map(s => s.name).join(' → ')}`}
       >
         <defs>
           <filter id="irm-node-shadow" x="-60%" y="-60%" width="220%" height="220%">
@@ -162,14 +163,22 @@ export default function InteractiveRouteMap({ stops = [], onDaySelect, isUnlocke
           </filter>
         </defs>
 
-        <rect width={VW} height={VH} fill="#F0EDE6" />
-        {/* Subtle grid */}
-        {[0.25, 0.5, 0.75].map(t => (
-          <g key={t}>
-            <line x1={VW * t} y1={0} x2={VW * t} y2={VH} stroke="#E2DDD4" strokeWidth="0.5" />
-            <line x1={0} y1={VH * t} x2={VW} y2={VH * t} stroke="#E2DDD4" strokeWidth="0.5" />
-          </g>
-        ))}
+        {/* Ocean */}
+        <rect width={VW} height={VH} fill="#BDD5E0" />
+        {/* Land mass — rounded rect, sea visible at edges */}
+        <rect
+          x={VW * 0.055} y={VH * 0.06}
+          width={VW * 0.89} height={VH * 0.88}
+          rx={VH * 0.10} ry={VH * 0.10}
+          fill="#D8CBAA" stroke="#B5A48A" strokeWidth="0.7"
+        />
+        {/* Secondary terrain tint — lower region */}
+        <rect
+          x={VW * 0.28} y={VH * 0.50}
+          width={VW * 0.62} height={VH * 0.44}
+          rx={VH * 0.07} ry={VH * 0.07}
+          fill="#C8A96A" fillOpacity="0.16"
+        />
 
         {/* Route ghost */}
         <path d={routePathD} fill="none" stroke="#1F3D3A" strokeWidth="1.2" opacity="0.07" />
@@ -224,7 +233,7 @@ export default function InteractiveRouteMap({ stops = [], onDaySelect, isUnlocke
                 fontSize={cfg.lFs} fontFamily="Georgia, serif"
                 fontWeight={tier === 1 ? '800' : '500'}
                 fill={isFuture ? '#9A9080' : tier === 1 ? '#131210' : '#1C1A16'}
-                style={{ paintOrder: 'stroke', stroke: '#F0EDE6', strokeWidth: '4', strokeLinejoin: 'round', pointerEvents: 'none' }}
+                style={{ paintOrder: 'stroke', stroke: '#D8CBAA', strokeWidth: '4', strokeLinejoin: 'round', pointerEvents: 'none' }}
               >
                 {stop.name}
               </text>
@@ -235,7 +244,7 @@ export default function InteractiveRouteMap({ stops = [], onDaySelect, isUnlocke
                   textAnchor={anchor}
                   fontSize={cfg.dFs} fontFamily="Helvetica, sans-serif"
                   fill={isFuture ? '#C0B8AC' : '#9C9284'}
-                  style={{ paintOrder: 'stroke', stroke: '#F0EDE6', strokeWidth: '2.5', pointerEvents: 'none' }}
+                  style={{ paintOrder: 'stroke', stroke: '#D8CBAA', strokeWidth: '2.5', pointerEvents: 'none' }}
                 >
                   {`Day ${stop.dayNumber}`}
                 </text>
