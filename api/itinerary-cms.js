@@ -913,10 +913,45 @@ async function handleUploadPDF(pool, id, req) {
   return { ok: true, url: blob.url, pdfVersion: newVersion };
 }
 
+// ── Sanitize a slug for use in Vercel Blob pathnames ─────────────────────────
+// Keeps only a-z, 0-9, hyphens and dots (for the .pdf extension).
+// Normalizes to ASCII, strips leading/trailing slashes, collapses double-slashes.
+function sanitizeSlug(raw) {
+  if (!raw || typeof raw !== 'string') throw new Error('slug is required for pathname generation');
+  let s = raw
+    .toLowerCase()
+    // Replace accented/unicode chars with ASCII equivalents where possible
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    // Keep only safe characters
+    .replace(/[^a-z0-9\-]/g, '-')
+    // Collapse multiple hyphens
+    .replace(/-+/g, '-')
+    // Strip leading/trailing hyphens
+    .replace(/^-+|-+$/g, '');
+  if (!s) throw new Error(`slug "${raw}" produced an empty safe slug`);
+  return s;
+}
+
+// Builds a safe, deterministic PDF pathname — no leading slash, no double-slash,
+// no special characters, always ends in .pdf.
+function buildPdfPathname(slug) {
+  const safeSlug = sanitizeSlug(slug);
+  const timestamp = Date.now();
+  const pathname = `itineraries/${safeSlug}/pdf/${safeSlug}-hiddenatlas-${timestamp}.pdf`;
+  if (pathname.includes('//')) throw new Error(`Generated pathname contains double-slash: ${pathname}`);
+  if (pathname.startsWith('/'))  throw new Error(`Generated pathname must not start with slash: ${pathname}`);
+  if (pathname.length > 900) throw new Error(`Generated pathname is too long (${pathname.length} chars)`);
+  return pathname;
+}
+
+// ── Vercel Blob upload URL (matches what @vercel/blob client.js uses internally) ──
+// The actual API endpoint is https://vercel.com/api/blob/?pathname=...
+// The pathname is sent as a query parameter, NOT in the URL path.
+const VERCEL_BLOB_API_URL = 'https://vercel.com/api/blob';
+
 // ── Issue a scoped client token for direct browser → Vercel Blob PDF upload ──
-// The client uses this token with @vercel/blob/client `put` to upload the PDF
-// directly from the browser, bypassing the Vercel Function body size limit.
-// Token is scoped to a single specific pathname and expires in 5 minutes.
+// Returns { token, pathname, uploadUrl } — the frontend must PUT to uploadUrl
+// using the token (no URL reconstruction on the client side).
 async function handleUploadPDFToken(pool, id) {
   if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
 
@@ -926,31 +961,33 @@ async function handleUploadPDFToken(pool, id) {
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
   const { slug } = rows[0];
 
-  const timestamp = Date.now();
-  const filename  = `${slug}-hiddenatlas-${timestamp}.pdf`;
-  const pathname  = `itineraries/${slug}/pdf/${filename}`;
+  const safeSlug = sanitizeSlug(slug);
+  const pathname = buildPdfPathname(slug);
 
-  console.log('PDF BLOB UPLOAD DEBUG', {
-    slug,
-    pathname,
-    hasBlobToken: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
-    environment: process.env.VERCEL_ENV,
-  });
+  // The upload URL is the Vercel Blob API endpoint with pathname as a query param.
+  // This matches what @vercel/blob/client put() does internally.
+  const uploadUrl = `${VERCEL_BLOB_API_URL}/?${new URLSearchParams({ pathname }).toString()}`;
+
+  console.log('[upload-pdf-token] slug:', slug, '| safeSlug:', safeSlug,
+    '| pathname:', pathname, '| pathLength:', pathname.length,
+    '| hasBlobToken:', Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+    '| env:', process.env.VERCEL_ENV || 'local');
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     throw Object.assign(new Error('BLOB_READ_WRITE_TOKEN is not configured'), { status: 503 });
   }
 
   const clientToken = await generateClientTokenFromReadWriteToken({
+    token: process.env.BLOB_READ_WRITE_TOKEN,
     pathname,
     allowedContentTypes: ['application/pdf'],
-    maximumSizeInBytes: 30 * 1024 * 1024, // 30 MB ceiling
-    validUntil: Date.now() + 5 * 60 * 1000, // 5-minute window
+    maximumSizeInBytes: 30 * 1024 * 1024,
+    validUntil: Date.now() + 5 * 60 * 1000,
     allowOverwrite: true,
   });
 
-  console.log('[upload-pdf-token] issued token — slug:', slug, '| path:', pathname);
-  return { token: clientToken, pathname };
+  console.log('[upload-pdf-token] token issued — pathname:', pathname);
+  return { token: clientToken, pathname, uploadUrl, contentType: 'application/pdf' };
 }
 
 // ── Persist blob URL + increment version after a successful client upload ─────

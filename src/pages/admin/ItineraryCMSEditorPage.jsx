@@ -1555,8 +1555,10 @@ export default function ItineraryCMSEditorPage() {
       console.log('[CMS] PDF blob ready — size:', pdfBlob.size, 'bytes');
 
       // ── 5. Upload PDF directly to Vercel Blob (bypasses 4.5 MB Function body limit) ──
-      // Step A: get a scoped client token + target pathname from the server
-      console.log('[CMS] Requesting upload token — size:', pdfBlob.size, 'bytes');
+      // Step A: get scoped client token + pre-built uploadUrl from the server.
+      // The server returns uploadUrl = https://vercel.com/api/blob/?pathname=...
+      // which matches what @vercel/blob/client put() uses internally.
+      console.log('[CMS] Requesting upload token — blob size:', pdfBlob.size, 'bytes | type:', pdfBlob.type);
       const tokenRes = await fetch(
         `/api/itinerary-cms?action=upload-pdf-token&id=${targetId}`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -1565,26 +1567,41 @@ export default function ItineraryCMSEditorPage() {
         const errText = await tokenRes.text();
         throw new Error(`Failed to get upload token: ${tokenRes.status} — ${errText.slice(0, 200)}`);
       }
-      const { token: clientToken, pathname } = await tokenRes.json();
+      const { token: clientToken, pathname, uploadUrl, contentType: blobContentType } = await tokenRes.json();
 
-      // Step B: PUT the PDF binary directly to Vercel Blob (no Function body involved)
-      console.log('[CMS] Uploading PDF directly to Blob — pathname:', pathname);
-      const blobRes = await fetch(`https://blob.vercel-storage.com/${pathname}`, {
+      // Diagnostic: log upload target without exposing the full token
+      console.log('[CMS] Upload token received —',
+        'uploadUrl host:', new URL(uploadUrl).host,
+        '| pathname:', pathname,
+        '| contentType:', blobContentType,
+        '| blob.size:', pdfBlob.size,
+        '| blob.type:', pdfBlob.type);
+
+      // Step B: PUT the PDF binary directly to Vercel Blob using uploadUrl from server.
+      // Headers mirror what @vercel/blob/client put() sends internally:
+      //   authorization: Bearer <client-token>
+      //   x-api-version: 12
+      //   x-content-type: application/pdf   (NOT Content-Type — Blob API uses this custom header)
+      //   x-vercel-blob-access: public
+      const blobRes = await fetch(uploadUrl, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${clientToken}`,
-          'Content-Type': 'application/pdf',
-          'x-api-version': '12',
+          'authorization':       `Bearer ${clientToken}`,
+          'x-api-version':       '12',
+          'x-content-type':      blobContentType || 'application/pdf',
+          'x-vercel-blob-access': 'public',
         },
         body: pdfBlob,
       });
       if (!blobRes.ok) {
-        const errText = await blobRes.text();
-        throw new Error(`Blob upload failed: ${blobRes.status} — ${errText.slice(0, 200)}`);
+        let errDetail = '';
+        try { errDetail = JSON.stringify(await blobRes.json()); } catch { errDetail = await blobRes.text().catch(() => ''); }
+        console.error('[CMS] Blob upload failed — status:', blobRes.status, '| uploadUrl host:', new URL(uploadUrl).host, '| pathname:', pathname, '| response:', errDetail.slice(0, 300));
+        throw new Error(`Blob upload failed (${blobRes.status}): ${errDetail.slice(0, 200)}`);
       }
       const blobJson = await blobRes.json();
       const directBlobUrl = blobJson.url;
-      if (!directBlobUrl) throw new Error('Blob upload returned no URL');
+      if (!directBlobUrl) throw new Error('Blob upload returned no URL — response: ' + JSON.stringify(blobJson).slice(0, 200));
 
       // Step C: save the URL to DB and increment the PDF version
       const saveRes = await fetch(
@@ -1603,7 +1620,7 @@ export default function ItineraryCMSEditorPage() {
       if (saveJson.error) throw new Error(saveJson.error);
 
       const { pdfUrl: blobUrl, pdfVersion } = saveJson;
-      console.log('[CMS] PDF uploaded —', blobUrl, '| version:', pdfVersion);
+      console.log('[CMS] PDF uploaded successfully —', blobUrl, '| version:', pdfVersion);
 
       setForm(f => ({ ...f, pdfUrl: blobUrl, pdf_url: blobUrl, pdf_version: pdfVersion || f.pdf_version }));
       setPdfState('done');
