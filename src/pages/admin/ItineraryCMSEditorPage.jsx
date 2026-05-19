@@ -70,9 +70,18 @@ const EMPTY_CONTENT = {
 };
 
 const DIFFICULTIES     = ['Relaxed', 'Balanced', 'Fast'];
-const BEST_FOR_OPTIONS = ['Couples', 'Families', 'Friend Groups', 'Adventurers', 'Solo'];
+const BEST_FOR_OPTIONS = [
+  'Couples', 'Families', 'Friend Groups', 'Adventurers', 'Solo',
+  'Wine Lovers', 'Food Lovers', 'First-time Visitors', 'Return Travellers',
+  'Slow Travellers', 'Luxury Travellers', 'Nature Lovers', 'Culture Seekers',
+  'Beach Lovers', 'Honeymooners', 'Multi-generation Families',
+];
 const GROUP_SIZES      = ['1–2 people', '2–4 people', '4–6 people', 'Flexible'];
-const CATEGORIES       = ['City Break', 'Road Trip', 'Island Journey', 'Cultural Route', 'Nature Escape', 'Luxury Escape'];
+const CATEGORIES       = [
+  'City Break', 'Road Trip', 'Island Journey', 'Cultural Route', 'Nature Escape', 'Luxury Escape',
+  'Wine & Food', 'Beach Escape', 'Countryside Escape', 'Family Journey', 'Romantic Escape',
+  'Adventure Route', 'Wellness Escape', 'Scenic Rail Journey', 'Safari & Wildlife', 'Winter Escape',
+];
 
 function slugify(title) {
   return title.toLowerCase()
