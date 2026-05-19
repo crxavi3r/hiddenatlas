@@ -806,10 +806,113 @@ function PhilippinesRouteSvgMap() {
   );
 }
 
+function TuscanyWineRoadsRouteSvgMap() {
+  const VW = 500, VH = 395;
+  const X0 = 9.85, X1 = 12.25, Y0 = 42.35, Y1 = 44.25;
+  const proj = (ln, lt) => _pdfProj(ln, lt, X0, X1, Y0, Y1, VW, VH);
+  const svgH = Math.round(PAGE_W * VH / VW); // ≈ 471pt
+
+  // Simplified Tuscany outline (clockwise from NW Lunigiana coast)
+  const LAND = [
+    [10.07,44.18],[10.35,44.20],[10.65,44.15],[10.95,44.20],
+    [11.25,44.22],[11.55,44.12],[11.75,44.00],[11.95,44.10],[12.05,43.92],
+    [12.12,43.65],[12.05,43.38],[11.92,43.10],[11.80,42.88],
+    [11.68,42.58],[11.48,42.42],[11.28,42.38],[11.10,42.38],[10.88,42.52],
+    [10.68,42.65],[10.52,42.82],[10.38,43.02],[10.28,43.18],
+    [10.20,43.40],[10.22,43.58],[10.18,43.70],
+    [10.08,43.82],[10.03,43.98],[10.07,44.18],
+  ];
+  // Wine region tint overlays
+  const CHIANTI = [
+    [11.00,43.75],[11.50,43.72],[11.55,43.40],[11.25,43.22],[10.95,43.30],[10.90,43.55],[11.00,43.75],
+  ];
+  const VAL_DORCIA = [
+    [11.25,43.15],[11.82,43.05],[11.78,42.72],[11.38,42.68],[11.22,42.88],[11.25,43.15],
+  ];
+  // 7 key overnight stops (one per day)
+  const CITIES = [
+    { name:'San Gimignano', lon:11.04, lat:43.47, day:1, dx:-14 },
+    { name:'Siena',         lon:11.33, lat:43.32, day:2, dx: 14 },
+    { name:'Cortona',       lon:11.99, lat:43.27, day:3, dx:-14 },
+    { name:'Pitigliano',    lon:11.67, lat:42.63, day:4, dx: 14 },
+    { name:'Montalcino',    lon:11.49, lat:43.05, day:5, dx:-14 },
+    { name:'Volterra',      lon:10.86, lat:43.40, day:6, dx:-14 },
+    { name:'Pisa',          lon:10.40, lat:43.72, day:7, dx: 14 },
+  ];
+  // Geographic context labels (no day number)
+  const CONTEXT = [
+    { name:'Florence', lon:11.25, lat:43.77, dx: 10 },
+    { name:'Arezzo',   lon:11.88, lat:43.47, dx: 10 },
+    { name:'Grosseto', lon:11.11, lat:42.76, dx:-10 },
+  ];
+
+  const landD      = _pdfPoly(LAND,      proj);
+  const chiantiD   = _pdfPoly(CHIANTI,   proj);
+  const valDorciaD = _pdfPoly(VAL_DORCIA, proj);
+  const routeD     = _pdfCatmull(CITIES.map(c => [c.lon, c.lat]), proj, 0.22);
+  const pts        = CITIES.map(c => ({ ...c, pt: proj(c.lon, c.lat) }));
+  const ctxPts     = CONTEXT.map(c => ({ ...c, pt: proj(c.lon, c.lat) }));
+
+  return (
+    <Svg viewBox={`0 0 ${VW} ${VH}`} width={PAGE_W} height={svgH}>
+      {/* Sea */}
+      <Rect x={0} y={0} width={VW} height={VH} fill="#C8DCEA" />
+      {/* Tuscany land */}
+      <Path d={landD} fill="#D4CBAA" stroke="#B0A485" strokeWidth={0.8} />
+      {/* Wine region tints */}
+      <Path d={chiantiD}   fill="#8B3A3A" fillOpacity={0.12} stroke="#7A2F2F" strokeWidth={0.6} strokeOpacity={0.3} />
+      <Path d={valDorciaD} fill="#8B5A1A" fillOpacity={0.10} stroke="#7A4A15" strokeWidth={0.6} strokeOpacity={0.25} />
+      {/* Route shadow */}
+      <Path d={routeD} fill="none" stroke="#0D2018" strokeWidth={4.5} opacity={0.07} />
+      {/* Main route line */}
+      <Path d={routeD} fill="none" stroke="#1B6B65" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+      {/* Context city dots */}
+      {ctxPts.map((c, i) => (
+        <Circle key={`cd${i}`} cx={c.pt[0]} cy={c.pt[1]} r={3}
+          fill="#D8D0BE" stroke="#A09880" strokeWidth={0.7} />
+      ))}
+      {/* Context labels */}
+      {ctxPts.map((c, i) => (
+        <Text key={`cl${i}`} x={c.dx > 0 ? c.pt[0] + 8 : c.pt[0] - 8} y={c.pt[1] + 4}
+          textAnchor={c.dx > 0 ? 'start' : 'end'}
+          fontFamily="Helvetica" fontSize={8} fill="#706558" fillOpacity={0.75}>
+          {c.name}
+        </Text>
+      ))}
+      {/* Day stop glow rings */}
+      {pts.map((c, i) => (
+        <Circle key={`dg${i}`} cx={c.pt[0]} cy={c.pt[1]} r={12}
+          fill="#C9A96E" fillOpacity={0.18} />
+      ))}
+      {/* Day stop dots */}
+      {pts.map((c, i) => (
+        <Circle key={`d${i}`} cx={c.pt[0]} cy={c.pt[1]} r={8}
+          fill="#F2E4CB" stroke="#C9A96E" strokeWidth={1.5} />
+      ))}
+      {/* Day numbers inside dots */}
+      {pts.map((c, i) => (
+        <Text key={`n${i}`} x={c.pt[0]} y={c.pt[1] + 3.5}
+          textAnchor="middle" fontFamily="Helvetica-Bold" fontSize={7.5} fill="#7A4A10">
+          {c.day}
+        </Text>
+      ))}
+      {/* City name labels */}
+      {pts.map((c, i) => (
+        <Text key={`l${i}`} x={c.pt[0] + c.dx} y={c.pt[1] + 4}
+          textAnchor={c.dx > 0 ? 'start' : 'end'}
+          fontFamily="Helvetica-Bold" fontSize={9.5} fill="#1C1A16">
+          {c.name}
+        </Text>
+      ))}
+    </Svg>
+  );
+}
+
 // Lookup: itinerary ID → PDF SVG map component + natural dimensions
 const PDF_ROUTE_MAPS = {
-  'morocco-motorcycle-expedition': { Component: MoroccoRouteSvgMap, svgW: PAGE_W,  svgH: Math.round(PAGE_W * 720 / 800) },
-  'philippines-island-journey':    { Component: PhilippinesRouteSvgMap, svgW: Math.round(650 * 660 / 800), svgH: 650 },
+  'morocco-motorcycle-expedition':    { Component: MoroccoRouteSvgMap,           svgW: PAGE_W,                       svgH: Math.round(PAGE_W * 720 / 800) },
+  'philippines-island-journey':       { Component: PhilippinesRouteSvgMap,       svgW: Math.round(650 * 660 / 800),  svgH: 650 },
+  'tuscany-wine-roads-in-7-days':     { Component: TuscanyWineRoadsRouteSvgMap,  svgW: PAGE_W,                       svgH: Math.round(PAGE_W * 395 / 500) },
 };
 
 /** Thin running header shared by all inner pages */
@@ -1408,63 +1511,87 @@ function CTAPage({ itinerary }) {
 // per-day location breakdown using day.route || day.title.
 
 function RouteOverviewPage({ itinerary }) {
-  const { title, country, routeOverview, days = [] } = itinerary;
+  const { title, country, routeOverview, duration, days = [] } = itinerary;
+  const entry = PDF_ROUTE_MAPS[itinerary.id];
+
+  // Build deduplicated stops strip
+  const stops = [];
+  const seen = new Set();
+  for (const d of days) {
+    const city = (d.route || d.title || '').split(/[·–\-]/)[0].trim();
+    if (city && !seen.has(city)) { seen.add(city); stops.push(city); }
+  }
+  const displayStops = stops.slice(0, 10);
+  const hasMore = stops.length > 10;
 
   return (
     <Page size="A4" style={{ backgroundColor: C.stone }}>
       <RunHeader country={country} title={title} />
 
-      <View style={{ paddingHorizontal: 48, paddingTop: 36, paddingBottom: 40 }}>
-        {/* Eyebrow + rule */}
-        <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 2.5, color: C.teal, marginBottom: 14 }}>
-          ROUTE OVERVIEW
-        </Text>
-        <View style={{ width: 32, height: 1.5, backgroundColor: C.gold, marginBottom: 26 }} />
-
-        {/* Overall route string — editorial callout box */}
-        {routeOverview ? (
-          <View style={{
-            marginBottom: 28, padding: 14,
-            backgroundColor: C.cream,
-            borderLeftWidth: 2.5, borderLeftColor: C.teal,
-          }}>
-            <Text style={{ fontFamily: 'Times-Roman', fontSize: 11, color: C.charcoal, lineHeight: 1.75 }}>
-              {routeOverview}
+      {/* Editorial header — mirrors DestinationSvgMapPage */}
+      <View style={{
+        paddingHorizontal: 48, paddingTop: 16, paddingBottom: 14,
+        flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between',
+        borderBottomWidth: 1, borderBottomColor: C.border,
+      }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: 2.5, color: C.teal, marginBottom: 7 }}>
+            ROUTE MAP
+          </Text>
+          <Text style={{ fontFamily: 'Times-Bold', fontSize: 26, color: C.charcoal, lineHeight: 1.1 }}>
+            {title}
+          </Text>
+        </View>
+        {duration ? (
+          <View style={{ alignItems: 'flex-end', paddingBottom: 3 }}>
+            <Text style={{ fontFamily: 'Helvetica', fontSize: 8.5, color: C.muted, marginBottom: 6 }}>
+              {duration}
             </Text>
-          </View>
-        ) : null}
-
-        {/* Day-by-day breakdown */}
-        {days.length > 0 ? (
-          <View>
-            <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 1.5, color: C.muted, marginBottom: 16 }}>
-              DAY BY DAY
-            </Text>
-            {days.map((day, i) => {
-              const routeText = day.route || day.title;
-              if (!routeText) return null;
-              const isLast = i === days.length - 1;
-              return (
-                <View key={i} wrap={false} style={{
-                  flexDirection: 'row', alignItems: 'flex-start',
-                  paddingVertical: 9,
-                  borderBottomWidth: isLast ? 0 : 0.5,
-                  borderBottomColor: C.border,
-                }}>
-                  <View style={{ width: 42, flexShrink: 0 }}>
-                    <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 8, color: C.teal, letterSpacing: 0.5 }}>
-                      DAY {day.day}
-                    </Text>
-                  </View>
-                  <Text style={{ fontFamily: 'Times-Roman', fontSize: 11, color: C.charcoal, flex: 1, lineHeight: 1.5 }}>
-                    {routeText}
-                  </Text>
-                </View>
-              );
-            })}
+            <View style={{ width: 30, height: 1.5, backgroundColor: C.gold }} />
           </View>
         ) : null}
       </View>
+
+      {/* SVG map or text fallback */}
+      {entry ? (
+        <View style={{ alignItems: 'center', backgroundColor: C.stone }}>
+          <entry.Component />
+        </View>
+      ) : (
+        routeOverview ? (
+          <View style={{ paddingHorizontal: 48, paddingTop: 28, paddingBottom: 28 }}>
+            <View style={{ padding: 18, backgroundColor: C.cream, borderLeftWidth: 2.5, borderLeftColor: C.teal }}>
+              <Text style={{ fontFamily: 'Times-Roman', fontSize: 12, color: C.charcoal, lineHeight: 1.75 }}>
+                {routeOverview}
+              </Text>
+            </View>
+          </View>
+        ) : null
+      )}
+
+      {/* Compact stops strip */}
+      {displayStops.length > 0 && (
+        <View style={{
+          paddingHorizontal: 48, paddingTop: 10, paddingBottom: 10,
+          borderTopWidth: 0.5, borderTopColor: C.border,
+          flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap',
+        }}>
+          {displayStops.map((stop, i) => (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ width: 3.5, height: 3.5, borderRadius: 2, backgroundColor: C.gold, marginRight: 5 }} />
+              <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: C.charcoal, marginRight: 3 }}>{stop}</Text>
+              {(i < displayStops.length - 1 || hasMore) && (
+                <Text style={{ fontFamily: 'Helvetica', fontSize: 8.5, color: C.border, marginRight: 6 }}>›</Text>
+              )}
+            </View>
+          ))}
+          {hasMore && (
+            <Text style={{ fontFamily: 'Helvetica', fontSize: 7.5, color: C.muted, fontStyle: 'italic' }}>
+              +{stops.length - 10} more
+            </Text>
+          )}
+        </View>
+      )}
 
       <Text style={s.pageNum} render={({ pageNumber }) => String(pageNumber)} fixed />
     </Page>
@@ -1533,8 +1660,9 @@ export default function ItineraryPDF({ itinerary }) {
   const { days = [] } = itinerary;
 
   // pdfConfig toggles.
-  // showRouteMap adds a RouteOverviewPage (day-by-day route breakdown) AFTER the
-  // always-present RouteMapPage ("Expedition Route") and BEFORE Day 1.
+  // showRouteMap adds a RouteOverviewPage (SVG map if PDF_ROUTE_MAPS has an entry,
+  // otherwise routeOverview text callout) AFTER RouteMapPage and BEFORE Day 1.
+  // When showRouteMap is true, DestinationSvgMapPage is suppressed to avoid duplication.
   // showHotels adds an AccommodationPage after the day pages.
   // Both default to false so legacy PDFs don't gain unexpected pages.
   const showRouteMap = itinerary.showRouteMap === true;
@@ -1544,7 +1672,7 @@ export default function ItineraryPDF({ itinerary }) {
   // never invoke a component that would return null.
   const mapImageUrl   = itinerary.mapImage || null;
   const hasMapPng     = !!(mapImageUrl && !mapImageUrl.endsWith('.svg'));
-  const hasSvgMap     = !mapImageUrl && !!PDF_ROUTE_MAPS[itinerary.id];
+  const hasSvgMap     = !mapImageUrl && !!PDF_ROUTE_MAPS[itinerary.id] && !showRouteMap;
   const hasTransport  = !!itinerary.transport;
   const hasClosing    = !!(itinerary.whySpecial || itinerary.routeOverview);
   const hasHotels     = showHotels && (itinerary.accommodation || []).some(h => h.name);
