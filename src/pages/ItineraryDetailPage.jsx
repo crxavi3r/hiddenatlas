@@ -1251,7 +1251,9 @@ export default function ItineraryDetailPage() {
                 .filter(s => s.visible !== false && s.latitude != null && s.longitude != null)
                 .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
               const hasCMSStops = cmsStops.length >= 2;
-              if (!mapImage && !RouteMapComponent && !hasCMSStops) return null;
+              // Only render for always-on itineraries (hardcoded component or static mapImage).
+              // CMS-managed itineraries use Section 2 (after highlights) instead.
+              if (!mapImage && !RouteMapComponent) return null;
               const scrollToDay = dayNum => {
                 const el = document.getElementById(`day-${dayNum}`);
                 if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
