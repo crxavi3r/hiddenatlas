@@ -248,14 +248,20 @@ function TrendChart({ data = [] }) {
 }
 
 // ── Funnel bars ───────────────────────────────────────────────────────────────
-function FunnelChart({ funnel }) {
+function FunnelChart({ funnel, isDesignerView = false }) {
   if (!funnel) return null;
-  const steps = [
-    { label: 'Visitors',        value: funnel.visitors,       color: '#1B6B65' },
-    { label: 'Itinerary views', value: funnel.itineraryViews, color: '#2E8B7A' },
-    { label: 'Downloads',       value: funnel.downloads,      color: '#C9A96E' },
-    { label: 'Purchases',       value: funnel.purchases,      color: '#4A433A' },
-  ];
+  const steps = isDesignerView
+    ? [
+        { label: 'Itinerary views', value: funnel.itineraryViews, color: '#2E8B7A' },
+        { label: 'Downloads',       value: funnel.downloads,      color: '#C9A96E' },
+        { label: 'Purchases',       value: funnel.purchases,      color: '#4A433A' },
+      ]
+    : [
+        { label: 'Visitors',        value: funnel.visitors,       color: '#1B6B65' },
+        { label: 'Itinerary views', value: funnel.itineraryViews, color: '#2E8B7A' },
+        { label: 'Downloads',       value: funnel.downloads,      color: '#C9A96E' },
+        { label: 'Purchases',       value: funnel.purchases,      color: '#4A433A' },
+      ];
   const max = Math.max(...steps.map(s => s.value), 1);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -461,7 +467,7 @@ export default function DashboardPage() {
 
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-          {[...Array(7)].map((_, i) => (
+          {[...Array(isAdmin ? 7 : 4)].map((_, i) => (
             <div key={i} style={{ ...card, height: '90px', background: 'white', opacity: 0.5 }} />
           ))}
         </div>
@@ -476,7 +482,7 @@ export default function DashboardPage() {
         <>
           {/* ── KPI Cards ── */}
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(160px, 1fr))', gap: isMobile ? '10px' : '14px', marginBottom: '22px' }}>
-            {[
+            {(isAdmin ? [
               { icon: Eye,          label: 'Visitors',        value: fmt(kpis?.visitors),       sub: 'unique sessions' },
               { icon: Eye,          label: 'Page Views',      value: fmt(kpis?.pageViews),      sub: 'total page views' },
               { icon: Users,        label: 'New Users',       value: fmt(kpis?.newUsers),       sub: 'signups' },
@@ -484,7 +490,12 @@ export default function DashboardPage() {
               { icon: Download,     label: 'Downloads',       value: fmt(kpis?.downloads),      sub: 'PDFs' },
               { icon: ShoppingBag,  label: 'Sales',           value: fmt(kpis?.sales),          sub: 'purchases' },
               { icon: DollarSign,   label: 'Revenue',         value: fmtEur(kpis?.revenue),     sub: `${kpis?.conversionRate ?? 0}% conv.` },
-            ].map(k => (
+            ] : [
+              { icon: TrendingUp,   label: 'Itinerary Views', value: fmt(kpis?.itineraryViews), sub: 'detail pages' },
+              { icon: Download,     label: 'Downloads',       value: fmt(kpis?.downloads),      sub: 'PDFs' },
+              { icon: ShoppingBag,  label: 'Sales',           value: fmt(kpis?.sales),          sub: 'purchases' },
+              { icon: DollarSign,   label: 'Revenue',         value: fmtEur(kpis?.revenue),     sub: `${kpis?.conversionRate ?? 0}% conv.` },
+            ]).map(k => (
               <div key={k.label} style={card}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '10px' }}>
                   <p style={{ fontSize: '11px', fontWeight: '600', color: '#8C8070', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{k.label}</p>
@@ -504,7 +515,7 @@ export default function DashboardPage() {
             </div>
             <div style={card}>
               <p style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16', marginBottom: '16px' }}>Funnel</p>
-              <FunnelChart funnel={data?.funnel} />
+              <FunnelChart funnel={data?.funnel} isDesignerView={!isAdmin} />
             </div>
           </div>
 
@@ -579,7 +590,7 @@ export default function DashboardPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
                 <thead>
                   <tr style={{ background: '#FAFAF8' }}>
-                    {['Source', 'Visitors', 'Itin. Views', 'Users'].map(h => (
+                    {(isAdmin ? ['Source', 'Visitors', 'Itin. Views', 'Users'] : ['Source', 'Itin. Views']).map(h => (
                       <th key={h} style={{ padding: '8px 14px', textAlign: h === 'Source' ? 'left' : 'right', color: '#8C8070', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase' }}>{h}</th>
                     ))}
                   </tr>
@@ -588,13 +599,13 @@ export default function DashboardPage() {
                   {(data?.sources ?? []).map((s, i) => (
                     <tr key={s.source} style={{ borderTop: '1px solid #F4F1EC', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
                       <td style={{ padding: '8px 14px', color: '#1C1A16', fontWeight: '500', textTransform: 'capitalize' }}>{s.source}</td>
-                      <td style={{ padding: '8px 14px', textAlign: 'right', color: '#4A433A' }}>{fmt(s.visitors)}</td>
+                      {isAdmin && <td style={{ padding: '8px 14px', textAlign: 'right', color: '#4A433A' }}>{fmt(s.visitors)}</td>}
                       <td style={{ padding: '8px 14px', textAlign: 'right', color: '#4A433A' }}>{fmt(s.itinerary_views)}</td>
-                      <td style={{ padding: '8px 14px', textAlign: 'right', color: '#4A433A' }}>{fmt(s.users)}</td>
+                      {isAdmin && <td style={{ padding: '8px 14px', textAlign: 'right', color: '#4A433A' }}>{fmt(s.users)}</td>}
                     </tr>
                   ))}
                   {!data?.sources?.length && (
-                    <tr><td colSpan={4} style={{ padding: '20px', textAlign: 'center', color: '#B5AA99', fontSize: '12.5px' }}>No source data yet</td></tr>
+                    <tr><td colSpan={isAdmin ? 4 : 2} style={{ padding: '20px', textAlign: 'center', color: '#B5AA99', fontSize: '12.5px' }}>No source data yet</td></tr>
                   )}
                 </tbody>
               </table>
