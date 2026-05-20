@@ -63,13 +63,13 @@ function niceMax(v) {
 }
 
 // ── SVG area/line chart ───────────────────────────────────────────────────────
-function TrendChart({ data = [] }) {
+function TrendChart({ data = [], isDesignerView = false }) {
   const [hovered, setHovered] = useState(null);
 
   const lines = [
-    { key: 'visitors',  color: '#1B6B65', label: 'Visitors' },
-    { key: 'downloads', color: '#C9A96E', label: 'Downloads' },
-    { key: 'sales',     color: '#4A433A', label: 'Sales' },
+    ...(!isDesignerView ? [{ key: 'visitors', color: '#1B6B65', label: 'Visitors' }] : []),
+    { key: 'downloads',       color: '#C9A96E', label: 'Downloads' },
+    { key: 'sales',           color: '#4A433A', label: 'Sales' },
   ];
 
   if (!data.length) {
@@ -84,7 +84,7 @@ function TrendChart({ data = [] }) {
   const cH = H - padT - padB;
   const n = data.length;
 
-  const rawMax = Math.max(...data.map(d => Math.max(d.visitors || 0, d.downloads || 0, d.sales || 0)), 1);
+  const rawMax = Math.max(...data.map(d => Math.max(...lines.map(l => d[l.key] || 0))), 1);
   const yMax = niceMax(rawMax);
   const YTICKS = 5;
   const yTicks = Array.from({ length: YTICKS + 1 }, (_, i) => Math.round((yMax / YTICKS) * i));
@@ -511,7 +511,7 @@ export default function DashboardPage() {
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 300px', gap: '16px', marginBottom: '20px' }}>
             <div style={card}>
               <p style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16', marginBottom: '16px' }}>Trends</p>
-              <TrendChart data={data?.chart} />
+              <TrendChart data={data?.chart} isDesignerView={!isAdmin} />
             </div>
             <div style={card}>
               <p style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16', marginBottom: '16px' }}>Funnel</p>
