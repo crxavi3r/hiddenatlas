@@ -470,7 +470,7 @@ export default function HomePage() {
                 </div>
                 <div style={{ flexShrink: 0 }}>
                   <Link
-                    to={creators.length === 1 ? `/${creators[0].slug}` : '#creators'}
+                    to="/custom"
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: '8px',
                       padding: '14px 28px', background: '#C9A96E', color: 'white',
