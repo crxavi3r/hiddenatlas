@@ -32,20 +32,37 @@ function fmtDate(ts) {
 }
 
 export default function SalesPage() {
-  const { isAdmin, loading: ctxLoading } = useUserCtx();
-  const [period, setPeriod] = useState('30d');
-  const [page, setPage]     = useState(1);
-  const [data, setData]     = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { isAdmin, isDesigner, creatorId, loading: ctxLoading } = useUserCtx();
+  const [period, setPeriod]           = useState('30d');
+  const [page, setPage]               = useState(1);
+  const [data, setData]               = useState(null);
+  const [loading, setLoading]         = useState(true);
+  const [designerFilter, setDesignerFilter] = useState(null);
+  const [designers, setDesigners]     = useState([]);
   const { getToken } = useAuth();
+
+  // Admin: load designers list
+  useEffect(() => {
+    if (!isAdmin) return;
+    getToken().then(token => {
+      if (!token) return;
+      fetch('/api/creators?action=list', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(d => setDesigners((d.creators || []).filter(c => c.isActive && c.userId)))
+        .catch(() => {});
+    });
+  }, [isAdmin, getToken]);
+
+  const filterCreatorId = isAdmin ? designerFilter : (isDesigner ? creatorId : null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const token = await getToken();
       if (!token) { setLoading(false); return; }
-      const from = encodeURIComponent(getPeriodFrom(period));
-      const res = await fetch(`/api/admin?action=sales&period=${period}&page=${page}&from=${from}`, {
+      const params = new URLSearchParams({ action: 'sales', period, page: String(page), from: getPeriodFrom(period) });
+      if (filterCreatorId) params.set('creatorId', filterCreatorId);
+      const res = await fetch(`/api/admin?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setData(await res.json());
@@ -54,19 +71,19 @@ export default function SalesPage() {
     } finally {
       setLoading(false);
     }
-  }, [period, page, getToken]);
+  }, [period, page, filterCreatorId, getToken]);
 
   useEffect(() => { load(); }, [load]);
 
   const totalPages = data ? Math.ceil((data.total || 0) / 50) : 1;
   const isMobile = useIsMobile();
 
-  if (!ctxLoading && !isAdmin) return <Navigate to="/admin" replace />;
+  if (!ctxLoading && !isAdmin && !isDesigner) return <Navigate to="/admin" replace />;
 
   return (
     <div style={{ padding: isMobile ? '16px' : '28px 32px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isAdmin && designers.length > 0 ? '12px' : '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '24px', fontWeight: '600', color: '#1C1A16' }}>
             Sales
@@ -89,6 +106,27 @@ export default function SalesPage() {
           ))}
         </div>
       </div>
+
+      {/* Admin designer filter */}
+      {isAdmin && designers.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+          <span style={{ fontSize: '12px', color: '#8C8070', fontWeight: '500' }}>Designer:</span>
+          <select
+            value={designerFilter || ''}
+            onChange={e => { setDesignerFilter(e.target.value || null); setPage(1); }}
+            style={{
+              fontSize: '12px', color: '#1C1A16', background: 'white',
+              border: '1px solid #E8E3DA', borderRadius: '6px',
+              padding: '5px 10px', cursor: 'pointer', outline: 'none',
+            }}
+          >
+            <option value="">All designers</option>
+            {designers.map(d => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '20px' }}>

@@ -90,7 +90,10 @@ function SidebarContent({ onClose, isAdmin, creatorId }) {
     : [{
         label: 'My Work',
         items: [
+          { label: 'Dashboard',       path: '/admin',                  icon: LayoutDashboard, end: true },
           { label: 'My Itineraries',  path: '/admin/itineraries',      icon: Map },
+          { label: 'Sales',           path: '/admin/sales',            icon: CreditCard },
+          { label: 'Downloads',       path: '/admin/downloads',        icon: Download },
           { label: 'Custom Requests', path: '/admin/custom-requests',  icon: Inbox },
           { label: 'Pricing',         path: '/admin/pricing',          icon: Tag },
           ...(creatorId ? [{ label: 'My Profile', path: `/admin/creators/${creatorId}`, icon: User }] : []),

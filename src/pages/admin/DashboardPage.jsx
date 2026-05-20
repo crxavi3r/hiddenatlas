@@ -345,13 +345,30 @@ function ActivityItem({ item }) {
 
 // ── Main dashboard ────────────────────────────────────────────────────────────
 export default function DashboardPage() {
-  const [period, setPeriod] = useState('7d');
-  const [data, setData]     = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [apiError, setApiError] = useState(null);
+  const [period, setPeriod]           = useState('7d');
+  const [data, setData]               = useState(null);
+  const [loading, setLoading]         = useState(true);
+  const [apiError, setApiError]       = useState(null);
+  const [designerFilter, setDesignerFilter] = useState(null); // admin only: Creator.id or null
+  const [designers, setDesigners]     = useState([]);
   const { getToken } = useAuth();
   const isMobile = useIsMobile();
-  const { isAdmin, loading: ctxLoading } = useUserCtx();
+  const { isAdmin, isDesigner, creatorId, loading: ctxLoading } = useUserCtx();
+
+  // Admin: load designers list for the filter dropdown
+  useEffect(() => {
+    if (!isAdmin) return;
+    getToken().then(token => {
+      if (!token) return;
+      fetch('/api/creators?action=list', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(d => setDesigners((d.creators || []).filter(c => c.isActive && c.userId)))
+        .catch(() => {});
+    });
+  }, [isAdmin, getToken]);
+
+  // Designer: always scope to own creatorId; Admin: use selected filter
+  const filterCreatorId = isAdmin ? designerFilter : (isDesigner ? creatorId : null);
 
   useEffect(() => {
     let cancelled = false;
@@ -362,7 +379,9 @@ export default function DashboardPage() {
         const token = await getToken();
         if (!token) { setApiError('Session expired — please sign in again.'); return; }
         const from = getPeriodFrom(period);
-        const res = await fetch(`/api/admin?action=dashboard&period=${period}&from=${encodeURIComponent(from)}`, {
+        const params = new URLSearchParams({ action: 'dashboard', period, from });
+        if (filterCreatorId) params.set('creatorId', filterCreatorId);
+        const res = await fetch(`/api/admin?${params}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const json = await res.json();
@@ -383,11 +402,9 @@ export default function DashboardPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [period, getToken]);
+  }, [period, filterCreatorId, getToken]);
 
-  // Designers have no permission to view dashboard stats — redirect them straight
-  // to their itinerary list. Admins continue to the full dashboard as normal.
-  if (!ctxLoading && !isAdmin) {
+  if (!ctxLoading && !isAdmin && !isDesigner) {
     return <Navigate to="/admin/itineraries" replace />;
   }
 
@@ -397,7 +414,7 @@ export default function DashboardPage() {
     <div style={{ padding: isMobile ? '16px' : '28px 32px' }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isAdmin && designers.length > 0 ? '12px' : '24px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '24px', fontWeight: '600', color: '#1C1A16' }}>
             Dashboard
@@ -420,6 +437,27 @@ export default function DashboardPage() {
           ))}
         </div>
       </div>
+
+      {/* Admin designer filter */}
+      {isAdmin && designers.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+          <span style={{ fontSize: '12px', color: '#8C8070', fontWeight: '500' }}>Designer:</span>
+          <select
+            value={designerFilter || ''}
+            onChange={e => setDesignerFilter(e.target.value || null)}
+            style={{
+              fontSize: '12px', color: '#1C1A16', background: 'white',
+              border: '1px solid #E8E3DA', borderRadius: '6px',
+              padding: '5px 10px', cursor: 'pointer', outline: 'none',
+            }}
+          >
+            <option value="">All designers</option>
+            {designers.map(d => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>

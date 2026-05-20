@@ -31,6 +31,9 @@ const DESIGNER_ACCESSIBLE_ACTIONS = new Set([
   'create-itinerary-from-request',
   'send-quote',
   'sync-payment',
+  'dashboard',
+  'sales',
+  'downloads',
 ]);
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
@@ -119,9 +122,11 @@ async function _handler(req, res) {
     return res.status(err.status ?? 401).json({ error: err.message });
   }
 
-  const { action, period = '7d', page = '1', q = '', id, status, from } = req.query;
+  const { action, period = '7d', page = '1', q = '', id, status, from, creatorId: qCreatorId } = req.query;
   const cutoff = parseCutoff(from, period);
   const offset = (Math.max(1, parseInt(page, 10)) - 1) * 50;
+  // Admin can pass creatorId to scope data to a specific designer; designers always see their own.
+  const filterCreatorId = adminCtx.isAdmin ? (qCreatorId || null) : (adminCtx.creatorId || null);
 
   try {
     // ── POST: designer application review ────────────────────────────────
@@ -654,12 +659,12 @@ async function _handler(req, res) {
       const FUNNEL_ZERO = { visitors: 0, itineraryViews: 0, downloads: 0, purchases: 0 };
 
       const [kpis, chart, funnel, topItineraries, sources, activity] = await Promise.all([
-        safe('kpis',           () => getDashboardKPIs(pool, cutoff),    KPI_ZERO),
-        safe('chart',          () => getChartData(pool, cutoff),         []),
-        safe('funnel',         () => getFunnelData(pool, cutoff),        FUNNEL_ZERO),
-        safe('topItineraries', () => getTopItineraries(pool, cutoff),    []),
+        safe('kpis',           () => getDashboardKPIs(pool, cutoff, filterCreatorId),    KPI_ZERO),
+        safe('chart',          () => getChartData(pool, cutoff, filterCreatorId),         []),
+        safe('funnel',         () => getFunnelData(pool, cutoff, filterCreatorId),        FUNNEL_ZERO),
+        safe('topItineraries', () => getTopItineraries(pool, cutoff, filterCreatorId),    []),
         safe('sources',        () => getTrafficSources(pool, cutoff),    []),
-        safe('activity',       () => getRecentActivity(pool, cutoff),    []),
+        safe('activity',       () => getRecentActivity(pool, cutoff, filterCreatorId),    []),
       ]);
       return res.status(200).json({ kpis, chart, funnel, topItineraries, sources, activity });
     }
@@ -671,8 +676,8 @@ async function _handler(req, res) {
       if (!data) return res.status(404).json({ error: 'User not found' });
       return res.status(200).json(data);
     }
-    if (action === 'sales')     return res.status(200).json(await getSales(pool, cutoff, offset));
-    if (action === 'downloads') return res.status(200).json(await getDownloads(pool, cutoff, offset));
+    if (action === 'sales')     return res.status(200).json(await getSales(pool, cutoff, offset, filterCreatorId));
+    if (action === 'downloads') return res.status(200).json(await getDownloads(pool, cutoff, offset, filterCreatorId));
     if (action === 'custom-requests') return res.status(200).json(await getCustomRequests(pool, status, offset, req.query.all === 'true', adminCtx));
 
     if (action === 'webhook-logs') {
@@ -744,26 +749,59 @@ async function _handler(req, res) {
 }
 
 // ── Dashboard KPIs ────────────────────────────────────────────────────────────
-async function getDashboardKPIs(pool, cutoff) {
-  // ── Core query: uses only legacy columns — always safe ───────────────────
-  const [visitors, pageViews, newUsers, itinViews, downloads, sales] = await Promise.all([
+async function getDashboardKPIs(pool, cutoff, creatorId = null) {
+  // Site-wide metrics (not filterable by individual designer)
+  const [visitors, pageViews, newUsers] = await Promise.all([
     pool.query(`SELECT COUNT(DISTINCT COALESCE("userId", "sessionId")) AS n FROM "Event" WHERE "eventType"='PAGE_VIEW' AND "createdAt" >= $1`, [cutoff]),
     pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='PAGE_VIEW' AND "createdAt" >= $1`, [cutoff]),
     pool.query(`SELECT COUNT(*) AS n FROM "User" WHERE "createdAt" >= $1`, [cutoff]),
-    pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= $1`, [cutoff]),
-    pool.query(`SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1`, [cutoff]),
-    // Revenue: COALESCE(netAmount, amount, 0) handles legacy rows (netAmount NULL) and new rows
-    pool.query(`SELECT COUNT(*) AS n, COALESCE(SUM(COALESCE("netAmount", amount, 0)),0) AS revenue FROM "Purchase" WHERE "purchasedAt" >= $1`, [cutoff]),
   ]);
 
-  // ── Discount breakdown: uses new columns — fails gracefully if not migrated yet ──
-  const discountRow = await pool.query(`
-    SELECT
-      COALESCE(SUM(COALESCE("grossAmount", amount, 0)),0)    AS gross_revenue,
-      COALESCE(SUM(COALESCE("netAmount",   amount, 0)),0)    AS net_revenue,
-      COALESCE(SUM(COALESCE("discountAmount", 0)),0)         AS total_discount
-    FROM "Purchase" WHERE "purchasedAt" >= $1
-  `, [cutoff]).then(r => r.rows[0]).catch(() => ({ gross_revenue: 0, net_revenue: 0, total_discount: 0 }));
+  // Itinerary-scoped metrics — filtered by creator when set
+  let itinViews, downloads, sales, discountRow;
+  if (creatorId) {
+    [itinViews, downloads, sales] = await Promise.all([
+      pool.query(`
+        SELECT COUNT(*) AS n FROM "Event" e
+        JOIN "Itinerary" i ON i.slug = e."itinerarySlug"
+        WHERE e."eventType"='ITINERARY_VIEW' AND e."createdAt" >= $1 AND i.creator_id = $2
+      `, [cutoff, creatorId]),
+      pool.query(`
+        SELECT COUNT(*) AS n FROM "TripEvent" te
+        JOIN "Trip" t ON t.id = te."tripId"
+        JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
+        WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $2
+      `, [cutoff, creatorId]),
+      pool.query(`
+        SELECT COUNT(*) AS n, COALESCE(SUM(COALESCE("netAmount", amount, 0)),0) AS revenue
+        FROM "Purchase" p
+        JOIN "Itinerary" i ON i.id = p."itineraryId"
+        WHERE p."purchasedAt" >= $1 AND i.creator_id = $2
+      `, [cutoff, creatorId]),
+    ]);
+    discountRow = await pool.query(`
+      SELECT
+        COALESCE(SUM(COALESCE("grossAmount", amount, 0)),0) AS gross_revenue,
+        COALESCE(SUM(COALESCE("netAmount",   amount, 0)),0) AS net_revenue,
+        COALESCE(SUM(COALESCE("discountAmount", 0)),0)      AS total_discount
+      FROM "Purchase" p
+      JOIN "Itinerary" i ON i.id = p."itineraryId"
+      WHERE p."purchasedAt" >= $1 AND i.creator_id = $2
+    `, [cutoff, creatorId]).then(r => r.rows[0]).catch(() => ({ gross_revenue: 0, net_revenue: 0, total_discount: 0 }));
+  } else {
+    [itinViews, downloads, sales] = await Promise.all([
+      pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= $1`, [cutoff]),
+      pool.query(`SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1`, [cutoff]),
+      pool.query(`SELECT COUNT(*) AS n, COALESCE(SUM(COALESCE("netAmount", amount, 0)),0) AS revenue FROM "Purchase" WHERE "purchasedAt" >= $1`, [cutoff]),
+    ]);
+    discountRow = await pool.query(`
+      SELECT
+        COALESCE(SUM(COALESCE("grossAmount", amount, 0)),0)    AS gross_revenue,
+        COALESCE(SUM(COALESCE("netAmount",   amount, 0)),0)    AS net_revenue,
+        COALESCE(SUM(COALESCE("discountAmount", 0)),0)         AS total_discount
+      FROM "Purchase" WHERE "purchasedAt" >= $1
+    `, [cutoff]).then(r => r.rows[0]).catch(() => ({ gross_revenue: 0, net_revenue: 0, total_discount: 0 }));
+  }
 
   const v = parseInt(visitors.rows[0].n, 10) || 0;
   const s = parseInt(sales.rows[0].n, 10) || 0;
@@ -783,7 +821,53 @@ async function getDashboardKPIs(pool, cutoff) {
 }
 
 // ── Daily chart data ──────────────────────────────────────────────────────────
-async function getChartData(pool, cutoff) {
+async function getChartData(pool, cutoff, creatorId = null) {
+  if (!creatorId) {
+    const { rows } = await pool.query(`
+      WITH d AS (
+        SELECT generate_series(
+          DATE_TRUNC('day', $1::timestamptz),
+          DATE_TRUNC('day', NOW()),
+          '1 day'
+        )::date AS day
+      ),
+      ev AS (
+        SELECT DATE("createdAt") AS day,
+          COUNT(DISTINCT COALESCE("userId", "sessionId")) FILTER (WHERE "eventType"='PAGE_VIEW') AS visitors,
+          COUNT(*) FILTER (WHERE "eventType"='ITINERARY_VIEW')  AS itinerary_views
+        FROM "Event" WHERE "createdAt" >= $1
+        GROUP BY DATE("createdAt")
+      ),
+      sl AS (
+        SELECT DATE("purchasedAt") AS day,
+          COUNT(*)               AS sales,
+          COALESCE(SUM(amount),0) AS revenue
+        FROM "Purchase" WHERE "purchasedAt" >= $1
+        GROUP BY DATE("purchasedAt")
+      ),
+      dl AS (
+        SELECT DATE("createdAt") AS day, COUNT(*) AS downloads
+        FROM "TripEvent"
+        WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1
+        GROUP BY DATE("createdAt")
+      )
+      SELECT
+        d.day::text,
+        COALESCE(ev.visitors,0)::int        AS visitors,
+        COALESCE(ev.itinerary_views,0)::int AS itinerary_views,
+        COALESCE(sl.sales,0)::int           AS sales,
+        COALESCE(sl.revenue,0)::float       AS revenue,
+        COALESCE(dl.downloads,0)::int       AS downloads
+      FROM d
+      LEFT JOIN ev ON ev.day = d.day
+      LEFT JOIN sl ON sl.day = d.day
+      LEFT JOIN dl ON dl.day = d.day
+      ORDER BY d.day
+    `, [cutoff]);
+    return rows;
+  }
+
+  // Creator-filtered chart: filter sales and downloads by creator's itineraries
   const { rows } = await pool.query(`
     WITH d AS (
       SELECT generate_series(
@@ -793,29 +877,32 @@ async function getChartData(pool, cutoff) {
       )::date AS day
     ),
     ev AS (
-      SELECT DATE("createdAt") AS day,
-        COUNT(DISTINCT COALESCE("userId", "sessionId")) FILTER (WHERE "eventType"='PAGE_VIEW') AS visitors,
-        COUNT(*) FILTER (WHERE "eventType"='ITINERARY_VIEW')  AS itinerary_views
-      FROM "Event" WHERE "createdAt" >= $1
-      GROUP BY DATE("createdAt")
+      SELECT DATE(e."createdAt") AS day, COUNT(*) AS itinerary_views
+      FROM "Event" e
+      JOIN "Itinerary" i ON i.slug = e."itinerarySlug"
+      WHERE e."eventType"='ITINERARY_VIEW' AND e."createdAt" >= $1 AND i.creator_id = $2
+      GROUP BY DATE(e."createdAt")
     ),
     sl AS (
-      -- Uses only legacy amount column - always safe regardless of migration state
-      SELECT DATE("purchasedAt") AS day,
-        COUNT(*)               AS sales,
-        COALESCE(SUM(amount),0) AS revenue
-      FROM "Purchase" WHERE "purchasedAt" >= $1
-      GROUP BY DATE("purchasedAt")
+      SELECT DATE(p."purchasedAt") AS day,
+        COUNT(*) AS sales,
+        COALESCE(SUM(COALESCE(p."netAmount", p.amount, 0)),0) AS revenue
+      FROM "Purchase" p
+      JOIN "Itinerary" i ON i.id = p."itineraryId"
+      WHERE p."purchasedAt" >= $1 AND i.creator_id = $2
+      GROUP BY DATE(p."purchasedAt")
     ),
     dl AS (
-      SELECT DATE("createdAt") AS day, COUNT(*) AS downloads
-      FROM "TripEvent"
-      WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1
-      GROUP BY DATE("createdAt")
+      SELECT DATE(te."createdAt") AS day, COUNT(*) AS downloads
+      FROM "TripEvent" te
+      JOIN "Trip" t ON t.id = te."tripId"
+      JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
+      WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $2
+      GROUP BY DATE(te."createdAt")
     )
     SELECT
       d.day::text,
-      COALESCE(ev.visitors,0)::int        AS visitors,
+      0::int                              AS visitors,
       COALESCE(ev.itinerary_views,0)::int AS itinerary_views,
       COALESCE(sl.sales,0)::int           AS sales,
       COALESCE(sl.revenue,0)::float       AS revenue,
@@ -825,17 +912,45 @@ async function getChartData(pool, cutoff) {
     LEFT JOIN sl ON sl.day = d.day
     LEFT JOIN dl ON dl.day = d.day
     ORDER BY d.day
-  `, [cutoff]);
+  `, [cutoff, creatorId]);
   return rows;
 }
 
 // ── Funnel ────────────────────────────────────────────────────────────────────
-async function getFunnelData(pool, cutoff) {
+async function getFunnelData(pool, cutoff, creatorId = null) {
+  if (!creatorId) {
+    const [v, iv, dl, p] = await Promise.all([
+      pool.query(`SELECT COUNT(DISTINCT COALESCE("userId", "sessionId")) AS n FROM "Event" WHERE "eventType"='PAGE_VIEW' AND "createdAt" >= $1`, [cutoff]),
+      pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= $1`, [cutoff]),
+      pool.query(`SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1`, [cutoff]),
+      pool.query(`SELECT COUNT(*) AS n FROM "Purchase" WHERE "purchasedAt" >= $1`, [cutoff]),
+    ]);
+    return {
+      visitors:       parseInt(v.rows[0].n, 10)  || 0,
+      itineraryViews: parseInt(iv.rows[0].n, 10) || 0,
+      downloads:      parseInt(dl.rows[0].n, 10) || 0,
+      purchases:      parseInt(p.rows[0].n, 10)  || 0,
+    };
+  }
+
   const [v, iv, dl, p] = await Promise.all([
     pool.query(`SELECT COUNT(DISTINCT COALESCE("userId", "sessionId")) AS n FROM "Event" WHERE "eventType"='PAGE_VIEW' AND "createdAt" >= $1`, [cutoff]),
-    pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= $1`, [cutoff]),
-    pool.query(`SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1`, [cutoff]),
-    pool.query(`SELECT COUNT(*) AS n FROM "Purchase" WHERE "purchasedAt" >= $1`, [cutoff]),
+    pool.query(`
+      SELECT COUNT(*) AS n FROM "Event" e
+      JOIN "Itinerary" i ON i.slug = e."itinerarySlug"
+      WHERE e."eventType"='ITINERARY_VIEW' AND e."createdAt" >= $1 AND i.creator_id = $2
+    `, [cutoff, creatorId]),
+    pool.query(`
+      SELECT COUNT(*) AS n FROM "TripEvent" te
+      JOIN "Trip" t ON t.id = te."tripId"
+      JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
+      WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $2
+    `, [cutoff, creatorId]),
+    pool.query(`
+      SELECT COUNT(*) AS n FROM "Purchase" p
+      JOIN "Itinerary" i ON i.id = p."itineraryId"
+      WHERE p."purchasedAt" >= $1 AND i.creator_id = $2
+    `, [cutoff, creatorId]),
   ]);
   return {
     visitors:       parseInt(v.rows[0].n, 10)  || 0,
@@ -846,7 +961,11 @@ async function getFunnelData(pool, cutoff) {
 }
 
 // ── Top itineraries ───────────────────────────────────────────────────────────
-async function getTopItineraries(pool, cutoff) {
+async function getTopItineraries(pool, cutoff, creatorId = null) {
+  const params = [cutoff];
+  if (creatorId) params.push(creatorId);
+  const creatorWhere = creatorId ? `AND i.creator_id = $2` : '';
+
   const { rows } = await pool.query(`
     SELECT
       i.slug, i.title, i.price,
@@ -874,9 +993,10 @@ async function getTopItineraries(pool, cutoff) {
       FROM "Purchase" WHERE "purchasedAt" >= $1
       GROUP BY "itineraryId"
     ) s ON s."itineraryId" = i.id
+    WHERE 1=1 ${creatorWhere}
     ORDER BY COALESCE(s.sales,0) DESC, COALESCE(d.downloads,0) DESC, COALESCE(v.views,0) DESC
     LIMIT 20
-  `, [cutoff]);
+  `, params);
   return rows.map(r => ({
     ...r,
     conversionRate: r.views > 0 ? +((r.sales / r.views) * 100).toFixed(1) : 0,
@@ -901,46 +1021,89 @@ async function getTrafficSources(pool, cutoff) {
 }
 
 // ── Recent activity ───────────────────────────────────────────────────────────
-async function getRecentActivity(pool, cutoff) {
+async function getRecentActivity(pool, cutoff, creatorId = null) {
+  if (!creatorId) {
+    const { rows } = await pool.query(`
+      (
+        SELECT 'signup' AS type, u.email, u.name, NULL::text AS country, NULL::text AS detail, u."createdAt" AS ts
+        FROM "User" u
+        WHERE u."createdAt" >= $1
+        ORDER BY ts DESC LIMIT 15
+      ) UNION ALL (
+        SELECT 'download' AS type, u.email, u.name, NULL::text AS country,
+          COALESCE(te.metadata->>'title', te.metadata->>'destination', 'trip') AS detail,
+          te."createdAt" AS ts
+        FROM "TripEvent" te JOIN "User" u ON u.id=te."userId"
+        WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1
+        ORDER BY ts DESC LIMIT 15
+      ) UNION ALL (
+        SELECT 'purchase' AS type,
+          COALESCE(u.email, '') AS email,
+          COALESCE(u.name,  '') AS name,
+          NULL::text AS country,
+          COALESCE(i.title,
+            'Custom trip planning' ||
+            CASE WHEN cr.destination IS NOT NULL AND cr.destination <> ''
+                 THEN ' — ' || cr.destination ELSE '' END
+          ) AS detail,
+          p."purchasedAt" AS ts
+        FROM "Purchase" p
+        LEFT JOIN "User"          u  ON u.id  = p."userId"
+        LEFT JOIN "Itinerary"     i  ON i.id  = p."itineraryId"
+        LEFT JOIN "CustomRequest" cr ON cr.id = p."customRequestId"
+        WHERE p."purchasedAt" >= $1
+        ORDER BY ts DESC LIMIT 15
+      ) UNION ALL (
+        SELECT 'itinerary_view' AS type, u.email, u.name, e.country, e."itinerarySlug" AS detail, e."createdAt" AS ts
+        FROM "Event" e
+        LEFT JOIN "User" u ON u.id = e."userId"
+        WHERE e."eventType"='ITINERARY_VIEW' AND e."createdAt" >= $1
+        ORDER BY ts DESC LIMIT 15
+      )
+      ORDER BY ts DESC LIMIT 50
+    `, [cutoff]);
+    return rows;
+  }
+
+  // Creator-filtered activity: downloads and purchases for their itineraries; global signups
   const { rows } = await pool.query(`
     (
       SELECT 'signup' AS type, u.email, u.name, NULL::text AS country, NULL::text AS detail, u."createdAt" AS ts
       FROM "User" u
       WHERE u."createdAt" >= $1
-      ORDER BY ts DESC LIMIT 15
+      ORDER BY ts DESC LIMIT 10
     ) UNION ALL (
       SELECT 'download' AS type, u.email, u.name, NULL::text AS country,
         COALESCE(te.metadata->>'title', te.metadata->>'destination', 'trip') AS detail,
         te."createdAt" AS ts
-      FROM "TripEvent" te JOIN "User" u ON u.id=te."userId"
-      WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1
+      FROM "TripEvent" te
+      JOIN "User" u ON u.id = te."userId"
+      JOIN "Trip" t ON t.id = te."tripId"
+      JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
+      WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $2
       ORDER BY ts DESC LIMIT 15
     ) UNION ALL (
       SELECT 'purchase' AS type,
         COALESCE(u.email, '') AS email,
         COALESCE(u.name,  '') AS name,
         NULL::text AS country,
-        COALESCE(i.title,
-          'Custom trip planning' ||
-          CASE WHEN cr.destination IS NOT NULL AND cr.destination <> ''
-               THEN ' — ' || cr.destination ELSE '' END
-        ) AS detail,
+        i.title AS detail,
         p."purchasedAt" AS ts
       FROM "Purchase" p
-      LEFT JOIN "User"          u  ON u.id  = p."userId"
-      LEFT JOIN "Itinerary"     i  ON i.id  = p."itineraryId"
-      LEFT JOIN "CustomRequest" cr ON cr.id = p."customRequestId"
-      WHERE p."purchasedAt" >= $1
+      JOIN "Itinerary" i ON i.id = p."itineraryId"
+      LEFT JOIN "User" u ON u.id = p."userId"
+      WHERE p."purchasedAt" >= $1 AND i.creator_id = $2
       ORDER BY ts DESC LIMIT 15
     ) UNION ALL (
       SELECT 'itinerary_view' AS type, u.email, u.name, e.country, e."itinerarySlug" AS detail, e."createdAt" AS ts
       FROM "Event" e
+      JOIN "Itinerary" i ON i.slug = e."itinerarySlug"
       LEFT JOIN "User" u ON u.id = e."userId"
-      WHERE e."eventType"='ITINERARY_VIEW' AND e."createdAt" >= $1
+      WHERE e."eventType"='ITINERARY_VIEW' AND e."createdAt" >= $1 AND i.creator_id = $2
       ORDER BY ts DESC LIMIT 15
     )
     ORDER BY ts DESC LIMIT 50
-  `, [cutoff]);
+  `, [cutoff, creatorId]);
   return rows;
 }
 
@@ -1046,9 +1209,11 @@ async function getUserDetail(pool, id) {
 }
 
 // ── Sales ─────────────────────────────────────────────────────────────────────
-async function getSales(pool, cutoff, offset) {
+async function getSales(pool, cutoff, offset, creatorId = null) {
+  const creatorJoin  = creatorId ? `JOIN "Itinerary" ci ON ci.id = p."itineraryId" AND ci.creator_id = $3` : '';
+  const creatorParam = creatorId ? [cutoff, offset, creatorId] : [cutoff, offset];
+
   // ── Sales rows ────────────────────────────────────────────────────────────
-  // Try with discount columns; fall back to legacy-only if migration not yet applied.
   let sales;
   try {
     const { rows } = await pool.query(`
@@ -1067,17 +1232,17 @@ async function getSales(pool, cutoff, offset) {
              p."couponCode",
              p.status
       FROM "Purchase" p
+      ${creatorJoin}
       LEFT JOIN "User"          u  ON u.id  = p."userId"
       LEFT JOIN "Itinerary"     i  ON i.id  = p."itineraryId"
       LEFT JOIN "CustomRequest" cr ON cr.id = p."customRequestId"
       WHERE p."purchasedAt" >= $1
       ORDER BY p."purchasedAt" DESC
       LIMIT 50 OFFSET $2
-    `, [cutoff, offset]);
+    `, creatorParam);
     sales = rows;
   } catch (err) {
     if (!err.message.toLowerCase().includes('column')) throw err;
-    // Discount columns or customRequestId not yet added — serve legacy data with safe defaults
     const { rows } = await pool.query(`
       SELECT p."purchasedAt",
              COALESCE(u.email, '') AS email,
@@ -1087,33 +1252,42 @@ async function getSales(pool, cutoff, offset) {
              p.amount, p.amount AS "grossAmount", 0 AS "discountAmount",
              NULL::text AS "couponCode", p.status
       FROM "Purchase" p
+      ${creatorJoin}
       LEFT JOIN "User"      u ON u.id = p."userId"
       LEFT JOIN "Itinerary" i ON i.id = p."itineraryId"
       WHERE p."purchasedAt" >= $1
       ORDER BY p."purchasedAt" DESC
       LIMIT 50 OFFSET $2
-    `, [cutoff, offset]);
+    `, creatorParam);
     sales = rows;
   }
 
-  // ── Totals: COALESCE(netAmount, amount, 0) handles legacy rows ────────────
+  // ── Totals ────────────────────────────────────────────────────────────────
+  const totalsCreatorJoin  = creatorId ? `JOIN "Itinerary" ci ON ci.id = p."itineraryId" AND ci.creator_id = $2` : '';
+  const totalsCreatorParam = creatorId ? [cutoff, creatorId] : [cutoff];
+
   const { rows: [{ total, revenue }] } = await pool.query(`
     SELECT COUNT(*) AS total,
       COALESCE(SUM(COALESCE("netAmount", amount, 0)),0) AS revenue
-    FROM "Purchase" WHERE "purchasedAt" >= $1
-  `, [cutoff]);
+    FROM "Purchase" p ${totalsCreatorJoin} WHERE p."purchasedAt" >= $1
+  `, totalsCreatorParam);
 
-  // Discount totals — fail gracefully if columns not yet present
   const discountTotals = await pool.query(`
     SELECT COALESCE(SUM(COALESCE("discountAmount", 0)),0) AS total_discount
-    FROM "Purchase" WHERE "purchasedAt" >= $1
-  `, [cutoff]).then(r => r.rows[0]).catch(() => ({ total_discount: 0 }));
+    FROM "Purchase" p ${totalsCreatorJoin} WHERE p."purchasedAt" >= $1
+  `, totalsCreatorParam).then(r => r.rows[0]).catch(() => ({ total_discount: 0 }));
+
+  // All-time totals (also scoped to creator when filter active)
+  const allTimeCreatorJoin  = creatorId ? `JOIN "Itinerary" ci ON ci.id = p."itineraryId" AND ci.creator_id = $1` : '';
+  const allTimeCreatorParam = creatorId ? [creatorId] : [];
 
   const { rows: [allTime] } = await pool.query(
-    `SELECT COUNT(*) AS total, COALESCE(SUM(COALESCE("netAmount", amount, 0)),0) AS revenue FROM "Purchase"`
+    `SELECT COUNT(*) AS total, COALESCE(SUM(COALESCE("netAmount", amount, 0)),0) AS revenue FROM "Purchase" p ${allTimeCreatorJoin}`,
+    allTimeCreatorParam
   );
   const allTimeDiscount = await pool.query(
-    `SELECT COALESCE(SUM(COALESCE("discountAmount", 0)),0) AS total_discount FROM "Purchase"`
+    `SELECT COALESCE(SUM(COALESCE("discountAmount", 0)),0) AS total_discount FROM "Purchase" p ${allTimeCreatorJoin}`,
+    allTimeCreatorParam
   ).then(r => parseFloat(r.rows[0].total_discount) || 0).catch(() => 0);
 
   return {
@@ -1284,24 +1458,49 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false, ctx
 }
 
 // ── Downloads ─────────────────────────────────────────────────────────────────
-async function getDownloads(pool, cutoff, offset) {
+async function getDownloads(pool, cutoff, offset, creatorId = null) {
+  if (!creatorId) {
+    const { rows: downloads } = await pool.query(`
+      SELECT
+        te."createdAt", u.email, u.name,
+        COALESCE(t.title, te.metadata->>'title', te.metadata->>'destination') AS title,
+        t."itinerarySlug", t.source AS trip_source, t.destination
+      FROM "TripEvent" te
+      JOIN "User" u ON u.id=te."userId"
+      LEFT JOIN "Trip" t ON t.id=te."tripId"
+      WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1
+      ORDER BY te."createdAt" DESC
+      LIMIT 50 OFFSET $2
+    `, [cutoff, offset]);
+
+    const { rows: [{ total }] } = await pool.query(`
+      SELECT COUNT(*) AS total FROM "TripEvent"
+      WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1
+    `, [cutoff]);
+
+    return { downloads, total: parseInt(total, 10) };
+  }
+
   const { rows: downloads } = await pool.query(`
     SELECT
       te."createdAt", u.email, u.name,
       COALESCE(t.title, te.metadata->>'title', te.metadata->>'destination') AS title,
       t."itinerarySlug", t.source AS trip_source, t.destination
     FROM "TripEvent" te
-    JOIN "User" u ON u.id=te."userId"
-    LEFT JOIN "Trip" t ON t.id=te."tripId"
-    WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1
+    JOIN "User" u ON u.id = te."userId"
+    JOIN "Trip" t ON t.id = te."tripId"
+    JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
+    WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $3
     ORDER BY te."createdAt" DESC
     LIMIT 50 OFFSET $2
-  `, [cutoff, offset]);
+  `, [cutoff, offset, creatorId]);
 
   const { rows: [{ total }] } = await pool.query(`
-    SELECT COUNT(*) AS total FROM "TripEvent"
-    WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1
-  `, [cutoff]);
+    SELECT COUNT(*) AS total FROM "TripEvent" te
+    JOIN "Trip" t ON t.id = te."tripId"
+    JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
+    WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $2
+  `, [cutoff, creatorId]);
 
   return { downloads, total: parseInt(total, 10) };
 }
