@@ -316,13 +316,14 @@ async function handleList(pool, ctx) {
   const { rows } = await pool.query(`
     SELECT i.*,
            COUNT(p.id)::int AS purchase_count,
-           c.name  AS creator_name,
-           c.slug  AS creator_slug
+           c.name                   AS creator_name,
+           c.slug                   AS creator_slug,
+           c.instagram_account_id   AS creator_instagram_account_id
     FROM "Itinerary" i
     LEFT JOIN "Purchase" p ON p."itineraryId" = i.id
     LEFT JOIN "Creator"  c ON c.id = i.creator_id
     ${creatorFilter}
-    GROUP BY i.id, c.name, c.slug
+    GROUP BY i.id, c.name, c.slug, c.instagram_account_id
     ORDER BY i."createdAt" DESC
   `, params);
   const itineraries = rows.filter(r => !r.isCollection);

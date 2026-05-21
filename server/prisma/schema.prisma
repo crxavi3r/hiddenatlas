@@ -24,7 +24,13 @@ model Creator {
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
 
-  itineraries Itinerary[]
+  // Instagram integration (snake_case columns via raw SQL migration)
+  instagramAccountId      String?
+  instagramAccessToken    String?
+  instagramTokenExpiresAt DateTime?
+
+  itineraries   Itinerary[]
+  instagramLogs InstagramPublishLog[]
 }
 
 // ─────────────────────────────────────────────
@@ -88,6 +94,9 @@ model Itinerary {
   pdfGeneratedAt  DateTime?
   pdfError        String?
 
+  // ── Instagram publishing ────────────────────
+  instagramPostId  String?
+
   pricingPlanId     String?                    // FK to DesignerPricingPlan.id — null for default pricing
 
   creator           Creator?            @relation(fields: [creatorId], references: [id])
@@ -96,6 +105,7 @@ model Itinerary {
   assets            ItineraryAsset[]
   aiGenerations     ItineraryAIGeneration[]
   customRequests    CustomRequest[]
+  instagramLogs     InstagramPublishLog[]
 
   @@index([status])
   @@index([accessType])
@@ -330,4 +340,27 @@ model DesignerPricingPlan {
 
   @@index([designerUserId])
   @@index([isActive])
+}
+
+// ─────────────────────────────────────────────
+// InstagramPublishLog  (immutable audit log)
+// Records every Instagram publish attempt.
+// status: success | failed
+// ─────────────────────────────────────────────
+model InstagramPublishLog {
+  id                  String   @id @default(uuid())
+  itineraryId         String
+  creatorId           String?
+  instagramAccountId  String?
+  instagramPostId     String?
+  caption             String?
+  status              String   @default("pending")
+  errorMessage        String?
+  publishedAt         DateTime @default(now())
+
+  itinerary Itinerary @relation(fields: [itineraryId], references: [id])
+
+  @@index([itineraryId])
+  @@index([creatorId])
+  @@index([status])
 }

@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { Plus, RefreshCw, Eye, Edit2, Copy, Trash2, Globe, EyeOff } from 'lucide-react';
+import { Plus, RefreshCw, Eye, Edit2, Copy, Trash2, Globe, EyeOff, Instagram, X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import { itineraries as STATIC_ITINERARIES } from '../../data/itineraries';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { resolveCoverImage } from '../../lib/resolveCoverImage';
@@ -87,6 +87,295 @@ const iconBtn = {
   borderRadius: '4px', color: '#8C8070', display: 'flex', alignItems: 'center',
 };
 
+// ── Instagram Publish Modal ───────────────────────────────────────────────────
+function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
+  const [loading,      setLoading]      = useState(true);
+  const [preview,      setPreview]      = useState(null);   // { caption, images, tokenWarning }
+  const [caption,      setCaption]      = useState('');
+  const [selectedIdx,  setSelectedIdx]  = useState(0);
+  const [publishing,   setPublishing]   = useState(false);
+  const [result,       setResult]       = useState(null);   // { success, permalink } | { error }
+  const [previewError, setPreviewError] = useState(null);
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    async function fetchPreview() {
+      try {
+        const token = await getToken();
+        const res   = await fetch(`/api/instagram?action=preview&id=${itinerary.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json  = await res.json();
+        if (json.error) throw new Error(json.error);
+        setPreview(json);
+        setCaption(json.caption);
+      } catch (e) {
+        setPreviewError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchPreview();
+  }, [itinerary.id, getToken]);
+
+  async function handlePublish() {
+    if (!preview?.images?.length) return;
+    const imageUrl = preview.images[selectedIdx]?.url;
+    if (!imageUrl) return;
+
+    setPublishing(true);
+    setResult(null);
+    try {
+      const token = await getToken();
+      const res   = await fetch('/api/instagram?action=publish', {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ itineraryId: itinerary.id, caption, imageUrl }),
+      });
+      const json  = await res.json();
+      if (json.error) throw new Error(json.error);
+      setResult({ success: true, permalink: json.permalink });
+      onSuccess?.(itinerary.id, json.instagramPostId);
+    } catch (e) {
+      setResult({ error: e.message });
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  const images      = preview?.images ?? [];
+  const selectedImg = images[selectedIdx];
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 700,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+    }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{
+        background: 'white', borderRadius: '12px', border: '1px solid #E8E3DA',
+        width: '100%', maxWidth: '680px', maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+        overflow: 'hidden',
+      }}>
+
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 20px', borderBottom: '1px solid #F4F1EC',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Instagram size={18} color="#E1306C" />
+            <div>
+              <p style={{ fontSize: '14px', fontWeight: '600', color: '#1C1A16' }}>
+                Publish to Instagram
+              </p>
+              <p style={{ fontSize: '11.5px', color: '#8C8070', marginTop: '1px' }}>
+                {itinerary.title}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ ...iconBtn, color: '#1C1A16' }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#8C8070', fontSize: '13.5px' }}>
+              Generating preview...
+            </div>
+          ) : previewError ? (
+            <div style={{
+              padding: '14px 16px', borderRadius: '8px', background: '#FEF2F2',
+              border: '1px solid #FECACA', color: '#C0392B', fontSize: '13px', lineHeight: '1.5',
+            }}>
+              {previewError}
+            </div>
+          ) : result?.success ? (
+            /* ── Success screen ── */
+            <div style={{ textAlign: 'center', padding: '24px 16px' }}>
+              <div style={{
+                width: '52px', height: '52px', borderRadius: '50%',
+                background: '#EFF6F5', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 16px',
+              }}>
+                <Instagram size={26} color="#1B6B65" />
+              </div>
+              <p style={{ fontSize: '16px', fontWeight: '600', color: '#1C1A16', marginBottom: '8px' }}>
+                Published successfully!
+              </p>
+              <p style={{ fontSize: '13px', color: '#8C8070', marginBottom: '20px', lineHeight: '1.6' }}>
+                Your post is live on Instagram.
+              </p>
+              {result.permalink && (
+                <a
+                  href={result.permalink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    padding: '9px 18px', borderRadius: '6px', border: '1px solid #E1306C',
+                    fontSize: '12.5px', fontWeight: '600', color: '#E1306C',
+                    textDecoration: 'none',
+                  }}
+                >
+                  <ExternalLink size={13} />
+                  View on Instagram
+                </a>
+              )}
+            </div>
+          ) : (
+            /* ── Edit screen ── */
+            <>
+              {preview?.tokenWarning && (
+                <div style={{
+                  padding: '10px 14px', borderRadius: '7px', background: '#FEF9EC',
+                  border: '1px solid #F5DFA0', color: '#7D5A00', fontSize: '12.5px',
+                  marginBottom: '16px', lineHeight: '1.5',
+                }}>
+                  ⚠️ {preview.tokenWarning}
+                </div>
+              )}
+
+              {result?.error && (
+                <div style={{
+                  padding: '10px 14px', borderRadius: '7px', background: '#FEF2F2',
+                  border: '1px solid #FECACA', color: '#C0392B', fontSize: '12.5px',
+                  marginBottom: '16px', lineHeight: '1.5',
+                }}>
+                  {result.error}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                {/* Left: image selector */}
+                <div style={{ flex: '0 0 auto', width: '200px' }}>
+                  <p style={{ fontSize: '11px', fontWeight: '600', color: '#6B6156', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '8px' }}>
+                    Select image
+                  </p>
+                  {images.length === 0 ? (
+                    <div style={{ fontSize: '12.5px', color: '#B5AA99', lineHeight: '1.5' }}>
+                      No images available for this itinerary.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {images.slice(0, 8).map((img, i) => (
+                        <div
+                          key={i}
+                          onClick={() => setSelectedIdx(i)}
+                          style={{
+                            position: 'relative', height: '80px', borderRadius: '6px',
+                            overflow: 'hidden', cursor: 'pointer', flexShrink: 0,
+                            border: selectedIdx === i ? '2px solid #E1306C' : '2px solid transparent',
+                            background: '#F4F1EC',
+                          }}
+                        >
+                          <img
+                            src={img.url}
+                            alt={img.alt}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={e => { e.currentTarget.style.opacity = '0.3'; }}
+                          />
+                          {selectedIdx === i && (
+                            <div style={{
+                              position: 'absolute', inset: 0,
+                              background: 'rgba(225, 48, 108, 0.12)',
+                              border: '2px solid #E1306C', borderRadius: '4px',
+                            }} />
+                          )}
+                          {i === 0 && img.type === 'hero' && (
+                            <span style={{
+                              position: 'absolute', top: '4px', left: '4px',
+                              background: 'rgba(0,0,0,0.55)', color: 'white',
+                              fontSize: '9px', fontWeight: '700', padding: '2px 5px',
+                              borderRadius: '3px', letterSpacing: '0.3px',
+                            }}>COVER</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Right: caption editor */}
+                <div style={{ flex: 1, minWidth: '240px' }}>
+                  {selectedImg && (
+                    <div style={{
+                      width: '100%', height: '140px', borderRadius: '8px',
+                      overflow: 'hidden', background: '#F4F1EC', marginBottom: '14px',
+                    }}>
+                      <img
+                        src={selectedImg.url}
+                        alt={selectedImg.alt}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    </div>
+                  )}
+
+                  <p style={{ fontSize: '11px', fontWeight: '600', color: '#6B6156', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
+                    Caption
+                  </p>
+                  <textarea
+                    ref={textareaRef}
+                    value={caption}
+                    onChange={e => setCaption(e.target.value)}
+                    maxLength={2200}
+                    style={{
+                      width: '100%', minHeight: '180px', padding: '10px 12px',
+                      border: '1px solid #E8E3DA', borderRadius: '6px',
+                      fontSize: '12.5px', color: '#1C1A16', background: 'white',
+                      outline: 'none', resize: 'vertical', lineHeight: '1.6',
+                      fontFamily: 'inherit', boxSizing: 'border-box',
+                    }}
+                  />
+                  <p style={{ fontSize: '11px', color: '#B5AA99', textAlign: 'right', marginTop: '4px' }}>
+                    {caption.length} / 2200
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        {!result?.success && (
+          <div style={{
+            padding: '14px 20px', borderTop: '1px solid #F4F1EC',
+            display: 'flex', justifyContent: 'flex-end', gap: '10px', background: '#FAFAF8',
+          }}>
+            <button onClick={onClose} style={btnSecondary}>
+              {result?.success ? 'Close' : 'Cancel'}
+            </button>
+            {!loading && !previewError && !result?.success && (
+              <button
+                onClick={handlePublish}
+                disabled={publishing || images.length === 0 || !caption.trim()}
+                style={{
+                  ...btnPrimary,
+                  background: publishing ? '#9CA3AF' : '#E1306C',
+                  display: 'flex', alignItems: 'center', gap: '7px',
+                  opacity: (!caption.trim() || images.length === 0) ? 0.5 : 1,
+                }}
+              >
+                <Instagram size={13} />
+                {publishing ? 'Publishing...' : 'Publish to Instagram'}
+              </button>
+            )}
+          </div>
+        )}
+        {result?.success && (
+          <div style={{
+            padding: '14px 20px', borderTop: '1px solid #F4F1EC',
+            display: 'flex', justifyContent: 'flex-end', background: '#FAFAF8',
+          }}>
+            <button onClick={onClose} style={btnPrimary}>Done</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function ItinerariesCMSPage() {
   const { getToken } = useAuth();
@@ -108,6 +397,7 @@ export default function ItinerariesCMSPage() {
   const [typeFilter,     setTypeFilter]     = useState('all');   // all | free | premium | custom
   const [creatorFilter,  setCreatorFilter]  = useState('');      // creator id or ''
   const [allCreators,    setAllCreators]    = useState([]);      // for filter dropdown
+  const [instagramModal, setInstagramModal] = useState(null);    // itinerary | null
 
   // An itinerary is deletable if: admin (always), or designer owns it and it's a draft.
   function canDelete(it) {
@@ -290,6 +580,12 @@ export default function ItinerariesCMSPage() {
     collections: collectionItems.length,
   };
 
+  function handleInstagramSuccess(itineraryId, instagramPostId) {
+    setItems(prev => prev.map(it =>
+      it.id === itineraryId ? { ...it, instagramPostId } : it
+    ));
+  }
+
   return (
     <div style={{ padding: isMobile ? '16px' : '28px 32px' }}>
 
@@ -298,6 +594,15 @@ export default function ItinerariesCMSPage() {
           message={`Delete "${toDelete.title}"? This cannot be undone.`}
           onConfirm={() => handleDelete(toDelete.id)}
           onCancel={() => setToDelete(null)}
+        />
+      )}
+
+      {instagramModal && (
+        <InstagramModal
+          itinerary={instagramModal}
+          getToken={getToken}
+          onClose={() => setInstagramModal(null)}
+          onSuccess={handleInstagramSuccess}
         />
       )}
 
@@ -501,6 +806,7 @@ export default function ItinerariesCMSPage() {
           onDuplicate={handleDuplicate}
           onDelete={requestDelete}
           canDelete={canDelete}
+          onInstagramPublish={it => setInstagramModal(it)}
         />
       ) : (
         <DesktopTable
@@ -511,6 +817,7 @@ export default function ItinerariesCMSPage() {
           onDuplicate={handleDuplicate}
           onDelete={requestDelete}
           canDelete={canDelete}
+          onInstagramPublish={it => setInstagramModal(it)}
         />
       )}
     </div>
@@ -518,7 +825,7 @@ export default function ItinerariesCMSPage() {
 }
 
 // ── Desktop table ─────────────────────────────────────────────────────────────
-function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, onDelete, canDelete }) {
+function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, onDelete, canDelete, onInstagramPublish }) {
   const [sortKey, setSortKey] = useState(null);  // null | 'pdf_version' | 'updatedAt'
   const [sortDir, setSortDir] = useState('asc'); // 'asc' | 'desc'
 
@@ -660,6 +967,15 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
                     >
                       {it.status === 'published' ? <EyeOff size={13} /> : <Globe size={13} />}
                     </button>
+                    {it.creator_instagram_account_id && (
+                      <button
+                        onClick={() => onInstagramPublish(it)}
+                        style={{ ...iconBtn, color: it.instagramPostId ? '#1B6B65' : '#E1306C' }}
+                        title={it.instagramPostId ? 'Re-publish to Instagram' : 'Publish to Instagram'}
+                      >
+                        <Instagram size={13} />
+                      </button>
+                    )}
                     {canDelete(it) && (
                       <button
                         onClick={() => onDelete(it)}
@@ -682,7 +998,7 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
 }
 
 // ── Mobile list ───────────────────────────────────────────────────────────────
-function MobileList({ items, onEdit, onPreview, onTogglePublish, onDuplicate, onDelete, canDelete }) {
+function MobileList({ items, onEdit, onPreview, onTogglePublish, onDuplicate, onDelete, canDelete, onInstagramPublish }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       {items.map(it => (
@@ -725,6 +1041,10 @@ function MobileList({ items, onEdit, onPreview, onTogglePublish, onDuplicate, on
                 action: () => onTogglePublish(it),
                 color: it.status === 'published' ? '#C9A96E' : '#1B6B65',
               },
+              ...(it.creator_instagram_account_id ? [{
+                icon: Instagram, label: 'Instagram', action: () => onInstagramPublish(it),
+                color: it.instagramPostId ? '#1B6B65' : '#E1306C',
+              }] : []),
               ...(canDelete(it) ? [{ icon: Trash2, label: 'Delete', action: () => onDelete(it), color: '#C0392B' }] : []),
             ].map(({ icon: Icon, label, action, color }) => (
               <button key={label} onClick={action} style={{

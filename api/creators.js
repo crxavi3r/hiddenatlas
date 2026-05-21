@@ -96,6 +96,8 @@ async function handleList(pool) {
   const { rows } = await pool.query(`
     SELECT c.id, c.name, c.slug, c.avatar_url AS "avatarUrl", c.bio, c.is_active AS "isActive",
            c.user_id AS "userId", c.created_at AS "createdAt",
+           c.instagram_account_id AS "instagramAccountId",
+           c.instagram_token_expires_at AS "instagramTokenExpiresAt",
            COUNT(i.id) FILTER (WHERE i.status = 'published' AND i."isPrivate" = false AND i."isCollection" = false)::int AS itinerary_count,
            COUNT(i.id)::int AS total_itinerary_count,
            u.email AS linked_email

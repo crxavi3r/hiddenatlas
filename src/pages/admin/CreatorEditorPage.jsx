@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate, Link, Navigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link, Navigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import { useUserCtx } from '../../lib/useUserCtx.jsx';
-import { ArrowLeft, Save, Upload, User, X, ExternalLink, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Save, Upload, User, X, ExternalLink, CheckCircle, Instagram, Link2Off } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
@@ -50,14 +50,15 @@ function getInitials(name) {
 }
 
 export default function CreatorEditorPage() {
-  const { id }         = useParams();
-  const navigate       = useNavigate();
-  const { getToken }   = useAuth();
+  const { id }           = useParams();
+  const navigate         = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { getToken }     = useAuth();
   const { isAdmin, creatorId, loading: ctxLoading } = useUserCtx();
-  const isMobile       = useIsMobile();
-  const isNew          = id === 'new';
-  const avatarInputRef  = useRef(null);
-  const slugEdited      = useRef(false); // tracks whether slug was manually changed on new creators
+  const isMobile         = useIsMobile();
+  const isNew            = id === 'new';
+  const avatarInputRef   = useRef(null);
+  const slugEdited       = useRef(false); // tracks whether slug was manually changed on new creators
   const nameEdited      = useRef(false); // tracks whether name was manually typed by admin
   const userSelectorRef = useRef(null);
   const slugDebounceRef = useRef(null);
@@ -73,6 +74,11 @@ export default function CreatorEditorPage() {
   const [dropdownOpen,  setDropdownOpen]  = useState(false);
   const [slugStatus,    setSlugStatus]    = useState(null); // null | 'checking' | 'available' | 'taken'
   const [stats,         setStats]         = useState({ total: 0, published: 0 });
+  const [igAccountId,   setIgAccountId]   = useState(null);  // connected Instagram account ID
+  const [igExpiry,      setIgExpiry]      = useState(null);  // token expiry date
+  const [igMsg,         setIgMsg]         = useState(null);  // { ok, text }
+  const [igConnecting,  setIgConnecting]  = useState(false);
+  const [igDisconnecting, setIgDisconnecting] = useState(false);
   const [form,        setForm]        = useState({
     name: '', slug: '', avatarUrl: '', bio: '', userId: '', isActive: true,
   });
@@ -102,11 +108,46 @@ export default function CreatorEditorPage() {
         published: creator.itinerary_count       || 0,
       });
       setLinkedUser(creator.linked_email ? { name: null, email: creator.linked_email } : null);
+      setIgAccountId(creator.instagramAccountId ?? null);
+      setIgExpiry(creator.instagramTokenExpiresAt ?? null);
     } catch (e) { alert(e.message); navigate('/admin/creators'); }
     finally { setLoading(false); }
   }, [id, isNew, getToken, navigate]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Handle Instagram OAuth callback redirect params (?instagram=connected|denied|error)
+  useEffect(() => {
+    const status = searchParams.get('instagram');
+    const reason = searchParams.get('reason');
+    if (!status) return;
+
+    if (status === 'connected') {
+      setIgMsg({ ok: true, text: 'Instagram account connected successfully.' });
+      load(); // reload to get fresh account ID
+    } else if (status === 'denied') {
+      setIgMsg({ ok: false, text: 'Instagram connection was cancelled.' });
+    } else if (status === 'error') {
+      const msgs = {
+        not_configured: 'Instagram integration is not configured on this server.',
+        invalid_state:  'OAuth state was invalid or expired. Please try again.',
+        token_exchange: 'Could not exchange the OAuth code for an access token.',
+        token_refresh:  'Could not obtain a long-lived access token.',
+        no_pages:       'No Facebook Pages found. Connect a Page to your account first.',
+        no_ig_account:  'No Instagram Business Account is linked to your Facebook Page.',
+        server_error:   'A server error occurred during Instagram connection.',
+      };
+      setIgMsg({ ok: false, text: msgs[reason] ?? 'Failed to connect Instagram.' });
+    }
+
+    // Clear the query params without re-triggering
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete('instagram');
+      next.delete('reason');
+      return next;
+    }, { replace: true });
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -267,6 +308,46 @@ export default function CreatorEditorPage() {
       alert(`Upload failed: ${err.message}`);
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleInstagramConnect() {
+    setIgConnecting(true);
+    setIgMsg(null);
+    try {
+      const token = await getToken();
+      const res   = await fetch(`/api/instagram?action=auth-url&creatorId=${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json  = await res.json();
+      if (json.error) throw new Error(json.error);
+      window.location.href = json.url;
+    } catch (e) {
+      setIgMsg({ ok: false, text: e.message });
+      setIgConnecting(false);
+    }
+  }
+
+  async function handleInstagramDisconnect() {
+    if (!window.confirm('Disconnect this Instagram account? Itineraries will no longer be publishable until reconnected.')) return;
+    setIgDisconnecting(true);
+    setIgMsg(null);
+    try {
+      const token = await getToken();
+      const res   = await fetch('/api/instagram?action=disconnect', {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ creatorId: id }),
+      });
+      const json  = await res.json();
+      if (json.error) throw new Error(json.error);
+      setIgAccountId(null);
+      setIgExpiry(null);
+      setIgMsg({ ok: true, text: 'Instagram account disconnected.' });
+    } catch (e) {
+      setIgMsg({ ok: false, text: e.message });
+    } finally {
+      setIgDisconnecting(false);
     }
   }
 
@@ -656,6 +737,100 @@ export default function CreatorEditorPage() {
             onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} />
         </div>
       </div>
+
+      {/* ── Instagram connection card (existing creators only) ── */}
+      {!isNew && (
+        <div style={{ ...card, padding: '28px', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+            <Instagram size={17} color="#E1306C" />
+            <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16' }}>
+              Instagram Connection
+            </p>
+          </div>
+          <p style={{ fontSize: '12px', color: '#8C8070', marginBottom: '20px', lineHeight: '1.6' }}>
+            Connect a Facebook-linked Instagram Business Account to allow publishing itineraries directly to Instagram from the CMS.
+          </p>
+
+          {igMsg && (
+            <div style={{
+              padding: '10px 14px', borderRadius: '7px', marginBottom: '16px',
+              background: igMsg.ok ? '#EFF6F5' : '#FEF2F2',
+              border: `1px solid ${igMsg.ok ? '#A8D5D0' : '#FECACA'}`,
+              color: igMsg.ok ? '#1B6B65' : '#C0392B',
+              fontSize: '12.5px', lineHeight: '1.5',
+            }}>
+              {igMsg.text}
+            </div>
+          )}
+
+          {igAccountId ? (
+            /* ── Connected state ── */
+            <div>
+              <div style={{
+                padding: '12px 16px', background: '#EFF6F5', borderRadius: '8px',
+                border: '1px solid #A8D5D0', marginBottom: '12px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <CheckCircle size={14} color="#1B6B65" />
+                  <p style={{ fontSize: '12.5px', fontWeight: '600', color: '#1B6B65' }}>
+                    Connected
+                  </p>
+                </div>
+                <p style={{ fontSize: '11px', color: '#4A433A', fontFamily: 'monospace', marginLeft: '22px' }}>
+                  Account ID: {igAccountId}
+                </p>
+                {igExpiry && (
+                  <p style={{ fontSize: '11px', color: '#8C8070', marginLeft: '22px', marginTop: '3px' }}>
+                    Token expires: {new Date(igExpiry).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {(new Date(igExpiry) - Date.now()) < 14 * 86_400_000 && (
+                      <span style={{ color: '#C9A96E', marginLeft: '6px', fontWeight: '600' }}>
+                        (expiring soon — reconnect)
+                      </span>
+                    )}
+                  </p>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={handleInstagramConnect}
+                  disabled={igConnecting}
+                  style={{ ...btnSecondary, display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Instagram size={12} />
+                  {igConnecting ? 'Redirecting…' : 'Reconnect'}
+                </button>
+                <button
+                  onClick={handleInstagramDisconnect}
+                  disabled={igDisconnecting}
+                  style={{ ...btnSecondary, color: '#C0392B', borderColor: '#FDECEA', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Link2Off size={12} />
+                  {igDisconnecting ? 'Disconnecting…' : 'Disconnect'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* ── Not connected state ── */
+            <div>
+              <p style={{ fontSize: '12.5px', color: '#B5AA99', marginBottom: '14px', lineHeight: '1.5' }}>
+                No Instagram account connected. Click below to connect via Facebook OAuth.
+              </p>
+              <button
+                onClick={handleInstagramConnect}
+                disabled={igConnecting}
+                style={{
+                  ...btnSecondary, display: 'flex', alignItems: 'center', gap: '7px',
+                  borderColor: '#E1306C', color: '#E1306C',
+                  opacity: igConnecting ? 0.7 : 1,
+                }}
+              >
+                <Instagram size={13} />
+                {igConnecting ? 'Redirecting to Facebook…' : 'Connect Instagram'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Save row ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
