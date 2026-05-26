@@ -304,6 +304,12 @@ async function handleAuthUrl(req, pool, ctx) {
 async function handleCallback(req, res) {
   const { code, state, error: igError, error_description: igDesc } = req.query;
 
+  console.log('[instagram:callback] received', {
+    hasCode:  Boolean(code),
+    hasState: Boolean(state),
+    igError:  igError ?? null,
+  });
+
   if (igError || !code || !state) {
     console.warn('[instagram:callback] denied or missing params', { igError, igDesc });
     return res.redirect(302, `/admin?instagram=denied`);
@@ -311,17 +317,19 @@ async function handleCallback(req, res) {
 
   try {
     requireInstagramEnv();
-  } catch {
+  } catch (e) {
+    console.error('[instagram:callback] env not configured:', e.message);
     return res.redirect(302, `/admin?instagram=error&reason=not_configured`);
   }
 
   const creatorId = verifyState(state);
+  console.log('[instagram:callback] state verified, creatorId:', creatorId ?? 'INVALID');
   if (!creatorId) {
-    console.warn('[instagram:callback] invalid or expired state');
     return res.redirect(302, `/admin?instagram=error&reason=invalid_state`);
   }
 
   if (!process.env.DATABASE_URL) {
+    console.error('[instagram:callback] DATABASE_URL missing');
     return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=server_error`);
   }
 
@@ -330,8 +338,10 @@ async function handleCallback(req, res) {
   try {
     const redirectUri = getRedirectUri(req);
 
-    // 1. Exchange code for short-lived token via POST (Instagram Login flow).
-    //    Response includes user_id directly — no Facebook Pages lookup needed.
+    // ── Step 1: exchange code for short-lived token ──────────────────────────
+    // POST to api.instagram.com (not graph.instagram.com) with form-urlencoded body.
+    // Response may be flat { access_token, user_id } or wrapped { data: [{ ... }] }.
+    console.log('[instagram:callback] step 1 — token exchange, redirectUri:', redirectUri);
     const tokenRes  = await fetch(`${IG_TOKEN}/oauth/access_token`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -343,65 +353,118 @@ async function handleCallback(req, res) {
         code,
       }),
     });
-    const tokenRaw  = await tokenRes.json();
-    // Meta docs show two possible response shapes:
-    //   flat:    { access_token, user_id, permissions }
-    //   wrapped: { data: [{ access_token, user_id, permissions }] }
-    // Normalise to a single object so downstream code doesn't care.
-    const tokenData = Array.isArray(tokenRaw?.data) ? tokenRaw.data[0] : tokenRaw;
+    console.log('[instagram:callback] step 1 — HTTP', tokenRes.status);
 
-    // Instagram Login errors surface as error_type + error_message (not error.code)
+    let tokenRaw;
+    try {
+      tokenRaw = await tokenRes.json();
+    } catch (parseErr) {
+      const text = await tokenRes.text().catch(() => '(unreadable)');
+      console.error('[instagram:callback] step 1 — response is not JSON, body:', text);
+      return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=token_exchange_failed`);
+    }
+
+    // Normalise both response shapes
+    const tokenData = Array.isArray(tokenRaw?.data) ? tokenRaw.data[0] : tokenRaw;
     if (tokenData?.error_type || !tokenData?.access_token) {
-      console.error('[instagram:callback] token exchange failed', tokenRaw);
-      let reason = 'token_exchange';
+      console.error('[instagram:callback] step 1 — failed:', JSON.stringify(tokenRaw));
+      let reason = 'token_exchange_failed';
       const msg  = (tokenData?.error_message ?? '').toLowerCase();
       if (msg.includes('invalid platform app'))                      reason = 'invalid_platform_app';
-      else if (msg.includes('redirect'))                             reason = 'redirect_mismatch';
-      else if (msg.includes('scope') || msg.includes('permission'))  reason = 'scope_denied';
+      else if (msg.includes('redirect'))                             reason = 'invalid_redirect_uri';
+      else if (msg.includes('secret') || msg.includes('client'))    reason = 'invalid_client_secret';
+      else if (msg.includes('scope') || msg.includes('permission')) reason = 'scope_denied';
       else if (msg.includes('code') || msg.includes('already used')) reason = 'code_used';
       return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=${reason}`);
     }
-
     if (!tokenData.user_id) {
-      console.error('[instagram:callback] user_id missing from token response', tokenRaw);
-      return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=no_ig_account`);
+      console.error('[instagram:callback] step 1 — user_id absent:', JSON.stringify(tokenRaw));
+      return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=account_fetch_failed`);
     }
 
-    const igAccountId = String(tokenData.user_id); // Instagram User ID — returned directly
+    const igAccountId = String(tokenData.user_id);
     const shortToken  = tokenData.access_token;
+    console.log('[instagram:callback] step 1 — OK, igAccountId:', igAccountId);
 
-    // 2. Exchange short-lived for long-lived token (~60 days) via graph.instagram.com
-    const longRes  = await fetch(`${IG_GRAPH}/access_token?` + new URLSearchParams({
-      grant_type:    'ig_exchange_token',
-      client_id:     igClientId(),
-      client_secret: igClientSecret(),
-      access_token:  shortToken,
-    }));
-    const longData = await longRes.json();
+    // ── Step 2: fetch Instagram profile to validate the account ─────────────
+    // Uses short-lived token; non-fatal if it fails — we already have user_id.
+    console.log('[instagram:callback] step 2 — profile fetch');
+    try {
+      const profileRes  = await fetch(
+        `${IG_GRAPH}/me?fields=user_id,username,account_type&access_token=${encodeURIComponent(shortToken)}`
+      );
+      console.log('[instagram:callback] step 2 — HTTP', profileRes.status);
+      const profileData = await profileRes.json();
+      if (profileData.error) {
+        console.warn('[instagram:callback] step 2 — error (non-fatal):', JSON.stringify(profileData.error));
+      } else {
+        console.log('[instagram:callback] step 2 — OK, username:', profileData.username, 'account_type:', profileData.account_type);
+      }
+    } catch (profileErr) {
+      console.warn('[instagram:callback] step 2 — fetch threw (non-fatal):', profileErr.message);
+    }
+
+    // ── Step 3: exchange short-lived token for long-lived token (~60 days) ───
+    // Endpoint is unversioned: graph.instagram.com/access_token (no /v25.0/).
+    // Only client_secret + access_token needed; client_id is not required here.
+    console.log('[instagram:callback] step 3 — long-lived token exchange');
+    const longRes = await fetch(
+      'https://graph.instagram.com/access_token?' + new URLSearchParams({
+        grant_type:    'ig_exchange_token',
+        client_secret: igClientSecret(),
+        access_token:  shortToken,
+      })
+    );
+    console.log('[instagram:callback] step 3 — HTTP', longRes.status);
+
+    let longData;
+    try {
+      longData = await longRes.json();
+    } catch (parseErr) {
+      const text = await longRes.text().catch(() => '(unreadable)');
+      console.error('[instagram:callback] step 3 — response is not JSON, body:', text);
+      return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=token_refresh_failed`);
+    }
+
     if (longData.error || !longData.access_token) {
-      console.error('[instagram:callback] long-lived token exchange failed', longData.error);
-      return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=token_refresh`);
+      console.error('[instagram:callback] step 3 — failed:', JSON.stringify(longData));
+      return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=token_refresh_failed`);
     }
 
     const accessToken = longData.access_token;
-    const expiresIn   = longData.expires_in ?? 5_184_000; // 60 days default
-    const expiresAt   = new Date(Date.now() + expiresIn * 1000);
+    const expiresIn   = longData.expires_in;
+    const expiresAt   = expiresIn ? new Date(Date.now() + expiresIn * 1000) : null;
+    console.log('[instagram:callback] step 3 — OK, expires_in:', expiresIn ?? 'not provided');
 
-    // 3. Persist on Creator row
-    await pool.query(
-      `UPDATE "Creator"
-       SET instagram_account_id       = $1,
-           instagram_access_token     = $2,
-           instagram_token_expires_at = $3
-       WHERE id = $4`,
-      [igAccountId, accessToken, expiresAt, creatorId]
-    );
+    // ── Step 4: persist on Creator row ───────────────────────────────────────
+    // Column names are snake_case as defined in the DB migration.
+    console.log('[instagram:callback] step 4 — DB update, creatorId:', creatorId);
+    let updateResult;
+    try {
+      updateResult = await pool.query(
+        `UPDATE "Creator"
+         SET instagram_account_id       = $1,
+             instagram_access_token     = $2,
+             instagram_token_expires_at = $3
+         WHERE id = $4`,
+        [igAccountId, accessToken, expiresAt, creatorId]
+      );
+    } catch (dbErr) {
+      console.error('[instagram:callback] step 4 — DB error:', dbErr.message);
+      return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=database_update_failed`);
+    }
 
+    if (updateResult.rowCount === 0) {
+      console.error('[instagram:callback] step 4 — 0 rows updated, creatorId not found:', creatorId);
+      return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=creator_not_found`);
+    }
+
+    console.log('[instagram:callback] step 4 — OK, rows updated:', updateResult.rowCount);
     console.log(`[instagram:callback] connected igAccountId=${igAccountId} creatorId=${creatorId}`);
     return res.redirect(302, `/admin/creators/${creatorId}?instagram=connected`);
 
   } catch (err) {
-    console.error('[instagram:callback] unexpected error', err);
+    console.error('[instagram:callback] unexpected error:', err.message, '\n', err.stack);
     return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=server_error`);
   } finally {
     await pool.end();

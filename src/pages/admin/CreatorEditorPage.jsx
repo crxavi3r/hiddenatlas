@@ -131,16 +131,19 @@ export default function CreatorEditorPage() {
       setIgMsg({ ok: false, text: 'Instagram connection was cancelled.' });
     } else if (status === 'error') {
       const msgs = {
-        not_configured:      'Instagram integration is not configured on this server.',
-        invalid_state:       'OAuth state was invalid or expired. Please try again.',
-        invalid_platform_app:'Meta rejected the request ("Invalid platform app"). Set INSTAGRAM_CLIENT_ID in Vercel to the Instagram App ID from Meta Dashboard → Instagram → API setup with Instagram login → section 3 → Business login settings — not the top-level Meta App ID.',
-        redirect_mismatch:   'Redirect URI rejected by Meta. INSTAGRAM_REDIRECT_URI in Vercel must exactly match the URI listed in Business login settings.',
-        scope_denied:        'Instagram did not grant the required permissions. Ensure instagram_business_basic and instagram_business_content_publish are approved in the Meta app.',
-        token_exchange:      'Could not exchange the OAuth code. Ensure the account is an Instagram Business or Creator account.',
-        code_used:           'The OAuth code was already used or expired. Please try connecting again.',
-        token_refresh:       'Could not obtain a long-lived access token.',
-        no_ig_account:       'No Instagram account ID was returned. The account may not be a Business or Creator account.',
-        server_error:        'A server error occurred during Instagram connection.',
+        not_configured:        'Instagram integration is not configured on this server.',
+        invalid_state:         'OAuth state was invalid or expired. Please try again.',
+        invalid_platform_app:  'Meta rejected the request ("Invalid platform app"). Check that INSTAGRAM_CLIENT_ID in Vercel matches the Instagram App ID in Meta Dashboard → Instagram → API setup with Instagram login → Business login settings.',
+        invalid_redirect_uri:  'Redirect URI was rejected during token exchange. INSTAGRAM_REDIRECT_URI must exactly match the URI in Business login settings.',
+        invalid_client_secret: 'Client secret was rejected during token exchange. Check INSTAGRAM_CLIENT_SECRET in Vercel.',
+        scope_denied:          'Instagram did not grant the required permissions. Ensure instagram_business_basic is approved in the Meta app.',
+        token_exchange_failed: 'Token exchange failed. Check Vercel function logs for the exact error from Instagram.',
+        code_used:             'The OAuth code was already used or expired. Please try connecting again.',
+        account_fetch_failed:  'No Instagram account ID was returned. The account may not be a Business or Creator account.',
+        token_refresh_failed:  'Could not obtain a long-lived access token. Check Vercel logs for the Instagram API response.',
+        creator_not_found:     'Creator record not found in the database. The creator ID in the OAuth state may be stale.',
+        database_update_failed:'Failed to save the Instagram connection to the database. Check Vercel logs.',
+        server_error:          'An unexpected server error occurred. Check Vercel function logs for details.',
       };
       setIgMsg({ ok: false, text: msgs[reason] ?? 'Failed to connect Instagram.' });
     }
