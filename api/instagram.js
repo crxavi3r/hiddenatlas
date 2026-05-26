@@ -2,7 +2,7 @@
 //
 // OAuth (browser-triggered, no Auth header):
 //   GET  /api/instagram?action=auth-url&creatorId=:id   — returns OAuth redirect URL
-//   GET  /api/instagram?action=callback                  — exchanges code, stores token
+//   GET  /api/instagram?code=...&state=...               — OAuth callback (detected by params)
 //
 // Publishing (require valid admin/designer JWT):
 //   GET  /api/instagram?action=preview&id=:itineraryId  — caption + image list
@@ -12,7 +12,7 @@
 //   POST /api/instagram?action=disconnect                — remove Instagram connection
 //   GET  /api/instagram?action=logs&id=:itineraryId     — publish history (admin only)
 //
-// Required env vars: INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET, DATABASE_URL
+// Required env vars: INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET, INSTAGRAM_REDIRECT_URI, DATABASE_URL
 
 import pg             from 'pg';
 import crypto         from 'crypto';
@@ -24,9 +24,11 @@ const REQUIRED_SCOPES  = 'instagram_basic,instagram_content_publish,pages_show_l
 
 // ── Env guard ─────────────────────────────────────────────────────────────────
 function requireInstagramEnv() {
-  if (!process.env.INSTAGRAM_APP_ID || !process.env.INSTAGRAM_APP_SECRET) {
+  const missing = ['INSTAGRAM_APP_ID', 'INSTAGRAM_APP_SECRET', 'INSTAGRAM_REDIRECT_URI']
+    .filter(k => !process.env[k]);
+  if (missing.length) {
     throw Object.assign(
-      new Error('Instagram integration is not configured (missing INSTAGRAM_APP_ID / INSTAGRAM_APP_SECRET)'),
+      new Error(`Instagram integration is not configured (missing: ${missing.join(', ')})`),
       { status: 503 }
     );
   }
@@ -72,9 +74,10 @@ function verifyState(state) {
 // ── Redirect URI ──────────────────────────────────────────────────────────────
 function getRedirectUri(req) {
   if (process.env.INSTAGRAM_REDIRECT_URI) return process.env.INSTAGRAM_REDIRECT_URI;
+  // Fallback for local dev — no query params so Meta accepts the URI
   const host  = req.headers['x-forwarded-host'] ?? req.headers.host ?? 'localhost:3000';
   const proto = req.headers['x-forwarded-proto']?.split(',')[0]?.trim() ?? 'http';
-  return `${proto}://${host}/api/instagram?action=callback`;
+  return `${proto}://${host}/api/instagram`;
 }
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
@@ -123,8 +126,9 @@ function generateCaption(it) {
 export default async function handler(req, res) {
   const action = req.query.action;
 
-  // OAuth callback is browser-redirected (no JWT), handle before pool creation
-  if (action === 'callback') {
+  // OAuth callback is browser-redirected (no JWT).
+  // Detected by presence of `code` + `state` (Meta appends these — no action= needed).
+  if (req.method === 'GET' && req.query.code && req.query.state) {
     return handleCallback(req, res);
   }
 
