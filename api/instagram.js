@@ -42,8 +42,9 @@ const { Pool } = pg;
 const IG_AUTH  = 'https://www.instagram.com';        // OAuth dialog (browser redirect)
 const IG_TOKEN = 'https://api.instagram.com';        // token exchange (server-to-server)
 const IG_GRAPH = 'https://graph.instagram.com/v25.0'; // Graph API calls
-// Minimum scopes for connecting and publishing (instagram_business_* family, Jan 2025+)
-const REQUIRED_SCOPES = 'instagram_business_basic,instagram_business_content_publish';
+// Scopes: instagram_business_basic only until instagram_business_content_publish
+// is confirmed added in Meta Dashboard → Instagram API → required permissions.
+const REQUIRED_SCOPES = 'instagram_business_basic';
 
 // ── Env accessors — prefer INSTAGRAM_CLIENT_* with INSTAGRAM_APP_* as legacy fallback ─
 function igClientId()     { return process.env.INSTAGRAM_CLIENT_ID     ?? process.env.INSTAGRAM_APP_ID; }

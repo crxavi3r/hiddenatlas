@@ -886,9 +886,12 @@ export default function CreatorEditorPage() {
                     </button>
                   </div>
                   {Object.entries(igDebug).map(([k, v]) => (
-                    <div key={k} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', borderBottom: '1px solid #E8E3DA', paddingBottom: '4px', marginBottom: '4px' }}>
-                      <span style={{ color: '#8C8070', minWidth: '200px', flexShrink: 0 }}>{k}</span>
-                      <span style={{ color: '#1C1A16', wordBreak: 'break-all' }}>{String(v)}</span>
+                    <div key={k} style={{ borderBottom: '1px solid #E8E3DA', paddingBottom: '6px', marginBottom: '6px' }}>
+                      <span style={{ color: '#8C8070', display: 'block', marginBottom: '2px' }}>{k}</span>
+                      {v !== null && typeof v === 'object'
+                        ? <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: '#1C1A16', background: '#EDE9E3', borderRadius: '4px', padding: '6px 8px', fontSize: '10.5px' }}>{JSON.stringify(v, null, 2)}</pre>
+                        : <span style={{ color: '#1C1A16', wordBreak: 'break-all' }}>{String(v)}</span>
+                      }
                     </div>
                   ))}
                 </div>
