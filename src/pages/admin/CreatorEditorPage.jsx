@@ -79,8 +79,6 @@ export default function CreatorEditorPage() {
   const [igMsg,         setIgMsg]         = useState(null);  // { ok, text }
   const [igConnecting,  setIgConnecting]  = useState(false);
   const [igDisconnecting, setIgDisconnecting] = useState(false);
-  const [igDebug,       setIgDebug]       = useState(null);  // debug payload from auth-url
-  const [igDebugOpen,   setIgDebugOpen]   = useState(false);
   const [form,        setForm]        = useState({
     name: '', slug: '', avatarUrl: '', bio: '', userId: '', isActive: true,
   });
@@ -337,23 +335,7 @@ export default function CreatorEditorPage() {
     }
   }
 
-  async function handleInstagramDebug() {
-    setIgDebug(null);
-    setIgDebugOpen(false);
-    try {
-      const token = await getToken();
-      const res   = await fetch(`/api/instagram?action=auth-url&creatorId=${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const json  = await res.json();
-      if (json.error) throw new Error(json.error);
-      setIgDebug(json.debug ?? { note: 'No debug payload returned (not admin?)' });
-      setIgDebugOpen(true);
-    } catch (e) {
-      setIgDebug({ error: e.message });
-      setIgDebugOpen(true);
-    }
-  }
+
 
   async function handleInstagramDisconnect() {
     if (!window.confirm('Disconnect this Instagram account? Itineraries will no longer be publishable until reconnected.')) return;
@@ -857,50 +839,7 @@ export default function CreatorEditorPage() {
             </div>
           )}
 
-          {/* ── Admin-only debug panel ── */}
-          {isAdmin && !isNew && (
-            <div style={{ marginTop: '20px', borderTop: '1px solid #E8E3DA', paddingTop: '16px' }}>
-              <button
-                onClick={handleInstagramDebug}
-                style={{
-                  background: 'none', border: '1px solid #C8C0B4', borderRadius: '6px',
-                  padding: '5px 10px', fontSize: '11px', color: '#8C8070', cursor: 'pointer',
-                  fontFamily: 'monospace',
-                }}
-              >
-                Debug Instagram OAuth
-              </button>
 
-              {igDebugOpen && igDebug && (
-                <div style={{
-                  marginTop: '10px', background: '#F4F1EC', border: '1px solid #DDD8CF',
-                  borderRadius: '8px', padding: '14px', fontSize: '11px', fontFamily: 'monospace',
-                  lineHeight: '1.8', color: '#1C1A16',
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <span style={{ fontWeight: '700', fontSize: '11.5px', letterSpacing: '0.03em' }}>
-                      OAuth Debug Info
-                    </span>
-                    <button
-                      onClick={() => setIgDebugOpen(false)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8C8070', fontSize: '13px', padding: '0 2px' }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  {Object.entries(igDebug).map(([k, v]) => (
-                    <div key={k} style={{ borderBottom: '1px solid #E8E3DA', paddingBottom: '6px', marginBottom: '6px' }}>
-                      <span style={{ color: '#8C8070', display: 'block', marginBottom: '2px' }}>{k}</span>
-                      {v !== null && typeof v === 'object'
-                        ? <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: '#1C1A16', background: '#EDE9E3', borderRadius: '4px', padding: '6px 8px', fontSize: '10.5px' }}>{JSON.stringify(v, null, 2)}</pre>
-                        : <span style={{ color: '#1C1A16', wordBreak: 'break-all' }}>{String(v)}</span>
-                      }
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       )}
 

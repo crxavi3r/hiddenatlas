@@ -139,32 +139,184 @@ function metaErrorMessage(err, context) {
 
 // ── Caption generator ─────────────────────────────────────────────────────────
 function generateCaption(it) {
-  const parts = [];
+  const SITE_BASE = 'https://www.hiddenatlas.travel';
 
-  const header = it.durationDays
-    ? `${it.title} | ${it.durationDays} Days`
-    : it.title;
-  parts.push(header);
+  const titleLower   = (it.title       || '').toLowerCase();
+  const destLower    = (it.destination || '').toLowerCase();
+  const countryLower = (it.country     || '').toLowerCase();
+  const combinedText = `${titleLower} ${destLower} ${countryLower}`;
+
+  // ── Emoji ───────────────────────────────────────────────────────────────────
+  function pickEmoji() {
+    if (combinedText.match(/wine|tuscany|chianti|bordeaux|champagne|rioja/)) return '🍷';
+    if (combinedText.match(/japan|kyoto|tokyo|osaka/))                       return '🌸';
+    if (combinedText.match(/ocean|coast|beach|island|azores|maldiv|caribbean|sicil/)) return '🌊';
+    if (combinedText.match(/mountain|alps|highland|norway|iceland|dolomit/)) return '⛰️';
+    if (combinedText.match(/scotland|castle|england|ireland|britain/))       return '🏰';
+    if (combinedText.match(/greece|mediterran|santorini|crete/))             return '⛵';
+    if (combinedText.match(/morocco|marrakech|sahara|desert/))               return '🕌';
+    if (combinedText.match(/paris|france|provence|normandy|brittany/))       return '🥐';
+    if (combinedText.match(/spain|andalusia|camino|barcelona|madrid/))       return '🌞';
+    if (combinedText.match(/road.?trip|drive|driving|route/))                return '🚗';
+    return '✈️';
+  }
+
+  // ── Description paragraphs ──────────────────────────────────────────────────
+  // Trim whitespace, normalise internal spacing, then split on blank lines.
+  // If only one block, try to split at the first full stop after 120 chars
+  // so we get two natural paragraphs without ever truncating.
+  function parseDescParagraphs(raw) {
+    if (!raw) return [];
+    const clean = raw.replace(/[ \t]+/g, ' ').trim();
+
+    // Try explicit paragraph breaks first
+    const blocks = clean.split(/\n{2,}/).map(b => b.replace(/\n/g, ' ').trim()).filter(Boolean);
+    if (blocks.length >= 2) return blocks;
+
+    // Single block: split at the first sentence boundary after 100 chars
+    if (clean.length > 150) {
+      const cutIdx = clean.slice(100).search(/(?<=[.!?])\s+[A-Z]/);
+      if (cutIdx !== -1) {
+        const pivot = 100 + cutIdx + 1;
+        return [clean.slice(0, pivot).trim(), clean.slice(pivot).trim()].filter(Boolean);
+      }
+    }
+    return [clean];
+  }
+
+  const excerptText = (it.excerpt     || '').trim();
+  const descText    = (it.description || '').trim();
+
+  let hookPara  = '';
+  let routePara = '';
+
+  if (excerptText && descText && excerptText !== descText) {
+    // Separate hook (excerpt) + route (description)
+    hookPara  = excerptText;
+    routePara = descText;
+  } else {
+    // Single source: parse into two paragraphs
+    const [p1, p2] = parseDescParagraphs(excerptText || descText);
+    hookPara  = p1 || '';
+    routePara = p2 || '';
+  }
+
+  // ── Bullets ─────────────────────────────────────────────────────────────────
+  function buildBullets() {
+    const ctx = `${combinedText} ${(excerptText + ' ' + descText).toLowerCase()}`;
+
+    const bullets = [];
+    const dest    = it.destination || 'travel';
+
+    bullets.push(`A clear day-by-day ${dest} route`);
+
+    if (ctx.match(/wine|vineyard|winery|cellar|tasting/)) {
+      bullets.push('Scenic drives through classic wine landscapes');
+    } else if (ctx.match(/coast|ocean|beach|island/)) {
+      bullets.push('Coastal drives and beach stop recommendations');
+    } else if (ctx.match(/mountain|highland|alps|hiking|trail/)) {
+      bullets.push('Scenic mountain and highland routes');
+    } else {
+      bullets.push('Scenic routes and highlights along the way');
+    }
+
+    if (ctx.match(/town|village|medieval|historic|old.?town|ancient/)) {
+      bullets.push('Historic towns and countryside stops');
+    } else if (ctx.match(/city|capital|urban|neighbourhood/)) {
+      bullets.push('City neighbourhoods and local highlights');
+    } else {
+      bullets.push('Key stops and places worth lingering in');
+    }
+
+    if (ctx.match(/wine|vineyard|cellar|tasting/)) {
+      bullets.push('Restaurant and winery recommendations');
+    } else if (ctx.match(/restaurant|dining|food|cuisine|gastro/)) {
+      bullets.push('Restaurant and dining recommendations');
+    } else {
+      bullets.push('Where to eat and what to try locally');
+    }
+
+    bullets.push('Practical notes to make the trip easier');
+
+    return bullets.slice(0, 5);
+  }
+
+  // ── Hashtags ─────────────────────────────────────────────────────────────────
+  function buildHashtags() {
+    const tags = ['#HiddenAtlas'];
+
+    // Destination tag
+    if (it.destination) {
+      tags.push(`#${it.destination.replace(/[^a-zA-Z0-9]/g, '')}`);
+    }
+
+    // Destination-specific bundles (ordered most-specific first)
+    if (destLower.includes('tuscany') || titleLower.includes('tuscany')) {
+      tags.push('#TuscanyRoadTrip', '#ItalyTravel', '#WineTravel');
+    } else if (destLower.includes('northern england') || titleLower.includes('northern england')) {
+      tags.push('#NorthernEngland', '#EnglandRoadTrip', '#UKTravel', '#Yorkshire');
+    } else if (destLower.includes('puglia') || titleLower.includes('puglia')) {
+      tags.push('#PugliaTravel', '#ItalyRoadTrip', '#ItalyTravel');
+    } else if (destLower.includes('normandy') || titleLower.includes('normandy') || destLower.includes('brittany')) {
+      tags.push('#NormandyTravel', '#FranceRoadTrip', '#FranceTravel');
+    } else if (countryLower === 'japan' || destLower.includes('japan')) {
+      tags.push('#JapanTravel', '#VisitJapan');
+    } else if (countryLower === 'morocco' || destLower.includes('morocco')) {
+      tags.push('#MoroccoTravel', '#VisitMorocco');
+    } else {
+      // Generic country road-trip tag
+      if (it.country) {
+        const c = it.country.replace(/\s+/g, '');
+        tags.push(`#${c}Travel`);
+        if (combinedText.match(/road.?trip|drive|driving|route/)) tags.push(`#${c}RoadTrip`);
+      }
+    }
+
+    // Thematic tags
+    const ctx = `${combinedText} ${(excerptText + ' ' + descText).toLowerCase()}`;
+    if (ctx.match(/wine|vineyard/))           tags.push('#WineTravel');
+    if (ctx.match(/road.?trip|drive|driving/)) tags.push('#RoadTrip');
+
+    tags.push('#TravelItinerary');
+
+    if (ctx.match(/luxury|boutique|high.?end|premium/)) {
+      tags.push('#LuxuryTravel');
+    } else {
+      tags.push('#SlowTravel');
+    }
+
+    return [...new Set(tags)];
+  }
+
+  // ── Assemble ─────────────────────────────────────────────────────────────────
+  const emoji    = pickEmoji();
+  const bullets  = buildBullets();
+  const hashtags = buildHashtags();
+  const location = [it.destination, it.country].filter(Boolean).join(', ');
+  const slug     = it.slug
+    || (it.title || '').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  const url = slug ? `${SITE_BASE}/itineraries/${slug}` : null;
+
+  const parts = [`${emoji} ${it.title}`, ''];
+
+  if (hookPara)  { parts.push(hookPara,  ''); }
+  if (routePara) { parts.push(routePara, ''); }
+
+  parts.push("Inside the guide you'll find:", '');
+  bullets.forEach(b => parts.push(`• ${b}`));
   parts.push('');
 
-  const desc = (it.excerpt || it.description || '').trim();
-  if (desc) {
-    const snippet = desc.length > 200 ? desc.slice(0, 197) + '...' : desc;
-    parts.push(snippet);
+  if (location)       parts.push(`📍 ${location}`);
+  if (it.durationDays) parts.push(`🗓 ${it.durationDays} days`);
+  parts.push('');
+
+  if (url) {
+    parts.push('Explore the full itinerary:');
+    parts.push(url);
     parts.push('');
   }
 
-  const location = [it.destination, it.country].filter(Boolean).join(', ');
-  if (location) parts.push(`📍 ${location}`);
-  if (it.durationDays) parts.push(`🗓 ${it.durationDays} days`);
-  parts.push('');
-  parts.push('Discover the full day-by-day route. Link in bio.');
-  parts.push('');
-
-  const tags = ['#HiddenAtlas', '#TravelItinerary', '#LuxuryTravel', '#TravelInspiration'];
-  if (it.country)     tags.push(`#${it.country.replace(/\s+/g, '')}`);
-  if (it.destination) tags.push(`#${it.destination.replace(/\s+/g, '')}Journey`);
-  parts.push(tags.join(' '));
+  parts.push(hashtags.join(' '));
 
   return parts.join('\n');
 }
