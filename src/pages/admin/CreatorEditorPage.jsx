@@ -79,6 +79,8 @@ export default function CreatorEditorPage() {
   const [igMsg,         setIgMsg]         = useState(null);  // { ok, text }
   const [igConnecting,  setIgConnecting]  = useState(false);
   const [igDisconnecting, setIgDisconnecting] = useState(false);
+  const [igDebug,       setIgDebug]       = useState(null);  // debug payload from auth-url
+  const [igDebugOpen,   setIgDebugOpen]   = useState(false);
   const [form,        setForm]        = useState({
     name: '', slug: '', avatarUrl: '', bio: '', userId: '', isActive: true,
   });
@@ -131,7 +133,7 @@ export default function CreatorEditorPage() {
       const msgs = {
         not_configured:      'Instagram integration is not configured on this server.',
         invalid_state:       'OAuth state was invalid or expired. Please try again.',
-        invalid_platform_app:'Meta rejected the request ("Invalid platform app"). The INSTAGRAM_APP_ID env var must be the Instagram App ID from Meta Dashboard → Instagram → API setup with Instagram login → section 3 → Business login settings — not the top-level Meta App ID.',
+        invalid_platform_app:'Meta rejected the request ("Invalid platform app"). Set INSTAGRAM_CLIENT_ID in Vercel to the Instagram App ID from Meta Dashboard → Instagram → API setup with Instagram login → section 3 → Business login settings — not the top-level Meta App ID.',
         redirect_mismatch:   'Redirect URI rejected by Meta. INSTAGRAM_REDIRECT_URI in Vercel must exactly match the URI listed in Business login settings.',
         scope_denied:        'Instagram did not grant the required permissions. Ensure instagram_business_basic and instagram_business_content_publish are approved in the Meta app.',
         token_exchange:      'Could not exchange the OAuth code. Ensure the account is an Instagram Business or Creator account.',
@@ -328,6 +330,24 @@ export default function CreatorEditorPage() {
     } catch (e) {
       setIgMsg({ ok: false, text: e.message });
       setIgConnecting(false);
+    }
+  }
+
+  async function handleInstagramDebug() {
+    setIgDebug(null);
+    setIgDebugOpen(false);
+    try {
+      const token = await getToken();
+      const res   = await fetch(`/api/instagram?action=auth-url&creatorId=${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json  = await res.json();
+      if (json.error) throw new Error(json.error);
+      setIgDebug(json.debug ?? { note: 'No debug payload returned (not admin?)' });
+      setIgDebugOpen(true);
+    } catch (e) {
+      setIgDebug({ error: e.message });
+      setIgDebugOpen(true);
     }
   }
 
@@ -816,7 +836,7 @@ export default function CreatorEditorPage() {
             /* ── Not connected state ── */
             <div>
               <p style={{ fontSize: '12.5px', color: '#B5AA99', marginBottom: '14px', lineHeight: '1.5' }}>
-                No Instagram account connected. Click below to connect via Facebook OAuth.
+                No Instagram account connected. Click below to connect via Instagram OAuth.
               </p>
               <button
                 onClick={handleInstagramConnect}
@@ -828,8 +848,50 @@ export default function CreatorEditorPage() {
                 }}
               >
                 <Instagram size={13} />
-                {igConnecting ? 'Redirecting to Facebook…' : 'Connect Instagram'}
+                {igConnecting ? 'Redirecting to Instagram…' : 'Connect Instagram'}
               </button>
+            </div>
+          )}
+
+          {/* ── Admin-only debug panel ── */}
+          {isAdmin && !isNew && (
+            <div style={{ marginTop: '20px', borderTop: '1px solid #E8E3DA', paddingTop: '16px' }}>
+              <button
+                onClick={handleInstagramDebug}
+                style={{
+                  background: 'none', border: '1px solid #C8C0B4', borderRadius: '6px',
+                  padding: '5px 10px', fontSize: '11px', color: '#8C8070', cursor: 'pointer',
+                  fontFamily: 'monospace',
+                }}
+              >
+                Debug Instagram OAuth
+              </button>
+
+              {igDebugOpen && igDebug && (
+                <div style={{
+                  marginTop: '10px', background: '#F4F1EC', border: '1px solid #DDD8CF',
+                  borderRadius: '8px', padding: '14px', fontSize: '11px', fontFamily: 'monospace',
+                  lineHeight: '1.8', color: '#1C1A16',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ fontWeight: '700', fontSize: '11.5px', letterSpacing: '0.03em' }}>
+                      OAuth Debug Info
+                    </span>
+                    <button
+                      onClick={() => setIgDebugOpen(false)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8C8070', fontSize: '13px', padding: '0 2px' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {Object.entries(igDebug).map(([k, v]) => (
+                    <div key={k} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', borderBottom: '1px solid #E8E3DA', paddingBottom: '4px', marginBottom: '4px' }}>
+                      <span style={{ color: '#8C8070', minWidth: '200px', flexShrink: 0 }}>{k}</span>
+                      <span style={{ color: '#1C1A16', wordBreak: 'break-all' }}>{String(v)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

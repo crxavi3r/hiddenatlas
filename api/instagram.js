@@ -5,15 +5,18 @@
 // in the token exchange response.
 //
 // ⚠️  Env var notes:
-//   INSTAGRAM_APP_ID     — the Instagram App ID from Meta Dashboard →
-//                          Instagram → API setup with Instagram login →
-//                          section 3 "Set up Instagram business login" →
-//                          Business login settings → "Instagram App ID".
-//                          This is NOT the Meta App ID shown at the top of the dashboard.
-//   INSTAGRAM_APP_SECRET — the Instagram App Secret from the same location.
-//                          Also NOT the Meta App Secret from Basic Settings.
-//   INSTAGRAM_REDIRECT_URI — must match exactly what is listed in
-//                          Business login settings → Valid OAuth Redirect URIs.
+//   INSTAGRAM_CLIENT_ID     — Instagram App ID from Meta Dashboard →
+//                             Instagram → API setup with Instagram login →
+//                             section 3 "Set up Instagram business login" →
+//                             Business login settings → "Instagram App ID".
+//                             NOT the Meta App ID at the top of the dashboard.
+//   INSTAGRAM_CLIENT_SECRET — Instagram App Secret from the same location.
+//                             NOT the Meta App Secret from Basic Settings.
+//   INSTAGRAM_REDIRECT_URI  — must match exactly what is listed in
+//                             Business login settings → Valid OAuth Redirect URIs.
+//
+//   Legacy aliases (still accepted if new vars are absent):
+//   INSTAGRAM_APP_ID / INSTAGRAM_APP_SECRET
 //
 // OAuth (browser-triggered, no Auth header):
 //   GET  /api/instagram?action=auth-url&creatorId=:id   — returns OAuth redirect URL
@@ -27,7 +30,8 @@
 //   POST /api/instagram?action=disconnect                — remove Instagram connection
 //   GET  /api/instagram?action=logs&id=:itineraryId     — publish history (admin only)
 //
-// Required env vars: INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET, INSTAGRAM_REDIRECT_URI, DATABASE_URL
+// Required env vars: INSTAGRAM_CLIENT_ID (or INSTAGRAM_APP_ID), INSTAGRAM_CLIENT_SECRET
+//                    (or INSTAGRAM_APP_SECRET), INSTAGRAM_REDIRECT_URI, DATABASE_URL
 
 import pg             from 'pg';
 import crypto         from 'crypto';
@@ -35,16 +39,22 @@ import { resolveUserCtx } from './_lib/resolveUserCtx.js';
 
 const { Pool } = pg;
 // Three separate Instagram endpoints — do not mix these up:
-const IG_AUTH  = 'https://www.instagram.com';       // OAuth dialog (browser redirect)
-const IG_TOKEN = 'https://api.instagram.com';       // token exchange (server-to-server)
+const IG_AUTH  = 'https://www.instagram.com';        // OAuth dialog (browser redirect)
+const IG_TOKEN = 'https://api.instagram.com';        // token exchange (server-to-server)
 const IG_GRAPH = 'https://graph.instagram.com/v25.0'; // Graph API calls
 // Minimum scopes for connecting and publishing (instagram_business_* family, Jan 2025+)
-const REQUIRED_SCOPES  = 'instagram_business_basic,instagram_business_content_publish';
+const REQUIRED_SCOPES = 'instagram_business_basic,instagram_business_content_publish';
+
+// ── Env accessors — prefer INSTAGRAM_CLIENT_* with INSTAGRAM_APP_* as legacy fallback ─
+function igClientId()     { return process.env.INSTAGRAM_CLIENT_ID     ?? process.env.INSTAGRAM_APP_ID; }
+function igClientSecret() { return process.env.INSTAGRAM_CLIENT_SECRET ?? process.env.INSTAGRAM_APP_SECRET; }
 
 // ── Env guard ─────────────────────────────────────────────────────────────────
 function requireInstagramEnv() {
-  const missing = ['INSTAGRAM_APP_ID', 'INSTAGRAM_APP_SECRET', 'INSTAGRAM_REDIRECT_URI']
-    .filter(k => !process.env[k]);
+  const missing = [];
+  if (!igClientId())     missing.push('INSTAGRAM_CLIENT_ID (or INSTAGRAM_APP_ID)');
+  if (!igClientSecret()) missing.push('INSTAGRAM_CLIENT_SECRET (or INSTAGRAM_APP_SECRET)');
+  if (!process.env.INSTAGRAM_REDIRECT_URI) missing.push('INSTAGRAM_REDIRECT_URI');
   if (missing.length) {
     throw Object.assign(
       new Error(`Instagram integration is not configured (missing: ${missing.join(', ')})`),
@@ -59,7 +69,7 @@ function signState(creatorId) {
   const ts  = Date.now();
   const msg = `${creatorId}:${ts}`;
   const sig = crypto
-    .createHmac('sha256', process.env.INSTAGRAM_APP_SECRET)
+    .createHmac('sha256', igClientSecret())
     .update(msg)
     .digest('hex')
     .slice(0, 16);
@@ -77,7 +87,7 @@ function verifyState(state) {
     const creatorId = body.slice(0, tsStart);
 
     const expected = crypto
-      .createHmac('sha256', process.env.INSTAGRAM_APP_SECRET)
+      .createHmac('sha256', igClientSecret())
       .update(body)
       .digest('hex')
       .slice(0, 16);
@@ -227,27 +237,40 @@ async function handleAuthUrl(req, pool, ctx) {
 
   const redirectUri = getRedirectUri(req);
   const state       = signState(creatorId);
+  const clientId    = igClientId();
 
   // OAuth dialog must use www.instagram.com — api.instagram.com causes "Invalid platform app"
   const url = new URL(`${IG_AUTH}/oauth/authorize`);
-  url.searchParams.set('client_id',     process.env.INSTAGRAM_APP_ID);
+  url.searchParams.set('client_id',     clientId);
   url.searchParams.set('redirect_uri',  redirectUri);
   url.searchParams.set('scope',         REQUIRED_SCOPES);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('state',         state);
 
+  // Build the full URL with a redacted state placeholder (state contains an HMAC)
+  const previewUrl = new URL(`${IG_AUTH}/oauth/authorize`);
+  previewUrl.searchParams.set('client_id',     clientId);
+  previewUrl.searchParams.set('redirect_uri',  redirectUri);
+  previewUrl.searchParams.set('scope',         REQUIRED_SCOPES);
+  previewUrl.searchParams.set('response_type', 'code');
+  previewUrl.searchParams.set('state',         '[state_token]');
+
   const debug = {
-    flowType:        'Instagram Business Login',
-    oauthEndpoint:   `${IG_AUTH}/oauth/authorize`,
-    clientIdUsed:    process.env.INSTAGRAM_APP_ID,
-    redirectUriUsed: redirectUri,
-    scopesUsed:      REQUIRED_SCOPES,
+    flowType:                    'Instagram Business Login (api.instagram.com)',
+    oauthEndpoint:               `${IG_AUTH}/oauth/authorize`,
+    tokenExchangeEndpoint:       `${IG_TOKEN}/oauth/access_token`,
+    apiBaseUsed:                 IG_GRAPH,
+    clientIdUsed:                clientId,
+    redirectUriUsed:             redirectUri,
+    scopesUsed:                  REQUIRED_SCOPES,
+    fullOAuthUrlWithoutStateSecret: previewUrl.toString(),
+    envSource:                   process.env.INSTAGRAM_CLIENT_ID ? 'INSTAGRAM_CLIENT_ID' : 'INSTAGRAM_APP_ID (legacy)',
   };
   console.log('[instagram:auth-url]', debug);
 
   return {
     url: url.toString(),
-    // debug only returned to admins — exposes credentials shape, not values
+    // debug only returned to admins — no secrets exposed (client secret never included)
     ...(ctx.isAdmin ? { debug } : {}),
   };
 }
@@ -288,8 +311,8 @@ async function handleCallback(req, res) {
       method:  'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body:    new URLSearchParams({
-        client_id:     process.env.INSTAGRAM_APP_ID,
-        client_secret: process.env.INSTAGRAM_APP_SECRET,
+        client_id:     igClientId(),
+        client_secret: igClientSecret(),
         grant_type:    'authorization_code',
         redirect_uri:  redirectUri,
         code,
@@ -319,8 +342,8 @@ async function handleCallback(req, res) {
     // 2. Exchange short-lived for long-lived token (~60 days) via graph.instagram.com
     const longRes  = await fetch(`${IG_GRAPH}/access_token?` + new URLSearchParams({
       grant_type:    'ig_exchange_token',
-      client_id:     process.env.INSTAGRAM_APP_ID,
-      client_secret: process.env.INSTAGRAM_APP_SECRET,
+      client_id:     igClientId(),
+      client_secret: igClientSecret(),
       access_token:  shortToken,
     }));
     const longData = await longRes.json();
