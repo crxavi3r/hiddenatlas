@@ -131,10 +131,9 @@ export default function CreatorEditorPage() {
       const msgs = {
         not_configured: 'Instagram integration is not configured on this server.',
         invalid_state:  'OAuth state was invalid or expired. Please try again.',
-        token_exchange: 'Could not exchange the OAuth code for an access token.',
+        scope_denied:   'Instagram did not grant the required permissions. Make sure the app has instagram_business_basic and instagram_business_content_publish approved.',
+        token_exchange: 'Could not exchange the OAuth code for an access token. Ensure the account is an Instagram Business or Creator account.',
         token_refresh:  'Could not obtain a long-lived access token.',
-        no_pages:       'No Facebook Pages found. Connect a Page to your account first.',
-        no_ig_account:  'No Instagram Business Account is linked to your Facebook Page.',
         server_error:   'A server error occurred during Instagram connection.',
       };
       setIgMsg({ ok: false, text: msgs[reason] ?? 'Failed to connect Instagram.' });

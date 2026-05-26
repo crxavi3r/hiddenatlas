@@ -1,5 +1,9 @@
 // ── Instagram Graph API Integration ──────────────────────────────────────────
 //
+// Uses "API setup with Instagram login" (instagram_business_* scopes, Jan 2025+).
+// No Facebook Page linkage required — the Instagram User ID is returned directly
+// in the token exchange response.
+//
 // OAuth (browser-triggered, no Auth header):
 //   GET  /api/instagram?action=auth-url&creatorId=:id   — returns OAuth redirect URL
 //   GET  /api/instagram?code=...&state=...               — OAuth callback (detected by params)
@@ -19,8 +23,11 @@ import crypto         from 'crypto';
 import { resolveUserCtx } from './_lib/resolveUserCtx.js';
 
 const { Pool } = pg;
-const FB_API           = 'https://graph.facebook.com/v18.0';
-const REQUIRED_SCOPES  = 'instagram_basic,instagram_content_publish,pages_show_list';
+// Instagram Login endpoints (no facebook.com dependency for auth or publishing)
+const IG_OAUTH         = 'https://api.instagram.com';
+const IG_GRAPH         = 'https://graph.instagram.com/v21.0';
+// Minimum scopes for connecting and publishing (instagram_business_* family, Jan 2025+)
+const REQUIRED_SCOPES  = 'instagram_business_basic,instagram_business_content_publish';
 
 // ── Env guard ─────────────────────────────────────────────────────────────────
 function requireInstagramEnv() {
@@ -88,6 +95,23 @@ async function verifyUser(authHeader, pool) {
     throw Object.assign(new Error('Forbidden — designers and admins only'), { status: 403 });
   }
   return ctx;
+}
+
+// ── Meta API error formatter ──────────────────────────────────────────────────
+// Translates Meta error codes into actionable admin messages.
+function metaErrorMessage(err, context) {
+  if (!err) return `${context} failed`;
+  const code = err.code;
+  if (code === 10 || code === 200) {
+    return `${context}: permission denied — ensure 'instagram_business_basic' and 'instagram_business_content_publish' are approved in the Meta app, and that the account is an Instagram Business or Creator account.`;
+  }
+  if (code === 190) {
+    return `${context}: access token invalid or expired — reconnect Instagram in Creator settings.`;
+  }
+  if (code === 24) {
+    return `${context}: the account has hit the publishing rate limit (100 posts per 24 hours).`;
+  }
+  return `${context}: ${err.message ?? JSON.stringify(err)}`;
 }
 
 // ── Caption generator ─────────────────────────────────────────────────────────
@@ -192,7 +216,8 @@ async function handleAuthUrl(req, pool, ctx) {
   const redirectUri = getRedirectUri(req);
   const state       = signState(creatorId);
 
-  const url = new URL('https://www.facebook.com/v18.0/dialog/oauth');
+  // Instagram Login OAuth dialog (api.instagram.com — not facebook.com)
+  const url = new URL(`${IG_OAUTH}/oauth/authorize`);
   url.searchParams.set('client_id',     process.env.INSTAGRAM_APP_ID);
   url.searchParams.set('redirect_uri',  redirectUri);
   url.searchParams.set('scope',         REQUIRED_SCOPES);
@@ -202,12 +227,12 @@ async function handleAuthUrl(req, pool, ctx) {
   return { url: url.toString() };
 }
 
-// ── GET callback (unauthenticated — browser redirect from Facebook OAuth) ─────
+// ── GET callback (unauthenticated — browser redirect from Instagram OAuth) ────
 async function handleCallback(req, res) {
-  const { code, state, error: fbError, error_description: fbDesc } = req.query;
+  const { code, state, error: igError, error_description: igDesc } = req.query;
 
-  if (fbError || !code || !state) {
-    console.warn('[instagram:callback] denied or missing params', { fbError, fbDesc });
+  if (igError || !code || !state) {
+    console.warn('[instagram:callback] denied or missing params', { igError, igDesc });
     return res.redirect(302, `/admin?instagram=denied`);
   }
 
@@ -232,25 +257,36 @@ async function handleCallback(req, res) {
   try {
     const redirectUri = getRedirectUri(req);
 
-    // 1. Exchange code for short-lived user access token
-    const tokenRes  = await fetch(`${FB_API}/oauth/access_token?` + new URLSearchParams({
-      client_id:     process.env.INSTAGRAM_APP_ID,
-      redirect_uri:  redirectUri,
-      client_secret: process.env.INSTAGRAM_APP_SECRET,
-      code,
-    }));
+    // 1. Exchange code for short-lived token via POST (Instagram Login flow).
+    //    Response includes user_id directly — no Facebook Pages lookup needed.
+    const tokenRes  = await fetch(`${IG_OAUTH}/oauth/access_token`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body:    new URLSearchParams({
+        client_id:     process.env.INSTAGRAM_APP_ID,
+        client_secret: process.env.INSTAGRAM_APP_SECRET,
+        grant_type:    'authorization_code',
+        redirect_uri:  redirectUri,
+        code,
+      }),
+    });
     const tokenData = await tokenRes.json();
-    if (tokenData.error || !tokenData.access_token) {
-      console.error('[instagram:callback] token exchange failed', tokenData.error);
-      return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=token_exchange`);
+    // Instagram Login errors surface as error_type + error_message (not error.code)
+    if (tokenData.error_type || !tokenData.access_token) {
+      console.error('[instagram:callback] token exchange failed', tokenData);
+      const reason = tokenData.error_type === 'OAuthException' ? 'scope_denied' : 'token_exchange';
+      return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=${reason}`);
     }
 
-    // 2. Exchange for long-lived token (~60 days)
-    const longRes  = await fetch(`${FB_API}/oauth/access_token?` + new URLSearchParams({
-      grant_type:        'fb_exchange_token',
-      client_id:         process.env.INSTAGRAM_APP_ID,
-      client_secret:     process.env.INSTAGRAM_APP_SECRET,
-      fb_exchange_token: tokenData.access_token,
+    const igAccountId = String(tokenData.user_id); // Instagram User ID — returned directly
+    const shortToken  = tokenData.access_token;
+
+    // 2. Exchange short-lived for long-lived token (~60 days) via graph.instagram.com
+    const longRes  = await fetch(`${IG_GRAPH}/access_token?` + new URLSearchParams({
+      grant_type:    'ig_exchange_token',
+      client_id:     process.env.INSTAGRAM_APP_ID,
+      client_secret: process.env.INSTAGRAM_APP_SECRET,
+      access_token:  shortToken,
     }));
     const longData = await longRes.json();
     if (longData.error || !longData.access_token) {
@@ -262,33 +298,7 @@ async function handleCallback(req, res) {
     const expiresIn   = longData.expires_in ?? 5_184_000; // 60 days default
     const expiresAt   = new Date(Date.now() + expiresIn * 1000);
 
-    // 3. Get Facebook Pages connected to this user account
-    const pagesRes  = await fetch(`${FB_API}/me/accounts?access_token=${encodeURIComponent(accessToken)}`);
-    const pagesData = await pagesRes.json();
-    if (pagesData.error || !pagesData.data?.length) {
-      console.warn('[instagram:callback] no Facebook Pages found', pagesData.error);
-      return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=no_pages`);
-    }
-
-    // 4. Find the Instagram Business Account linked to any of the Pages
-    let igAccountId = null;
-    for (const page of pagesData.data) {
-      const pageRes  = await fetch(
-        `${FB_API}/${page.id}?fields=instagram_business_account&access_token=${encodeURIComponent(accessToken)}`
-      );
-      const pageData = await pageRes.json();
-      if (pageData.instagram_business_account?.id) {
-        igAccountId = pageData.instagram_business_account.id;
-        break;
-      }
-    }
-
-    if (!igAccountId) {
-      console.warn('[instagram:callback] no Instagram Business Account found', { creatorId });
-      return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=no_ig_account`);
-    }
-
-    // 5. Persist on Creator row
+    // 3. Persist on Creator row
     await pool.query(
       `UPDATE "Creator"
        SET instagram_account_id       = $1,
@@ -416,29 +426,25 @@ async function handlePublish(pool, body, ctx) {
 
   try {
     // 1. Create media container
-    const containerRes  = await fetch(`${FB_API}/${igAccountId}/media`, {
+    const containerRes  = await fetch(`${IG_GRAPH}/${igAccountId}/media`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ image_url: imageUrl, caption, access_token: accessToken }),
     });
     const containerData = await containerRes.json();
     if (containerData.error || !containerData.id) {
-      throw new Error(
-        containerData.error?.message ?? `Media container creation failed (HTTP ${containerRes.status})`
-      );
+      throw new Error(metaErrorMessage(containerData.error, 'Media container creation'));
     }
 
     // 2. Publish the container
-    const publishRes  = await fetch(`${FB_API}/${igAccountId}/media_publish`, {
+    const publishRes  = await fetch(`${IG_GRAPH}/${igAccountId}/media_publish`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ creation_id: containerData.id, access_token: accessToken }),
     });
     const publishData = await publishRes.json();
     if (publishData.error || !publishData.id) {
-      throw new Error(
-        publishData.error?.message ?? `Media publish failed (HTTP ${publishRes.status})`
-      );
+      throw new Error(metaErrorMessage(publishData.error, 'Media publish'));
     }
 
     instagramPostId = publishData.id;
@@ -471,7 +477,7 @@ async function handlePublish(pool, body, ctx) {
   let permalink = null;
   try {
     const plRes  = await fetch(
-      `${FB_API}/${instagramPostId}?fields=permalink&access_token=${encodeURIComponent(accessToken)}`
+      `${IG_GRAPH}/${instagramPostId}?fields=permalink&access_token=${encodeURIComponent(accessToken)}`
     );
     const plData = await plRes.json();
     permalink    = plData.permalink ?? null;
