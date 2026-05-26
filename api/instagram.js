@@ -4,6 +4,17 @@
 // No Facebook Page linkage required — the Instagram User ID is returned directly
 // in the token exchange response.
 //
+// ⚠️  Env var notes:
+//   INSTAGRAM_APP_ID     — the Instagram App ID from Meta Dashboard →
+//                          Instagram → API setup with Instagram login →
+//                          section 3 "Set up Instagram business login" →
+//                          Business login settings → "Instagram App ID".
+//                          This is NOT the Meta App ID shown at the top of the dashboard.
+//   INSTAGRAM_APP_SECRET — the Instagram App Secret from the same location.
+//                          Also NOT the Meta App Secret from Basic Settings.
+//   INSTAGRAM_REDIRECT_URI — must match exactly what is listed in
+//                          Business login settings → Valid OAuth Redirect URIs.
+//
 // OAuth (browser-triggered, no Auth header):
 //   GET  /api/instagram?action=auth-url&creatorId=:id   — returns OAuth redirect URL
 //   GET  /api/instagram?code=...&state=...               — OAuth callback (detected by params)
@@ -23,9 +34,10 @@ import crypto         from 'crypto';
 import { resolveUserCtx } from './_lib/resolveUserCtx.js';
 
 const { Pool } = pg;
-// Instagram Login endpoints (no facebook.com dependency for auth or publishing)
-const IG_OAUTH         = 'https://api.instagram.com';
-const IG_GRAPH         = 'https://graph.instagram.com/v21.0';
+// Three separate Instagram endpoints — do not mix these up:
+const IG_AUTH  = 'https://www.instagram.com';       // OAuth dialog (browser redirect)
+const IG_TOKEN = 'https://api.instagram.com';       // token exchange (server-to-server)
+const IG_GRAPH = 'https://graph.instagram.com/v25.0'; // Graph API calls
 // Minimum scopes for connecting and publishing (instagram_business_* family, Jan 2025+)
 const REQUIRED_SCOPES  = 'instagram_business_basic,instagram_business_content_publish';
 
@@ -216,15 +228,28 @@ async function handleAuthUrl(req, pool, ctx) {
   const redirectUri = getRedirectUri(req);
   const state       = signState(creatorId);
 
-  // Instagram Login OAuth dialog (api.instagram.com — not facebook.com)
-  const url = new URL(`${IG_OAUTH}/oauth/authorize`);
+  // OAuth dialog must use www.instagram.com — api.instagram.com causes "Invalid platform app"
+  const url = new URL(`${IG_AUTH}/oauth/authorize`);
   url.searchParams.set('client_id',     process.env.INSTAGRAM_APP_ID);
   url.searchParams.set('redirect_uri',  redirectUri);
   url.searchParams.set('scope',         REQUIRED_SCOPES);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('state',         state);
 
-  return { url: url.toString() };
+  const debug = {
+    flowType:        'Instagram Business Login',
+    oauthEndpoint:   `${IG_AUTH}/oauth/authorize`,
+    clientIdUsed:    process.env.INSTAGRAM_APP_ID,
+    redirectUriUsed: redirectUri,
+    scopesUsed:      REQUIRED_SCOPES,
+  };
+  console.log('[instagram:auth-url]', debug);
+
+  return {
+    url: url.toString(),
+    // debug only returned to admins — exposes credentials shape, not values
+    ...(ctx.isAdmin ? { debug } : {}),
+  };
 }
 
 // ── GET callback (unauthenticated — browser redirect from Instagram OAuth) ────
@@ -259,7 +284,7 @@ async function handleCallback(req, res) {
 
     // 1. Exchange code for short-lived token via POST (Instagram Login flow).
     //    Response includes user_id directly — no Facebook Pages lookup needed.
-    const tokenRes  = await fetch(`${IG_OAUTH}/oauth/access_token`, {
+    const tokenRes  = await fetch(`${IG_TOKEN}/oauth/access_token`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body:    new URLSearchParams({
@@ -274,8 +299,18 @@ async function handleCallback(req, res) {
     // Instagram Login errors surface as error_type + error_message (not error.code)
     if (tokenData.error_type || !tokenData.access_token) {
       console.error('[instagram:callback] token exchange failed', tokenData);
-      const reason = tokenData.error_type === 'OAuthException' ? 'scope_denied' : 'token_exchange';
+      // Map known error types to actionable reason codes
+      let reason = 'token_exchange';
+      const msg  = (tokenData.error_message ?? '').toLowerCase();
+      if (msg.includes('invalid platform app'))    reason = 'invalid_platform_app';
+      else if (msg.includes('redirect'))           reason = 'redirect_mismatch';
+      else if (msg.includes('scope') || msg.includes('permission')) reason = 'scope_denied';
       return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=${reason}`);
+    }
+
+    if (!tokenData.user_id) {
+      console.error('[instagram:callback] user_id missing from token response', tokenData);
+      return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=no_ig_account`);
     }
 
     const igAccountId = String(tokenData.user_id); // Instagram User ID — returned directly

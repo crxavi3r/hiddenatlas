@@ -129,12 +129,15 @@ export default function CreatorEditorPage() {
       setIgMsg({ ok: false, text: 'Instagram connection was cancelled.' });
     } else if (status === 'error') {
       const msgs = {
-        not_configured: 'Instagram integration is not configured on this server.',
-        invalid_state:  'OAuth state was invalid or expired. Please try again.',
-        scope_denied:   'Instagram did not grant the required permissions. Make sure the app has instagram_business_basic and instagram_business_content_publish approved.',
-        token_exchange: 'Could not exchange the OAuth code for an access token. Ensure the account is an Instagram Business or Creator account.',
-        token_refresh:  'Could not obtain a long-lived access token.',
-        server_error:   'A server error occurred during Instagram connection.',
+        not_configured:      'Instagram integration is not configured on this server.',
+        invalid_state:       'OAuth state was invalid or expired. Please try again.',
+        invalid_platform_app:'Meta rejected the request ("Invalid platform app"). The INSTAGRAM_APP_ID env var must be the Instagram App ID from Meta Dashboard → Instagram → API setup with Instagram login → section 3 → Business login settings — not the top-level Meta App ID.',
+        redirect_mismatch:   'Redirect URI rejected by Meta. INSTAGRAM_REDIRECT_URI in Vercel must exactly match the URI listed in Business login settings.',
+        scope_denied:        'Instagram did not grant the required permissions. Ensure instagram_business_basic and instagram_business_content_publish are approved in the Meta app.',
+        token_exchange:      'Could not exchange the OAuth code. Ensure the account is an Instagram Business or Creator account.',
+        token_refresh:       'Could not obtain a long-lived access token.',
+        no_ig_account:       'No Instagram account ID was returned. The account may not be a Business or Creator account.',
+        server_error:        'A server error occurred during Instagram connection.',
       };
       setIgMsg({ ok: false, text: msgs[reason] ?? 'Failed to connect Instagram.' });
     }
@@ -320,6 +323,7 @@ export default function CreatorEditorPage() {
       });
       const json  = await res.json();
       if (json.error) throw new Error(json.error);
+      if (json.debug) console.info('[instagram:auth-url debug]', json.debug);
       window.location.href = json.url;
     } catch (e) {
       setIgMsg({ ok: false, text: e.message });
