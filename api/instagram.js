@@ -239,38 +239,62 @@ async function handleAuthUrl(req, pool, ctx) {
   const state       = signState(creatorId);
   const clientId    = igClientId();
 
-  // OAuth dialog must use www.instagram.com — api.instagram.com causes "Invalid platform app"
+  // Params per Meta docs for Instagram API with Instagram Login (Jan 2025+):
+  //   enable_fb_login=0  — hide the "Log in with Facebook" option on the dialog
+  //   force_reauth=1     — force Instagram credential entry (correct name; NOT force_authentication)
   const url = new URL(`${IG_AUTH}/oauth/authorize`);
-  url.searchParams.set('client_id',     clientId);
-  url.searchParams.set('redirect_uri',  redirectUri);
-  url.searchParams.set('scope',         REQUIRED_SCOPES);
-  url.searchParams.set('response_type', 'code');
-  url.searchParams.set('state',         state);
+  url.searchParams.set('client_id',       clientId);
+  url.searchParams.set('redirect_uri',    redirectUri);
+  url.searchParams.set('response_type',   'code');
+  url.searchParams.set('scope',           REQUIRED_SCOPES);
+  url.searchParams.set('enable_fb_login', '0');
+  url.searchParams.set('force_reauth',    '1');
+  url.searchParams.set('state',           state);
 
-  // Build the full URL with a redacted state placeholder (state contains an HMAC)
+  // Config-level checks (no API call — checks env vars and URL structure only)
+  const configCheck = {
+    clientIdPresent:        Boolean(clientId),
+    clientSecretPresent:    Boolean(igClientSecret()),
+    redirectUriPresent:     Boolean(process.env.INSTAGRAM_REDIRECT_URI),
+    scopesLookCorrect:      REQUIRED_SCOPES.startsWith('instagram_business_'),
+    oauthHostCorrect:       IG_AUTH === 'https://www.instagram.com',
+    tokenHostCorrect:       IG_TOKEN === 'https://api.instagram.com',
+    graphHostCorrect:       IG_GRAPH.startsWith('https://graph.instagram.com/'),
+    enableFbLogin:          '0 (Facebook Login option hidden)',
+    forceReauth:            '1 (forces fresh Instagram credential entry)',
+    note:                   'If app still returns "Invalid platform app": verify the Meta app type is "Business", that Instagram API with Instagram Login product is added, and that required permissions (instagram_business_basic, instagram_business_content_publish) are listed under "Add required permissions" in the dashboard.',
+  };
+
+  // Preview URL with state HMAC redacted — safe to show to admins
   const previewUrl = new URL(`${IG_AUTH}/oauth/authorize`);
-  previewUrl.searchParams.set('client_id',     clientId);
-  previewUrl.searchParams.set('redirect_uri',  redirectUri);
-  previewUrl.searchParams.set('scope',         REQUIRED_SCOPES);
-  previewUrl.searchParams.set('response_type', 'code');
-  previewUrl.searchParams.set('state',         '[state_token]');
+  previewUrl.searchParams.set('client_id',       clientId);
+  previewUrl.searchParams.set('redirect_uri',    redirectUri);
+  previewUrl.searchParams.set('response_type',   'code');
+  previewUrl.searchParams.set('scope',           REQUIRED_SCOPES);
+  previewUrl.searchParams.set('enable_fb_login', '0');
+  previewUrl.searchParams.set('force_reauth',    '1');
+  previewUrl.searchParams.set('state',           '[state_token]');
 
   const debug = {
-    flowType:                    'Instagram Business Login (api.instagram.com)',
+    flowType:                    'Instagram Business Login',
     oauthEndpoint:               `${IG_AUTH}/oauth/authorize`,
     tokenExchangeEndpoint:       `${IG_TOKEN}/oauth/access_token`,
     apiBaseUsed:                 IG_GRAPH,
     clientIdUsed:                clientId,
     redirectUriUsed:             redirectUri,
     scopesUsed:                  REQUIRED_SCOPES,
-    fullOAuthUrlWithoutStateSecret: previewUrl.toString(),
+    response_type:               'code',
+    enable_fb_login:             '0',
+    force_reauth:                '1',
     envSource:                   process.env.INSTAGRAM_CLIENT_ID ? 'INSTAGRAM_CLIENT_ID' : 'INSTAGRAM_APP_ID (legacy)',
+    exactEncodedOAuthUrl:        previewUrl.toString(),
+    configCheck,
   };
   console.log('[instagram:auth-url]', debug);
 
   return {
     url: url.toString(),
-    // debug only returned to admins — no secrets exposed (client secret never included)
+    // debug only returned to admins — no secrets, tokens, or HMAC values included
     ...(ctx.isAdmin ? { debug } : {}),
   };
 }
@@ -318,21 +342,27 @@ async function handleCallback(req, res) {
         code,
       }),
     });
-    const tokenData = await tokenRes.json();
+    const tokenRaw  = await tokenRes.json();
+    // Meta docs show two possible response shapes:
+    //   flat:    { access_token, user_id, permissions }
+    //   wrapped: { data: [{ access_token, user_id, permissions }] }
+    // Normalise to a single object so downstream code doesn't care.
+    const tokenData = Array.isArray(tokenRaw?.data) ? tokenRaw.data[0] : tokenRaw;
+
     // Instagram Login errors surface as error_type + error_message (not error.code)
-    if (tokenData.error_type || !tokenData.access_token) {
-      console.error('[instagram:callback] token exchange failed', tokenData);
-      // Map known error types to actionable reason codes
+    if (tokenData?.error_type || !tokenData?.access_token) {
+      console.error('[instagram:callback] token exchange failed', tokenRaw);
       let reason = 'token_exchange';
-      const msg  = (tokenData.error_message ?? '').toLowerCase();
-      if (msg.includes('invalid platform app'))    reason = 'invalid_platform_app';
-      else if (msg.includes('redirect'))           reason = 'redirect_mismatch';
-      else if (msg.includes('scope') || msg.includes('permission')) reason = 'scope_denied';
+      const msg  = (tokenData?.error_message ?? '').toLowerCase();
+      if (msg.includes('invalid platform app'))                      reason = 'invalid_platform_app';
+      else if (msg.includes('redirect'))                             reason = 'redirect_mismatch';
+      else if (msg.includes('scope') || msg.includes('permission'))  reason = 'scope_denied';
+      else if (msg.includes('code') || msg.includes('already used')) reason = 'code_used';
       return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=${reason}`);
     }
 
     if (!tokenData.user_id) {
-      console.error('[instagram:callback] user_id missing from token response', tokenData);
+      console.error('[instagram:callback] user_id missing from token response', tokenRaw);
       return res.redirect(302, `/admin/creators/${creatorId}?instagram=error&reason=no_ig_account`);
     }
 

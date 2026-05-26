@@ -137,6 +137,7 @@ export default function CreatorEditorPage() {
         redirect_mismatch:   'Redirect URI rejected by Meta. INSTAGRAM_REDIRECT_URI in Vercel must exactly match the URI listed in Business login settings.',
         scope_denied:        'Instagram did not grant the required permissions. Ensure instagram_business_basic and instagram_business_content_publish are approved in the Meta app.',
         token_exchange:      'Could not exchange the OAuth code. Ensure the account is an Instagram Business or Creator account.',
+        code_used:           'The OAuth code was already used or expired. Please try connecting again.',
         token_refresh:       'Could not obtain a long-lived access token.',
         no_ig_account:       'No Instagram account ID was returned. The account may not be a Business or Creator account.',
         server_error:        'A server error occurred during Instagram connection.',
