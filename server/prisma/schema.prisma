@@ -24,10 +24,10 @@ model Creator {
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
 
-  // Instagram integration (snake_case columns via raw SQL migration)
-  instagramAccountId      String?
-  instagramAccessToken    String?
-  instagramTokenExpiresAt DateTime?
+  // Instagram integration — columns are snake_case in DB (see migration 20260521000000)
+  instagramAccountId      String?   @map("instagram_account_id")
+  instagramAccessToken    String?   @map("instagram_access_token")
+  instagramTokenExpiresAt DateTime? @map("instagram_token_expires_at")
 
   itineraries   Itinerary[]
   instagramLogs InstagramPublishLog[]
@@ -359,6 +359,7 @@ model InstagramPublishLog {
   publishedAt         DateTime @default(now())
 
   itinerary Itinerary @relation(fields: [itineraryId], references: [id])
+  creator   Creator?  @relation(fields: [creatorId],   references: [id])
 
   @@index([itineraryId])
   @@index([creatorId])
