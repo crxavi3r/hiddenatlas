@@ -126,26 +126,32 @@ function metaErrorMessage(err, context) {
   const code    = err.code;
   const message = (err.message ?? '').toLowerCase();
 
-  // String-pattern check first — catches "missing permissions" errors that surface
-  // as code 100 with specific message text rather than code 10/200.
+  // String-pattern check — catches permission errors that surface as code 100
+  // with a specific message rather than code 10/200.
   if (
     message.includes('missing permissions') ||
     message.includes('unsupported post request') ||
     (message.includes('does not exist') && message.includes('permissions'))
   ) {
-    return 'Instagram publishing permission is missing. Please reconnect Instagram.';
+    return `${context}: Meta denied the request — "${err.message}" (code ${code ?? 'n/a'}). ` +
+      `Ensure the instagram_business_content_publish permission is approved in the Meta app and ` +
+      `the connected account is authorised (added as a tester in development mode, or the app is live).`;
   }
 
+  // Code 10 / 200 — insufficient scope on the token
   if (code === 10 || code === 200) {
-    return 'Instagram publishing permission is missing. Please reconnect Instagram.';
+    return `${context}: insufficient permissions (Meta code ${code} — ${err.message ?? 'missing scope'}). ` +
+      `The token may not include instagram_business_content_publish. ` +
+      `In development mode the connected account must be added as a tester. ` +
+      `For production, the permission requires Meta App Review.`;
   }
   if (code === 190) {
-    return `${context}: access token invalid or expired. Reconnect Instagram in Creator settings.`;
+    return `${context}: access token invalid or expired (Meta code 190). Reconnect Instagram in Creator settings.`;
   }
   if (code === 24) {
-    return `${context}: the account has hit the publishing rate limit (100 posts per 24 hours).`;
+    return `${context}: publishing rate limit reached (100 posts per 24 hours).`;
   }
-  return `${context}: ${err.message ?? JSON.stringify(err)}`;
+  return `${context}: ${err.message ?? JSON.stringify(err)} (Meta code: ${code ?? 'unknown'})`;
 }
 
 // ── Permission check via Meta debug_token API ─────────────────────────────────
@@ -910,11 +916,11 @@ async function handlePreview(pool, itineraryId, ctx) {
     return null;
   })();
 
-  // Check publish permission via Meta debug_token — best-effort, non-blocking
-  const canPublish = await hasPublishPermission(it.instagram_access_token);
-  const permissionWarning = canPublish
-    ? null
-    : 'Instagram is connected, but publishing permission is missing. Please reconnect Instagram.';
+  // Run debug_token for diagnostic logging only — the result does NOT block publishing.
+  // The preflight check is unreliable: INSTAGRAM_CLIENT_ID is the Instagram App ID,
+  // which differs from the Meta App ID that graph.facebook.com/debug_token expects.
+  // Real permission errors are surfaced from Meta's response during the actual publish call.
+  await hasPublishPermission(it.instagram_access_token);
 
   return {
     caption:   generateCaption(it),
@@ -924,7 +930,6 @@ async function handlePreview(pool, itineraryId, ctx) {
       destination: it.destination, country: it.country, durationDays: it.durationDays,
     },
     tokenWarning,
-    permissionWarning,
   };
 }
 
@@ -939,14 +944,20 @@ async function handlePublish(pool, body, ctx) {
 
   // Fetch creator credentials via the itinerary
   const { rows } = await pool.query(
-    `SELECT c.instagram_account_id, c.instagram_access_token, c.id AS creator_id
+    `SELECT c.instagram_account_id, c.instagram_access_token, c.id AS creator_id,
+            c.instagram_token_expires_at
      FROM "Itinerary" i
      LEFT JOIN "Creator" c ON c.id = i.creator_id
      WHERE i.id = $1 LIMIT 1`,
     [itineraryId]
   );
   if (!rows.length) throw Object.assign(new Error('Itinerary not found'), { status: 404 });
-  const { instagram_account_id: igAccountId, instagram_access_token: accessToken, creator_id: creatorId } = rows[0];
+  const {
+    instagram_account_id:      igAccountId,
+    instagram_access_token:    accessToken,
+    creator_id:                creatorId,
+    instagram_token_expires_at: tokenExpiresAt,
+  } = rows[0];
 
   if (!igAccountId || !accessToken) {
     throw Object.assign(
@@ -956,15 +967,21 @@ async function handlePublish(pool, body, ctx) {
   }
 
   const publishTokenHash = crypto.createHash('sha256').update(accessToken).digest('hex').slice(0, 12);
+  let imageUrlDomain = null;
+  try { imageUrlDomain = new URL(imageUrl).hostname; } catch { /* ignore */ }
   console.log('[instagram:publish] diagnostic:', {
     itineraryId,
     creatorId,
     igAccountId,
     tokenExists:          true,
     tokenHash:            publishTokenHash,
+    tokenExpiresAt:       tokenExpiresAt ? new Date(tokenExpiresAt).toISOString() : null,
+    imageUrlExists:       Boolean(imageUrl),
+    imageUrlDomain,
     mediaEndpoint:        `${IG_GRAPH}/${igAccountId}/media`,
     publishEndpoint:      `${IG_GRAPH}/${igAccountId}/media_publish`,
     usingInstagramGraph:  IG_GRAPH.startsWith('https://graph.instagram.com/'),
+    notUsingFacebook:     !imageUrl?.includes('facebook.com'),
   });
 
   // Ownership: designers can only publish their own itineraries
@@ -985,8 +1002,18 @@ async function handlePublish(pool, body, ctx) {
     });
     const containerData = await containerRes.json();
     if (containerData.error || !containerData.id) {
+      console.error('[instagram:publish] media container creation failed:', {
+        httpStatus:    containerRes.status,
+        metaCode:      containerData.error?.code,
+        metaType:      containerData.error?.type,
+        metaMessage:   containerData.error?.message,
+        metaSubcode:   containerData.error?.error_subcode,
+        metaFbtraceId: containerData.error?.fbtrace_id,
+        fullMetaError: JSON.stringify(containerData.error),
+      });
       throw new Error(metaErrorMessage(containerData.error, 'Media container creation'));
     }
+    console.log('[instagram:publish] media container created:', { containerId: containerData.id });
 
     // 2. Publish the container
     const publishRes  = await fetch(`${IG_GRAPH}/${igAccountId}/media_publish`, {
@@ -996,6 +1023,15 @@ async function handlePublish(pool, body, ctx) {
     });
     const publishData = await publishRes.json();
     if (publishData.error || !publishData.id) {
+      console.error('[instagram:publish] media_publish failed:', {
+        httpStatus:    publishRes.status,
+        metaCode:      publishData.error?.code,
+        metaType:      publishData.error?.type,
+        metaMessage:   publishData.error?.message,
+        metaSubcode:   publishData.error?.error_subcode,
+        metaFbtraceId: publishData.error?.fbtrace_id,
+        fullMetaError: JSON.stringify(publishData.error),
+      });
       throw new Error(metaErrorMessage(publishData.error, 'Media publish'));
     }
 
