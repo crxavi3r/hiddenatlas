@@ -95,8 +95,9 @@ model Itinerary {
   pdfError        String?
 
   // ── Instagram publishing ────────────────────
-  instagramPostId    String?
-  instagramPermalink String?
+  instagramPostId      String?
+  instagramPermalink   String?
+  instagramPublishedAt DateTime?
 
   pricingPlanId     String?                    // FK to DesignerPricingPlan.id — null for default pricing
 
@@ -357,6 +358,7 @@ model InstagramPublishLog {
   caption             String?
   status              String   @default("pending")
   errorMessage        String?
+  permalink           String?
   publishedAt         DateTime @default(now())
 
   itinerary Itinerary @relation(fields: [itineraryId], references: [id])

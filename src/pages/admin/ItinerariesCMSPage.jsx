@@ -100,7 +100,7 @@ function deriveCardSubtitle(subtitle, durationDays) {
 
 function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
   const [loading,        setLoading]        = useState(true);
-  const [preview,        setPreview]        = useState(null);   // { caption, images, itinerary, tokenWarning, permissionWarning }
+  const [preview,        setPreview]        = useState(null);   // { caption, images, itinerary, tokenWarning }
   const [caption,        setCaption]        = useState('');
   const [selectedIdx,    setSelectedIdx]    = useState(0);
   const [publishing,     setPublishing]     = useState(false);
@@ -110,13 +110,39 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
   const [coverDataUrl,   setCoverDataUrl]   = useState(null);
   const [coverGenerating, setCoverGenerating] = useState(false);
   const [coverError,      setCoverError]      = useState(null);
+  const [fetchedPermalink,  setFetchedPermalink]  = useState(null);  // retroactively fetched permalink
+  const [permalinkFetching, setPermalinkFetching] = useState(false); // true while fetching permalink
   const textareaRef     = useRef(null);
   const canvasRef       = useRef(null);
   const generatedForRef = useRef(null); // URL of image for which branded cover was last generated
 
   useEffect(() => {
-    // Already published — nothing to preview, show published state immediately
-    if (itinerary.instagramPostId) { setLoading(false); return; }
+    // Already published — nothing to preview, show published state immediately.
+    // If permalink is missing, try to fetch it retroactively.
+    if (itinerary.instagramPostId) {
+      setLoading(false);
+      if (!itinerary.instagramPermalink) {
+        setPermalinkFetching(true);
+        (async () => {
+          try {
+            const token = await getToken();
+            const res   = await fetch(`/api/instagram?action=fetch-permalink&id=${itinerary.id}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            const json  = await res.json();
+            if (json.permalink) {
+              setFetchedPermalink(json.permalink);
+              onSuccess?.(itinerary.id, itinerary.instagramPostId, json.permalink);
+            }
+          } catch {
+            // non-fatal — fallback message remains visible
+          } finally {
+            setPermalinkFetching(false);
+          }
+        })();
+      }
+      return;
+    }
 
     async function fetchPreview() {
       try {
@@ -432,26 +458,39 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
               <p style={{ fontSize: '13px', color: '#8C8070', marginBottom: '24px', lineHeight: '1.6' }}>
                 This itinerary has already been published as an Instagram post.
               </p>
-              {itinerary.instagramPermalink ? (
-                <a
-                  href={itinerary.instagramPermalink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '7px',
-                    padding: '10px 20px', borderRadius: '7px', background: '#E1306C',
-                    fontSize: '13.5px', fontWeight: '600', color: 'white',
-                    textDecoration: 'none',
-                  }}
-                >
-                  <ExternalLink size={14} />
-                  View post on Instagram
-                </a>
-              ) : (
-                <p style={{ fontSize: '12.5px', color: '#9B9187', lineHeight: '1.5' }}>
-                  Published to Instagram, but post link is not available.
-                </p>
-              )}
+              {(() => {
+                const permalink = itinerary.instagramPermalink ?? fetchedPermalink;
+                if (permalink) {
+                  return (
+                    <a
+                      href={permalink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '7px',
+                        padding: '10px 20px', borderRadius: '7px', background: '#E1306C',
+                        fontSize: '13.5px', fontWeight: '600', color: 'white',
+                        textDecoration: 'none',
+                      }}
+                    >
+                      <ExternalLink size={14} />
+                      View post on Instagram
+                    </a>
+                  );
+                }
+                if (permalinkFetching) {
+                  return (
+                    <p style={{ fontSize: '12.5px', color: '#9B9187', lineHeight: '1.5' }}>
+                      Looking up post link...
+                    </p>
+                  );
+                }
+                return (
+                  <p style={{ fontSize: '12.5px', color: '#9B9187', lineHeight: '1.5' }}>
+                    Published to Instagram, but post link is not available.
+                  </p>
+                );
+              })()}
             </div>
           ) : loading ? (
             <div style={{ textAlign: 'center', padding: '40px 0', color: '#8C8070', fontSize: '13.5px' }}>

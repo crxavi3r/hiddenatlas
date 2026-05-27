@@ -506,6 +506,10 @@ export default async function handler(req, res) {
         await verifyUser(req.headers.authorization, pool);
         return handleProxyImage(req, res);
       }
+      if (action === 'fetch-permalink') {
+        const ctx = await verifyUser(req.headers.authorization, pool);
+        return res.json(await handleFetchPermalink(pool, req.query.id, ctx));
+      }
       return res.status(400).json({ error: 'Unknown GET action' });
     }
 
@@ -1174,9 +1178,9 @@ async function handlePublish(pool, body, ctx) {
     status          = 'success';
     console.log('[instagram:publish] success:', { instagramPostId, totalAttempts: attempt });
 
-    // 4. Store post ID on the Itinerary
+    // 4. Store post ID + published timestamp on the Itinerary
     await pool.query(
-      `UPDATE "Itinerary" SET "instagramPostId" = $1 WHERE id = $2`,
+      `UPDATE "Itinerary" SET "instagramPostId" = $1, "instagramPublishedAt" = NOW() WHERE id = $2`,
       [instagramPostId, itineraryId]
     );
 
@@ -1185,40 +1189,45 @@ async function handlePublish(pool, body, ctx) {
     console.error('[instagram:publish]', err.message);
   }
 
-  // Always log the attempt
+  // 5. Fetch permalink immediately after publish (best-effort, before logging)
+  let permalink = null;
+  if (status === 'success' && instagramPostId) {
+    try {
+      const plRes  = await fetch(
+        `${IG_GRAPH}/${instagramPostId}?fields=id,permalink&access_token=${encodeURIComponent(accessToken)}`
+      );
+      const plData = await plRes.json();
+      permalink = plData.permalink ?? null;
+      console.log('[instagram:publish] permalink fetch:', {
+        itineraryId,
+        instagramPostId,
+        permalinkFound: Boolean(permalink),
+        metaError: plData.error ?? null,
+      });
+      if (permalink) {
+        await pool.query(
+          `UPDATE "Itinerary" SET "instagramPermalink" = $1 WHERE id = $2`,
+          [permalink, itineraryId]
+        );
+        console.log('[instagram:publish] permalink stored:', { itineraryId });
+      }
+    } catch (plErr) {
+      console.warn('[instagram:publish] permalink fetch failed (non-fatal):', plErr.message);
+    }
+  }
+
+  // 6. Always log the attempt — permalink included when available
   await pool.query(
     `INSERT INTO "InstagramPublishLog"
-       ("id", "itineraryId", "creatorId", "instagramAccountId", "instagramPostId", "caption", "status", "errorMessage")
-     VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7)`,
-    [itineraryId, creatorId, publishAccountId, instagramPostId, caption.slice(0, 2000), status, errorMessage]
+       ("id", "itineraryId", "creatorId", "instagramAccountId", "instagramPostId",
+        "caption", "status", "errorMessage", "permalink")
+     VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7, $8)`,
+    [itineraryId, creatorId, publishAccountId, instagramPostId,
+     caption.slice(0, 2000), status, errorMessage, permalink]
   );
 
   if (status === 'failed') {
     throw Object.assign(new Error(errorMessage ?? 'Publishing failed'), { status: 502 });
-  }
-
-  // 4. Fetch the post permalink (best-effort) and store it on the Itinerary
-  let permalink = null;
-  try {
-    const plRes  = await fetch(
-      `${IG_GRAPH}/${instagramPostId}?fields=permalink&access_token=${encodeURIComponent(accessToken)}`
-    );
-    const plData = await plRes.json();
-    permalink    = plData.permalink ?? null;
-  } catch {
-    // Non-fatal — post is published, permalink fetch failed
-  }
-
-  if (permalink) {
-    try {
-      await pool.query(
-        `UPDATE "Itinerary" SET "instagramPermalink" = $1 WHERE id = $2`,
-        [permalink, itineraryId]
-      );
-      console.log('[instagram:publish] permalink stored:', { itineraryId });
-    } catch (dbErr) {
-      console.warn('[instagram:publish] permalink save failed (non-fatal):', dbErr.message);
-    }
   }
 
   return { success: true, instagramPostId, permalink };
@@ -1260,6 +1269,69 @@ async function handleLogs(pool, itineraryId, ctx) {
     [itineraryId]
   );
   return { logs: rows };
+}
+
+// ── GET fetch-permalink ───────────────────────────────────────────────────────
+// Retroactively fetches and stores the Instagram permalink for an already-
+// published itinerary where instagramPermalink was not saved at publish time.
+async function handleFetchPermalink(pool, itineraryId, ctx) {
+  if (!itineraryId) throw Object.assign(new Error('id is required'), { status: 400 });
+
+  const { rows } = await pool.query(
+    `SELECT i.id, i."instagramPostId", i."instagramPermalink",
+            c.instagram_access_token, c.id AS creator_id
+     FROM "Itinerary" i
+     LEFT JOIN "Creator" c ON c.id = i.creator_id
+     WHERE i.id = $1 LIMIT 1`,
+    [itineraryId]
+  );
+  if (!rows.length) throw Object.assign(new Error('Itinerary not found'), { status: 404 });
+  const it = rows[0];
+
+  if (!ctx.isAdmin && ctx.creatorId && it.creator_id !== ctx.creatorId) {
+    throw Object.assign(new Error('Forbidden'), { status: 403 });
+  }
+
+  if (!it.instagramPostId) return { permalink: null, reason: 'not_published' };
+
+  // Return cached value immediately — no extra API call needed
+  if (it.instagramPermalink) return { permalink: it.instagramPermalink };
+
+  if (!it.instagram_access_token) return { permalink: null, reason: 'no_token' };
+
+  // Fetch from Instagram Graph API
+  const plRes  = await fetch(
+    `${IG_GRAPH}/${it.instagramPostId}?fields=id,permalink&access_token=${encodeURIComponent(it.instagram_access_token)}`
+  );
+  const plData = await plRes.json();
+  const permalink = plData.permalink ?? null;
+
+  console.log('[instagram:fetch-permalink]', {
+    itineraryId,
+    instagramPostId: it.instagramPostId,
+    permalinkFound:  Boolean(permalink),
+    metaError:       plData.error ?? null,
+  });
+
+  if (permalink) {
+    await pool.query(
+      `UPDATE "Itinerary" SET "instagramPermalink" = $1 WHERE id = $2`,
+      [permalink, itineraryId]
+    );
+    // Back-fill the most recent audit log row that's missing the permalink
+    await pool.query(
+      `UPDATE "InstagramPublishLog" SET "permalink" = $1
+       WHERE id = (
+         SELECT id FROM "InstagramPublishLog"
+         WHERE "itineraryId" = $2 AND "instagramPostId" = $3 AND "permalink" IS NULL
+         ORDER BY "publishedAt" DESC LIMIT 1
+       )`,
+      [permalink, itineraryId, it.instagramPostId]
+    ).catch(() => {}); // non-fatal
+    console.log('[instagram:fetch-permalink] permalink saved:', { itineraryId });
+  }
+
+  return { permalink };
 }
 
 // ── GET proxy-image ───────────────────────────────────────────────────────────
