@@ -176,9 +176,9 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, 1080, 1080);
 
-      // Ensure fonts are loaded
+      // Ensure fonts are loaded (includes italic for subtitle)
       await document.fonts.load('700 76px "Playfair Display"').catch(() => null);
-      await document.fonts.load('400 36px "Playfair Display"').catch(() => null);
+      await document.fonts.load('italic 400 36px "Playfair Display"').catch(() => null);
 
       // Title text (uppercase, strip duration)
       const rawTitle = (itinerary.title || '')
@@ -488,31 +488,43 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
                           if (checked && selectedImg) generateCoverCanvas(selectedImg.url);
                           else setCoverDataUrl(null);
                         }}
-                        style={{ marginTop: '2px', accentColor: '#1B6B65', cursor: 'pointer' }}
+                        style={{ marginTop: '3px', accentColor: '#1B6B65', cursor: 'pointer', flexShrink: 0 }}
                       />
-                      <span style={{ fontSize: '11.5px', color: '#4A433A', lineHeight: '1.4' }}>
-                        Branded cover card
-                      </span>
+                      <div>
+                        <span style={{ fontSize: '11.5px', color: '#4A433A', lineHeight: '1.4', display: 'block', fontWeight: '500' }}>
+                          Use branded Instagram cover
+                        </span>
+                        <span style={{ fontSize: '10.5px', color: '#9B9187', lineHeight: '1.5', display: 'block', marginTop: '2px' }}>
+                          Adds the itinerary title and hiddenatlas.travel to the image for a branded feed post.
+                        </span>
+                      </div>
                     </label>
                   )}
                 </div>
 
                 {/* Right: image preview + caption */}
                 <div style={{ flex: 1, minWidth: '240px' }}>
-                  {/* Image preview — shows branded card when toggle is on */}
+                  {/* Image preview — square+contain when branded so the full 1080×1080 canvas is visible */}
                   <div style={{
-                    width: '100%', height: '150px', borderRadius: '8px',
-                    overflow: 'hidden', background: '#F4F1EC', marginBottom: '14px',
+                    width: '100%',
+                    height: useBrandedCover ? '260px' : '150px',
+                    borderRadius: '8px', overflow: 'hidden', marginBottom: '14px',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     position: 'relative',
+                    background: useBrandedCover ? '#1C1A16' : '#F4F1EC',
+                    transition: 'height 0.2s ease, background 0.2s ease',
                   }}>
                     {useBrandedCover ? (
                       coverGenerating ? (
-                        <span style={{ fontSize: '11.5px', color: '#8C8070' }}>Generating cover...</span>
+                        <span style={{ fontSize: '11.5px', color: '#9B9187' }}>Generating branded cover...</span>
                       ) : coverDataUrl ? (
-                        <img src={coverDataUrl} alt="Branded cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <img
+                          src={coverDataUrl}
+                          alt="Branded cover"
+                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                        />
                       ) : selectedImg ? (
-                        <span style={{ fontSize: '11.5px', color: '#B5AA99' }}>Cover not generated</span>
+                        <span style={{ fontSize: '11.5px', color: '#777' }}>Cover not generated</span>
                       ) : null
                     ) : selectedImg ? (
                       <img
