@@ -145,6 +145,10 @@ function metaErrorMessage(err, context) {
       `In development mode the connected account must be added as a tester. ` +
       `For production, the permission requires Meta App Review.`;
   }
+  if (code === 9007) {
+    return `${context}: Instagram media container was not ready when publish was attempted (Meta code 9007). ` +
+      `The image may still be processing — please try again in a few seconds.`;
+  }
   if (code === 190) {
     return `${context}: access token invalid or expired (Meta code 190). Reconnect Instagram in Creator settings.`;
   }
@@ -1094,13 +1098,63 @@ async function handlePublish(pool, body, ctx) {
       });
       throw new Error(metaErrorMessage(containerData.error, 'Media container creation'));
     }
-    console.log('[instagram:publish] media container created:', { containerId: containerData.id, publishAccountId });
+    const creationId = containerData.id;
+    console.log('[instagram:publish] media container created:', { creationId, publishAccountId });
 
-    // 2. Publish the container
+    // 2. Poll container status — Meta processes images asynchronously.
+    // Calling media_publish before FINISHED causes code 9007 ("Media ID not available").
+    const POLL_MS      = 2000;
+    const MAX_ATTEMPTS = 10;
+    let   attempt      = 0;
+    let   statusCode   = null;
+
+    await new Promise(r => setTimeout(r, POLL_MS)); // initial 2s wait before first check
+
+    while (attempt < MAX_ATTEMPTS) {
+      attempt++;
+      const statusRes  = await fetch(
+        `${IG_GRAPH}/${creationId}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`
+      );
+      const statusData = await statusRes.json();
+      statusCode       = statusData.status_code ?? null;
+
+      console.log('[instagram:publish] container status poll:', {
+        attempt,
+        creationId,
+        statusCode,
+        status:    statusData.status ?? null,
+        metaError: statusData.error  ?? null,
+      });
+
+      if (statusCode === 'FINISHED') break;
+
+      if (statusCode === 'ERROR') {
+        throw new Error('Instagram could not process the image. Please try another image.');
+      }
+      if (statusCode === 'EXPIRED') {
+        throw new Error('Instagram media container expired before publishing. Please try again.');
+      }
+
+      // IN_PROGRESS or unknown — wait and retry
+      if (attempt < MAX_ATTEMPTS) await new Promise(r => setTimeout(r, POLL_MS));
+    }
+
+    if (statusCode !== 'FINISHED') {
+      throw new Error(
+        `Instagram image processing did not complete after ${MAX_ATTEMPTS} attempts ` +
+        `(last status: ${statusCode ?? 'unknown'}). Please try again.`
+      );
+    }
+
+    console.log('[instagram:publish] container FINISHED — calling media_publish:', {
+      creationId, publishAccountId, attempts: attempt,
+    });
+
+    // 3. Publish the container — only called after status_code === FINISHED
     const publishRes  = await fetch(`${IG_GRAPH}/${publishAccountId}/media_publish`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ creation_id: containerData.id, access_token: accessToken }),
+      body:    JSON.stringify({ creation_id: creationId, access_token: accessToken }),
     });
     const publishData = await publishRes.json();
     if (publishData.error || !publishData.id) {
@@ -1118,8 +1172,9 @@ async function handlePublish(pool, body, ctx) {
 
     instagramPostId = publishData.id;
     status          = 'success';
+    console.log('[instagram:publish] success:', { instagramPostId, totalAttempts: attempt });
 
-    // 3. Store post ID on the Itinerary
+    // 4. Store post ID on the Itinerary
     await pool.query(
       `UPDATE "Itinerary" SET "instagramPostId" = $1 WHERE id = $2`,
       [instagramPostId, itineraryId]
