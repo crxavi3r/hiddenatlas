@@ -522,16 +522,19 @@ async function handleAuthUrl(req, pool, ctx) {
 
   // Config-level checks (no API call — checks env vars and URL structure only)
   const configCheck = {
-    clientIdPresent:        Boolean(clientId),
-    clientSecretPresent:    Boolean(igClientSecret()),
-    redirectUriPresent:     Boolean(process.env.INSTAGRAM_REDIRECT_URI),
-    scopesLookCorrect:      REQUIRED_SCOPES.startsWith('instagram_business_'),
-    oauthHostCorrect:       IG_AUTH === 'https://www.instagram.com',
-    tokenHostCorrect:       IG_TOKEN === 'https://api.instagram.com',
-    graphHostCorrect:       IG_GRAPH.startsWith('https://graph.instagram.com/'),
-    enableFbLogin:          '0 (Facebook Login option hidden)',
-    forceReauth:            '1 (forces fresh Instagram credential entry)',
-    note:                   'If app still returns "Invalid platform app": verify the Meta app type is "Business", that Instagram API with Instagram Login product is added, and that required permissions (instagram_business_basic, instagram_business_content_publish) are listed under "Add required permissions" in the dashboard.',
+    clientIdPresent:              Boolean(clientId),
+    clientSecretPresent:          Boolean(igClientSecret()),
+    redirectUriPresent:           Boolean(process.env.INSTAGRAM_REDIRECT_URI),
+    scopesString:                 REQUIRED_SCOPES,
+    scopesArray:                  REQUIRED_SCOPES.split(','),
+    hasBasicScope:                REQUIRED_SCOPES.includes('instagram_business_basic'),
+    hasPublishScope:              REQUIRED_SCOPES.includes('instagram_business_content_publish'),
+    oauthHostCorrect:             IG_AUTH === 'https://www.instagram.com',
+    tokenHostCorrect:             IG_TOKEN === 'https://api.instagram.com',
+    graphHostCorrect:             IG_GRAPH.startsWith('https://graph.instagram.com/'),
+    enableFbLogin:                '0 (Facebook Login option hidden)',
+    forceReauth:                  '1 (forces fresh Instagram credential entry)',
+    note:                         'If app still returns "Invalid platform app": verify the Meta app type is "Business", that Instagram API with Instagram Login product is added, and that required permissions (instagram_business_basic, instagram_business_content_publish) are listed under "Add required permissions" in the dashboard.',
   };
 
   // Preview URL with state HMAC redacted — safe to show to admins
@@ -552,6 +555,7 @@ async function handleAuthUrl(req, pool, ctx) {
     clientIdUsed:                clientId,
     redirectUriUsed:             redirectUri,
     scopesUsed:                  REQUIRED_SCOPES,
+    scopesAsArray:               REQUIRED_SCOPES.split(','),
     response_type:               'code',
     enable_fb_login:             '0',
     force_reauth:                '1',
@@ -703,6 +707,36 @@ async function handleCallback(req, res) {
     const expiresIn   = longData.expires_in;
     const expiresAt   = expiresIn ? new Date(Date.now() + expiresIn * 1000) : null;
     console.log('[instagram:callback] step 3 — OK, expires_in:', expiresIn ?? 'not provided');
+
+    // ── Step 3b: verify scopes Meta actually granted (non-fatal) ─────────────
+    // Calls debug_token to confirm instagram_business_content_publish is present.
+    // Never logs the access token or app secret — only the resulting scope list.
+    console.log('[instagram:callback] step 3b — verifying granted scopes via debug_token');
+    try {
+      const dbgRes  = await fetch(
+        `https://graph.facebook.com/debug_token` +
+        `?input_token=${encodeURIComponent(accessToken)}` +
+        `&access_token=${encodeURIComponent(`${igClientId()}|${igClientSecret()}`)}`
+      );
+      const dbgData = await dbgRes.json();
+      const granted    = dbgData?.data?.scopes ?? [];
+      const hasBasic   = granted.includes('instagram_business_basic');
+      const hasPublish = granted.includes('instagram_business_content_publish');
+      console.log('[instagram:callback] step 3b — scopes granted by Meta:', {
+        scopes:     granted,
+        hasBasic,
+        hasPublish,
+        scopesOk:   hasBasic && hasPublish,
+      });
+      if (!hasPublish) {
+        console.warn(
+          '[instagram:callback] step 3b — WARNING: instagram_business_content_publish NOT granted.',
+          'Publishing will fail. Ensure the Meta app has this permission approved and the user re-authorises.'
+        );
+      }
+    } catch (scopeErr) {
+      console.warn('[instagram:callback] step 3b — scope check failed (non-fatal):', scopeErr.message);
+    }
 
     // ── Step 4: persist on Creator row ───────────────────────────────────────
     // Column names are snake_case as defined in the DB migration.
