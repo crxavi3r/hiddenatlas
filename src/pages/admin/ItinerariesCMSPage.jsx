@@ -168,30 +168,39 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
         img.src = objUrl;
       });
 
-      // Dark gradient overlay — covers bottom ~55%
-      const grad = ctx.createLinearGradient(0, 460, 0, 1080);
+      // Dark gradient — starts higher for stronger text contrast at the bottom
+      const grad = ctx.createLinearGradient(0, 540, 0, 1080);
       grad.addColorStop(0,    'rgba(0,0,0,0)');
-      grad.addColorStop(0.35, 'rgba(0,0,0,0.28)');
-      grad.addColorStop(1,    'rgba(0,0,0,0.80)');
+      grad.addColorStop(0.28, 'rgba(0,0,0,0.22)');
+      grad.addColorStop(1,    'rgba(0,0,0,0.82)');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, 1080, 1080);
 
-      // Ensure fonts are loaded (includes italic for subtitle)
-      await document.fonts.load('700 76px "Playfair Display"').catch(() => null);
-      await document.fonts.load('italic 400 36px "Playfair Display"').catch(() => null);
+      // Fonts
+      await document.fonts.load('700 72px "Playfair Display"').catch(() => null);
+      await document.fonts.load('italic 400 32px "Playfair Display"').catch(() => null);
 
-      // Title text (uppercase, strip duration)
+      // Layout constants — 10% safe margin each side
+      const SIDE_MARGIN   = 108;               // 10% of 1080
+      const MAX_TEXT_W    = 1080 - SIDE_MARGIN * 2;  // 864px
+      const FOOTER_Y      = 1028;              // top of footer text
+      const FOOTER_GAP    = 28;               // gap between subtitle bottom and footer top
+      const TITLE_SUB_GAP = 14;               // gap between last title line and subtitle top
+      const SUBTITLE_SZ   = 32;
+
+      // Title — uppercase, strip duration suffix
       const rawTitle = (itinerary.title || '')
         .replace(/\s+in\s+\d+\s+days?/i, '')
         .replace(/\s+\d+[-\s]?days?\b/i, '')
         .toUpperCase()
         .trim();
 
-      // Subtitle
-      const pit = preview?.itinerary ?? {};
-      const cardSubtitle = deriveCardSubtitle(pit.subtitle, pit.durationDays ?? itinerary.durationDays);
+      // Subtitle — always use short "N-Day Journey" pattern to avoid overflow
+      const pit  = preview?.itinerary ?? {};
+      const days = pit.durationDays ?? itinerary.durationDays;
+      const cardSubtitle = days ? `${days}-Day Journey` : 'Travel Itinerary';
 
-      // Word-wrap helper
+      // Word-wrap helper (uses current ctx.font for measurement)
       function wrapText(text, maxPx) {
         const words = text.split(' ');
         const lines = [];
@@ -205,30 +214,34 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
         return lines;
       }
 
-      let fontSize = 76;
+      // Adaptive title font size
+      let fontSize = 72;
       ctx.font = `700 ${fontSize}px "Playfair Display", Georgia, serif`;
-      let titleLines = wrapText(rawTitle, 960);
+      let titleLines = wrapText(rawTitle, MAX_TEXT_W);
       if (titleLines.length > 3) {
-        fontSize = 58;
+        fontSize = 56;
         ctx.font = `700 ${fontSize}px "Playfair Display", Georgia, serif`;
-        titleLines = wrapText(rawTitle, 960);
+        titleLines = wrapText(rawTitle, MAX_TEXT_W);
       }
+      const lineH = Math.round(fontSize * 1.25);
 
-      const lineH      = Math.round(fontSize * 1.22);
-      const subtitleSz = 36;
-      const gapSz      = 46;
-      // Position text block so bottom lands at y=1018
-      const blockH = titleLines.length * lineH + gapSz + subtitleSz;
-      let y = 1018 - blockH;
+      // Anchor layout from the bottom up:
+      //   FOOTER_Y   → footer text top
+      //   -FOOTER_GAP -SUBTITLE_SZ → subtitle text top
+      //   -TITLE_SUB_GAP -(lines × lineH) → title block top
+      const subtitleY    = FOOTER_Y - FOOTER_GAP - SUBTITLE_SZ;
+      const titleBlockTop = subtitleY - TITLE_SUB_GAP - titleLines.length * lineH;
+      let y = titleBlockTop;
 
-      ctx.textAlign    = 'center';
-      ctx.textBaseline = 'top';
-      ctx.shadowColor  = 'rgba(0,0,0,0.55)';
-      ctx.shadowBlur   = 10;
+      ctx.textAlign     = 'center';
+      ctx.textBaseline  = 'top';
+      ctx.shadowColor   = 'rgba(0,0,0,0.65)';
+      ctx.shadowBlur    = 14;
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 2;
 
       // Title
+      ctx.font      = `700 ${fontSize}px "Playfair Display", Georgia, serif`;
       ctx.fillStyle = 'rgba(255,255,255,1)';
       for (const line of titleLines) {
         ctx.fillText(line, 540, y);
@@ -236,16 +249,16 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
       }
 
       // Subtitle
-      ctx.font      = `italic 400 ${subtitleSz}px "Playfair Display", Georgia, serif`;
-      ctx.fillStyle = 'rgba(255,255,255,0.82)';
-      ctx.shadowBlur = 6;
-      ctx.fillText(cardSubtitle, 540, y + gapSz * 0.6);
+      ctx.font      = `italic 400 ${SUBTITLE_SZ}px "Playfair Display", Georgia, serif`;
+      ctx.fillStyle = 'rgba(255,255,255,0.80)';
+      ctx.shadowBlur = 8;
+      ctx.fillText(cardSubtitle, 540, subtitleY);
 
       // Footer domain
-      ctx.font      = `300 22px "Inter", system-ui, sans-serif`;
-      ctx.fillStyle = 'rgba(255,255,255,0.58)';
       ctx.shadowBlur = 0;
-      ctx.fillText('hiddenatlas.travel', 540, 1048);
+      ctx.font      = `400 21px "Inter", system-ui, sans-serif`;
+      ctx.fillStyle = 'rgba(255,255,255,0.72)';
+      ctx.fillText('hiddenatlas.travel', 540, FOOTER_Y);
 
       setCoverDataUrl(canvas.toDataURL('image/jpeg', 0.93));
     } catch (err) {
