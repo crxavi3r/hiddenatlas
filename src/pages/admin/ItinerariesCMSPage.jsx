@@ -250,14 +250,14 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
 
       // Subtitle
       ctx.font      = `italic 400 ${SUBTITLE_SZ}px "Playfair Display", Georgia, serif`;
-      ctx.fillStyle = 'rgba(255,255,255,0.80)';
+      ctx.fillStyle = 'rgba(255,255,255,0.88)';
       ctx.shadowBlur = 8;
       ctx.fillText(cardSubtitle, 540, subtitleY);
 
       // Footer domain
       ctx.shadowBlur = 0;
-      ctx.font      = `400 21px "Inter", system-ui, sans-serif`;
-      ctx.fillStyle = 'rgba(255,255,255,0.72)';
+      ctx.font      = `400 22px "Inter", system-ui, sans-serif`;
+      ctx.fillStyle = 'rgba(255,255,255,0.84)';
       ctx.fillText('hiddenatlas.travel', 540, FOOTER_Y);
 
       setCoverDataUrl(canvas.toDataURL('image/jpeg', 0.93));

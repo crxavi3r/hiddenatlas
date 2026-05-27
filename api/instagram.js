@@ -313,9 +313,12 @@ function generateCaption(it) {
   function buildHashtags() {
     const tags = new Set(['#HiddenAtlas']);
 
-    // Sub-destination tags (remapped where needed)
+    // Sub-destination tags — single-word only.
+    // Multi-word slugs (e.g. "TuscanyWineRoads") are not useful hashtags;
+    // the destination field handles the region tag.
     const REMAP = { Loire: 'LoireValley', Sardinia: 'Sardinia', Sicilia: 'Sicily' };
     for (const sub of subDests.slice(0, 4)) {
+      if (sub.includes(' ')) continue;
       const slug = sub.split(/\s+/).map(w => w[0].toUpperCase() + w.slice(1).toLowerCase()).join('');
       tags.add('#' + (REMAP[slug] || REMAP[sub] || slug));
     }
@@ -332,16 +335,21 @@ function generateCaption(it) {
     if (fullCtx.match(/château|chateau/i) && fullCtx.match(/loire/i))  tags.add('#LoireCastles');
     if (fullCtx.match(/amalfi/i))                                        tags.add('#AmalfiCoast');
 
-    // Country-level road trip tag
+    // Road trip tags — prefer destination-based (#TuscanyRoadTrip) over country-only
     if (it.country) {
       const c = it.country.replace(/\s+/g, '');
-      if (fullCtx.match(/road.?trip|drive|driving|route|journey/)) tags.add(`#${c}RoadTrip`);
-      else if (![...tags].some(t => t.toLowerCase().includes(c.toLowerCase()))) tags.add(`#${c}Travel`);
+      if (fullCtx.match(/road.?trip|roads?\b|drive|driving|route/)) {
+        const dest = (it.destination || '').replace(/[^a-zA-Z0-9]/g, '');
+        if (dest.length >= 3) tags.add(`#${dest}RoadTrip`);
+        tags.add(`#${c}RoadTrip`);
+      } else if (![...tags].some(t => t.toLowerCase().includes(c.toLowerCase()))) {
+        tags.add(`#${c}Travel`);
+      }
     }
 
     // Thematic
-    if (fullCtx.match(/wine|vineyard/))     tags.add('#WineTravel');
-    if (fullCtx.match(/road.?trip|drive/))  tags.add('#RoadTrip');
+    if (fullCtx.match(/wine|vineyard/))             tags.add('#WineTravel');
+    if (fullCtx.match(/road.?trip|roads?\b|drive/)) tags.add('#RoadTrip');
 
     tags.add('#TravelItinerary');
     tags.add('#TravelPlanning');
@@ -383,10 +391,9 @@ function generateCaption(it) {
     parts.push(hookLine, '');
   }
 
-  // Source content paragraphs (from CMS excerpt / description)
-  if (hookPara)      parts.push(hookPara,      '');
-  if (routePara)     parts.push(routePara,     '');
-  if (discoveryPara) parts.push(discoveryPara, '');
+  // Source content paragraphs — max 2 to keep the caption concise
+  if (hookPara)  parts.push(hookPara,  '');
+  if (routePara) parts.push(routePara, '');
 
   // Bullets
   parts.push("Inside the guide you'll find:", '');
