@@ -109,8 +109,10 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
   const [useBrandedCover, setUseBrandedCover] = useState(true);
   const [coverDataUrl,   setCoverDataUrl]   = useState(null);
   const [coverGenerating, setCoverGenerating] = useState(false);
-  const textareaRef = useRef(null);
-  const canvasRef   = useRef(null);
+  const [coverError,      setCoverError]      = useState(null);
+  const textareaRef     = useRef(null);
+  const canvasRef       = useRef(null);
+  const generatedForRef = useRef(null); // URL of image for which branded cover was last generated
 
   useEffect(() => {
     async function fetchPreview() {
@@ -137,6 +139,7 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
     if (!bgImageUrl || !canvasRef.current) return;
     setCoverGenerating(true);
     setCoverDataUrl(null);
+    setCoverError(null);
 
     const canvas = canvasRef.current;
     const ctx    = canvas.getContext('2d');
@@ -263,6 +266,8 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
       setCoverDataUrl(canvas.toDataURL('image/jpeg', 0.93));
     } catch (err) {
       console.error('[cover-gen]', err.message);
+      setCoverError('Could not generate branded cover. You can publish the original image instead.');
+      generatedForRef.current = null; // allow retry on next trigger
     } finally {
       setCoverGenerating(false);
     }
@@ -312,10 +317,21 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
     }
   }
 
-  const images      = preview?.images ?? [];
-  const selectedImg = images[selectedIdx];
+  const images         = preview?.images ?? [];
+  const selectedImg    = images[selectedIdx];
+  const selectedImgUrl = selectedImg?.url ?? null;
 
-  // Publish button disabled when cover is pending
+  // Auto-generate branded cover when preview loads or selected image changes.
+  // Guarded by a ref so it only fires once per unique image URL, preventing
+  // re-generation on every render and enabling retry after a failure.
+  useEffect(() => {
+    if (!useBrandedCover || !selectedImgUrl) return;
+    if (generatedForRef.current === selectedImgUrl) return;
+    generatedForRef.current = selectedImgUrl;
+    generateCoverCanvas(selectedImgUrl);
+  }, [selectedImgUrl, useBrandedCover]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Publish button disabled when cover is pending or not ready (including error state)
   const publishDisabled = publishing || images.length === 0 || !caption.trim()
     || (useBrandedCover && (!coverDataUrl || coverGenerating));
 
@@ -449,10 +465,7 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
                       {images.slice(0, 8).map((img, i) => (
                         <div
                           key={i}
-                          onClick={() => {
-                            setSelectedIdx(i);
-                            if (useBrandedCover) generateCoverCanvas(img.url);
-                          }}
+                          onClick={() => setSelectedIdx(i)}
                           style={{
                             position: 'relative', height: '72px', borderRadius: '6px',
                             overflow: 'hidden', cursor: 'pointer', flexShrink: 0,
@@ -498,8 +511,11 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
                         onChange={e => {
                           const checked = e.target.checked;
                           setUseBrandedCover(checked);
-                          if (checked && selectedImg) generateCoverCanvas(selectedImg.url);
-                          else setCoverDataUrl(null);
+                          if (!checked) {
+                            setCoverDataUrl(null);
+                            setCoverError(null);
+                            generatedForRef.current = null;
+                          }
                         }}
                         style={{ marginTop: '3px', accentColor: '#1B6B65', cursor: 'pointer', flexShrink: 0 }}
                       />
@@ -537,6 +553,10 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
                           alt="Branded cover"
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
+                      ) : coverError ? (
+                        <span style={{ fontSize: '11.5px', color: '#C0392B', textAlign: 'center', padding: '0 14px', lineHeight: '1.6' }}>
+                          {coverError}
+                        </span>
                       ) : selectedImg ? (
                         <span style={{ fontSize: '11.5px', color: '#8C8070' }}>Cover not generated</span>
                       ) : null
