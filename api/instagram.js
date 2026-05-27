@@ -1267,15 +1267,37 @@ async function handleLogs(pool, itineraryId, ctx) {
 // Blocks RFC-1918 / loopback addresses.
 async function handleProxyImage(req, res) {
   const url = req.query.url;
-  if (!url || !/^https?:\/\//i.test(url)) {
-    throw Object.assign(new Error('url param is required and must be http(s)'), { status: 400 });
+  const isAbsolute = url && /^https?:\/\//i.test(url);
+  const isRelative = url && url.startsWith('/') && !/^\/\//.test(url);
+
+  console.log('[instagram:proxy-image]', {
+    url:        url ?? null,
+    isAbsolute,
+    isRelative,
+    referer:    req.headers.referer ?? null,
+  });
+
+  if (!url || (!isAbsolute && !isRelative)) {
+    throw Object.assign(new Error('url param must be an absolute http(s) URL or a root-relative path'), { status: 400 });
   }
-  if (/localhost|127\.\d|10\.\d|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.0\.0\.0|::1/i.test(url)) {
+
+  let resolvedUrl = url;
+  if (isRelative) {
+    // Resolve against the request's own origin so we can serve same-origin static assets.
+    const proto = req.headers['x-forwarded-proto'] || 'https';
+    const host  = req.headers['x-forwarded-host'] || req.headers.host;
+    if (!host) throw Object.assign(new Error('Cannot resolve relative URL: no host header'), { status: 400 });
+    resolvedUrl = `${proto}://${host}${url}`;
+    console.log('[instagram:proxy-image] resolved relative →', resolvedUrl);
+  }
+
+  if (/localhost|127\.\d|10\.\d|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.0\.0\.0|::1/i.test(resolvedUrl)) {
     throw Object.assign(new Error('Private/loopback URLs are not allowed'), { status: 400 });
   }
 
-  const imgRes = await fetch(url, { headers: { 'User-Agent': 'HiddenAtlas-Proxy/1.0' } });
+  const imgRes = await fetch(resolvedUrl, { headers: { 'User-Agent': 'HiddenAtlas-Proxy/1.0' } });
   if (!imgRes.ok) {
+    console.warn('[instagram:proxy-image] upstream failed', { resolvedUrl, status: imgRes.status });
     throw Object.assign(new Error(`Upstream image fetch failed (${imgRes.status})`), { status: 502 });
   }
   const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
@@ -1284,6 +1306,7 @@ async function handleProxyImage(req, res) {
   }
 
   const buffer = await imgRes.arrayBuffer();
+  console.log('[instagram:proxy-image] served', { resolvedUrl, contentType, bytes: buffer.byteLength });
   res.setHeader('Content-Type', contentType);
   res.setHeader('Cache-Control', 'public, max-age=3600');
   res.setHeader('Access-Control-Allow-Origin', '*');

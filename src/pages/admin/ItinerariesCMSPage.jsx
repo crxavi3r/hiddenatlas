@@ -144,25 +144,63 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
     setCoverDataUrl(null);
     setCoverError(null);
 
+    const isRelative = bgImageUrl.startsWith('/') && !/^\/\//.test(bgImageUrl);
+    console.log('[cover-gen] start', {
+      itineraryId: itinerary.id,
+      slug:        itinerary.slug,
+      imageUrl:    bgImageUrl,
+      isRelative,
+    });
+
     const canvas = canvasRef.current;
     const ctx    = canvas.getContext('2d');
     canvas.width  = 1080;
     canvas.height = 1080;
 
     try {
-      // Fetch via server proxy to avoid CORS restrictions
-      const token   = await getToken();
-      const proxyRes = await fetch(
-        `/api/instagram?action=proxy-image&url=${encodeURIComponent(bgImageUrl)}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (!proxyRes.ok) throw new Error('Image proxy failed');
-      const blob   = await proxyRes.blob();
-      const objUrl = URL.createObjectURL(blob);
+      let objUrl;
+
+      if (isRelative) {
+        // Same-origin path (e.g. /itineraries/slug/cover.jpg) — fetch directly.
+        // No proxy or CORS restriction applies to same-origin resources.
+        const imgRes = await fetch(bgImageUrl);
+        console.log('[cover-gen] direct fetch', { url: bgImageUrl, status: imgRes.status, ok: imgRes.ok, contentType: imgRes.headers.get('content-type') });
+        if (!imgRes.ok) {
+          setCoverError('This image cannot be loaded. Please select another image.');
+          generatedForRef.current = null;
+          return;
+        }
+        const blob = await imgRes.blob();
+        if (!blob.type.startsWith('image/')) {
+          console.warn('[cover-gen] not an image', { url: bgImageUrl, type: blob.type });
+          setCoverError('This image cannot be loaded. Please select another image.');
+          generatedForRef.current = null;
+          return;
+        }
+        objUrl = URL.createObjectURL(blob);
+      } else {
+        // External / CDN URL — use server proxy to avoid canvas CORS tainting
+        const token    = await getToken();
+        const proxyRes = await fetch(
+          `/api/instagram?action=proxy-image&url=${encodeURIComponent(bgImageUrl)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        console.log('[cover-gen] proxy fetch', { url: bgImageUrl, status: proxyRes.status, ok: proxyRes.ok });
+        if (!proxyRes.ok) {
+          const errBody = await proxyRes.text().catch(() => '');
+          console.warn('[cover-gen] proxy error', { url: bgImageUrl, status: proxyRes.status, body: errBody });
+          setCoverError('Could not load this image for cover generation. Please select another image or uncheck "Use branded Instagram cover".');
+          generatedForRef.current = null;
+          return;
+        }
+        const blob = await proxyRes.blob();
+        objUrl = URL.createObjectURL(blob);
+      }
 
       await new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => {
+          console.log('[cover-gen] image loaded', { naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight, url: bgImageUrl });
           const scale = Math.max(1080 / img.naturalWidth, 1080 / img.naturalHeight);
           const dw = img.naturalWidth  * scale;
           const dh = img.naturalHeight * scale;
@@ -268,7 +306,7 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
 
       setCoverDataUrl(canvas.toDataURL('image/jpeg', 0.93));
     } catch (err) {
-      console.error('[cover-gen]', err.message);
+      console.error('[cover-gen] generation failed', { message: err.message, url: bgImageUrl });
       setCoverError('Could not generate branded cover. You can publish the original image instead.');
       generatedForRef.current = null; // allow retry on next trigger
     } finally {
@@ -297,7 +335,7 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
     setResult(null);
     try {
       let imageUrl;
-      if (useBrandedCover) {
+      if (useBrandedCover && coverDataUrl && !coverError) {
         imageUrl = await uploadCoverAndGetUrl();
       } else {
         imageUrl = preview.images[selectedIdx]?.url;
@@ -335,9 +373,10 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
     generateCoverCanvas(selectedImgUrl);
   }, [selectedImgUrl, useBrandedCover]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Publish button disabled when cover is pending or not ready (including error state)
+  // Disabled while generating, or while waiting for a cover that hasn't errored yet.
+  // When coverError is set the original image is used as fallback — don't block publish.
   const publishDisabled = publishing || images.length === 0 || !caption.trim()
-    || (useBrandedCover && (!coverDataUrl || coverGenerating));
+    || (useBrandedCover && !coverError && (!coverDataUrl || coverGenerating));
 
   return (
     <>
@@ -595,9 +634,24 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                       ) : coverError ? (
-                        <span style={{ fontSize: '11.5px', color: '#C0392B', textAlign: 'center', padding: '0 14px', lineHeight: '1.6' }}>
-                          {coverError}
-                        </span>
+                        // Show original image with an error notice overlay so the user sees what will be published
+                        <>
+                          {selectedImg && (
+                            <img
+                              src={selectedImg.url}
+                              alt={selectedImg.alt}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
+                            />
+                          )}
+                          <div style={{
+                            position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '14px',
+                          }}>
+                            <span style={{ fontSize: '11.5px', color: '#FFD6D6', textAlign: 'center', lineHeight: '1.6' }}>
+                              {coverError}
+                            </span>
+                          </div>
+                        </>
                       ) : selectedImg ? (
                         <span style={{ fontSize: '11.5px', color: '#8C8070' }}>Cover not generated</span>
                       ) : null
