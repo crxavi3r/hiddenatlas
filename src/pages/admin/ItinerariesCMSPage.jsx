@@ -115,6 +115,9 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
   const generatedForRef = useRef(null); // URL of image for which branded cover was last generated
 
   useEffect(() => {
+    // Already published — nothing to preview, show published state immediately
+    if (itinerary.instagramPostId) { setLoading(false); return; }
+
     async function fetchPreview() {
       try {
         const token = await getToken();
@@ -309,7 +312,7 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
       const json  = await res.json();
       if (json.error) throw new Error(json.error);
       setResult({ success: true, permalink: json.permalink });
-      onSuccess?.(itinerary.id, json.instagramPostId);
+      onSuccess?.(itinerary.id, json.instagramPostId, json.permalink);
     } catch (e) {
       setResult({ error: e.message });
     } finally {
@@ -325,6 +328,7 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
   // Guarded by a ref so it only fires once per unique image URL, preventing
   // re-generation on every render and enabling retry after a failure.
   useEffect(() => {
+    if (itinerary.instagramPostId) return; // already published — skip generation
     if (!useBrandedCover || !selectedImgUrl) return;
     if (generatedForRef.current === selectedImgUrl) return;
     generatedForRef.current = selectedImgUrl;
@@ -373,7 +377,44 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
 
         {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-          {loading ? (
+          {itinerary.instagramPostId && !result?.success ? (
+            /* ── Already published screen ── */
+            <div style={{ textAlign: 'center', padding: '32px 20px' }}>
+              <div style={{
+                width: '52px', height: '52px', borderRadius: '50%',
+                background: '#EFF6F5', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 16px',
+              }}>
+                <Instagram size={26} color="#1B6B65" />
+              </div>
+              <p style={{ fontSize: '16px', fontWeight: '600', color: '#1C1A16', marginBottom: '8px' }}>
+                Published to Instagram
+              </p>
+              <p style={{ fontSize: '13px', color: '#8C8070', marginBottom: '24px', lineHeight: '1.6' }}>
+                This itinerary has already been published as an Instagram post.
+              </p>
+              {itinerary.instagramPermalink ? (
+                <a
+                  href={itinerary.instagramPermalink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '7px',
+                    padding: '10px 20px', borderRadius: '7px', background: '#E1306C',
+                    fontSize: '13.5px', fontWeight: '600', color: 'white',
+                    textDecoration: 'none',
+                  }}
+                >
+                  <ExternalLink size={14} />
+                  View post on Instagram
+                </a>
+              ) : (
+                <p style={{ fontSize: '12.5px', color: '#9B9187', lineHeight: '1.5' }}>
+                  Published to Instagram, but post link is not available.
+                </p>
+              )}
+            </div>
+          ) : loading ? (
             <div style={{ textAlign: 'center', padding: '40px 0', color: '#8C8070', fontSize: '13.5px' }}>
               Generating preview...
             </div>
@@ -595,15 +636,20 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
         </div>
 
         {/* Footer */}
-        {!result?.success && (
+        {itinerary.instagramPostId && !result?.success ? (
+          <div style={{
+            padding: '14px 20px', borderTop: '1px solid #F4F1EC',
+            display: 'flex', justifyContent: 'flex-end', background: '#FAFAF8',
+          }}>
+            <button onClick={onClose} style={btnSecondary}>Close</button>
+          </div>
+        ) : !result?.success ? (
           <div style={{
             padding: '14px 20px', borderTop: '1px solid #F4F1EC',
             display: 'flex', justifyContent: 'flex-end', gap: '10px', background: '#FAFAF8',
           }}>
-            <button onClick={onClose} style={btnSecondary}>
-              {result?.success ? 'Close' : 'Cancel'}
-            </button>
-            {!loading && !previewError && !result?.success && (
+            <button onClick={onClose} style={btnSecondary}>Cancel</button>
+            {!loading && !previewError && (
               <button
                 onClick={handlePublish}
                 disabled={publishDisabled}
@@ -619,8 +665,7 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
               </button>
             )}
           </div>
-        )}
-        {result?.success && (
+        ) : (
           <div style={{
             padding: '14px 20px', borderTop: '1px solid #F4F1EC',
             display: 'flex', justifyContent: 'flex-end', background: '#FAFAF8',
@@ -838,9 +883,9 @@ export default function ItinerariesCMSPage() {
     collections: collectionItems.length,
   };
 
-  function handleInstagramSuccess(itineraryId, instagramPostId) {
+  function handleInstagramSuccess(itineraryId, instagramPostId, permalink) {
     setItems(prev => prev.map(it =>
-      it.id === itineraryId ? { ...it, instagramPostId } : it
+      it.id === itineraryId ? { ...it, instagramPostId, instagramPermalink: permalink ?? null } : it
     ));
   }
 
@@ -1229,7 +1274,7 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
                       <button
                         onClick={() => onInstagramPublish(it)}
                         style={{ ...iconBtn, color: it.instagramPostId ? '#1B6B65' : '#E1306C' }}
-                        title={it.instagramPostId ? 'Re-publish to Instagram' : 'Publish to Instagram'}
+                        title={it.instagramPostId ? 'View Instagram post' : 'Publish to Instagram'}
                       >
                         <Instagram size={13} />
                       </button>

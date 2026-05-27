@@ -1197,7 +1197,7 @@ async function handlePublish(pool, body, ctx) {
     throw Object.assign(new Error(errorMessage ?? 'Publishing failed'), { status: 502 });
   }
 
-  // 4. Fetch the post permalink (best-effort)
+  // 4. Fetch the post permalink (best-effort) and store it on the Itinerary
   let permalink = null;
   try {
     const plRes  = await fetch(
@@ -1206,7 +1206,19 @@ async function handlePublish(pool, body, ctx) {
     const plData = await plRes.json();
     permalink    = plData.permalink ?? null;
   } catch {
-    // Non-fatal — post was published, permalink fetch failed
+    // Non-fatal — post is published, permalink fetch failed
+  }
+
+  if (permalink) {
+    try {
+      await pool.query(
+        `UPDATE "Itinerary" SET "instagramPermalink" = $1 WHERE id = $2`,
+        [permalink, itineraryId]
+      );
+      console.log('[instagram:publish] permalink stored:', { itineraryId });
+    } catch (dbErr) {
+      console.warn('[instagram:publish] permalink save failed (non-fatal):', dbErr.message);
+    }
   }
 
   return { success: true, instagramPostId, permalink };

@@ -95,7 +95,8 @@ model Itinerary {
   pdfError        String?
 
   // ── Instagram publishing ────────────────────
-  instagramPostId  String?
+  instagramPostId    String?
+  instagramPermalink String?
 
   pricingPlanId     String?                    // FK to DesignerPricingPlan.id — null for default pricing
 
