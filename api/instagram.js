@@ -350,18 +350,6 @@ function generateCaption(it) {
     return [...tags];
   }
 
-  // ── Bridge paragraph ─────────────────────────────────────────────────────────
-  const destPhrase = it.destination || it.country || 'this destination';
-  const bridge = (() => {
-    if (fullCtx.match(/road.?trip|drive|driving/))
-      return `We put this itinerary together for anyone planning a road trip through ${destPhrase}.`;
-    if (fullCtx.match(/wine|vineyard|chianti|bordeaux/))
-      return `We put together a free guide for anyone wanting to take the slow route through ${destPhrase}.`;
-    if (fullCtx.match(/history|heritage|d.?day|wwii|castle|abbey|cathedral/))
-      return `We put together a free itinerary to help you explore the history and landscapes of ${destPhrase}.`;
-    return `We put together a free guide to help you discover ${destPhrase} at a slower pace.`;
-  })();
-
   // ── Assemble ─────────────────────────────────────────────────────────────────
   const bullets  = buildBullets();
   const hashtags = buildHashtags();
@@ -371,22 +359,47 @@ function generateCaption(it) {
 
   const parts = [];
 
-  if (hookPara)      { parts.push(hookPara,      ''); }
-  if (routePara)     { parts.push(routePara,     ''); }
-  if (discoveryPara) { parts.push(discoveryPara, ''); }
+  // Emoji + full itinerary title as header
+  const emoji = (() => {
+    if (fullCtx.match(/wine|vineyard|chianti|bordeaux|rioja/)) return '🍷';
+    if (fullCtx.match(/beach|coast|ocean|atlantic|mediterranean/)) return '🌊';
+    if (fullCtx.match(/castle|medieval|heritage|d.?day|wwii/)) return '🏰';
+    if (fullCtx.match(/japan|temple|shrine|ryokan/i)) return '🌸';
+    if (fullCtx.match(/mountain|highland|alps/)) return '🏔️';
+    return '✈️';
+  })();
+  if (it.title) parts.push(`${emoji} ${it.title}`, '');
 
-  parts.push(bridge, '');
-  parts.push('What\'s inside:', '');
+  // Short editorial hook — single sentence, destination-specific
+  const destName = it.destination || it.country || '';
+  if (destName) {
+    const hookLine = (() => {
+      if (fullCtx.match(/wine|vineyard/))        return `${destName} is not a place to rush.`;
+      if (fullCtx.match(/island|archipelago/))   return `${destName} rewards slow travel.`;
+      if (fullCtx.match(/road.?trip|drive|driving/)) return `${destName} is best explored by road.`;
+      if (fullCtx.match(/beach|coast/))          return `${destName} is the kind of place you want more time in.`;
+      return `${destName} is best explored at a slower pace.`;
+    })();
+    parts.push(hookLine, '');
+  }
+
+  // Source content paragraphs (from CMS excerpt / description)
+  if (hookPara)      parts.push(hookPara,      '');
+  if (routePara)     parts.push(routePara,     '');
+  if (discoveryPara) parts.push(discoveryPara, '');
+
+  // Bullets
+  parts.push("Inside the guide you'll find:", '');
   bullets.forEach(b => parts.push(`• ${b}`));
   parts.push('');
 
   if (url) {
-    parts.push('👉 Full itinerary:');
+    parts.push('👉 Explore the full itinerary:');
     parts.push(url);
     parts.push('');
   }
 
-  parts.push('Save this for your trip planning. ✈️', '');
+  parts.push('Save this post for your future trip ✨', '');
   parts.push(hashtags.join(' '));
 
   return parts.join('\n');
@@ -399,7 +412,7 @@ function deriveCardSubtitle(subtitle, durationDays) {
     const stripped = subtitle.replace(/^\d+[-\s]?days?\s+/i, '').trim();
     return stripped || subtitle;
   }
-  if (durationDays) return `${durationDays}-Day Journey`;
+  if (durationDays) return `${durationDays} Day Journey`;
   return 'Travel Itinerary';
 }
 

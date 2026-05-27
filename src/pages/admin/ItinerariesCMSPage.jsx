@@ -94,7 +94,7 @@ function deriveCardSubtitle(subtitle, durationDays) {
     const stripped = subtitle.replace(/^\d+[-\s]?days?\s+/i, '').trim();
     return stripped || subtitle;
   }
-  if (durationDays) return `${durationDays}-Day Journey`;
+  if (durationDays) return `${durationDays} Day Journey`;
   return 'Travel Itinerary';
 }
 
@@ -198,7 +198,7 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
       // Subtitle — always use short "N-Day Journey" pattern to avoid overflow
       const pit  = preview?.itinerary ?? {};
       const days = pit.durationDays ?? itinerary.durationDays;
-      const cardSubtitle = days ? `${days}-Day Journey` : 'Travel Itinerary';
+      const cardSubtitle = days ? `${days} Day Journey` : 'Travel Itinerary';
 
       // Word-wrap helper (uses current ctx.font for measurement)
       function wrapText(text, maxPx) {
@@ -517,15 +517,16 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
 
                 {/* Right: image preview + caption */}
                 <div style={{ flex: 1, minWidth: '240px' }}>
-                  {/* Image preview — square+contain when branded so the full 1080×1080 canvas is visible */}
+                  {/* Image preview — square aspect ratio when branded (1080×1080 canvas fits without letterboxing) */}
                   <div style={{
                     width: '100%',
-                    height: useBrandedCover ? '260px' : '150px',
+                    ...(useBrandedCover
+                      ? { aspectRatio: '1 / 1' }
+                      : { height: '150px' }),
                     borderRadius: '8px', overflow: 'hidden', marginBottom: '14px',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     position: 'relative',
-                    background: useBrandedCover ? '#1C1A16' : '#F4F1EC',
-                    transition: 'height 0.2s ease, background 0.2s ease',
+                    background: '#F4F1EC',
                   }}>
                     {useBrandedCover ? (
                       coverGenerating ? (
@@ -534,10 +535,10 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
                         <img
                           src={coverDataUrl}
                           alt="Branded cover"
-                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                       ) : selectedImg ? (
-                        <span style={{ fontSize: '11.5px', color: '#777' }}>Cover not generated</span>
+                        <span style={{ fontSize: '11.5px', color: '#8C8070' }}>Cover not generated</span>
                       ) : null
                     ) : selectedImg ? (
                       <img
