@@ -696,17 +696,25 @@ async function handleCallback(req, res) {
 
     // ── Step 2: fetch Instagram profile to validate the account ─────────────
     // Uses short-lived token; non-fatal if it fails — we already have user_id.
+    // Logs both id and user_id from /me since they may differ from token exchange user_id.
     console.log('[instagram:callback] step 2 — profile fetch');
     try {
       const profileRes  = await fetch(
-        `${IG_GRAPH}/me?fields=user_id,username,account_type&access_token=${encodeURIComponent(shortToken)}`
+        `${IG_GRAPH}/me?fields=id,user_id,username,account_type&access_token=${encodeURIComponent(shortToken)}`
       );
       console.log('[instagram:callback] step 2 — HTTP', profileRes.status);
       const profileData = await profileRes.json();
       if (profileData.error) {
         console.warn('[instagram:callback] step 2 — error (non-fatal):', JSON.stringify(profileData.error));
       } else {
-        console.log('[instagram:callback] step 2 — OK, username:', profileData.username, 'account_type:', profileData.account_type);
+        console.log('[instagram:callback] step 2 — OK:', {
+          meId:                    profileData.id          ?? null,
+          meUserId:                profileData.user_id     ?? null,
+          username:                profileData.username    ?? null,
+          accountType:             profileData.account_type ?? null,
+          tokenExchangeUserId:     igAccountId,
+          meIdMatchesExchangeId:   String(profileData.id ?? '') === igAccountId,
+        });
       }
     } catch (profileErr) {
       console.warn('[instagram:callback] step 2 — fetch threw (non-fatal):', profileErr.message);
@@ -774,6 +782,42 @@ async function handleCallback(req, res) {
       console.warn('[instagram:callback] step 3b — scope check failed (non-fatal):', scopeErr.message);
     }
 
+    // ── Step 3c: confirm correct account ID via /me with the long-lived token ─
+    // The user_id from the token exchange (step 1) and the id from /me may differ
+    // in the Business Login flow. The /media endpoint requires the id returned by /me.
+    console.log('[instagram:callback] step 3c — confirming account ID via GET /me (long-lived token)');
+    let confirmedAccountId = igAccountId; // fallback: user_id from token exchange
+    try {
+      const meRes  = await fetch(
+        `${IG_GRAPH}/me?fields=id,user_id,username,account_type&access_token=${encodeURIComponent(accessToken)}`
+      );
+      const meData = await meRes.json();
+      if (meData.error) {
+        console.warn('[instagram:callback] step 3c — /me error (will save token exchange user_id):', JSON.stringify(meData.error));
+      } else {
+        console.log('[instagram:callback] step 3c — /me response:', {
+          meId:                      meData.id          ?? null,
+          meUserId:                  meData.user_id     ?? null,
+          username:                  meData.username    ?? null,
+          accountType:               meData.account_type ?? null,
+          tokenExchangeUserId:       igAccountId,
+          meIdMatchesExchangeId:     String(meData.id      ?? '') === igAccountId,
+          meUserIdMatchesExchangeId: String(meData.user_id ?? '') === igAccountId,
+        });
+        if (meData.id) {
+          confirmedAccountId = String(meData.id);
+          if (confirmedAccountId !== igAccountId) {
+            console.warn('[instagram:callback] step 3c — MISMATCH: token exchange user_id', igAccountId,
+              '!= /me id', confirmedAccountId, '— will save /me id as instagram_account_id');
+          } else {
+            console.log('[instagram:callback] step 3c — /me id matches token exchange user_id — OK');
+          }
+        }
+      }
+    } catch (meErr) {
+      console.warn('[instagram:callback] step 3c — /me threw (will save token exchange user_id):', meErr.message);
+    }
+
     // ── Step 4: persist on Creator row ───────────────────────────────────────
     // Column names are snake_case as defined in the DB migration.
 
@@ -805,7 +849,7 @@ async function handleCallback(req, res) {
              instagram_access_token     = $2,
              instagram_token_expires_at = $3
          WHERE id = $4`,
-        [igAccountId, accessToken, expiresAt, creatorId]
+        [confirmedAccountId, accessToken, expiresAt, creatorId]
       );
     } catch (dbErr) {
       console.error('[instagram:callback] step 4 — DB error:', dbErr.message);
@@ -823,15 +867,18 @@ async function handleCallback(req, res) {
     const newTokenHash = crypto.createHash('sha256').update(accessToken).digest('hex').slice(0, 12);
     console.log('[instagram:callback] token update summary:', {
       creatorId,
-      igAccountId,
-      previousTokenHash: oldTokenHash,
+      tokenExchangeUserId:  igAccountId,
+      confirmedAccountId,
+      accountIdCorrected:   confirmedAccountId !== igAccountId,
+      savedAccountId:       confirmedAccountId,
+      previousTokenHash:    oldTokenHash,
       newTokenHash,
-      tokenChanged:      oldTokenHash !== newTokenHash,
-      expiresAt:         expiresAt?.toISOString() ?? null,
-      rowsUpdated:       updateResult.rowCount,
+      tokenChanged:         oldTokenHash !== newTokenHash,
+      expiresAt:            expiresAt?.toISOString() ?? null,
+      rowsUpdated:          updateResult.rowCount,
     });
 
-    console.log(`[instagram:callback] connected igAccountId=${igAccountId} creatorId=${creatorId}`);
+    console.log(`[instagram:callback] connected savedAccountId=${confirmedAccountId} creatorId=${creatorId}`);
     return res.redirect(302, `/admin/creators/${creatorId}?instagram=connected`);
 
   } catch (err) {
@@ -989,13 +1036,46 @@ async function handlePublish(pool, body, ctx) {
     throw Object.assign(new Error('Forbidden'), { status: 403 });
   }
 
+  // ── /me check: confirm the correct account ID for the /media endpoint ────────
+  // The stored instagram_account_id may differ from what /me returns as id.
+  // The /media URL path must use the id returned by GET /me for the current token.
+  let publishAccountId = igAccountId;
+  try {
+    const meRes  = await fetch(
+      `${IG_GRAPH}/me?fields=id,user_id,username,account_type&access_token=${encodeURIComponent(accessToken)}`
+    );
+    const meData = await meRes.json();
+    const meId   = meData.id ? String(meData.id) : null;
+    if (meData.error) {
+      console.warn('[instagram:publish] /me pre-publish check failed (using stored ID):', JSON.stringify(meData.error));
+    } else {
+      console.log('[instagram:publish] /me pre-publish check:', {
+        storedIgAccountId:     igAccountId,
+        meId,
+        meUserId:              meData.user_id      ?? null,
+        username:              meData.username     ?? null,
+        accountType:           meData.account_type ?? null,
+        storedMatchesMeId:     meId === igAccountId,
+        storedMatchesMeUserId: String(meData.user_id ?? '') === igAccountId,
+        usingId:               meId ?? igAccountId,
+      });
+      if (meId && meId !== igAccountId) {
+        console.warn('[instagram:publish] MISMATCH: stored', igAccountId, '!= /me id', meId,
+          '— using /me id for media container URL');
+        publishAccountId = meId;
+      }
+    }
+  } catch (meErr) {
+    console.warn('[instagram:publish] /me pre-publish check threw (using stored ID):', meErr.message);
+  }
+
   let instagramPostId = null;
   let status          = 'failed';
   let errorMessage    = null;
 
   try {
-    // 1. Create media container
-    const containerRes  = await fetch(`${IG_GRAPH}/${igAccountId}/media`, {
+    // 1. Create media container — uses publishAccountId (from /me, corrected if needed)
+    const containerRes  = await fetch(`${IG_GRAPH}/${publishAccountId}/media`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ image_url: imageUrl, caption, access_token: accessToken }),
@@ -1003,6 +1083,7 @@ async function handlePublish(pool, body, ctx) {
     const containerData = await containerRes.json();
     if (containerData.error || !containerData.id) {
       console.error('[instagram:publish] media container creation failed:', {
+        publishAccountId,
         httpStatus:    containerRes.status,
         metaCode:      containerData.error?.code,
         metaType:      containerData.error?.type,
@@ -1013,10 +1094,10 @@ async function handlePublish(pool, body, ctx) {
       });
       throw new Error(metaErrorMessage(containerData.error, 'Media container creation'));
     }
-    console.log('[instagram:publish] media container created:', { containerId: containerData.id });
+    console.log('[instagram:publish] media container created:', { containerId: containerData.id, publishAccountId });
 
     // 2. Publish the container
-    const publishRes  = await fetch(`${IG_GRAPH}/${igAccountId}/media_publish`, {
+    const publishRes  = await fetch(`${IG_GRAPH}/${publishAccountId}/media_publish`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ creation_id: containerData.id, access_token: accessToken }),
@@ -1054,7 +1135,7 @@ async function handlePublish(pool, body, ctx) {
     `INSERT INTO "InstagramPublishLog"
        ("id", "itineraryId", "creatorId", "instagramAccountId", "instagramPostId", "caption", "status", "errorMessage")
      VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7)`,
-    [itineraryId, creatorId, igAccountId, instagramPostId, caption.slice(0, 2000), status, errorMessage]
+    [itineraryId, creatorId, publishAccountId, instagramPostId, caption.slice(0, 2000), status, errorMessage]
   );
 
   if (status === 'failed') {
