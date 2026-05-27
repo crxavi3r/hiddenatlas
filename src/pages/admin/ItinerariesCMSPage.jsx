@@ -118,8 +118,9 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
 
   useEffect(() => {
     // Already published — nothing to preview, show published state immediately.
+    // Source of truth: Itinerary.instagramPermalink (preferred) or instagramPostId.
     // If permalink is missing, try to fetch it retroactively.
-    if (itinerary.instagramPostId) {
+    if (itinerary.instagramPermalink || itinerary.instagramPostId) {
       setLoading(false);
       if (!itinerary.instagramPermalink) {
         setPermalinkFetching(true);
@@ -392,7 +393,7 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
   // Guarded by a ref so it only fires once per unique image URL, preventing
   // re-generation on every render and enabling retry after a failure.
   useEffect(() => {
-    if (itinerary.instagramPostId) return; // already published — skip generation
+    if (itinerary.instagramPermalink || itinerary.instagramPostId) return; // already published — skip generation
     if (!useBrandedCover || !selectedImgUrl) return;
     if (generatedForRef.current === selectedImgUrl) return;
     generatedForRef.current = selectedImgUrl;
@@ -442,8 +443,8 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
 
         {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-          {itinerary.instagramPostId && !result?.success ? (
-            /* ── Already published screen ── */
+          {(itinerary.instagramPermalink || itinerary.instagramPostId) && !result?.success ? (
+            /* ── Already published screen — source of truth: Itinerary table fields only ── */
             <div style={{ textAlign: 'center', padding: '32px 20px' }}>
               <div style={{
                 width: '52px', height: '52px', borderRadius: '50%',
@@ -729,7 +730,7 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
         </div>
 
         {/* Footer */}
-        {itinerary.instagramPostId && !result?.success ? (
+        {(itinerary.instagramPermalink || itinerary.instagramPostId) && !result?.success ? (
           <div style={{
             padding: '14px 20px', borderTop: '1px solid #F4F1EC',
             display: 'flex', justifyContent: 'flex-end', background: '#FAFAF8',
@@ -1366,8 +1367,8 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
                     {it.creator_instagram_account_id && (
                       <button
                         onClick={() => onInstagramPublish(it)}
-                        style={{ ...iconBtn, color: it.instagramPostId ? '#1B6B65' : '#E1306C' }}
-                        title={it.instagramPostId ? 'View Instagram post' : 'Publish to Instagram'}
+                        style={{ ...iconBtn, color: (it.instagramPermalink || it.instagramPostId) ? '#1B6B65' : '#E1306C' }}
+                        title={(it.instagramPermalink || it.instagramPostId) ? 'View Instagram post' : 'Publish to Instagram'}
                       >
                         <Instagram size={13} />
                       </button>
@@ -1439,7 +1440,7 @@ function MobileList({ items, onEdit, onPreview, onTogglePublish, onDuplicate, on
               },
               ...(it.creator_instagram_account_id ? [{
                 icon: Instagram, label: 'Instagram', action: () => onInstagramPublish(it),
-                color: it.instagramPostId ? '#1B6B65' : '#E1306C',
+                color: (it.instagramPermalink || it.instagramPostId) ? '#1B6B65' : '#E1306C',
               }] : []),
               ...(canDelete(it) ? [{ icon: Trash2, label: 'Delete', action: () => onDelete(it), color: '#C0392B' }] : []),
             ].map(({ icon: Icon, label, action, color }) => (

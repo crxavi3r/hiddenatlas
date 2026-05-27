@@ -315,6 +315,12 @@ async function handleList(pool, ctx) {
 
   const { rows } = await pool.query(`
     SELECT i.*,
+           -- Explicit aliases guarantee camelCase names even if the table has lowercase
+           -- duplicate columns (e.g. instagrampostid created without quotes).
+           -- The Itinerary table is the sole source of truth for Instagram publish state.
+           i."instagramPostId"      AS "instagramPostId",
+           i."instagramPermalink"   AS "instagramPermalink",
+           i."instagramPublishedAt" AS "instagramPublishedAt",
            COUNT(p.id)::int AS purchase_count,
            c.name                   AS creator_name,
            c.slug                   AS creator_slug,
@@ -326,8 +332,31 @@ async function handleList(pool, ctx) {
     GROUP BY i.id, c.name, c.slug, c.instagram_account_id
     ORDER BY i."createdAt" DESC
   `, params);
-  const itineraries = rows.filter(r => !r.isCollection);
-  const collections = rows.filter(r => r.isCollection);
+
+  // Normalize Instagram fields: if the DB returned lowercase variants alongside
+  // the camelCase ones, the explicit aliases above win, but also apply a JS-level
+  // remap as a belt-and-suspenders guard. Source of truth: Itinerary table only.
+  const normalized = rows.map(r => {
+    const instagramPostId      = r.instagramPostId      ?? r.instagrampostid      ?? null;
+    const instagramPermalink   = r.instagramPermalink   ?? r.instagrampermalink   ?? null;
+    const instagramPublishedAt = r.instagramPublishedAt ?? r.instagrampublishedat ?? null;
+
+    if (r.creator_instagram_account_id) {
+      console.log('[itinerary-cms:list] instagram state:', {
+        id:                    r.id,
+        slug:                  r.slug,
+        instagramPostId,
+        instagramPermalink,
+        instagramPublishedAt,
+        rawInstagramKeys:      Object.keys(r).filter(k => k.toLowerCase().startsWith('instagram')),
+      });
+    }
+
+    return { ...r, instagramPostId, instagramPermalink, instagramPublishedAt };
+  });
+
+  const itineraries = normalized.filter(r => !r.isCollection);
+  const collections = normalized.filter(r => r.isCollection);
   return { itineraries, collections };
 }
 
