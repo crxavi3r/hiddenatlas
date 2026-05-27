@@ -1216,11 +1216,11 @@ async function handlePublish(pool, body, ctx) {
     }
   }
 
-  // 6. Always log the attempt — permalink included when available
+  // 6. Always log the attempt — instagramPermalink included when available
   await pool.query(
     `INSERT INTO "InstagramPublishLog"
        ("id", "itineraryId", "creatorId", "instagramAccountId", "instagramPostId",
-        "caption", "status", "errorMessage", "permalink")
+        "caption", "status", "errorMessage", "instagramPermalink")
      VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7, $8)`,
     [itineraryId, creatorId, publishAccountId, instagramPostId,
      caption.slice(0, 2000), status, errorMessage, permalink]
@@ -1261,7 +1261,7 @@ async function handleLogs(pool, itineraryId, ctx) {
 
   const { rows } = await pool.query(
     `SELECT id, "itineraryId", "creatorId", "instagramAccountId", "instagramPostId",
-            status, "errorMessage", "publishedAt"
+            "instagramPermalink", status, "errorMessage", "publishedAt"
      FROM "InstagramPublishLog"
      WHERE "itineraryId" = $1
      ORDER BY "publishedAt" DESC
@@ -1320,10 +1320,10 @@ async function handleFetchPermalink(pool, itineraryId, ctx) {
     );
     // Back-fill the most recent audit log row that's missing the permalink
     await pool.query(
-      `UPDATE "InstagramPublishLog" SET "permalink" = $1
+      `UPDATE "InstagramPublishLog" SET "instagramPermalink" = $1
        WHERE id = (
          SELECT id FROM "InstagramPublishLog"
-         WHERE "itineraryId" = $2 AND "instagramPostId" = $3 AND "permalink" IS NULL
+         WHERE "itineraryId" = $2 AND "instagramPostId" = $3 AND "instagramPermalink" IS NULL
          ORDER BY "publishedAt" DESC LIMIT 1
        )`,
       [permalink, itineraryId, it.instagramPostId]

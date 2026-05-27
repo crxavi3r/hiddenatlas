@@ -14,6 +14,6 @@ CREATE INDEX IF NOT EXISTS "Itinerary_instagramPublishedAt_idx"
   ON "Itinerary"("instagramPublishedAt")
   WHERE "instagramPublishedAt" IS NOT NULL;
 
--- permalink on the audit log so each row is self-contained
+-- instagramPermalink on the audit log so each row is self-contained
 ALTER TABLE "InstagramPublishLog"
-  ADD COLUMN IF NOT EXISTS "permalink" TEXT;
+  ADD COLUMN IF NOT EXISTS "instagramPermalink" TEXT;

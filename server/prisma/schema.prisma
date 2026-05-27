@@ -358,7 +358,7 @@ model InstagramPublishLog {
   caption             String?
   status              String   @default("pending")
   errorMessage        String?
-  permalink           String?
+  instagramPermalink  String?
   publishedAt         DateTime @default(now())
 
   itinerary Itinerary @relation(fields: [itineraryId], references: [id])
