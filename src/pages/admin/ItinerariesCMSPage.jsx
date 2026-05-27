@@ -106,7 +106,7 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
   const [publishing,     setPublishing]     = useState(false);
   const [result,         setResult]         = useState(null);   // { success, permalink } | { error }
   const [previewError,   setPreviewError]   = useState(null);
-  const [useBrandedCover, setUseBrandedCover] = useState(false);
+  const [useBrandedCover, setUseBrandedCover] = useState(true);
   const [coverDataUrl,   setCoverDataUrl]   = useState(null);
   const [coverGenerating, setCoverGenerating] = useState(false);
   const textareaRef = useRef(null);

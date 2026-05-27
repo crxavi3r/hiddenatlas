@@ -152,20 +152,50 @@ function metaErrorMessage(err, context) {
 // Returns true if the token has instagram_business_content_publish scope.
 // Best-effort — returns true on any network/parse failure so we don't block.
 async function hasPublishPermission(accessToken) {
+  if (!accessToken) {
+    console.warn('[instagram:hasPublishPermission] called with no token — returning true (cannot check)');
+    return true;
+  }
+  const tokenHash = crypto.createHash('sha256').update(accessToken).digest('hex').slice(0, 12);
   try {
     const appId     = igClientId();
     const appSecret = igClientSecret();
-    if (!appId || !appSecret) return true; // can't check without app credentials
+    if (!appId || !appSecret) {
+      console.warn('[instagram:hasPublishPermission] app credentials missing — skipping check, tokenHash:', tokenHash);
+      return true;
+    }
 
     const url = `https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(`${appId}|${appSecret}`)}`;
     const res  = await fetch(url);
-    if (!res.ok) return true;
-    const json = await res.json();
-    const scopes = json?.data?.scopes ?? [];
-    if (!Array.isArray(scopes) || scopes.length === 0) return true; // can't determine
-    return scopes.includes('instagram_business_content_publish');
-  } catch {
-    return true; // non-fatal
+    console.log('[instagram:hasPublishPermission] debug_token HTTP', res.status, '— tokenHash:', tokenHash);
+    if (!res.ok) {
+      console.warn('[instagram:hasPublishPermission] debug_token non-OK — returning true');
+      return true;
+    }
+    const json   = await res.json();
+    const data   = json?.data ?? {};
+    const scopes = data.scopes ?? [];
+    console.log('[instagram:hasPublishPermission] debug_token response:', {
+      tokenHash,
+      isValid:    data.is_valid ?? null,
+      appId:      data.app_id   ?? null,
+      scopes,
+      hasBasic:   scopes.includes('instagram_business_basic'),
+      hasPublish: scopes.includes('instagram_business_content_publish'),
+      error:      json?.error   ?? null,
+    });
+    if (!Array.isArray(scopes) || scopes.length === 0) {
+      console.warn('[instagram:hasPublishPermission] no scopes in response — returning true (cannot determine)');
+      return true;
+    }
+    const result = scopes.includes('instagram_business_content_publish');
+    if (!result) {
+      console.warn('[instagram:hasPublishPermission] instagram_business_content_publish NOT found in scopes — tokenHash:', tokenHash);
+    }
+    return result;
+  } catch (err) {
+    console.warn('[instagram:hasPublishPermission] check threw (non-fatal):', err.message);
+    return true;
   }
 }
 
@@ -740,6 +770,26 @@ async function handleCallback(req, res) {
 
     // ── Step 4: persist on Creator row ───────────────────────────────────────
     // Column names are snake_case as defined in the DB migration.
+
+    // Pre-update: capture existing token hash for comparison (never log raw token)
+    let oldTokenHash = null;
+    try {
+      const { rows: prevRows } = await pool.query(
+        `SELECT instagram_access_token FROM "Creator" WHERE id = $1 LIMIT 1`, [creatorId]
+      );
+      const prevToken = prevRows[0]?.instagram_access_token;
+      oldTokenHash = prevToken
+        ? crypto.createHash('sha256').update(prevToken).digest('hex').slice(0, 12)
+        : null;
+      console.log('[instagram:callback] pre-update token:', {
+        creatorId,
+        previousTokenExists: Boolean(prevToken),
+        previousTokenHash:   oldTokenHash,
+      });
+    } catch (preCheckErr) {
+      console.warn('[instagram:callback] pre-update token check failed (non-fatal):', preCheckErr.message);
+    }
+
     console.log('[instagram:callback] step 4 — DB update, creatorId:', creatorId);
     let updateResult;
     try {
@@ -762,6 +812,19 @@ async function handleCallback(req, res) {
     }
 
     console.log('[instagram:callback] step 4 — OK, rows updated:', updateResult.rowCount);
+
+    // Post-update token summary (hash only — no raw token exposed)
+    const newTokenHash = crypto.createHash('sha256').update(accessToken).digest('hex').slice(0, 12);
+    console.log('[instagram:callback] token update summary:', {
+      creatorId,
+      igAccountId,
+      previousTokenHash: oldTokenHash,
+      newTokenHash,
+      tokenChanged:      oldTokenHash !== newTokenHash,
+      expiresAt:         expiresAt?.toISOString() ?? null,
+      rowsUpdated:       updateResult.rowCount,
+    });
+
     console.log(`[instagram:callback] connected igAccountId=${igAccountId} creatorId=${creatorId}`);
     return res.redirect(302, `/admin/creators/${creatorId}?instagram=connected`);
 
@@ -781,7 +844,7 @@ async function handlePreview(pool, itineraryId, ctx) {
     `SELECT i.id, i.title, i.slug, i.subtitle, i.description, i.excerpt, i."coverImage",
             i.destination, i.country, i."durationDays",
             c.id AS creator_id, c.instagram_account_id,
-            c.instagram_token_expires_at
+            c.instagram_access_token, c.instagram_token_expires_at
      FROM "Itinerary" i
      LEFT JOIN "Creator" c ON c.id = i.creator_id
      WHERE i.id = $1 LIMIT 1`,
@@ -801,6 +864,19 @@ async function handlePreview(pool, itineraryId, ctx) {
       { status: 400 }
     );
   }
+
+  const previewTokenHash = it.instagram_access_token
+    ? crypto.createHash('sha256').update(it.instagram_access_token).digest('hex').slice(0, 12)
+    : null;
+  console.log('[instagram:preview] diagnostic:', {
+    itineraryId,
+    creatorId:          it.creator_id           ?? null,
+    igAccountId:        it.instagram_account_id ?? null,
+    tokenExists:        Boolean(it.instagram_access_token),
+    tokenHash:          previewTokenHash,
+    tokenExpiresAt:     it.instagram_token_expires_at ?? null,
+    validationEndpoint: 'https://graph.facebook.com/debug_token',
+  });
 
   // Collect available images: hero coverImage first, then active gallery assets
   const { rows: assets } = await pool.query(
@@ -878,6 +954,18 @@ async function handlePublish(pool, body, ctx) {
       { status: 400 }
     );
   }
+
+  const publishTokenHash = crypto.createHash('sha256').update(accessToken).digest('hex').slice(0, 12);
+  console.log('[instagram:publish] diagnostic:', {
+    itineraryId,
+    creatorId,
+    igAccountId,
+    tokenExists:          true,
+    tokenHash:            publishTokenHash,
+    mediaEndpoint:        `${IG_GRAPH}/${igAccountId}/media`,
+    publishEndpoint:      `${IG_GRAPH}/${igAccountId}/media_publish`,
+    usingInstagramGraph:  IG_GRAPH.startsWith('https://graph.instagram.com/'),
+  });
 
   // Ownership: designers can only publish their own itineraries
   if (!ctx.isAdmin && ctx.creatorId !== creatorId) {
