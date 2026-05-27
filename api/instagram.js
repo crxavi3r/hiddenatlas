@@ -35,6 +35,7 @@
 
 import pg             from 'pg';
 import crypto         from 'crypto';
+import { put as blobPut } from '@vercel/blob';
 import { resolveUserCtx } from './_lib/resolveUserCtx.js';
 
 const { Pool } = pg;
@@ -42,9 +43,7 @@ const { Pool } = pg;
 const IG_AUTH  = 'https://www.instagram.com';        // OAuth dialog (browser redirect)
 const IG_TOKEN = 'https://api.instagram.com';        // token exchange (server-to-server)
 const IG_GRAPH = 'https://graph.instagram.com/v25.0'; // Graph API calls
-// Scopes: instagram_business_basic only until instagram_business_content_publish
-// is confirmed added in Meta Dashboard → Instagram API → required permissions.
-const REQUIRED_SCOPES = 'instagram_business_basic';
+const REQUIRED_SCOPES = 'instagram_business_basic,instagram_business_content_publish';
 
 // ── Env accessors — prefer INSTAGRAM_CLIENT_* with INSTAGRAM_APP_* as legacy fallback ─
 function igClientId()     { return process.env.INSTAGRAM_CLIENT_ID     ?? process.env.INSTAGRAM_APP_ID; }
@@ -121,20 +120,67 @@ async function verifyUser(authHeader, pool) {
 }
 
 // ── Meta API error formatter ──────────────────────────────────────────────────
-// Translates Meta error codes into actionable admin messages.
+// Translates Meta error codes and message patterns into actionable admin messages.
 function metaErrorMessage(err, context) {
   if (!err) return `${context} failed`;
-  const code = err.code;
+  const code    = err.code;
+  const message = (err.message ?? '').toLowerCase();
+
+  // String-pattern check first — catches "missing permissions" errors that surface
+  // as code 100 with specific message text rather than code 10/200.
+  if (
+    message.includes('missing permissions') ||
+    message.includes('unsupported post request') ||
+    (message.includes('does not exist') && message.includes('permissions'))
+  ) {
+    return 'Instagram publishing permission is missing. Please reconnect Instagram.';
+  }
+
   if (code === 10 || code === 200) {
-    return `${context}: permission denied — ensure 'instagram_business_basic' and 'instagram_business_content_publish' are approved in the Meta app, and that the account is an Instagram Business or Creator account.`;
+    return 'Instagram publishing permission is missing. Please reconnect Instagram.';
   }
   if (code === 190) {
-    return `${context}: access token invalid or expired — reconnect Instagram in Creator settings.`;
+    return `${context}: access token invalid or expired. Reconnect Instagram in Creator settings.`;
   }
   if (code === 24) {
     return `${context}: the account has hit the publishing rate limit (100 posts per 24 hours).`;
   }
   return `${context}: ${err.message ?? JSON.stringify(err)}`;
+}
+
+// ── Permission check via Meta debug_token API ─────────────────────────────────
+// Returns true if the token has instagram_business_content_publish scope.
+// Best-effort — returns true on any network/parse failure so we don't block.
+async function hasPublishPermission(accessToken) {
+  try {
+    const appId     = igClientId();
+    const appSecret = igClientSecret();
+    if (!appId || !appSecret) return true; // can't check without app credentials
+
+    const url = `https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(`${appId}|${appSecret}`)}`;
+    const res  = await fetch(url);
+    if (!res.ok) return true;
+    const json = await res.json();
+    const scopes = json?.data?.scopes ?? [];
+    if (!Array.isArray(scopes) || scopes.length === 0) return true; // can't determine
+    return scopes.includes('instagram_business_content_publish');
+  } catch {
+    return true; // non-fatal
+  }
+}
+
+// ── Caption text sanitizer ────────────────────────────────────────────────────
+// Replaces em/en dashes with natural punctuation so source copy never carries
+// "X — Y" patterns into captions.
+function sanitize(text) {
+  if (!text) return text;
+  // " — word" or " – word" → ". Word" (start a new sentence)
+  let out = text.replace(/ [—–] ([a-zA-Z])/g, (_, c) => `. ${c.toUpperCase()}`);
+  // Any remaining " — " or " – " spacing variants → ". "
+  out = out.replace(/ [—–] /g, '. ');
+  // Bare em/en dashes with no surrounding space → comma
+  out = out.replace(/[—–]/g, ', ');
+  return out;
 }
 
 // ── Caption generator ─────────────────────────────────────────────────────────
@@ -144,181 +190,226 @@ function generateCaption(it) {
   const titleLower   = (it.title       || '').toLowerCase();
   const destLower    = (it.destination || '').toLowerCase();
   const countryLower = (it.country     || '').toLowerCase();
-  const combinedText = `${titleLower} ${destLower} ${countryLower}`;
-
-  // ── Emoji ───────────────────────────────────────────────────────────────────
-  function pickEmoji() {
-    if (combinedText.match(/wine|tuscany|chianti|bordeaux|champagne|rioja/)) return '🍷';
-    if (combinedText.match(/japan|kyoto|tokyo|osaka/))                       return '🌸';
-    if (combinedText.match(/ocean|coast|beach|island|azores|maldiv|caribbean|sicil/)) return '🌊';
-    if (combinedText.match(/mountain|alps|highland|norway|iceland|dolomit/)) return '⛰️';
-    if (combinedText.match(/scotland|castle|england|ireland|britain/))       return '🏰';
-    if (combinedText.match(/greece|mediterran|santorini|crete/))             return '⛵';
-    if (combinedText.match(/morocco|marrakech|sahara|desert/))               return '🕌';
-    if (combinedText.match(/paris|france|provence|normandy|brittany/))       return '🥐';
-    if (combinedText.match(/spain|andalusia|camino|barcelona|madrid/))       return '🌞';
-    if (combinedText.match(/road.?trip|drive|driving|route/))                return '🚗';
-    return '✈️';
-  }
+  const excerptText  = (it.excerpt     || '').trim();
+  const descText     = (it.description || '').trim();
+  const fullCtx      = [titleLower, destLower, countryLower, excerptText, descText].join(' ').toLowerCase();
 
   // ── Description paragraphs ──────────────────────────────────────────────────
-  // Trim whitespace, normalise internal spacing, then split on blank lines.
-  // If only one block, try to split at the first full stop after 120 chars
-  // so we get two natural paragraphs without ever truncating.
   function parseDescParagraphs(raw) {
     if (!raw) return [];
     const clean = raw.replace(/[ \t]+/g, ' ').trim();
-
-    // Try explicit paragraph breaks first
     const blocks = clean.split(/\n{2,}/).map(b => b.replace(/\n/g, ' ').trim()).filter(Boolean);
     if (blocks.length >= 2) return blocks;
-
-    // Single block: split at the first sentence boundary after 100 chars
-    if (clean.length > 150) {
-      const cutIdx = clean.slice(100).search(/(?<=[.!?])\s+[A-Z]/);
+    // Single block — split at first sentence boundary after 120 chars
+    if (clean.length > 160) {
+      const tail   = clean.slice(120);
+      const cutIdx = tail.search(/(?<=[.!?])\s+[A-Z]/);
       if (cutIdx !== -1) {
-        const pivot = 100 + cutIdx + 1;
+        const pivot = 120 + cutIdx + 1;
         return [clean.slice(0, pivot).trim(), clean.slice(pivot).trim()].filter(Boolean);
       }
     }
     return [clean];
   }
 
-  const excerptText = (it.excerpt     || '').trim();
-  const descText    = (it.description || '').trim();
-
-  let hookPara  = '';
-  let routePara = '';
-
+  let hookPara = '', routePara = '', discoveryPara = '';
   if (excerptText && descText && excerptText !== descText) {
-    // Separate hook (excerpt) + route (description)
-    hookPara  = excerptText;
-    routePara = descText;
+    hookPara = excerptText;
+    const dp = parseDescParagraphs(descText);
+    routePara     = dp[0] || '';
+    discoveryPara = dp[1] || '';
   } else {
-    // Single source: parse into two paragraphs
-    const [p1, p2] = parseDescParagraphs(excerptText || descText);
-    hookPara  = p1 || '';
-    routePara = p2 || '';
+    const dp = parseDescParagraphs(excerptText || descText);
+    hookPara      = dp[0] || '';
+    routePara     = dp[1] || '';
+    discoveryPara = dp[2] || '';
   }
+
+  // Strip em/en dashes from source copy before it enters the caption
+  hookPara      = sanitize(hookPara);
+  routePara     = sanitize(routePara);
+  discoveryPara = sanitize(discoveryPara);
+
+  // ── Sub-destination extraction (from title) ──────────────────────────────────
+  // "Normandy, Brittany & Loire" → ["Normandy", "Brittany", "Loire"]
+  function extractSubDests() {
+    const clean = (it.title || '')
+      .replace(/\s+in\s+\d+\s+days?/i, '')
+      .replace(/\s+\d+[-\s]?days?\b/i, '')
+      .trim();
+    return clean
+      .split(/[,&]|\band\b/i)
+      .map(s => s.replace(/[^a-zA-Z0-9\s]/g, '').trim())
+      .filter(s => s.length >= 3 && /^[A-Z]/.test(s));
+  }
+  const subDests = extractSubDests();
 
   // ── Bullets ─────────────────────────────────────────────────────────────────
   function buildBullets() {
-    const ctx = `${combinedText} ${(excerptText + ' ' + descText).toLowerCase()}`;
-
     const bullets = [];
-    const dest    = it.destination || 'travel';
 
-    bullets.push(`A clear day-by-day ${dest} route`);
-
-    if (ctx.match(/wine|vineyard|winery|cellar|tasting/)) {
-      bullets.push('Scenic drives through classic wine landscapes');
-    } else if (ctx.match(/coast|ocean|beach|island/)) {
-      bullets.push('Coastal drives and beach stop recommendations');
-    } else if (ctx.match(/mountain|highland|alps|hiking|trail/)) {
-      bullets.push('Scenic mountain and highland routes');
+    // Bullet 1 — places/towns
+    if (subDests.length >= 3) {
+      bullets.push(`The most beautiful places in ${subDests[0]} and ${subDests[1]}`);
+    } else if (subDests.length === 2) {
+      bullets.push(`The highlights of ${subDests[0]} and ${subDests[1]}`);
+    } else if (fullCtx.match(/beach|coast|ocean|atlantic|mediterranean/)) {
+      bullets.push('The best beaches and coastal highlights');
+    } else if (fullCtx.match(/wine|vineyard|winery/)) {
+      bullets.push('The top wine regions and vineyard stops');
+    } else if (fullCtx.match(/town|village|medieval|ancient/)) {
+      bullets.push('The most beautiful historic towns and villages');
     } else {
-      bullets.push('Scenic routes and highlights along the way');
+      const dest = it.destination || it.country || 'the region';
+      bullets.push(`The most unmissable places in ${dest}`);
     }
 
-    if (ctx.match(/town|village|medieval|historic|old.?town|ancient/)) {
-      bullets.push('Historic towns and countryside stops');
-    } else if (ctx.match(/city|capital|urban|neighbourhood/)) {
-      bullets.push('City neighbourhoods and local highlights');
+    // Bullet 2 — landmark or signature experience
+    if (fullCtx.match(/mont.?saint.?michel|mont saint/i)) {
+      bullets.push('Mont-Saint-Michel and the Atlantic coast');
+    } else if (fullCtx.match(/château|chateau/i) && fullCtx.match(/loire/i)) {
+      bullets.push('The most iconic castles of the Loire Valley');
+    } else if (fullCtx.match(/wine|vineyard|chianti|bordeaux|rioja/)) {
+      bullets.push('Scenic drives through classic wine country');
+    } else if (fullCtx.match(/cliff|gorge|canyon|fjord|waterfall/)) {
+      bullets.push('Dramatic landscapes, cliffs and natural highlights');
+    } else if (fullCtx.match(/temple|shrine|ryokan|japan/i)) {
+      bullets.push('Temples, shrines and traditional Japanese culture');
+    } else if (fullCtx.match(/mountain|highland|peak|summit|alps/)) {
+      bullets.push('Mountain scenery, scenic passes and highland stops');
+    } else if (fullCtx.match(/castle|fortress|fortif/)) {
+      bullets.push('Historic castles, fortified towns and heritage sites');
+    } else if (fullCtx.match(/island|archipelago/)) {
+      bullets.push('Island routes, hidden coves and local villages');
     } else {
-      bullets.push('Key stops and places worth lingering in');
+      bullets.push('Scenic routes and standout places to stop');
     }
 
-    if (ctx.match(/wine|vineyard|cellar|tasting/)) {
-      bullets.push('Restaurant and winery recommendations');
-    } else if (ctx.match(/restaurant|dining|food|cuisine|gastro/)) {
-      bullets.push('Restaurant and dining recommendations');
+    // Bullet 3 — history or culture
+    if (fullCtx.match(/d.?day|omaha|wwii|war.?history|normandy.*beach/i)) {
+      bullets.push('History, heritage sites and D-Day memorials');
+    } else if (fullCtx.match(/abbey|cathedral|monastery|convent/)) {
+      bullets.push('Abbeys, cathedrals and cultural landmarks');
+    } else if (fullCtx.match(/market|local.?food|gastronomy|street food/)) {
+      bullets.push('Local markets, food culture and regional specialties');
+    } else if (fullCtx.match(/museum|gallery|art|architecture/)) {
+      bullets.push('Art, museums and cultural highlights');
+    } else if (fullCtx.match(/onsen|spa|thermal|wellness/)) {
+      bullets.push('Traditional onsen and slow travel moments');
     } else {
-      bullets.push('Where to eat and what to try locally');
+      bullets.push('Local culture, history and hidden highlights');
     }
 
-    bullets.push('Practical notes to make the trip easier');
+    // Bullet 4 — always practical
+    bullets.push('Restaurant and travel recommendations');
 
-    return bullets.slice(0, 5);
+    // Bullet 5 — always structural
+    bullets.push('A clear day-by-day travel plan');
+
+    return bullets;
   }
 
   // ── Hashtags ─────────────────────────────────────────────────────────────────
   function buildHashtags() {
-    const tags = ['#HiddenAtlas'];
+    const tags = new Set(['#HiddenAtlas']);
 
-    // Destination tag
-    if (it.destination) {
-      tags.push(`#${it.destination.replace(/[^a-zA-Z0-9]/g, '')}`);
+    // Sub-destination tags (remapped where needed)
+    const REMAP = { Loire: 'LoireValley', Sardinia: 'Sardinia', Sicilia: 'Sicily' };
+    for (const sub of subDests.slice(0, 4)) {
+      const slug = sub.split(/\s+/).map(w => w[0].toUpperCase() + w.slice(1).toLowerCase()).join('');
+      tags.add('#' + (REMAP[slug] || REMAP[sub] || slug));
     }
 
-    // Destination-specific bundles (ordered most-specific first)
-    if (destLower.includes('tuscany') || titleLower.includes('tuscany')) {
-      tags.push('#TuscanyRoadTrip', '#ItalyTravel', '#WineTravel');
-    } else if (destLower.includes('northern england') || titleLower.includes('northern england')) {
-      tags.push('#NorthernEngland', '#EnglandRoadTrip', '#UKTravel', '#Yorkshire');
-    } else if (destLower.includes('puglia') || titleLower.includes('puglia')) {
-      tags.push('#PugliaTravel', '#ItalyRoadTrip', '#ItalyTravel');
-    } else if (destLower.includes('normandy') || titleLower.includes('normandy') || destLower.includes('brittany')) {
-      tags.push('#NormandyTravel', '#FranceRoadTrip', '#FranceTravel');
-    } else if (countryLower === 'japan' || destLower.includes('japan')) {
-      tags.push('#JapanTravel', '#VisitJapan');
-    } else if (countryLower === 'morocco' || destLower.includes('morocco')) {
-      tags.push('#MoroccoTravel', '#VisitMorocco');
-    } else {
-      // Generic country road-trip tag
-      if (it.country) {
-        const c = it.country.replace(/\s+/g, '');
-        tags.push(`#${c}Travel`);
-        if (combinedText.match(/road.?trip|drive|driving|route/)) tags.push(`#${c}RoadTrip`);
-      }
+    // If the title is a single-destination title, also tag the destination field
+    if (subDests.length <= 1 && it.destination) {
+      const dt = it.destination.replace(/[^a-zA-Z0-9\s]/g, '').trim().split(/\s+/)
+        .map(w => w[0].toUpperCase() + w.slice(1)).join('');
+      if (dt.length >= 3) tags.add('#' + dt);
     }
 
-    // Thematic tags
-    const ctx = `${combinedText} ${(excerptText + ' ' + descText).toLowerCase()}`;
-    if (ctx.match(/wine|vineyard/))           tags.push('#WineTravel');
-    if (ctx.match(/road.?trip|drive|driving/)) tags.push('#RoadTrip');
+    // Landmark-specific tags derived from content
+    if (fullCtx.match(/mont.?saint.?michel|mont saint/i))               tags.add('#MontSaintMichel');
+    if (fullCtx.match(/château|chateau/i) && fullCtx.match(/loire/i))  tags.add('#LoireCastles');
+    if (fullCtx.match(/amalfi/i))                                        tags.add('#AmalfiCoast');
 
-    tags.push('#TravelItinerary');
-
-    if (ctx.match(/luxury|boutique|high.?end|premium/)) {
-      tags.push('#LuxuryTravel');
-    } else {
-      tags.push('#SlowTravel');
+    // Country-level road trip tag
+    if (it.country) {
+      const c = it.country.replace(/\s+/g, '');
+      if (fullCtx.match(/road.?trip|drive|driving|route|journey/)) tags.add(`#${c}RoadTrip`);
+      else if (![...tags].some(t => t.toLowerCase().includes(c.toLowerCase()))) tags.add(`#${c}Travel`);
     }
 
-    return [...new Set(tags)];
+    // Thematic
+    if (fullCtx.match(/wine|vineyard/))     tags.add('#WineTravel');
+    if (fullCtx.match(/road.?trip|drive/))  tags.add('#RoadTrip');
+
+    tags.add('#TravelItinerary');
+    tags.add('#TravelPlanning');
+    tags.add('#SlowTravel');
+
+    return [...tags];
   }
 
+  // ── Bridge paragraph ─────────────────────────────────────────────────────────
+  const destPhrase = it.destination || it.country || 'this destination';
+  const bridge = (() => {
+    if (fullCtx.match(/road.?trip|drive|driving/))
+      return `We put this itinerary together for anyone planning a road trip through ${destPhrase}.`;
+    if (fullCtx.match(/wine|vineyard|chianti|bordeaux/))
+      return `We put together a free guide for anyone wanting to take the slow route through ${destPhrase}.`;
+    if (fullCtx.match(/history|heritage|d.?day|wwii|castle|abbey|cathedral/))
+      return `We put together a free itinerary to help you explore the history and landscapes of ${destPhrase}.`;
+    return `We put together a free guide to help you discover ${destPhrase} at a slower pace.`;
+  })();
+
   // ── Assemble ─────────────────────────────────────────────────────────────────
-  const emoji    = pickEmoji();
   const bullets  = buildBullets();
   const hashtags = buildHashtags();
-  const location = [it.destination, it.country].filter(Boolean).join(', ');
   const slug     = it.slug
     || (it.title || '').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   const url = slug ? `${SITE_BASE}/itineraries/${slug}` : null;
 
-  const parts = [`${emoji} ${it.title}`, ''];
+  const parts = [];
 
-  if (hookPara)  { parts.push(hookPara,  ''); }
-  if (routePara) { parts.push(routePara, ''); }
+  if (hookPara)      { parts.push(hookPara,      ''); }
+  if (routePara)     { parts.push(routePara,     ''); }
+  if (discoveryPara) { parts.push(discoveryPara, ''); }
 
-  parts.push("Inside the guide you'll find:", '');
+  parts.push(bridge, '');
+  parts.push('What\'s inside:', '');
   bullets.forEach(b => parts.push(`• ${b}`));
   parts.push('');
 
-  if (location)       parts.push(`📍 ${location}`);
-  if (it.durationDays) parts.push(`🗓 ${it.durationDays} days`);
-  parts.push('');
-
   if (url) {
-    parts.push('Explore the full itinerary:');
+    parts.push('👉 Full itinerary:');
     parts.push(url);
     parts.push('');
   }
 
+  parts.push('Save this for your trip planning. ✈️', '');
   parts.push(hashtags.join(' '));
 
   return parts.join('\n');
+}
+
+// ── Cover card subtitle helper (shared with preview response) ─────────────────
+function deriveCardSubtitle(subtitle, durationDays) {
+  if (subtitle) {
+    // Strip leading "4 Day " / "7-Day " prefix to get the category label
+    const stripped = subtitle.replace(/^\d+[-\s]?days?\s+/i, '').trim();
+    return stripped || subtitle;
+  }
+  if (durationDays) return `${durationDays}-Day Journey`;
+  return 'Travel Itinerary';
+}
+
+// ── Card title (strip duration suffix for clean cover text) ──────────────────
+function deriveCardTitle(title) {
+  return (title || '')
+    .replace(/\s+in\s+\d+\s+days?/i, '')
+    .replace(/\s+\d+[-\s]?days?\b/i, '')
+    .toUpperCase()
+    .trim();
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -351,14 +442,19 @@ export default async function handler(req, res) {
         const ctx = await verifyUser(req.headers.authorization, pool);
         return res.json(await handleLogs(pool, req.query.id, ctx));
       }
+      if (action === 'proxy-image') {
+        await verifyUser(req.headers.authorization, pool);
+        return handleProxyImage(req, res);
+      }
       return res.status(400).json({ error: 'Unknown GET action' });
     }
 
     if (req.method === 'POST') {
       const ctx  = await verifyUser(req.headers.authorization, pool);
       const body = req.body ?? {};
-      if (action === 'publish')    return res.json(await handlePublish(pool, body, ctx));
-      if (action === 'disconnect') return res.json(await handleDisconnect(pool, body, ctx));
+      if (action === 'publish')      return res.json(await handlePublish(pool, body, ctx));
+      if (action === 'disconnect')   return res.json(await handleDisconnect(pool, body, ctx));
+      if (action === 'upload-cover') return res.json(await handleUploadCover(body, ctx));
       return res.status(400).json({ error: 'Unknown POST action' });
     }
 
@@ -628,7 +724,7 @@ async function handlePreview(pool, itineraryId, ctx) {
   if (!itineraryId) throw Object.assign(new Error('id is required'), { status: 400 });
 
   const { rows } = await pool.query(
-    `SELECT i.id, i.title, i.slug, i.description, i.excerpt, i."coverImage",
+    `SELECT i.id, i.title, i.slug, i.subtitle, i.description, i.excerpt, i."coverImage",
             i.destination, i.country, i."durationDays",
             c.id AS creator_id, c.instagram_account_id,
             c.instagram_token_expires_at
@@ -684,11 +780,21 @@ async function handlePreview(pool, itineraryId, ctx) {
     return null;
   })();
 
+  // Check publish permission via Meta debug_token — best-effort, non-blocking
+  const canPublish = await hasPublishPermission(it.instagram_access_token);
+  const permissionWarning = canPublish
+    ? null
+    : 'Instagram is connected, but publishing permission is missing. Please reconnect Instagram.';
+
   return {
     caption:   generateCaption(it),
     images,
-    itinerary: { id: it.id, title: it.title, destination: it.destination, country: it.country },
+    itinerary: {
+      id: it.id, title: it.title, subtitle: it.subtitle,
+      destination: it.destination, country: it.country, durationDays: it.durationDays,
+    },
     tokenWarning,
+    permissionWarning,
   };
 }
 
@@ -828,4 +934,59 @@ async function handleLogs(pool, itineraryId, ctx) {
     [itineraryId]
   );
   return { logs: rows };
+}
+
+// ── GET proxy-image ───────────────────────────────────────────────────────────
+// Proxies an external image to avoid canvas CORS restrictions.
+// Blocks RFC-1918 / loopback addresses.
+async function handleProxyImage(req, res) {
+  const url = req.query.url;
+  if (!url || !/^https?:\/\//i.test(url)) {
+    throw Object.assign(new Error('url param is required and must be http(s)'), { status: 400 });
+  }
+  if (/localhost|127\.\d|10\.\d|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.0\.0\.0|::1/i.test(url)) {
+    throw Object.assign(new Error('Private/loopback URLs are not allowed'), { status: 400 });
+  }
+
+  const imgRes = await fetch(url, { headers: { 'User-Agent': 'HiddenAtlas-Proxy/1.0' } });
+  if (!imgRes.ok) {
+    throw Object.assign(new Error(`Upstream image fetch failed (${imgRes.status})`), { status: 502 });
+  }
+  const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+  if (!contentType.startsWith('image/')) {
+    throw Object.assign(new Error('URL does not point to an image'), { status: 400 });
+  }
+
+  const buffer = await imgRes.arrayBuffer();
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  return res.status(200).send(Buffer.from(buffer));
+}
+
+// ── POST upload-cover ─────────────────────────────────────────────────────────
+// Receives base64-encoded JPEG from the canvas generator and stores it in
+// Vercel Blob, returning the public URL to use as the Instagram imageUrl.
+async function handleUploadCover(body, ctx) {
+  const { base64, itineraryId } = body;
+  if (!base64)      throw Object.assign(new Error('base64 is required'),      { status: 400 });
+  if (!itineraryId) throw Object.assign(new Error('itineraryId is required'), { status: 400 });
+
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    throw Object.assign(
+      new Error('Blob storage not configured (missing BLOB_READ_WRITE_TOKEN)'),
+      { status: 503 }
+    );
+  }
+
+  const buffer   = Buffer.from(base64, 'base64');
+  const blobPath = `instagram-covers/${itineraryId}-${Date.now()}.jpg`;
+  const result   = await blobPut(blobPath, buffer, {
+    access:          'public',
+    contentType:     'image/jpeg',
+    addRandomSuffix: false,
+  });
+
+  console.log('[instagram:upload-cover]', { itineraryId, url: result.url, bytes: buffer.length });
+  return { url: result.url };
 }

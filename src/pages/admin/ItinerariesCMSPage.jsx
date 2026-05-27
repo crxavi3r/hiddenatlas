@@ -88,15 +88,29 @@ const iconBtn = {
 };
 
 // ── Instagram Publish Modal ───────────────────────────────────────────────────
+// ── Derive cover card subtitle (strip leading "4 Day " prefix) ────────────────
+function deriveCardSubtitle(subtitle, durationDays) {
+  if (subtitle) {
+    const stripped = subtitle.replace(/^\d+[-\s]?days?\s+/i, '').trim();
+    return stripped || subtitle;
+  }
+  if (durationDays) return `${durationDays}-Day Journey`;
+  return 'Travel Itinerary';
+}
+
 function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
-  const [loading,      setLoading]      = useState(true);
-  const [preview,      setPreview]      = useState(null);   // { caption, images, tokenWarning }
-  const [caption,      setCaption]      = useState('');
-  const [selectedIdx,  setSelectedIdx]  = useState(0);
-  const [publishing,   setPublishing]   = useState(false);
-  const [result,       setResult]       = useState(null);   // { success, permalink } | { error }
-  const [previewError, setPreviewError] = useState(null);
+  const [loading,        setLoading]        = useState(true);
+  const [preview,        setPreview]        = useState(null);   // { caption, images, itinerary, tokenWarning, permissionWarning }
+  const [caption,        setCaption]        = useState('');
+  const [selectedIdx,    setSelectedIdx]    = useState(0);
+  const [publishing,     setPublishing]     = useState(false);
+  const [result,         setResult]         = useState(null);   // { success, permalink } | { error }
+  const [previewError,   setPreviewError]   = useState(null);
+  const [useBrandedCover, setUseBrandedCover] = useState(false);
+  const [coverDataUrl,   setCoverDataUrl]   = useState(null);
+  const [coverGenerating, setCoverGenerating] = useState(false);
   const textareaRef = useRef(null);
+  const canvasRef   = useRef(null);
 
   useEffect(() => {
     async function fetchPreview() {
@@ -118,14 +132,156 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
     fetchPreview();
   }, [itinerary.id, getToken]);
 
+  // ── Canvas cover card generator ─────────────────────────────────────────────
+  async function generateCoverCanvas(bgImageUrl) {
+    if (!bgImageUrl || !canvasRef.current) return;
+    setCoverGenerating(true);
+    setCoverDataUrl(null);
+
+    const canvas = canvasRef.current;
+    const ctx    = canvas.getContext('2d');
+    canvas.width  = 1080;
+    canvas.height = 1080;
+
+    try {
+      // Fetch via server proxy to avoid CORS restrictions
+      const token   = await getToken();
+      const proxyRes = await fetch(
+        `/api/instagram?action=proxy-image&url=${encodeURIComponent(bgImageUrl)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!proxyRes.ok) throw new Error('Image proxy failed');
+      const blob   = await proxyRes.blob();
+      const objUrl = URL.createObjectURL(blob);
+
+      await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.max(1080 / img.naturalWidth, 1080 / img.naturalHeight);
+          const dw = img.naturalWidth  * scale;
+          const dh = img.naturalHeight * scale;
+          ctx.drawImage(img, (1080 - dw) / 2, (1080 - dh) / 2, dw, dh);
+          URL.revokeObjectURL(objUrl);
+          resolve();
+        };
+        img.onerror = () => { URL.revokeObjectURL(objUrl); reject(new Error('Image draw failed')); };
+        img.src = objUrl;
+      });
+
+      // Dark gradient overlay — covers bottom ~55%
+      const grad = ctx.createLinearGradient(0, 460, 0, 1080);
+      grad.addColorStop(0,    'rgba(0,0,0,0)');
+      grad.addColorStop(0.35, 'rgba(0,0,0,0.28)');
+      grad.addColorStop(1,    'rgba(0,0,0,0.80)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 1080, 1080);
+
+      // Ensure fonts are loaded
+      await document.fonts.load('700 76px "Playfair Display"').catch(() => null);
+      await document.fonts.load('400 36px "Playfair Display"').catch(() => null);
+
+      // Title text (uppercase, strip duration)
+      const rawTitle = (itinerary.title || '')
+        .replace(/\s+in\s+\d+\s+days?/i, '')
+        .replace(/\s+\d+[-\s]?days?\b/i, '')
+        .toUpperCase()
+        .trim();
+
+      // Subtitle
+      const pit = preview?.itinerary ?? {};
+      const cardSubtitle = deriveCardSubtitle(pit.subtitle, pit.durationDays ?? itinerary.durationDays);
+
+      // Word-wrap helper
+      function wrapText(text, maxPx) {
+        const words = text.split(' ');
+        const lines = [];
+        let line = '';
+        for (const w of words) {
+          const test = line ? `${line} ${w}` : w;
+          if (ctx.measureText(test).width > maxPx && line) { lines.push(line); line = w; }
+          else line = test;
+        }
+        if (line) lines.push(line);
+        return lines;
+      }
+
+      let fontSize = 76;
+      ctx.font = `700 ${fontSize}px "Playfair Display", Georgia, serif`;
+      let titleLines = wrapText(rawTitle, 960);
+      if (titleLines.length > 3) {
+        fontSize = 58;
+        ctx.font = `700 ${fontSize}px "Playfair Display", Georgia, serif`;
+        titleLines = wrapText(rawTitle, 960);
+      }
+
+      const lineH      = Math.round(fontSize * 1.22);
+      const subtitleSz = 36;
+      const gapSz      = 46;
+      // Position text block so bottom lands at y=1018
+      const blockH = titleLines.length * lineH + gapSz + subtitleSz;
+      let y = 1018 - blockH;
+
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'top';
+      ctx.shadowColor  = 'rgba(0,0,0,0.55)';
+      ctx.shadowBlur   = 10;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 2;
+
+      // Title
+      ctx.fillStyle = 'rgba(255,255,255,1)';
+      for (const line of titleLines) {
+        ctx.fillText(line, 540, y);
+        y += lineH;
+      }
+
+      // Subtitle
+      ctx.font      = `italic 400 ${subtitleSz}px "Playfair Display", Georgia, serif`;
+      ctx.fillStyle = 'rgba(255,255,255,0.82)';
+      ctx.shadowBlur = 6;
+      ctx.fillText(cardSubtitle, 540, y + gapSz * 0.6);
+
+      // Footer domain
+      ctx.font      = `300 22px "Inter", system-ui, sans-serif`;
+      ctx.fillStyle = 'rgba(255,255,255,0.58)';
+      ctx.shadowBlur = 0;
+      ctx.fillText('hiddenatlas.travel', 540, 1048);
+
+      setCoverDataUrl(canvas.toDataURL('image/jpeg', 0.93));
+    } catch (err) {
+      console.error('[cover-gen]', err.message);
+    } finally {
+      setCoverGenerating(false);
+    }
+  }
+
+  // Upload the generated canvas to Vercel Blob and return the public URL
+  async function uploadCoverAndGetUrl() {
+    if (!coverDataUrl) throw new Error('Cover image not generated');
+    const base64 = coverDataUrl.split(',')[1];
+    const token  = await getToken();
+    const res    = await fetch('/api/instagram?action=upload-cover', {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ base64, itineraryId: itinerary.id }),
+    });
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+    return json.url;
+  }
+
   async function handlePublish() {
     if (!preview?.images?.length) return;
-    const imageUrl = preview.images[selectedIdx]?.url;
-    if (!imageUrl) return;
-
     setPublishing(true);
     setResult(null);
     try {
+      let imageUrl;
+      if (useBrandedCover) {
+        imageUrl = await uploadCoverAndGetUrl();
+      } else {
+        imageUrl = preview.images[selectedIdx]?.url;
+        if (!imageUrl) return;
+      }
       const token = await getToken();
       const res   = await fetch('/api/instagram?action=publish', {
         method:  'POST',
@@ -146,7 +302,15 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
   const images      = preview?.images ?? [];
   const selectedImg = images[selectedIdx];
 
+  // Publish button disabled when cover is pending
+  const publishDisabled = publishing || images.length === 0 || !caption.trim()
+    || (useBrandedCover && (!coverDataUrl || coverGenerating));
+
   return (
+    <>
+      {/* Hidden canvas for cover generation */}
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
+
     <div style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 700,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
@@ -227,6 +391,16 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
           ) : (
             /* ── Edit screen ── */
             <>
+              {preview?.permissionWarning && (
+                <div style={{
+                  padding: '10px 14px', borderRadius: '7px', background: '#FEF2F2',
+                  border: '1px solid #FECACA', color: '#C0392B', fontSize: '12.5px',
+                  marginBottom: '12px', lineHeight: '1.5', fontWeight: '500',
+                }}>
+                  🚫 {preview.permissionWarning}
+                </div>
+              )}
+
               {preview?.tokenWarning && (
                 <div style={{
                   padding: '10px 14px', borderRadius: '7px', background: '#FEF9EC',
@@ -248,8 +422,8 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
               )}
 
               <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                {/* Left: image selector */}
-                <div style={{ flex: '0 0 auto', width: '200px' }}>
+                {/* Left: image selector + branded cover toggle */}
+                <div style={{ flex: '0 0 auto', width: '180px' }}>
                   <p style={{ fontSize: '11px', fontWeight: '600', color: '#6B6156', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '8px' }}>
                     Select image
                   </p>
@@ -262,9 +436,12 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
                       {images.slice(0, 8).map((img, i) => (
                         <div
                           key={i}
-                          onClick={() => setSelectedIdx(i)}
+                          onClick={() => {
+                            setSelectedIdx(i);
+                            if (useBrandedCover) generateCoverCanvas(img.url);
+                          }}
                           style={{
-                            position: 'relative', height: '80px', borderRadius: '6px',
+                            position: 'relative', height: '72px', borderRadius: '6px',
                             overflow: 'hidden', cursor: 'pointer', flexShrink: 0,
                             border: selectedIdx === i ? '2px solid #E1306C' : '2px solid transparent',
                             background: '#F4F1EC',
@@ -295,22 +472,56 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
                       ))}
                     </div>
                   )}
+
+                  {/* Branded cover toggle */}
+                  {images.length > 0 && (
+                    <label style={{
+                      display: 'flex', alignItems: 'flex-start', gap: '7px',
+                      marginTop: '14px', cursor: 'pointer',
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={useBrandedCover}
+                        onChange={e => {
+                          const checked = e.target.checked;
+                          setUseBrandedCover(checked);
+                          if (checked && selectedImg) generateCoverCanvas(selectedImg.url);
+                          else setCoverDataUrl(null);
+                        }}
+                        style={{ marginTop: '2px', accentColor: '#1B6B65', cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: '11.5px', color: '#4A433A', lineHeight: '1.4' }}>
+                        Branded cover card
+                      </span>
+                    </label>
+                  )}
                 </div>
 
-                {/* Right: caption editor */}
+                {/* Right: image preview + caption */}
                 <div style={{ flex: 1, minWidth: '240px' }}>
-                  {selectedImg && (
-                    <div style={{
-                      width: '100%', height: '140px', borderRadius: '8px',
-                      overflow: 'hidden', background: '#F4F1EC', marginBottom: '14px',
-                    }}>
+                  {/* Image preview — shows branded card when toggle is on */}
+                  <div style={{
+                    width: '100%', height: '150px', borderRadius: '8px',
+                    overflow: 'hidden', background: '#F4F1EC', marginBottom: '14px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    position: 'relative',
+                  }}>
+                    {useBrandedCover ? (
+                      coverGenerating ? (
+                        <span style={{ fontSize: '11.5px', color: '#8C8070' }}>Generating cover...</span>
+                      ) : coverDataUrl ? (
+                        <img src={coverDataUrl} alt="Branded cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : selectedImg ? (
+                        <span style={{ fontSize: '11.5px', color: '#B5AA99' }}>Cover not generated</span>
+                      ) : null
+                    ) : selectedImg ? (
                       <img
                         src={selectedImg.url}
                         alt={selectedImg.alt}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
-                    </div>
-                  )}
+                    ) : null}
+                  </div>
 
                   <p style={{ fontSize: '11px', fontWeight: '600', color: '#6B6156', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
                     Caption
@@ -321,7 +532,7 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
                     onChange={e => setCaption(e.target.value)}
                     maxLength={2200}
                     style={{
-                      width: '100%', minHeight: '180px', padding: '10px 12px',
+                      width: '100%', minHeight: '200px', padding: '10px 12px',
                       border: '1px solid #E8E3DA', borderRadius: '6px',
                       fontSize: '12.5px', color: '#1C1A16', background: 'white',
                       outline: 'none', resize: 'vertical', lineHeight: '1.6',
@@ -349,12 +560,12 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
             {!loading && !previewError && !result?.success && (
               <button
                 onClick={handlePublish}
-                disabled={publishing || images.length === 0 || !caption.trim()}
+                disabled={publishDisabled}
                 style={{
                   ...btnPrimary,
-                  background: publishing ? '#9CA3AF' : '#E1306C',
+                  background: publishDisabled ? '#9CA3AF' : '#E1306C',
                   display: 'flex', alignItems: 'center', gap: '7px',
-                  opacity: (!caption.trim() || images.length === 0) ? 0.5 : 1,
+                  opacity: publishDisabled ? 0.6 : 1,
                 }}
               >
                 <Instagram size={13} />
@@ -373,6 +584,7 @@ function InstagramModal({ itinerary, getToken, onClose, onSuccess }) {
         )}
       </div>
     </div>
+    </>
   );
 }
 
