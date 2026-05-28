@@ -2008,27 +2008,40 @@ function extractHtmlContent(html, sourceUrl) {
     .replace(/&nbsp;/g, ' ').replace(/&#\d+;/g, ' ').replace(/&[a-z]+;/g, ' ')
     .replace(/[ \t]+/g, ' ').replace(/\n{4,}/g, '\n\n\n').trim();
 
-  // Smart truncation: score paragraphs and prefer itinerary-relevant sections
-  const ITINERARY_RE = /\b(dia\s+\d|day\s+\d|roteiro|itinerar|visitar|onde\s+ficar|alojamento|miradour|praias?|dicas?|transporte|mapa|percurso|restaurante|hotel|hostel|highlights?|practical|tips?|budget|como\s+chegar|getting\s+there|accommodation|suggested|recommend)\b/i;
+  // Smart truncation: score paragraphs and prefer itinerary-relevant sections.
+  // IMPORTANT: always preserve document order — re-ordering breaks day sequences.
+  const ITINERARY_RE = /\b(dia\s+\d|day\s+\d|roteiro|itinerar|visitar|onde\s+ficar|alojamento|miradour|praias?|dicas?|transporte|mapa|percurso|restaurante|hotel|hostel|highlights?|practical|tips?|budget|como\s+chegar|getting\s+there|accommodation|suggested|recommend|atracao|attraction|stop|ponto)\b/i;
 
   if (text.length > 13000) {
     const paragraphs = text.split(/\n\n+/);
     const scored = paragraphs.map((p, i) => ({
-      p, i,
+      p,
       score: (ITINERARY_RE.test(p) ? 3 : 0)
            + (/^#{1,4} /.test(p.trimStart()) ? 2 : 0)
            + (i < 6 ? 1 : 0),
     }));
 
-    const high = scored.filter(x => x.score >= 2).sort((a, b) => a.i - b.i);
-    const rest = scored.filter(x => x.score < 2).sort((a, b) => a.i - b.i);
-
-    let result = '';
-    for (const { p } of [...high, ...rest]) {
-      if (result.length + p.length + 2 > 13000) break;
-      result += (result ? '\n\n' : '') + p;
+    // Try progressively aggressive filtering while preserving document order
+    let truncated = false;
+    for (const minScore of [0, 1]) {
+      const filtered = scored.filter(x => x.score > minScore);
+      const joined = filtered.map(x => x.p).join('\n\n');
+      if (joined.length <= 13000) {
+        text = joined + (filtered.length < scored.length ? '\n... [low-value sections removed]' : '');
+        truncated = true;
+        break;
+      }
     }
-    text = (result || text.slice(0, 13000)) + '\n... [content prioritised for itinerary sections]';
+    if (!truncated) {
+      // Still too long — take paragraphs in document order until cap
+      let result = '';
+      for (const { p, score } of scored) {
+        if (score === 0) continue; // always drop zero-value
+        if (result.length + p.length + 2 > 13000) break;
+        result += (result ? '\n\n' : '') + p;
+      }
+      text = (result || text.slice(0, 13000)) + '\n... [content truncated]';
+    }
   }
 
   console.log(`[extract-html] pageTitle="${pageTitle.slice(0,60)}" text=${text.length}chars images=${images.length}`);
@@ -2322,6 +2335,25 @@ async function callClaudeRaw(systemPrompt, messages, maxTokens = 4096) {
 //   1. Direct extraction → normalize → validate
 //   2. Repair retry if validation fails
 //   3. Partial preview built from og-metadata as final fallback
+// ── Source type detection ─────────────────────────────────────────────────────
+// Classifies the source so the AI prompt can adjust its extraction strategy.
+// Returns 'structured-itinerary' | 'travel-blog'
+function detectSourceType(sourceUrl, extractedText) {
+  const url = (sourceUrl || '').toLowerCase();
+
+  // Known structured itinerary platforms
+  if (/visitacity\.com/i.test(url))  return 'structured-itinerary';
+  if (/getyourguide\.com|musement\.com|tourscanner\.com|viator\.com/i.test(url)) return 'structured-itinerary';
+  // URL patterns strongly suggesting a structured route
+  if (/\/\d+-days?-in-|\/\d+-day-itinerary|itinerary-\d+-days?|top-attractions-in-.*-in-\d+/i.test(url)) return 'structured-itinerary';
+
+  // Detect from content: multiple explicit day headings = structured
+  const dayHeadings = (extractedText.match(/^#{1,4}\s*(day\s*\d|dia\s*\d)/gmi) || []).length;
+  if (dayHeadings >= 2) return 'structured-itinerary';
+
+  return 'travel-blog';
+}
+
 // ── AI repair helper ──────────────────────────────────────────────────────────
 // Sends an invalid/unparseable AI response back to Claude asking it to fix the
 // JSON. Used when extractJson() returns null on the primary response.
@@ -2392,58 +2424,105 @@ async function normalizeWithClaude(extracted, sourceUrl, language = 'english') {
   }
 
   const headingsCount = (extracted.text.match(/^#+\s/gm) || []).length;
-  console.log(`[normalize] start — text=${extracted.text.length}chars headings=${headingsCount} images=${extracted.images.length} source="${(sourceUrl||'').slice(0,60)}"`);
+  const sourceType = detectSourceType(sourceUrl, extracted.text);
+  console.log(`[normalize] start — text=${extracted.text.length}chars headings=${headingsCount} images=${extracted.images.length} sourceType=${sourceType} source="${(sourceUrl||'').slice(0,60)}"`);
 
   const imgList = extracted.images.slice(0, 10)
     .map((img, i) => `${i + 1}. ${img.url}${img.alt ? ` [alt: "${img.alt}"]` : ''}`)
     .join('\n');
 
   const langInstruction = language === 'portuguese'
-    ? 'Write all text fields in European Portuguese (not Brazilian). Keep slugs, category values, pace values, and bestFor values in English.'
+    ? 'Write all descriptive text fields in European Portuguese (not Brazilian). Slugs, category, pace, and bestFor values must remain in English.'
     : 'Write all text fields in English.';
 
-  const SYSTEM = `You are converting extracted travel article content into the HiddenAtlas itinerary import schema.
+  const sourceTypeBlock = sourceType === 'structured-itinerary'
+    ? `SOURCE TYPE: STRUCTURED ITINERARY
+This source already organises content day by day. Extraction strategy:
+- Preserve the exact day count, day order, and attraction sequence from the source.
+- Each day in the output must list the actual attractions from that source day, in order.
+- Day titles and descriptions must name the real attractions — do not invent a new narrative.
+- Do not merge, drop, or reorder days.
+- Extract contact details, opening times, and addresses into sections.practicalNotes if present.
+- The route map stops should reflect the actual place sequence from the source.`
+    : `SOURCE TYPE: TRAVEL BLOG / NARRATIVE
+This is a narrative article. Structure it into a logical day-by-day format:
+- Identify day groupings from explicit markers ("Day 1", dates, or natural flow).
+- Preserve all specific place names, recommendations, and practical advice.
+- Maintain the travel logic from the source when grouping stops into days.
+- Where the blog covers multiple days loosely, infer a sensible day structure.`;
 
-RULES:
-- Return valid JSON only. No markdown. No explanations. No comments. No code fences.
-- ${langInstruction}
-- Do not invent impossible facts. If a field is missing, infer a sensible draft value.
-- If unsure about a field, add a string describing it to the warnings array.
-- Keep descriptions concise and editorial. Transform content — do not copy verbatim.
-- The itinerary must be draft only (never set any published/live flag).
+  const SYSTEM = `You are a travel data extractor converting article content into the HiddenAtlas itinerary schema. Return ONLY valid JSON — no markdown, no prose, no code fences.
 
-REQUIRED FIELD RULES:
-- basics.title: required, concise, destination-focused headline
-- basics.destination: required, e.g. "Madeira, Portugal"
-- basics.durationDays: integer number of days, or null if unknown
-- basics.slug: url-safe, lowercase, ASCII hyphens only, e.g. "madeira-7-days"
-- overview.tagline: max 80 characters
-- overview.highlights: max 6 items, max 60 chars each
+CORE RULE — in strict priority order:
+1. EXTRACT: Copy factual data directly from the source. Attraction names, day sequence, durations, addresses, descriptions, images, opening hours — preserve all of it.
+2. INFER: Only fill HiddenAtlas-required fields that are absent from the source: category, pace, bestFor, tagline, insider tips, SEO fields.
+3. REWRITE: Edit text minimally for conciseness. Keep all specific facts. Never replace concrete content with generic copy.
+
+Do not invent attractions. Do not change the route sequence. Do not discard factual details.
+If the source lists 10 attraction names, they must all appear in days, highlights, or routeMap.stops.
+
+${sourceTypeBlock}
+
+BANNED PHRASES — never use any of these in any text field:
+"hidden gems", "unforgettable", "vibrant streets", "sun-drenched", "authentic culture", "charming corners",
+"immerse yourself", "picture-perfect", "magical", "timeless", "breathtaking", "bustling", "nestled",
+"off the beaten path", "discover the soul of", "rich tapestry", "local gems", "wander freely",
+"let the city reveal", "iconic" (unless site is globally famous), "must-see gems"
+
+PUNCTUATION RULES:
+- No em dashes (—) or en dashes (–) anywhere in any text field.
+- Use commas, colons, or separate sentences instead.
+- Short, clear sentences. No excessive semicolons.
+
+WRITING TONE: Direct, practical, factual. Travel editor voice. No marketing copy. No hype.
+
+${langInstruction}
+
+FIELD RULES:
+- basics.title: from the source title; concise, destination-focused
+- basics.destination: city or region from the source, e.g. "Seville, Spain"
+- basics.durationDays: integer from source or inferred from day count
+- basics.slug: lowercase, ASCII hyphens only — convert all unicode dashes to hyphens
+- overview.tagline: max 80 chars; factual one-line summary; no clichés
+- overview.description: summarise the actual route naming key attractions; 2-3 sentences; no clichés
+- overview.highlights: 4-8 items; specific named attractions or neighbourhoods from the source
 - overview.category: exactly one of [Road Trip, City Break, Island Journey, Cultural Route, Nature Escape, Luxury Escape]
 - overview.pace: exactly one of [Relaxed, Balanced, Fast]
 - overview.bestFor: subset of [Couples, Families, Friend Groups, Adventurers, Solo]
-- days: array (may be empty []); each day must have dayNumber(int), title(str), description(str), highlights(str[]), insiderTip(str), imageUrl(str|null)
-- seo.seoTitle: max 60 chars
-- seo.seoDescription: max 155 chars
-- warnings: array of strings describing uncertain/inferred/missing data
-- inferredFields: array of field name strings that were inferred from context`;
+- days[].title: name the main location or theme for that day
+- days[].description: 2-3 sentences grounded in the source attractions for that day
+- days[].highlights: specific stops from that day's source content
+- days[].insiderTip: practical tip only; e.g. "Book Cathedral tickets online in advance." No metaphors.
+- sections.routeOverview: factual narrative of the route sequence, naming key stops in order
+- sections.practicalNotes: addresses, opening hours, contact details from the source if available
+- routeMap.stops: place names in route sequence; extract from source if listed
+- warnings: note inferred fields and any data that needs verification (timings, prices)
+- inferredFields: list all field names that had no direct source evidence`;
 
   const SCHEMA_EXAMPLE = `{"basics":{"title":"","subtitle":"","destination":"","durationDays":null,"slug":"","country":"","region":""},"overview":{"tagline":"","description":"","category":"","pace":"","bestFor":[],"groupSize":"","highlights":[]},"days":[{"dayNumber":1,"title":"","description":"","highlights":[],"insiderTip":"","imageUrl":null}],"sections":{"hotels":[{"name":"","type":"","note":""}],"practicalNotes":"","faq":[{"q":"","a":""}],"routeOverview":"","whySpecial":""},"images":{"cover":null,"gallery":[],"dayImages":[]},"seo":{"seoTitle":"","seoDescription":"","canonicalSourceUrl":"${sourceUrl || ''}"},"routeMap":{"stops":[]},"warnings":[],"inferredFields":[]}`;
 
-  const USER = `Extract and structure this travel article into the HiddenAtlas itinerary import schema.
+  const USER = `Extract this ${sourceType === 'structured-itinerary' ? 'structured itinerary' : 'travel article'} into the HiddenAtlas import schema.
 
-SOURCE: ${sourceUrl || '(pasted content)'}
+SOURCE URL: ${sourceUrl || '(pasted content)'}
 PAGE TITLE: ${extracted.pageTitle || extracted.ogTitle || '(none)'}
-OG DESCRIPTION: ${extracted.ogDescription || '(none)'}
-OG IMAGE: ${extracted.ogImage || '(none)'}
+DESCRIPTION: ${extracted.ogDescription || '(none)'}
+COVER IMAGE: ${extracted.ogImage || '(none)'}
 
-ARTICLE TEXT:
+ARTICLE CONTENT:
 ${extracted.text}
 
-IMAGES (first 10):
+IMAGES (${extracted.images.length} total, first 10 listed):
 ${imgList || '(none)'}
 
-Return ONLY valid JSON matching this exact structure (all keys present, use empty string/array/null for missing optional data):
+EXTRACTION CHECKLIST:
+1. Preserve all attraction names, day titles, and route sequence from the content above.
+2. Each day entry must reflect the actual attractions in the source for that day.
+3. Highlights must be specific named places from the source, not generic descriptors.
+4. Only infer: category, pace, bestFor, tagline, insider tips, SEO fields.
+5. No em dashes, no en dashes, no banned travel phrases.
+6. Warnings should flag any fields that were inferred or that need editorial verification.
+
+Return ONLY valid JSON matching this exact structure:
 ${SCHEMA_EXAMPLE}`;
 
   // ── Attempt 1: primary extraction ─────────────────────────────────────────
