@@ -45,6 +45,30 @@ const SOURCE_TABS = [
   { key: 'paste', icon: <ClipboardPaste size={12} />, label: 'Paste Content' },
 ];
 
+const INFERRED_FIELD_LABELS = {
+  title: 'Title', subtitle: 'Subtitle', destination: 'Destination',
+  country: 'Country', durationDays: 'Duration', slug: 'Slug',
+  'basics.title': 'Title', 'basics.subtitle': 'Subtitle',
+  'basics.destination': 'Destination', 'basics.country': 'Country',
+  'basics.durationDays': 'Duration', 'basics.slug': 'Slug',
+  tagline: 'Tagline', description: 'Description', category: 'Category',
+  pace: 'Pace', bestFor: 'Best for', highlights: 'Highlights', groupSize: 'Group size',
+  'overview.tagline': 'Tagline', 'overview.description': 'Description',
+  'overview.category': 'Category', 'overview.pace': 'Pace',
+  'overview.bestFor': 'Best for', 'overview.highlights': 'Highlights',
+  'overview.groupSize': 'Group size',
+  days: 'Day structure', 'routeMap.stops': 'Route map',
+  'sections.routeOverview': 'Route overview',
+  seoTitle: 'SEO title', seoDescription: 'SEO description',
+  'seo.seoTitle': 'SEO title', 'seo.seoDescription': 'SEO description',
+};
+
+function humanizeFieldLabel(field) {
+  if (INFERRED_FIELD_LABELS[field]) return INFERRED_FIELD_LABELS[field];
+  if (/^days/.test(field)) return 'Day structure';
+  return field;
+}
+
 function InferredBadge() {
   return <span style={badge('#8C8070', '#F4F1EC')}>Inferred</span>;
 }
@@ -77,6 +101,7 @@ export default function ImportItineraryModal({ getToken, onClose }) {
   const [step,          setStep]         = useState('input');
   // source: 'url' | 'csv' | 'paste'
   const [source,        setSource]       = useState('url');
+  const [language,      setLanguage]     = useState('english');
   const [url,           setUrl]          = useState('');
   const [csvText,       setCsvText]      = useState('');
   const [pasteText,     setPasteText]    = useState('');
@@ -100,13 +125,13 @@ export default function ImportItineraryModal({ getToken, onClose }) {
 
       if (source === 'url') {
         action       = 'import-url-preview';
-        bodyPayload  = { url };
+        bodyPayload  = { url, language };
       } else if (source === 'csv') {
         action       = 'import-csv-preview';
         bodyPayload  = { csv: csvText };
       } else {
         action       = 'import-text-preview';
-        bodyPayload  = { text: pasteText, sourceUrl: pasteSourceUrl };
+        bodyPayload  = { text: pasteText, sourceUrl: pasteSourceUrl, language };
       }
 
       const res  = await fetch(`/api/itinerary-cms?action=${action}`, {
@@ -241,24 +266,48 @@ export default function ImportItineraryModal({ getToken, onClose }) {
           <div style={{ padding: '20px 24px 24px' }}>
 
             {/* Source tabs */}
-            <div style={{ display: 'flex', gap: '2px', background: '#F0EDE8', borderRadius: '7px', padding: '3px', marginBottom: '20px', width: 'fit-content' }}>
-              {SOURCE_TABS.map(({ key, icon, label }) => (
-                <button
-                  key={key}
-                  onClick={() => { setSource(key); setError(''); }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                    padding: '7px 14px', border: 'none', borderRadius: '5px', cursor: 'pointer',
-                    fontSize: '12.5px', fontWeight: source === key ? '600' : '400',
-                    background: source === key ? 'white' : 'transparent',
-                    color: source === key ? '#1C1A16' : '#6B6156',
-                    boxShadow: source === key ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
-                    transition: 'all 0.12s', whiteSpace: 'nowrap',
-                  }}
-                >
-                  {icon}{label}
-                </button>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', gap: '2px', background: '#F0EDE8', borderRadius: '7px', padding: '3px' }}>
+                {SOURCE_TABS.map(({ key, icon, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => { setSource(key); setError(''); }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                      padding: '7px 14px', border: 'none', borderRadius: '5px', cursor: 'pointer',
+                      fontSize: '12.5px', fontWeight: source === key ? '600' : '400',
+                      background: source === key ? 'white' : 'transparent',
+                      color: source === key ? '#1C1A16' : '#6B6156',
+                      boxShadow: source === key ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+                      transition: 'all 0.12s', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {icon}{label}
+                  </button>
+                ))}
+              </div>
+              {source !== 'csv' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '11.5px', color: '#6B6156', whiteSpace: 'nowrap' }}>Output language:</span>
+                  {['english', 'portuguese'].map(lang => (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => setLanguage(lang)}
+                      style={{
+                        padding: '4px 10px', border: '1px solid', borderRadius: '20px', cursor: 'pointer',
+                        fontSize: '11.5px', fontWeight: language === lang ? '600' : '400',
+                        background: language === lang ? '#1B6B65' : 'white',
+                        color: language === lang ? 'white' : '#6B6156',
+                        borderColor: language === lang ? '#1B6B65' : '#D5CEC4',
+                        transition: 'all 0.12s',
+                      }}
+                    >
+                      {lang === 'english' ? 'English' : 'Portuguese'}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* URL tab */}
@@ -514,26 +563,31 @@ export default function ImportItineraryModal({ getToken, onClose }) {
         {step === 'preview' && preview && (
           <div style={{ padding: '20px 24px 24px', overflowY: 'auto', maxHeight: 'calc(100vh - 120px)' }}>
 
-            {/* Inferred fields notice */}
-            {preview.inferredFields?.length > 0 && (
-              <div style={{ background: '#FBF8F1', border: '1px solid #E8D9B8', borderRadius: '7px', padding: '10px 14px', marginBottom: '12px', fontSize: '12px', color: '#7A6130', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: '1px' }} />
-                <span>
-                  Fields marked <InferredBadge /> were inferred by AI, not explicitly stated in the source:{' '}
-                  <strong>{preview.inferredFields.join(', ')}</strong>. Review before publishing.
-                </span>
-              </div>
-            )}
-
             {/* Warnings */}
             {preview.warnings?.length > 0 && (
               <div style={{ background: '#FDF3F3', border: '1px solid #F5C6C6', borderRadius: '7px', padding: '10px 14px', marginBottom: '12px', fontSize: '12px', color: '#8B2020' }}>
-                <strong>Warnings:</strong>
-                <ul style={{ margin: '4px 0 0', paddingLeft: '16px' }}>
-                  {preview.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                <strong style={{ display: 'block', marginBottom: '3px' }}>Review before publishing:</strong>
+                <ul style={{ margin: 0, paddingLeft: '16px', lineHeight: '1.7' }}>
+                  {preview.warnings.map((w, i) => (
+                    <li key={i}>{w.length > 130 ? w.slice(0, 130) + '…' : w}</li>
+                  ))}
                 </ul>
               </div>
             )}
+
+            {/* Inferred fields notice */}
+            {preview.inferredFields?.length > 0 && (() => {
+              const labels = [...new Set(preview.inferredFields.map(humanizeFieldLabel))];
+              return (
+                <div style={{ background: '#FBF8F1', border: '1px solid #E8D9B8', borderRadius: '7px', padding: '10px 14px', marginBottom: '12px', fontSize: '12px', color: '#7A6130', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                  <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: '1px' }} />
+                  <span>
+                    Some fields were estimated by AI and may not appear in the original source:{' '}
+                    <strong>{labels.join(', ')}</strong>. Double-check before publishing.
+                  </span>
+                </div>
+              );
+            })()}
 
             {/* Basics — key fields editable */}
             <div style={sectionCard}>
@@ -658,43 +712,21 @@ export default function ImportItineraryModal({ getToken, onClose }) {
               </CollapsibleSection>
             )}
 
-            {/* Sections */}
-            {(preview.sections?.practicalNotes || preview.sections?.hotels?.length > 0 || preview.sections?.faq?.length > 0) && (
-              <CollapsibleSection title="Sections" defaultOpen={false}>
-                {preview.sections?.routeOverview && (
-                  <div style={{ marginBottom: '10px' }}>
-                    <label style={labelStyle}>Route Overview</label>
-                    <p style={{ fontSize: '13px', color: '#1C1A16', margin: 0, lineHeight: '1.6' }}>{preview.sections.routeOverview}</p>
-                  </div>
-                )}
-                {preview.sections?.hotels?.length > 0 && (
-                  <div style={{ marginBottom: '10px' }}>
-                    <label style={labelStyle}>Accommodation ({preview.sections.hotels.length})</label>
-                    {preview.sections.hotels.map((h, i) => (
-                      <div key={i} style={{ fontSize: '12.5px', color: '#1C1A16', padding: '5px 0', borderBottom: i < preview.sections.hotels.length - 1 ? '1px solid #EDE9E2' : 'none' }}>
-                        <strong>{h.name}</strong> {h.type && <span style={{ color: '#8C8070' }}>· {h.type}</span>}
-                        {h.note && <span style={{ color: '#4A433A' }}> — {h.note}</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {preview.sections?.practicalNotes && (
-                  <div style={{ marginBottom: '10px' }}>
-                    <label style={labelStyle}>Practical Notes</label>
-                    <p style={{ fontSize: '12.5px', color: '#4A433A', margin: 0, lineHeight: '1.6' }}>{preview.sections.practicalNotes}</p>
-                  </div>
-                )}
-                {preview.sections?.faq?.length > 0 && (
-                  <div>
-                    <label style={labelStyle}>FAQ ({preview.sections.faq.length} entries)</label>
-                    {preview.sections.faq.map((f, i) => (
-                      <div key={i} style={{ marginBottom: '8px' }}>
-                        <p style={{ fontSize: '12.5px', fontWeight: '600', color: '#1C1A16', margin: '0 0 2px' }}>Q: {f.q}</p>
-                        <p style={{ fontSize: '12.5px', color: '#4A433A', margin: 0 }}>A: {f.a}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
+            {/* Route stops */}
+            {preview.routeMap?.stops?.length > 0 && (
+              <CollapsibleSection title="Route Stops" count={preview.routeMap.stops.length} defaultOpen={false}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  {preview.routeMap.stops.map((s, i) => (
+                    <div key={i} style={{ fontSize: '12.5px', color: '#1C1A16', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#1B6B65', minWidth: '20px' }}>#{s.order || i + 1}</span>
+                      <span>{s.name}</span>
+                      {s.dayNumber && <span style={{ fontSize: '11px', color: '#8C8070' }}>Day {s.dayNumber}</span>}
+                    </div>
+                  ))}
+                </div>
+                <p style={{ fontSize: '11.5px', color: '#8C8070', margin: '8px 0 0' }}>
+                  Precise coordinates can be generated by the AI route map tool after saving.
+                </p>
               </CollapsibleSection>
             )}
 
@@ -755,21 +787,43 @@ export default function ImportItineraryModal({ getToken, onClose }) {
               </CollapsibleSection>
             )}
 
-            {/* Route stops */}
-            {preview.routeMap?.stops?.length > 0 && (
-              <CollapsibleSection title="Route Stops" count={preview.routeMap.stops.length} defaultOpen={false}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                  {preview.routeMap.stops.map((s, i) => (
-                    <div key={i} style={{ fontSize: '12.5px', color: '#1C1A16', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#1B6B65', minWidth: '20px' }}>#{s.order || i + 1}</span>
-                      <span>{s.name}</span>
-                      {s.dayNumber && <span style={{ fontSize: '11px', color: '#8C8070' }}>Day {s.dayNumber}</span>}
-                    </div>
-                  ))}
-                </div>
-                <p style={{ fontSize: '11.5px', color: '#8C8070', margin: '8px 0 0' }}>
-                  Precise coordinates can be generated by the AI route map tool after saving.
-                </p>
+            {/* Sections / FAQ */}
+            {(preview.sections?.practicalNotes || preview.sections?.hotels?.length > 0 || preview.sections?.faq?.length > 0 || preview.sections?.routeOverview) && (
+              <CollapsibleSection title="Sections &amp; FAQ" defaultOpen={false}>
+                {preview.sections?.routeOverview && (
+                  <div style={{ marginBottom: '10px' }}>
+                    <label style={labelStyle}>Route Overview</label>
+                    <p style={{ fontSize: '13px', color: '#1C1A16', margin: 0, lineHeight: '1.6' }}>{preview.sections.routeOverview}</p>
+                  </div>
+                )}
+                {preview.sections?.hotels?.length > 0 && (
+                  <div style={{ marginBottom: '10px' }}>
+                    <label style={labelStyle}>Accommodation ({preview.sections.hotels.length})</label>
+                    {preview.sections.hotels.map((h, i) => (
+                      <div key={i} style={{ fontSize: '12.5px', color: '#1C1A16', padding: '5px 0', borderBottom: i < preview.sections.hotels.length - 1 ? '1px solid #EDE9E2' : 'none' }}>
+                        <strong>{h.name}</strong> {h.type && <span style={{ color: '#8C8070' }}>· {h.type}</span>}
+                        {h.note && <span style={{ color: '#4A433A' }}> — {h.note}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {preview.sections?.practicalNotes && (
+                  <div style={{ marginBottom: '10px' }}>
+                    <label style={labelStyle}>Practical Notes</label>
+                    <p style={{ fontSize: '12.5px', color: '#4A433A', margin: 0, lineHeight: '1.6' }}>{preview.sections.practicalNotes}</p>
+                  </div>
+                )}
+                {preview.sections?.faq?.length > 0 && (
+                  <div>
+                    <label style={labelStyle}>FAQ ({preview.sections.faq.length} entries)</label>
+                    {preview.sections.faq.map((f, i) => (
+                      <div key={i} style={{ marginBottom: '8px' }}>
+                        <p style={{ fontSize: '12.5px', fontWeight: '600', color: '#1C1A16', margin: '0 0 2px' }}>Q: {f.q}</p>
+                        <p style={{ fontSize: '12.5px', color: '#4A433A', margin: 0 }}>A: {f.a}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CollapsibleSection>
             )}
 

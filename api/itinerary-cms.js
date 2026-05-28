@@ -1898,6 +1898,7 @@ function buildContentFromStatic(item) {
 
 function slugify(text) {
   return String(text)
+    .replace(/[‐‑‒–—―−]/g, '-')  // unicode dashes → ASCII hyphen
     .toLowerCase()
     .replace(/[àáâãäåā]/g, 'a').replace(/[èéêëē]/g, 'e')
     .replace(/[ìíîïī]/g, 'i').replace(/[òóôõöō]/g, 'o')
@@ -2214,7 +2215,7 @@ async function callClaudeRaw(systemPrompt, messages, maxTokens = 4096) {
 //   1. Direct extraction → normalize → validate
 //   2. Repair retry if validation fails
 //   3. Partial preview built from og-metadata as final fallback
-async function normalizeWithClaude(extracted, sourceUrl) {
+async function normalizeWithClaude(extracted, sourceUrl, language = 'english') {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw Object.assign(new Error('AI service not configured — add ANTHROPIC_API_KEY to environment'), { status: 503 });
   }
@@ -2223,10 +2224,15 @@ async function normalizeWithClaude(extracted, sourceUrl) {
     .map((img, i) => `${i + 1}. ${img.url}${img.alt ? ` [alt: "${img.alt}"]` : ''}`)
     .join('\n');
 
+  const langInstruction = language === 'portuguese'
+    ? 'Write all text fields in European Portuguese (not Brazilian). Keep slugs, category values, pace values, and bestFor values in English.'
+    : 'Write all text fields in English.';
+
   const SYSTEM = `You are converting extracted travel article content into the HiddenAtlas itinerary import schema.
 
 RULES:
 - Return valid JSON only. No markdown. No explanations. No comments. No code fences.
+- ${langInstruction}
 - Do not invent impossible facts. If a field is missing, infer a sensible draft value.
 - If unsure about a field, add a string describing it to the warnings array.
 - Keep descriptions concise and editorial. Transform content — do not copy verbatim.
@@ -2456,7 +2462,7 @@ async function fetchWithStrategies(url, parsedUrl) {
 }
 
 async function handleImportUrlPreview(body) {
-  const { url } = body;
+  const { url, language = 'english' } = body;
   if (!url || typeof url !== 'string') {
     throw Object.assign(new Error('url is required'), { status: 400 });
   }
@@ -2479,14 +2485,14 @@ async function handleImportUrlPreview(body) {
   const extracted = extractHtmlContent(result.html, result.finalUrl || url);
   console.log(`[import-url] extracted — ${extracted.text.length} chars, ${extracted.images.length} images`);
 
-  const preview = await normalizeWithClaude(extracted, url);
+  const preview = await normalizeWithClaude(extracted, url, language);
   return { preview };
 }
 
 // Normalizes user-pasted article text (or lightly HTML-pasted content) using Claude.
 // Skips the HTTP fetch step — content is provided directly by the user.
 async function handleImportTextPreview(body) {
-  const { text, sourceUrl = '', title = '', destination = '' } = body;
+  const { text, sourceUrl = '', title = '', destination = '', language = 'english' } = body;
   if (!text || typeof text !== 'string' || text.trim().length < 50) {
     throw Object.assign(
       new Error('Please paste at least 50 characters of article content'),
@@ -2523,7 +2529,7 @@ async function handleImportTextPreview(body) {
     text: cleanText,
   };
 
-  const preview = await normalizeWithClaude(extracted, sourceUrl);
+  const preview = await normalizeWithClaude(extracted, sourceUrl, language);
 
   // Preserve the source URL even if Claude didn't pick it up
   if (sourceUrl) {
