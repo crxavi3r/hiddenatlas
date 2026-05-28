@@ -176,9 +176,9 @@ export default async function handler(req, res) {
       if (action === 'generate-route-map')   { await assertOwnership(pool, id, ctx); return res.json(await handleGenerateRouteMap(pool, id)); }
       if (action === 'backfill-pricing')  { adminOnly(); return res.json(await handleBackfillPricing(pool)); }
       if (action === 'resolve-images')    return res.json(await handleResolveImages(body));
-      if (action === 'import-url-preview')  return res.json(await handleImportUrlPreview(body, ctx));
-      if (action === 'import-csv-preview')  return res.json(await handleImportCsvPreview(body, ctx));
-      if (action === 'import-text-preview') return res.json(await handleImportTextPreview(body, ctx));
+      if (action === 'import-url-preview')  return res.json(await handleImportUrlPreview(body));
+      if (action === 'import-csv-preview')  return res.json(await handleImportCsvPreview(body));
+      if (action === 'import-text-preview') return res.json(await handleImportTextPreview(body));
       if (action === 'import-confirm')      return res.json(await handleImportConfirm(pool, body, ctx));
       return res.status(400).json({ error: 'Unknown POST action' });
     }
@@ -1944,7 +1944,10 @@ function parseSimpleCSV(csvString) {
 }
 
 // Strips HTML to structured text for Claude extraction.
+// Preserves heading markers, extracts lazy-load src attrs, and smart-truncates
+// to prefer itinerary-relevant sections.
 function extractHtmlContent(html, sourceUrl) {
+  // Remove noise before any processing
   let cleaned = html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -1952,8 +1955,10 @@ function extractHtmlContent(html, sourceUrl) {
     .replace(/<header[\s\S]*?<\/header>/gi, '')
     .replace(/<footer[\s\S]*?<\/footer>/gi, '')
     .replace(/<aside[\s\S]*?<\/aside>/gi, '')
+    .replace(/<form[\s\S]*?<\/form>/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '');
 
+  // Extract og: / twitter: / description meta from raw html (before noise removal)
   const getMeta = (prop) => {
     const m = html.match(new RegExp(`<meta\\s[^>]*(?:property|name)=["']${prop}["'][^>]*content=["']([^"']+)["']`, 'i'))
            || html.match(new RegExp(`<meta\\s[^>]*content=["']([^"']+)["'][^>]*(?:property|name)=["']${prop}["']`, 'i'));
@@ -1965,15 +1970,19 @@ function extractHtmlContent(html, sourceUrl) {
   const ogImage       = getMeta('og:image')        || getMeta('twitter:image');
   const pageTitle     = (html.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1]?.trim() || '';
 
-  // Extract images
+  // Extract images — also check data-src (lazy load) and data-lazy-src
   const images = [];
   const imgRegex = /<img\b[^>]+>/gi;
   let imgMatch;
   while ((imgMatch = imgRegex.exec(cleaned)) !== null) {
     const tag = imgMatch[0];
-    const src = (tag.match(/\bsrc=["']([^"']+)["']/) || [])[1] || '';
+    const src = (tag.match(/\bdata-lazy-src=["']([^"']+)["']/) || [])[1]
+             || (tag.match(/\bdata-src=["']([^"']+)["']/)      || [])[1]
+             || (tag.match(/\bsrc=["']([^"']+)["']/)           || [])[1]
+             || '';
     const alt = (tag.match(/\balt=["']([^"']*)["']/) || [])[1] || '';
-    if (src && !src.startsWith('data:')) {
+    // Skip tracker pixels, icons, avatars, logos
+    if (src && !src.startsWith('data:') && !/\b(pixel|tracking|avatar|logo|icon|1x1)\b/i.test(src)) {
       try {
         const absUrl = new URL(src, sourceUrl).href;
         if (absUrl.startsWith('http')) images.push({ url: absUrl, alt });
@@ -1981,103 +1990,208 @@ function extractHtmlContent(html, sourceUrl) {
     }
   }
 
-  // Convert to plain text
+  // Convert HTML to plain text preserving heading markers for structure
   let text = cleaned
+    .replace(/<h1[^>]*>/gi, '\n\n# ').replace(/<\/h1>/gi, '\n')
+    .replace(/<h2[^>]*>/gi, '\n\n## ').replace(/<\/h2>/gi, '\n')
+    .replace(/<h3[^>]*>/gi, '\n\n### ').replace(/<\/h3>/gi, '\n')
+    .replace(/<h4[^>]*>/gi, '\n\n#### ').replace(/<\/h4>/gi, '\n')
+    .replace(/<h5[^>]*>/gi, '\n\n##### ').replace(/<\/h5>/gi, '\n')
+    .replace(/<h6[^>]*>/gi, '\n\n###### ').replace(/<\/h6>/gi, '\n')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n\n')
-    .replace(/<\/h[1-6]>/gi, '\n\n')
-    .replace(/<\/li>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '\n- ').replace(/<\/li>/gi, '')
+    .replace(/<\/ul>/gi, '\n').replace(/<\/ol>/gi, '\n')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&nbsp;/g, ' ').replace(/&#\d+;/g, ' ').replace(/&[a-z]+;/g, ' ')
-    .replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    .replace(/[ \t]+/g, ' ').replace(/\n{4,}/g, '\n\n\n').trim();
 
-  if (text.length > 14000) text = text.slice(0, 14000) + '\n... [truncated]';
+  // Smart truncation: score paragraphs and prefer itinerary-relevant sections
+  const ITINERARY_RE = /\b(dia\s+\d|day\s+\d|roteiro|itinerar|visitar|onde\s+ficar|alojamento|miradour|praias?|dicas?|transporte|mapa|percurso|restaurante|hotel|hostel|highlights?|practical|tips?|budget|como\s+chegar|getting\s+there|accommodation|suggested|recommend)\b/i;
 
+  if (text.length > 13000) {
+    const paragraphs = text.split(/\n\n+/);
+    const scored = paragraphs.map((p, i) => ({
+      p, i,
+      score: (ITINERARY_RE.test(p) ? 3 : 0)
+           + (/^#{1,4} /.test(p.trimStart()) ? 2 : 0)
+           + (i < 6 ? 1 : 0),
+    }));
+
+    const high = scored.filter(x => x.score >= 2).sort((a, b) => a.i - b.i);
+    const rest = scored.filter(x => x.score < 2).sort((a, b) => a.i - b.i);
+
+    let result = '';
+    for (const { p } of [...high, ...rest]) {
+      if (result.length + p.length + 2 > 13000) break;
+      result += (result ? '\n\n' : '') + p;
+    }
+    text = (result || text.slice(0, 13000)) + '\n... [content prioritised for itinerary sections]';
+  }
+
+  console.log(`[extract-html] pageTitle="${pageTitle.slice(0,60)}" text=${text.length}chars images=${images.length}`);
   return { pageTitle, ogTitle, ogDescription, ogImage, images: images.slice(0, 20), text };
 }
 
-async function normalizeWithClaude(extracted, sourceUrl) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw Object.assign(new Error('AI service not configured — add ANTHROPIC_API_KEY to environment'), { status: 503 });
+// ── Defensive JSON extraction ─────────────────────────────────────────────────
+// Strips markdown fences and extracts the first complete {...} block.
+function extractJson(text) {
+  if (!text || typeof text !== 'string') return null;
+  // Strip ```json ... ``` or ``` ... ``` fences
+  let s = text.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim();
+  // Try direct parse
+  try { return JSON.parse(s); } catch { /* fall through */ }
+  // Depth-matching bracket search for first complete JSON object
+  const start = s.indexOf('{');
+  if (start === -1) return null;
+  let depth = 0, end = -1;
+  for (let i = start; i < s.length; i++) {
+    if      (s[i] === '{') depth++;
+    else if (s[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+  }
+  if (end !== -1) { try { return JSON.parse(s.slice(start, end + 1)); } catch { /* fall through */ } }
+  return null;
+}
+
+// ── Schema normalization ──────────────────────────────────────────────────────
+// Accepts any object (possibly incomplete AI output) and returns a fully-shaped
+// preview object with safe defaults for every optional field.
+function normalizePreviewData(raw, sourceUrl) {
+  if (!raw || typeof raw !== 'object') raw = {};
+
+  const str  = (v)      => (typeof v === 'string' ? v.trim() : '');
+  const num  = (v)      => (typeof v === 'number' && isFinite(v) ? Math.round(v) : null);
+  const arr  = (v)      => (Array.isArray(v) ? v : []);
+
+  const basics   = (raw.basics   && typeof raw.basics   === 'object') ? raw.basics   : {};
+  const overview = (raw.overview && typeof raw.overview === 'object') ? raw.overview : {};
+  const sections = (raw.sections && typeof raw.sections === 'object') ? raw.sections : {};
+  const images   = (raw.images   && typeof raw.images   === 'object') ? raw.images   : {};
+  const seo      = (raw.seo      && typeof raw.seo      === 'object') ? raw.seo      : {};
+  const routeMap = (raw.routeMap && typeof raw.routeMap === 'object') ? raw.routeMap : {};
+
+  const title       = str(basics.title) || str(raw.title) || '';
+  const destination = str(basics.destination) || str(raw.destination) || '';
+
+  // Try to infer duration from day array length or text
+  let durationDays = num(basics.durationDays) || num(raw.durationDays);
+  const rawDays    = arr(raw.days);
+  if (!durationDays && rawDays.length > 0) durationDays = rawDays.length;
+  if (!durationDays) {
+    const m = (str(basics.subtitle) + ' ' + str(overview.tagline)).match(/(\d+)\s*(?:days?|noites?|dias?)/i);
+    if (m) durationDays = parseInt(m[1], 10);
   }
 
-  const imgList = extracted.images.slice(0, 12)
-    .map((img, i) => `${i + 1}. ${img.url}${img.alt ? ` [alt: "${img.alt}"]` : ''}`)
-    .join('\n');
+  const slug = str(basics.slug) || slugify(title || destination || 'imported-itinerary');
 
-  const systemPrompt = `You are a travel content editor for HiddenAtlas, a premium boutique travel planning service. Extract and normalise a travel article into a structured itinerary. Be concise, editorial, and accurate. Return ONLY valid JSON, no markdown, no code fences.`;
+  // Normalize days — filter invalid entries, guarantee required keys
+  const normalizedDays = rawDays
+    .filter(d => d && typeof d === 'object')
+    .map((d, i) => ({
+      dayNumber:   typeof d.dayNumber === 'number' ? d.dayNumber : (parseInt(d.day, 10) || i + 1),
+      title:       str(d.title) || `Day ${i + 1}`,
+      description: str(d.description) || str(d.desc) || '',
+      highlights:  arr(d.highlights).filter(h => typeof h === 'string' && h.trim()),
+      insiderTip:  str(d.insiderTip) || str(d.tip) || '',
+      imageUrl:    str(d.imageUrl) || str(d.img) || null,
+    }));
 
-  const userPrompt = `Extract structured itinerary data from this travel article.
+  // Hotels — accept array of objects
+  const hotels = arr(sections.hotels)
+    .filter(h => h && str(h.name))
+    .map(h => ({ name: str(h.name), type: str(h.type) || 'Hotel', note: str(h.note) }));
 
-PAGE METADATA:
-Page title: ${extracted.pageTitle || '(none)'}
-OG title: ${extracted.ogTitle || '(none)'}
-OG description: ${extracted.ogDescription || '(none)'}
-OG image: ${extracted.ogImage || '(none)'}
-Source URL: ${sourceUrl}
+  // FAQ
+  const faq = arr(sections.faq)
+    .filter(f => f && str(f.q))
+    .map(f => ({ q: str(f.q), a: str(f.a) }));
 
-ARTICLE TEXT:
-${extracted.text}
+  // bestFor — validate against known set
+  const VALID_BEST_FOR = new Set(['Couples', 'Families', 'Friend Groups', 'Adventurers', 'Solo']);
+  const bestFor = arr(overview.bestFor).filter(b => VALID_BEST_FOR.has(b));
 
-IMAGES FOUND:
-${imgList || '(none)'}
+  // highlights — max 6
+  const highlights = arr(overview.highlights)
+    .filter(h => typeof h === 'string' && h.trim())
+    .slice(0, 6);
 
-Return this exact JSON (use empty string / empty array / null for missing data):
+  // tagline — max 80 chars
+  const tagline = str(overview.tagline).slice(0, 80);
 
-{
-  "basics": {
-    "title": "concise editorial headline, destination-focused, not the blog title",
-    "subtitle": "evocative sub-line that includes duration if known, e.g. '10 Day Road Trip'",
-    "destination": "main destination name, e.g. 'Puglia, Italy'",
-    "durationDays": null,
-    "slug": "url-safe-slug, e.g. puglia-10-day-road-trip",
-    "country": "country name",
-    "region": "region or province"
-  },
-  "overview": {
-    "tagline": "max 80 chars — evocative one-liner",
-    "description": "100-200 words editorial overview suitable for HiddenAtlas itinerary listing",
-    "category": "one of: Road Trip, City Break, Island Journey, Cultural Route, Nature Escape, Luxury Escape",
-    "pace": "one of: Relaxed, Balanced, Fast",
-    "bestFor": ["select from: Couples, Families, Friend Groups, Adventurers, Solo"],
-    "groupSize": "e.g. '2-4 people'",
-    "highlights": ["up to 6 editorial highlights, max 60 chars each"]
-  },
-  "days": [
-    {
-      "dayNumber": 1,
-      "title": "Day title",
-      "description": "2-3 sentence day description",
-      "highlights": ["short activity highlights"],
-      "insiderTip": "optional insider tip string, or empty string",
-      "imageUrl": "image URL from article clearly associated with this day, or null"
-    }
-  ],
-  "sections": {
-    "hotels": [{"name": "hotel name", "type": "Boutique Hotel", "note": "one sentence description"}],
-    "practicalNotes": "practical advice: transport, best season, visa, budget tips",
-    "faq": [{"q": "question", "a": "answer"}],
-    "routeOverview": "1-2 sentence route summary",
-    "whySpecial": "1-2 sentences on what makes this destination special"
-  },
-  "images": {
-    "cover": "best cover image URL — prefer og:image, or null",
-    "gallery": ["article image URLs, max 8"],
-    "dayImages": [{"dayNumber": 1, "url": "image url"}]
-  },
-  "seo": {
-    "seoTitle": "SEO title max 60 chars",
-    "seoDescription": "meta description max 155 chars",
-    "canonicalSourceUrl": "${sourceUrl}"
-  },
-  "routeMap": {
-    "stops": [{"order": 1, "name": "place name", "latitude": null, "longitude": null, "dayNumber": 1}]
-  },
-  "warnings": ["describe any issues: missing duration, blocked images, inferred data, etc."],
-  "inferredFields": ["field names that were inferred rather than explicitly stated, e.g. category, pace, bestFor"]
-}`;
+  // gallery — only valid http URLs, max 8
+  const gallery = arr(images.gallery)
+    .filter(u => typeof u === 'string' && u.startsWith('http'))
+    .slice(0, 8);
 
+  const cover = str(images.cover) || str(raw.coverImage) || null;
+
+  const seoTitle = (str(seo.seoTitle) || (title ? `${title} | HiddenAtlas` : '')).slice(0, 60);
+  const seoDesc  = (str(seo.seoDescription) || str(overview.description)).slice(0, 155);
+
+  return {
+    basics: {
+      title,
+      subtitle:     str(basics.subtitle),
+      destination,
+      durationDays: durationDays || null,
+      slug,
+      country:      str(basics.country),
+      region:       str(basics.region),
+    },
+    overview: { tagline, description: str(overview.description), category: str(overview.category), pace: str(overview.pace), bestFor, groupSize: str(overview.groupSize), highlights },
+    days: normalizedDays,
+    sections: { hotels, practicalNotes: str(sections.practicalNotes), faq, routeOverview: str(sections.routeOverview), whySpecial: str(sections.whySpecial) },
+    images: { cover, gallery, dayImages: arr(images.dayImages).filter(d => d && str(d.url)) },
+    seo: { seoTitle, seoDescription: seoDesc, canonicalSourceUrl: str(seo.canonicalSourceUrl) || sourceUrl || '' },
+    routeMap: {
+      stops: arr(routeMap.stops).filter(s => s && str(s.name)).map((s, i) => ({
+        order:     typeof s.order     === 'number' ? s.order     : i + 1,
+        name:      str(s.name),
+        latitude:  typeof s.latitude  === 'number' ? s.latitude  : null,
+        longitude: typeof s.longitude === 'number' ? s.longitude : null,
+        dayNumber: typeof s.dayNumber === 'number' ? s.dayNumber : null,
+      })),
+    },
+    warnings:      arr(raw.warnings).filter(w => typeof w === 'string'),
+    inferredFields: arr(raw.inferredFields).filter(f => typeof f === 'string'),
+  };
+}
+
+// ── Schema validation ─────────────────────────────────────────────────────────
+function validatePreview(preview) {
+  const errors = [];
+  if (!preview?.basics?.title)           errors.push('basics.title is required');
+  if (!preview?.basics?.destination)     errors.push('basics.destination is required');
+  if (!Array.isArray(preview?.days))     errors.push('days must be an array');
+  if (!Array.isArray(preview?.warnings)) errors.push('warnings must be an array');
+  return { valid: errors.length === 0, errors };
+}
+
+// ── Partial preview fallback ──────────────────────────────────────────────────
+// Used when AI output is unrecoverable — builds a minimal valid preview
+// from the raw HTML extraction metadata so the user can still continue.
+function buildPartialPreview(extracted, sourceUrl, validationErrors) {
+  const title = extracted.ogTitle || extracted.pageTitle || 'Imported Itinerary';
+  return {
+    basics:   { title, subtitle: '', destination: '', durationDays: null, slug: slugify(title), country: '', region: '' },
+    overview: { tagline: str_safe(extracted.ogDescription).slice(0, 80), description: str_safe(extracted.ogDescription), category: '', pace: '', bestFor: [], groupSize: '', highlights: [] },
+    days:     [],
+    sections: { hotels: [], practicalNotes: '', faq: [], routeOverview: '', whySpecial: '' },
+    images:   { cover: extracted.ogImage || null, gallery: [], dayImages: [] },
+    seo:      { seoTitle: title.slice(0, 60), seoDescription: str_safe(extracted.ogDescription).slice(0, 155), canonicalSourceUrl: sourceUrl || '' },
+    routeMap:  { stops: [] },
+    warnings: [
+      'Automatic extraction produced an incomplete structure. Please fill in the missing fields in the CMS editor.',
+      ...(validationErrors || []).slice(0, 3),
+    ],
+    inferredFields: ['title', 'description', 'days', 'highlights'],
+  };
+}
+function str_safe(v) { return typeof v === 'string' ? v.trim() : ''; }
+
+// ── Shared Claude API caller ──────────────────────────────────────────────────
+async function callClaudeRaw(systemPrompt, messages, maxTokens = 4096) {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -2085,41 +2199,136 @@ Return this exact JSON (use empty string / empty array / null for missing data):
       'anthropic-version': '2023-06-01',
       'content-type':      'application/json',
     },
-    body: JSON.stringify({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 4096,
-      system:     systemPrompt,
-      messages:   [{ role: 'user', content: userPrompt }],
-    }),
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: maxTokens, system: systemPrompt, messages }),
   });
-
   if (!response.ok) {
     const errText = await response.text().catch(() => '');
-    throw Object.assign(
-      new Error(`AI extraction failed (${response.status}): ${errText.slice(0, 200)}`),
-      { status: 502 }
-    );
+    throw Object.assign(new Error(`AI API error (${response.status}): ${errText.slice(0, 200)}`), { status: 502 });
+  }
+  const json = await response.json();
+  return (json.content?.[0]?.text || '').trim();
+}
+
+// ── Main AI normalizer ────────────────────────────────────────────────────────
+// Converts extracted content into a HiddenAtlas preview. Tries:
+//   1. Direct extraction → normalize → validate
+//   2. Repair retry if validation fails
+//   3. Partial preview built from og-metadata as final fallback
+async function normalizeWithClaude(extracted, sourceUrl) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw Object.assign(new Error('AI service not configured — add ANTHROPIC_API_KEY to environment'), { status: 503 });
   }
 
-  const aiJson  = await response.json();
-  const rawText = (aiJson.content?.[0]?.text || '').trim();
+  const imgList = extracted.images.slice(0, 10)
+    .map((img, i) => `${i + 1}. ${img.url}${img.alt ? ` [alt: "${img.alt}"]` : ''}`)
+    .join('\n');
 
-  let preview;
-  try {
-    preview = JSON.parse(rawText);
-  } catch {
-    const match = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || rawText.match(/(\{[\s\S]*\})/);
-    try { preview = match ? JSON.parse(match[1] || match[0]) : null; } catch { preview = null; }
+  const SYSTEM = `You are converting extracted travel article content into the HiddenAtlas itinerary import schema.
+
+RULES:
+- Return valid JSON only. No markdown. No explanations. No comments. No code fences.
+- Do not invent impossible facts. If a field is missing, infer a sensible draft value.
+- If unsure about a field, add a string describing it to the warnings array.
+- Keep descriptions concise and editorial. Transform content — do not copy verbatim.
+- The itinerary must be draft only (never set any published/live flag).
+
+REQUIRED FIELD RULES:
+- basics.title: required, concise, destination-focused headline
+- basics.destination: required, e.g. "Madeira, Portugal"
+- basics.durationDays: integer number of days, or null if unknown
+- basics.slug: url-safe, lowercase, hyphens, e.g. "madeira-7-days"
+- overview.tagline: max 80 characters
+- overview.highlights: max 6 items, max 60 chars each
+- overview.category: exactly one of [Road Trip, City Break, Island Journey, Cultural Route, Nature Escape, Luxury Escape]
+- overview.pace: exactly one of [Relaxed, Balanced, Fast]
+- overview.bestFor: subset of [Couples, Families, Friend Groups, Adventurers, Solo]
+- days: array (may be empty []); each day must have dayNumber(int), title(str), description(str), highlights(str[]), insiderTip(str), imageUrl(str|null)
+- seo.seoTitle: max 60 chars
+- seo.seoDescription: max 155 chars
+- warnings: array of strings describing uncertain/inferred/missing data
+- inferredFields: array of field name strings that were inferred from context`;
+
+  const USER = `Extract and structure this travel article into the HiddenAtlas itinerary import schema.
+
+SOURCE: ${sourceUrl || '(pasted content)'}
+PAGE TITLE: ${extracted.pageTitle || extracted.ogTitle || '(none)'}
+OG DESCRIPTION: ${extracted.ogDescription || '(none)'}
+OG IMAGE: ${extracted.ogImage || '(none)'}
+
+ARTICLE TEXT:
+${extracted.text}
+
+IMAGES (first 10):
+${imgList || '(none)'}
+
+Return ONLY valid JSON matching this exact structure (all keys present, use empty string/array/null for missing optional data):
+{"basics":{"title":"","subtitle":"","destination":"","durationDays":null,"slug":"","country":"","region":""},"overview":{"tagline":"","description":"","category":"","pace":"","bestFor":[],"groupSize":"","highlights":[]},"days":[{"dayNumber":1,"title":"","description":"","highlights":[],"insiderTip":"","imageUrl":null}],"sections":{"hotels":[{"name":"","type":"","note":""}],"practicalNotes":"","faq":[{"q":"","a":""}],"routeOverview":"","whySpecial":""},"images":{"cover":null,"gallery":[],"dayImages":[]},"seo":{"seoTitle":"","seoDescription":"","canonicalSourceUrl":"${sourceUrl || ''}"},"routeMap":{"stops":[]},"warnings":[],"inferredFields":[]}`;
+
+  console.log(`[normalize] start — text=${extracted.text.length}chars images=${extracted.images.length} source="${sourceUrl?.slice(0,60)}"`);
+
+  // ── Attempt 1: primary extraction ─────────────────────────────────────────
+  const rawText = await callClaudeRaw(SYSTEM, [{ role: 'user', content: USER }]);
+  console.log(`[normalize] AI response length=${rawText.length}`);
+
+  const parsed1 = extractJson(rawText);
+  if (parsed1) {
+    const normalized1 = normalizePreviewData(parsed1, sourceUrl);
+    const { valid: v1, errors: e1 } = validatePreview(normalized1);
+    if (v1) {
+      console.log('[normalize] SUCCESS attempt 1');
+      return normalized1;
+    }
+    console.log(`[normalize] attempt 1 failed validation: ${e1.join('; ')}`);
+
+    // ── Attempt 2: repair ──────────────────────────────────────────────────
+    const REPAIR_SYS = `You are a JSON repair assistant for HiddenAtlas. Return ONLY the corrected JSON object, no explanation, no markdown, no code fences.`;
+    const REPAIR_USR = `Fix this JSON so it satisfies the HiddenAtlas itinerary import schema.
+
+Validation errors to fix:
+${e1.map(e => `- ${e}`).join('\n')}
+
+JSON to fix (may be truncated if very large):
+${rawText.slice(0, 4000)}
+
+Return only the corrected JSON:`;
+
+    console.log('[normalize] attempting repair...');
+    let repaired;
+    try {
+      const repairText = await callClaudeRaw(REPAIR_SYS, [{ role: 'user', content: REPAIR_USR }], 2048);
+      repaired = extractJson(repairText);
+    } catch {
+      console.log('[normalize] repair call failed — falling back to partial preview');
+      repaired = null;
+    }
+
+    if (repaired) {
+      const normalized2 = normalizePreviewData(repaired, sourceUrl);
+      const { valid: v2, errors: e2 } = validatePreview(normalized2);
+      if (v2) {
+        console.log('[normalize] REPAIRED successfully');
+        normalized2.warnings = [...(normalized2.warnings || []), 'Some fields required AI repair — please review before publishing.'];
+        return normalized2;
+      }
+      console.log(`[normalize] repair still invalid: ${e2.join('; ')} — using partially-normalized output`);
+      // Return whatever we have from the first normalization + warnings
+      normalized1.warnings = [...(normalized1.warnings || []),
+        'We extracted the page but the structure needs review. Please fill in missing fields in the editor.',
+      ];
+      normalized1.inferredFields = [...new Set([...(normalized1.inferredFields || []), ...e1])];
+      return normalized1;
+    }
+
+    // Repair parse failed — return best effort from attempt 1
+    normalized1.warnings = [...(normalized1.warnings || []),
+      'We extracted the page but the structure needs review. Please fill in missing fields in the editor.',
+    ];
+    return normalized1;
   }
 
-  if (!preview?.basics) {
-    throw Object.assign(
-      new Error('AI returned an invalid structure — the page may be blocked or have too little content'),
-      { status: 502 }
-    );
-  }
-
-  return preview;
+  // Could not parse any JSON at all — partial preview from og-metadata
+  console.log(`[normalize] could not parse any JSON from AI response — building partial preview`);
+  return buildPartialPreview(extracted, sourceUrl, ['AI did not return parseable JSON']);
 }
 
 // Tries progressively more browser-like header sets to fetch a public page.
@@ -2246,7 +2455,7 @@ async function fetchWithStrategies(url, parsedUrl) {
   return { blocked: true, status: lastStatus };
 }
 
-async function handleImportUrlPreview(body, ctx) {
+async function handleImportUrlPreview(body) {
   const { url } = body;
   if (!url || typeof url !== 'string') {
     throw Object.assign(new Error('url is required'), { status: 400 });
@@ -2276,7 +2485,7 @@ async function handleImportUrlPreview(body, ctx) {
 
 // Normalizes user-pasted article text (or lightly HTML-pasted content) using Claude.
 // Skips the HTTP fetch step — content is provided directly by the user.
-async function handleImportTextPreview(body, ctx) {
+async function handleImportTextPreview(body) {
   const { text, sourceUrl = '', title = '', destination = '' } = body;
   if (!text || typeof text !== 'string' || text.trim().length < 50) {
     throw Object.assign(
@@ -2342,7 +2551,7 @@ async function handleImportTextPreview(body, ctx) {
   return { preview };
 }
 
-async function handleImportCsvPreview(body, ctx) {
+async function handleImportCsvPreview(body) {
   const { csv } = body;
   if (!csv || typeof csv !== 'string') {
     throw Object.assign(new Error('csv content is required'), { status: 400 });
