@@ -107,8 +107,7 @@ export default async function handler(req, res) {
                 "durationDays", type, "accessType", price,
                 "isPrivate", "isCollection", "parentId",
                 "coverImage", description, status, "isPublished",
-                content->'tripFacts'->>'groupSize' AS "tripFactsGroupSize",
-                content->'tripFacts'->>'bestFor'   AS "tripFactsBestFor"
+                content->'tripFacts' AS "tripFacts"
          FROM   "Itinerary"
          WHERE  (status = 'published' OR "isPublished" = true)
            AND  ("isPrivate" = false OR "isPrivate" IS NULL)
@@ -119,8 +118,8 @@ export default async function handler(req, res) {
       );
       return res.json({ itineraries: rows });
     } catch (err) {
+      console.error('[itineraries/list] query failed:', err.message);
       if (err.message?.includes('does not exist')) return res.json({ itineraries: [] });
-      console.error('[itineraries/list]', err.message);
       return res.status(500).json({ error: err.message });
     } finally {
       await pool.end();
