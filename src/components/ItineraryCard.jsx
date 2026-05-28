@@ -151,7 +151,7 @@ export default function ItineraryCard({ itinerary, variant = 'default', isPurcha
             )}
 
             {/* Best For pills */}
-            {bestFor && (
+            {bestFor?.length > 0 && (
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
                 {bestFor.map(label => (
                   <span key={label} style={{
@@ -174,14 +174,18 @@ export default function ItineraryCard({ itinerary, variant = 'default', isPurcha
             )}
 
             <div style={{ display: 'flex', gap: '14px', marginBottom: '18px' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12.5px', color: '#6B6156' }}>
-                <Clock size={12} strokeWidth={2} />
-                {displayDuration}
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12.5px', color: '#6B6156' }}>
-                <Users size={12} strokeWidth={2} />
-                {groupSize}
-              </span>
+              {displayDuration && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12.5px', color: '#6B6156' }}>
+                  <Clock size={12} strokeWidth={2} />
+                  {displayDuration}
+                </span>
+              )}
+              {groupSize && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12.5px', color: '#6B6156' }}>
+                  <Users size={12} strokeWidth={2} />
+                  {groupSize}
+                </span>
+              )}
             </div>
 
             {/* Footer */}
@@ -285,12 +289,16 @@ export default function ItineraryCard({ itinerary, variant = 'default', isPurcha
             </Link>
           )}
           <div style={{ display: 'flex', gap: '12px' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#6B6156' }}>
-              <Clock size={12} />{displayDuration}
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#6B6156' }}>
-              <Users size={12} />{groupSize}
-            </span>
+            {displayDuration && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#6B6156' }}>
+                <Clock size={12} />{displayDuration}
+              </span>
+            )}
+            {groupSize && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#6B6156' }}>
+                <Users size={12} />{groupSize}
+              </span>
+            )}
           </div>
         </div>
       </div>

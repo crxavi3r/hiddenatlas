@@ -3546,7 +3546,10 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
 
         {/* Trip Facts */}
         <div style={sectionCard}>
-          <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '20px' }}>Trip Facts</p>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginBottom: '20px' }}>
+            <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16' }}>Trip Facts</p>
+            <p style={{ fontSize: '11px', color: '#B5AA99' }}>Group Size and Best For appear on the public listing card.</p>
+          </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
             <Field label="Group Size">

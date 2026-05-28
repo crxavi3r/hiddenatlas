@@ -106,7 +106,9 @@ export default async function handler(req, res) {
         `SELECT slug, title, subtitle, destination, country, region,
                 "durationDays", type, "accessType", price,
                 "isPrivate", "isCollection", "parentId",
-                "coverImage", description, status, "isPublished"
+                "coverImage", description, status, "isPublished",
+                content->'tripFacts'->>'groupSize' AS "tripFactsGroupSize",
+                content->'tripFacts'->>'bestFor'   AS "tripFactsBestFor"
          FROM   "Itinerary"
          WHERE  (status = 'published' OR "isPublished" = true)
            AND  ("isPrivate" = false OR "isPrivate" IS NULL)
