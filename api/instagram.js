@@ -223,9 +223,14 @@ function sanitize(text) {
   return out;
 }
 
+function normalizeHashtags(tags) {
+  return tags.map(t => t.toLowerCase());
+}
+
 // ── Caption generator ─────────────────────────────────────────────────────────
 function generateCaption(it) {
-  const SITE_BASE = 'https://www.hiddenatlas.travel';
+  const SITE_BASE   = 'https://www.hiddenatlas.travel';
+  const isPremium   = (it.price ?? 0) > 0;
 
   const titleLower   = (it.title       || '').toLowerCase();
   const destLower    = (it.destination || '').toLowerCase();
@@ -398,8 +403,22 @@ function generateCaption(it) {
     return [...tags];
   }
 
+  // ── Premium bullets ──────────────────────────────────────────────────────────
+  // For paid itineraries the bullets describe the type of value inside, not the
+  // specific route. This protects gated content while still selling the guide.
+  function buildPremiumBullets() {
+    const region = it.destination || it.country || 'the region';
+    return [
+      `A curated route across ${region}`,
+      'Carefully planned travel days and overnight stops',
+      'Scenic, cultural and local highlights',
+      'Restaurant, stay and planning recommendations',
+      'The full day by day plan after unlocking',
+    ];
+  }
+
   // ── Assemble ─────────────────────────────────────────────────────────────────
-  const bullets  = buildBullets();
+  const bullets  = isPremium ? buildPremiumBullets() : buildBullets();
   const hashtags = buildHashtags();
   const slug     = it.slug
     || (it.title || '').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
@@ -431,9 +450,11 @@ function generateCaption(it) {
     parts.push(hookLine, '');
   }
 
-  // Source content paragraphs — max 2 to keep the caption concise
-  if (hookPara)  parts.push(hookPara,  '');
-  if (routePara) parts.push(routePara, '');
+  // Source content paragraphs.
+  // For premium itineraries only the excerpt (hookPara) is included — the
+  // description paragraphs often expose the full route sequence and gated stops.
+  if (hookPara)              parts.push(hookPara,  '');
+  if (!isPremium && routePara) parts.push(routePara, '');
 
   // Bullets
   parts.push("Inside the guide you'll find:", '');
@@ -447,7 +468,7 @@ function generateCaption(it) {
   }
 
   parts.push('Save this post for your future trip ✨', '');
-  parts.push(hashtags.join(' '));
+  parts.push(normalizeHashtags(hashtags).join(' '));
 
   return parts.join('\n');
 }
@@ -903,7 +924,7 @@ async function handlePreview(pool, itineraryId, ctx) {
 
   const { rows } = await pool.query(
     `SELECT i.id, i.title, i.slug, i.subtitle, i.description, i.excerpt, i."coverImage",
-            i.destination, i.country, i."durationDays",
+            i.destination, i.country, i."durationDays", i.price,
             c.id AS creator_id, c.instagram_account_id,
             c.instagram_access_token, c.instagram_token_expires_at
      FROM "Itinerary" i

@@ -128,7 +128,15 @@
       "Bash(xargs sed -i '' 's|https://hiddenatlas\\\\.travel|https://www.hiddenatlas.travel|g')",
       "Bash(sed -n '11,16p' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/src/hooks/useSEO.js)",
       "Bash(sed -n '1,35p' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/index.html)",
-      "Bash(kill %1)"
+      "Bash(kill %1)",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__list_pages",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__navigate_page",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_screenshot",
+      "Bash(awk '{print $9}')",
+      "Bash(awk '{print $2, $11, $12, $13}')",
+      "Bash(ps -p 16675 -o command)",
+      "WebFetch(domain:developers.facebook.com)",
+      "WebFetch(domain:stackoverflow.com)"
     ]
   }
 }
