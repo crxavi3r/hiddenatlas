@@ -2039,19 +2039,45 @@ function extractHtmlContent(html, sourceUrl) {
 // Strips markdown fences and extracts the first complete {...} block.
 function extractJson(text) {
   if (!text || typeof text !== 'string') return null;
-  // Strip ```json ... ``` or ``` ... ``` fences
-  let s = text.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '').trim();
-  // Try direct parse
+
+  // 1. Strip markdown code fences (single-line and multi-line variants)
+  let s = text
+    .replace(/^```(?:json)?\s*/gm, '')
+    .replace(/```\s*$/gm, '')
+    .trim();
+
+  // 2. Direct parse of cleaned string
   try { return JSON.parse(s); } catch { /* fall through */ }
-  // Depth-matching bracket search for first complete JSON object
+
+  // 3. String-aware depth-matching to find the outermost {} object
   const start = s.indexOf('{');
   if (start === -1) return null;
-  let depth = 0, end = -1;
+
+  let depth = 0, end = -1, inStr = false, esc = false;
   for (let i = start; i < s.length; i++) {
-    if      (s[i] === '{') depth++;
-    else if (s[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+    const ch = s[i];
+    if (esc)             { esc = false; continue; }
+    if (ch === '\\' && inStr) { esc = true; continue; }
+    if (ch === '"')      { inStr = !inStr; continue; }
+    if (inStr)           { continue; }
+    if (ch === '{')      { depth++; }
+    else if (ch === '}') { depth--; if (depth === 0) { end = i; break; } }
   }
-  if (end !== -1) { try { return JSON.parse(s.slice(start, end + 1)); } catch { /* fall through */ } }
+
+  if (end === -1) return null;
+  const candidate = s.slice(start, end + 1);
+
+  // 4. Try direct parse of extracted block
+  try { return JSON.parse(candidate); } catch { /* fall through */ }
+
+  // 5. Apply common JSON repair heuristics and retry
+  const fixed = candidate
+    .replace(/,(\s*[}\]])/g, '$1')            // trailing commas before } or ]
+    .replace(/([{,]\s*)([a-zA-Z_]\w*)\s*:/g, '$1"$2":')  // unquoted keys
+    .replace(/:\s*'([^']*)'/g, ': "$1"');     // single-quoted string values
+
+  try { return JSON.parse(fixed); } catch { /* fall through */ }
+
   return null;
 }
 
@@ -2084,7 +2110,8 @@ function normalizePreviewData(raw, sourceUrl) {
     if (m) durationDays = parseInt(m[1], 10);
   }
 
-  const slug = str(basics.slug) || slugify(title || destination || 'imported-itinerary');
+  // Always run through slugify — normalises unicode dashes even when AI provides a slug
+  const slug = slugify(str(basics.slug) || title || destination || 'imported-itinerary');
 
   // Normalize days — filter invalid entries, guarantee required keys
   const normalizedDays = rawDays
@@ -2169,24 +2196,104 @@ function validatePreview(preview) {
   return { valid: errors.length === 0, errors };
 }
 
+// ── Destination / duration inference helpers ──────────────────────────────────
+// Used by buildPartialPreview to fill obvious fields from title text.
+
+const DEST_COUNTRY_MAP = {
+  'Madeira': 'Portugal', 'Açores': 'Portugal', 'Azores': 'Portugal',
+  'Lisboa': 'Portugal', 'Lisbon': 'Portugal', 'Porto': 'Portugal',
+  'Algarve': 'Portugal', 'Sintra': 'Portugal', 'Alentejo': 'Portugal',
+  'Barcelona': 'Spain', 'Madrid': 'Spain', 'Seville': 'Spain', 'Sevilha': 'Spain',
+  'Valencia': 'Spain', 'Málaga': 'Spain', 'Malaga': 'Spain',
+  'Mallorca': 'Spain', 'Maiorca': 'Spain', 'Ibiza': 'Spain',
+  'Paris': 'France', 'Lyon': 'France', 'Nice': 'France', 'Provence': 'France',
+  'Rome': 'Italy', 'Roma': 'Italy', 'Florence': 'Italy', 'Florença': 'Italy',
+  'Venice': 'Italy', 'Veneza': 'Italy', 'Milan': 'Italy', 'Milão': 'Italy',
+  'Amalfi': 'Italy', 'Sicily': 'Italy', 'Sicília': 'Italy',
+  'Amsterdam': 'Netherlands', 'Berlin': 'Germany', 'Berlim': 'Germany',
+  'Vienna': 'Austria', 'Viena': 'Austria', 'Prague': 'Czech Republic', 'Praga': 'Czech Republic',
+  'Budapest': 'Hungary', 'Budapeste': 'Hungary',
+  'London': 'United Kingdom', 'Londres': 'United Kingdom', 'Edinburgh': 'United Kingdom',
+  'Dublin': 'Ireland',
+  'Tokyo': 'Japan', 'Tóquio': 'Japan', 'Kyoto': 'Japan', 'Osaka': 'Japan',
+  'Bangkok': 'Thailand', 'Bali': 'Indonesia', 'Singapore': 'Singapore',
+  'New York': 'United States', 'Los Angeles': 'United States', 'Miami': 'United States',
+};
+
+function inferDestinationFromText(text) {
+  if (!text) return '';
+  for (const dest of Object.keys(DEST_COUNTRY_MAP)) {
+    if (new RegExp(`\\b${dest}\\b`, 'i').test(text)) return dest;
+  }
+  return '';
+}
+
+function inferCountryFromDestination(dest) {
+  if (!dest) return '';
+  for (const [d, c] of Object.entries(DEST_COUNTRY_MAP)) {
+    if (d.toLowerCase() === dest.toLowerCase()) return c;
+  }
+  return '';
+}
+
+function inferDurationFromText(text) {
+  if (!text) return null;
+  // Match patterns like "7 dias", "5 e 7 dias", "3, 5 e 7 dias", "7 days"
+  const matches = [...text.matchAll(/(\d+)\s*(?:dias?|nights?|noites?|days?)/gi)];
+  if (!matches.length) return null;
+  const nums = matches.map(m => parseInt(m[1], 10)).filter(n => n > 0 && n <= 90);
+  if (!nums.length) return null;
+  return Math.max(...nums);  // default to the longest option
+}
+
 // ── Partial preview fallback ──────────────────────────────────────────────────
-// Used when AI output is unrecoverable — builds a minimal valid preview
-// from the raw HTML extraction metadata so the user can still continue.
+// Last resort when AI output is completely unrecoverable. Infers what it can
+// from og-metadata and title text so the user gets a useful starting point.
 function buildPartialPreview(extracted, sourceUrl, validationErrors) {
-  const title = extracted.ogTitle || extracted.pageTitle || 'Imported Itinerary';
+  const rawTitle  = extracted.ogTitle || extracted.pageTitle || 'Imported Itinerary';
+  const textHint  = rawTitle + ' ' + str_safe(extracted.ogDescription);
+  const dest      = inferDestinationFromText(textHint);
+  const country   = inferCountryFromDestination(dest);
+  const duration  = inferDurationFromText(textHint);
+
+  const warnings = [
+    'Partial import: AI could not produce a complete structure. Review all fields before publishing.',
+    ...(validationErrors || []).slice(0, 2),
+  ];
+  if (duration && textHint.match(/(\d+)\s*(?:,\s*\d+\s*)*e\s*\d+\s*(?:dias?|days?)/i)) {
+    warnings.push(`Multiple durations detected in the title. Defaulted to ${duration} days — edit if needed.`);
+  }
+
   return {
-    basics:   { title, subtitle: '', destination: '', durationDays: null, slug: slugify(title), country: '', region: '' },
-    overview: { tagline: str_safe(extracted.ogDescription).slice(0, 80), description: str_safe(extracted.ogDescription), category: '', pace: '', bestFor: [], groupSize: '', highlights: [] },
+    basics: {
+      title:        rawTitle,
+      subtitle:     '',
+      destination:  dest,
+      durationDays: duration,
+      slug:         slugify(rawTitle),
+      country,
+      region:       '',
+    },
+    overview: {
+      tagline:     str_safe(extracted.ogDescription).slice(0, 80),
+      description: str_safe(extracted.ogDescription),
+      category:    '',
+      pace:        '',
+      bestFor:     [],
+      groupSize:   '',
+      highlights:  [],
+    },
     days:     [],
     sections: { hotels: [], practicalNotes: '', faq: [], routeOverview: '', whySpecial: '' },
     images:   { cover: extracted.ogImage || null, gallery: [], dayImages: [] },
-    seo:      { seoTitle: title.slice(0, 60), seoDescription: str_safe(extracted.ogDescription).slice(0, 155), canonicalSourceUrl: sourceUrl || '' },
-    routeMap:  { stops: [] },
-    warnings: [
-      'Automatic extraction produced an incomplete structure. Please fill in the missing fields in the CMS editor.',
-      ...(validationErrors || []).slice(0, 3),
-    ],
-    inferredFields: ['title', 'description', 'days', 'highlights'],
+    seo:      {
+      seoTitle:          rawTitle.slice(0, 60),
+      seoDescription:    str_safe(extracted.ogDescription).slice(0, 155),
+      canonicalSourceUrl: sourceUrl || '',
+    },
+    routeMap: { stops: [] },
+    warnings,
+    inferredFields: ['title', 'destination', 'country', 'durationDays', 'description', 'days', 'highlights'],
   };
 }
 function str_safe(v) { return typeof v === 'string' ? v.trim() : ''; }
@@ -2215,10 +2322,77 @@ async function callClaudeRaw(systemPrompt, messages, maxTokens = 4096) {
 //   1. Direct extraction → normalize → validate
 //   2. Repair retry if validation fails
 //   3. Partial preview built from og-metadata as final fallback
+// ── AI repair helper ──────────────────────────────────────────────────────────
+// Sends an invalid/unparseable AI response back to Claude asking it to fix the
+// JSON. Used when extractJson() returns null on the primary response.
+async function repairJsonWithClaude(invalidResponse, sourceUrl, language) {
+  const SCHEMA = '{"basics":{"title":"","subtitle":"","destination":"","durationDays":null,"slug":"","country":"","region":""},"overview":{"tagline":"","description":"","category":"","pace":"","bestFor":[],"groupSize":"","highlights":[]},"days":[{"dayNumber":1,"title":"","description":"","highlights":[],"insiderTip":"","imageUrl":null}],"sections":{"hotels":[],"practicalNotes":"","faq":[],"routeOverview":"","whySpecial":""},"images":{"cover":null,"gallery":[],"dayImages":[]},"seo":{"seoTitle":"","seoDescription":"","canonicalSourceUrl":""},"routeMap":{"stops":[]},"warnings":[],"inferredFields":[]}';
+
+  const langNote = language === 'portuguese'
+    ? 'Use European Portuguese for all descriptive text fields.'
+    : 'Use English for all text fields.';
+
+  const REPAIR_SYS = 'You are a JSON repair specialist. The input below is a malformed AI response that should have been a valid JSON object. Extract the structured data and return ONLY valid JSON. No markdown fences. No prose. No explanations.';
+  const REPAIR_USR = `The following response was supposed to match this exact schema:
+${SCHEMA}
+
+Rules:
+- basics.title must not be empty (use source URL or page title as fallback)
+- basics.destination must not be empty
+- days must be an array (empty [] if unknown)
+- warnings must be an array
+- ${langNote}
+- Return ONLY the corrected JSON object
+
+Source URL: ${sourceUrl || '(unknown)'}
+
+Malformed response to repair (extract and fix all data from it):
+${invalidResponse.slice(0, 8000)}`;
+
+  try {
+    const repairText = await callClaudeRaw(REPAIR_SYS, [{ role: 'user', content: REPAIR_USR }], 6144);
+    console.log(`[repair] response length=${repairText.length}`);
+    const repaired = extractJson(repairText);
+    console.log(`[repair] parse: ${repaired ? 'SUCCESS' : 'FAILED'}`);
+    return repaired;
+  } catch (e) {
+    console.log(`[repair] call error: ${e.message}`);
+    return null;
+  }
+}
+
+// ── Patch required fields from metadata when AI leaves them blank ─────────────
+function patchRequiredFields(normalized, extracted, sourceUrl) {
+  if (!normalized.basics.title) {
+    normalized.basics.title = extracted.ogTitle || extracted.pageTitle || 'Imported Itinerary';
+  }
+  if (!normalized.basics.destination) {
+    const hint = normalized.basics.title + ' ' + str_safe(extracted.ogDescription);
+    normalized.basics.destination = inferDestinationFromText(hint) || '';
+  }
+  if (!normalized.basics.country && normalized.basics.destination) {
+    normalized.basics.country = inferCountryFromDestination(normalized.basics.destination);
+  }
+  if (!normalized.basics.durationDays) {
+    const hint = normalized.basics.title + ' ' + str_safe(extracted.ogDescription);
+    normalized.basics.durationDays = inferDurationFromText(hint);
+  }
+  if (!normalized.basics.slug) {
+    normalized.basics.slug = slugify(normalized.basics.title || normalized.basics.destination || 'imported-itinerary');
+  }
+  if (!normalized.seo?.canonicalSourceUrl && sourceUrl) {
+    if (!normalized.seo) normalized.seo = {};
+    normalized.seo.canonicalSourceUrl = sourceUrl;
+  }
+}
+
 async function normalizeWithClaude(extracted, sourceUrl, language = 'english') {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw Object.assign(new Error('AI service not configured — add ANTHROPIC_API_KEY to environment'), { status: 503 });
   }
+
+  const headingsCount = (extracted.text.match(/^#+\s/gm) || []).length;
+  console.log(`[normalize] start — text=${extracted.text.length}chars headings=${headingsCount} images=${extracted.images.length} source="${(sourceUrl||'').slice(0,60)}"`);
 
   const imgList = extracted.images.slice(0, 10)
     .map((img, i) => `${i + 1}. ${img.url}${img.alt ? ` [alt: "${img.alt}"]` : ''}`)
@@ -2242,7 +2416,7 @@ REQUIRED FIELD RULES:
 - basics.title: required, concise, destination-focused headline
 - basics.destination: required, e.g. "Madeira, Portugal"
 - basics.durationDays: integer number of days, or null if unknown
-- basics.slug: url-safe, lowercase, hyphens, e.g. "madeira-7-days"
+- basics.slug: url-safe, lowercase, ASCII hyphens only, e.g. "madeira-7-days"
 - overview.tagline: max 80 characters
 - overview.highlights: max 6 items, max 60 chars each
 - overview.category: exactly one of [Road Trip, City Break, Island Journey, Cultural Route, Nature Escape, Luxury Escape]
@@ -2253,6 +2427,8 @@ REQUIRED FIELD RULES:
 - seo.seoDescription: max 155 chars
 - warnings: array of strings describing uncertain/inferred/missing data
 - inferredFields: array of field name strings that were inferred from context`;
+
+  const SCHEMA_EXAMPLE = `{"basics":{"title":"","subtitle":"","destination":"","durationDays":null,"slug":"","country":"","region":""},"overview":{"tagline":"","description":"","category":"","pace":"","bestFor":[],"groupSize":"","highlights":[]},"days":[{"dayNumber":1,"title":"","description":"","highlights":[],"insiderTip":"","imageUrl":null}],"sections":{"hotels":[{"name":"","type":"","note":""}],"practicalNotes":"","faq":[{"q":"","a":""}],"routeOverview":"","whySpecial":""},"images":{"cover":null,"gallery":[],"dayImages":[]},"seo":{"seoTitle":"","seoDescription":"","canonicalSourceUrl":"${sourceUrl || ''}"},"routeMap":{"stops":[]},"warnings":[],"inferredFields":[]}`;
 
   const USER = `Extract and structure this travel article into the HiddenAtlas itinerary import schema.
 
@@ -2268,73 +2444,66 @@ IMAGES (first 10):
 ${imgList || '(none)'}
 
 Return ONLY valid JSON matching this exact structure (all keys present, use empty string/array/null for missing optional data):
-{"basics":{"title":"","subtitle":"","destination":"","durationDays":null,"slug":"","country":"","region":""},"overview":{"tagline":"","description":"","category":"","pace":"","bestFor":[],"groupSize":"","highlights":[]},"days":[{"dayNumber":1,"title":"","description":"","highlights":[],"insiderTip":"","imageUrl":null}],"sections":{"hotels":[{"name":"","type":"","note":""}],"practicalNotes":"","faq":[{"q":"","a":""}],"routeOverview":"","whySpecial":""},"images":{"cover":null,"gallery":[],"dayImages":[]},"seo":{"seoTitle":"","seoDescription":"","canonicalSourceUrl":"${sourceUrl || ''}"},"routeMap":{"stops":[]},"warnings":[],"inferredFields":[]}`;
-
-  console.log(`[normalize] start — text=${extracted.text.length}chars images=${extracted.images.length} source="${sourceUrl?.slice(0,60)}"`);
+${SCHEMA_EXAMPLE}`;
 
   // ── Attempt 1: primary extraction ─────────────────────────────────────────
-  const rawText = await callClaudeRaw(SYSTEM, [{ role: 'user', content: USER }]);
-  console.log(`[normalize] AI response length=${rawText.length}`);
+  // Use 8192 tokens — a 7-day itinerary with full day descriptions can exceed 4096
+  const rawText = await callClaudeRaw(SYSTEM, [{ role: 'user', content: USER }], 8192);
+  console.log(`[normalize] primary response length=${rawText.length}`);
 
-  const parsed1 = extractJson(rawText);
-  if (parsed1) {
-    const normalized1 = normalizePreviewData(parsed1, sourceUrl);
-    const { valid: v1, errors: e1 } = validatePreview(normalized1);
-    if (v1) {
-      console.log('[normalize] SUCCESS attempt 1');
-      return normalized1;
+  let parsed = extractJson(rawText);
+  console.log(`[normalize] primary parse: ${parsed ? 'SUCCESS' : 'FAILED'}`);
+
+  // ── Attempt 2: repair when primary parse fails entirely ────────────────────
+  if (!parsed) {
+    console.log('[normalize] primary JSON unparseable — attempting AI repair...');
+    parsed = await repairJsonWithClaude(rawText, sourceUrl, language);
+    if (parsed) {
+      console.log('[normalize] repair produced parseable JSON');
+    } else {
+      console.log('[normalize] repair also failed — will fall through to partial preview');
     }
-    console.log(`[normalize] attempt 1 failed validation: ${e1.join('; ')}`);
-
-    // ── Attempt 2: repair ──────────────────────────────────────────────────
-    const REPAIR_SYS = `You are a JSON repair assistant for HiddenAtlas. Return ONLY the corrected JSON object, no explanation, no markdown, no code fences.`;
-    const REPAIR_USR = `Fix this JSON so it satisfies the HiddenAtlas itinerary import schema.
-
-Validation errors to fix:
-${e1.map(e => `- ${e}`).join('\n')}
-
-JSON to fix (may be truncated if very large):
-${rawText.slice(0, 4000)}
-
-Return only the corrected JSON:`;
-
-    console.log('[normalize] attempting repair...');
-    let repaired;
-    try {
-      const repairText = await callClaudeRaw(REPAIR_SYS, [{ role: 'user', content: REPAIR_USR }], 2048);
-      repaired = extractJson(repairText);
-    } catch {
-      console.log('[normalize] repair call failed — falling back to partial preview');
-      repaired = null;
-    }
-
-    if (repaired) {
-      const normalized2 = normalizePreviewData(repaired, sourceUrl);
-      const { valid: v2, errors: e2 } = validatePreview(normalized2);
-      if (v2) {
-        console.log('[normalize] REPAIRED successfully');
-        normalized2.warnings = [...(normalized2.warnings || []), 'Some fields required AI repair — please review before publishing.'];
-        return normalized2;
-      }
-      console.log(`[normalize] repair still invalid: ${e2.join('; ')} — using partially-normalized output`);
-      // Return whatever we have from the first normalization + warnings
-      normalized1.warnings = [...(normalized1.warnings || []),
-        'We extracted the page but the structure needs review. Please fill in missing fields in the editor.',
-      ];
-      normalized1.inferredFields = [...new Set([...(normalized1.inferredFields || []), ...e1])];
-      return normalized1;
-    }
-
-    // Repair parse failed — return best effort from attempt 1
-    normalized1.warnings = [...(normalized1.warnings || []),
-      'We extracted the page but the structure needs review. Please fill in missing fields in the editor.',
-    ];
-    return normalized1;
   }
 
-  // Could not parse any JSON at all — partial preview from og-metadata
-  console.log(`[normalize] could not parse any JSON from AI response — building partial preview`);
-  return buildPartialPreview(extracted, sourceUrl, ['AI did not return parseable JSON']);
+  // ── If we have any parsed object, normalize and validate ──────────────────
+  if (parsed) {
+    const normalized = normalizePreviewData(parsed, sourceUrl);
+    const { valid, errors } = validatePreview(normalized);
+    console.log(`[normalize] schema validation: ${valid ? 'VALID' : 'INVALID — ' + errors.join('; ')}`);
+
+    if (valid) {
+      console.log('[normalize] SUCCESS — returning full preview');
+      return normalized;
+    }
+
+    // Validation failed but we have useful data — patch required fields from metadata
+    console.log('[normalize] patching missing required fields from page metadata...');
+    patchRequiredFields(normalized, extracted, sourceUrl);
+
+    const { valid: v2, errors: e2 } = validatePreview(normalized);
+    console.log(`[normalize] post-patch validation: ${v2 ? 'VALID' : 'STILL INVALID — ' + e2.join('; ')}`);
+
+    if (v2) {
+      console.log('[normalize] SUCCESS after field patching');
+      normalized.warnings = [...(normalized.warnings || []),
+        'Some fields were filled automatically from page metadata — review before publishing.',
+      ];
+      normalized.inferredFields = [...new Set([...(normalized.inferredFields || []), ...errors.map(e => e.split('.').slice(0, 2).join('.'))])];
+      return normalized;
+    }
+
+    // Still has issues but has partial content — return with warnings rather than discarding
+    console.log(`[normalize] returning partial preview with validation warnings`);
+    normalized.warnings = [...(normalized.warnings || []),
+      'Partial import: some content was recovered but the itinerary needs review before publishing.',
+    ];
+    normalized.inferredFields = [...new Set([...(normalized.inferredFields || []), ...e2.map(e => e.split('.').slice(0, 2).join('.'))])];
+    return normalized;
+  }
+
+  // ── Last resort: build from page metadata only ─────────────────────────────
+  console.log('[normalize] FALLBACK — building partial preview from page metadata only');
+  return buildPartialPreview(extracted, sourceUrl, ['AI could not produce a valid structure after repair attempts']);
 }
 
 // Tries progressively more browser-like header sets to fetch a public page.
