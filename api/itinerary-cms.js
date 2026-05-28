@@ -21,10 +21,11 @@
 // POST /api/itinerary-cms?action=save-pdf-url&id=:id      — saves blob URL + increments version after client upload
 // POST /api/itinerary-cms?action=ai-generate
 // POST /api/itinerary-cms?action=generate-route-map&id=:id — AI-extracts route stops with coordinates from itinerary content
-// GET  /api/itinerary-cms?action=import-csv-template       — returns sample CSV template for import
-// POST /api/itinerary-cms?action=import-url-preview        — fetch URL, AI-extract preview JSON (no DB write)
-// POST /api/itinerary-cms?action=import-csv-preview        — parse CSV, return preview JSON (no DB write)
-// POST /api/itinerary-cms?action=import-confirm            — create draft itinerary from preview JSON
+// GET  /api/itinerary-cms?action=import-csv-template        — returns sample CSV template for import
+// POST /api/itinerary-cms?action=import-url-preview         — fetch URL (multi-strategy), AI-extract preview JSON; returns { blocked:true } on 403
+// POST /api/itinerary-cms?action=import-csv-preview         — parse CSV, return preview JSON (no DB write)
+// POST /api/itinerary-cms?action=import-text-preview        — normalise user-pasted article text via AI (no fetch, no DB write)
+// POST /api/itinerary-cms?action=import-confirm             — create draft itinerary from preview JSON
 
 import pg                         from 'pg';
 import { resolveUserCtx }         from './_lib/resolveUserCtx.js';
@@ -175,9 +176,10 @@ export default async function handler(req, res) {
       if (action === 'generate-route-map')   { await assertOwnership(pool, id, ctx); return res.json(await handleGenerateRouteMap(pool, id)); }
       if (action === 'backfill-pricing')  { adminOnly(); return res.json(await handleBackfillPricing(pool)); }
       if (action === 'resolve-images')    return res.json(await handleResolveImages(body));
-      if (action === 'import-url-preview') return res.json(await handleImportUrlPreview(body, ctx));
-      if (action === 'import-csv-preview') return res.json(await handleImportCsvPreview(body, ctx));
-      if (action === 'import-confirm')     return res.json(await handleImportConfirm(pool, body, ctx));
+      if (action === 'import-url-preview')  return res.json(await handleImportUrlPreview(body, ctx));
+      if (action === 'import-csv-preview')  return res.json(await handleImportCsvPreview(body, ctx));
+      if (action === 'import-text-preview') return res.json(await handleImportTextPreview(body, ctx));
+      if (action === 'import-confirm')      return res.json(await handleImportConfirm(pool, body, ctx));
       return res.status(400).json({ error: 'Unknown POST action' });
     }
   } catch (err) {
@@ -2120,6 +2122,130 @@ Return this exact JSON (use empty string / empty array / null for missing data):
   return preview;
 }
 
+// Tries progressively more browser-like header sets to fetch a public page.
+// Returns { html, strategy, finalUrl } on success, { blocked, status } on 403/401.
+async function fetchWithStrategies(url, parsedUrl) {
+  const origin = `${parsedUrl.protocol}//${parsedUrl.host}`;
+
+  const strategies = [
+    {
+      name: 'chrome-mac',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'pt-PT,pt;q=0.9,en-GB;q=0.8,en;q=0.7',
+        'Cache-Control': 'max-age=0',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
+      },
+    },
+    {
+      name: 'chrome-mac-referer',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'pt-PT,pt;q=0.9,en-GB;q=0.8,en;q=0.7',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Referer': `${origin}/`,
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'same-origin',
+        'Upgrade-Insecure-Requests': '1',
+      },
+    },
+    {
+      name: 'firefox-linux',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'pt-PT,pt;q=0.8,en-US;q=0.5,en;q=0.3',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'cross-site',
+      },
+    },
+  ];
+
+  let lastStatus = null;
+  let lastError  = null;
+
+  for (const strategy of strategies) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 18000);
+    try {
+      console.log(`[import-url] trying strategy="${strategy.name}" url="${url}"`);
+      const r = await fetch(url, {
+        signal:   controller.signal,
+        headers:  strategy.headers,
+        redirect: 'follow',
+      });
+      clearTimeout(timer);
+
+      const finalUrl    = r.url || url;
+      const contentType = r.headers.get('content-type') || '';
+      console.log(`[import-url] strategy="${strategy.name}" status=${r.status} finalUrl="${finalUrl}" ct="${contentType}"`);
+
+      // Blocked by server — try next strategy
+      if (r.status === 403 || r.status === 401) {
+        lastStatus = r.status;
+        continue;
+      }
+      // Rate limited — surface to user
+      if (r.status === 429) {
+        throw Object.assign(
+          new Error('This website is rate-limiting requests. Try again in a few minutes.'),
+          { status: 429 }
+        );
+      }
+      if (!r.ok) {
+        throw Object.assign(
+          new Error(`Page returned HTTP ${r.status}`),
+          { status: 422 }
+        );
+      }
+      if (!contentType.includes('html') && !contentType.includes('text/plain')) {
+        throw Object.assign(
+          new Error('URL does not point to a web page — check the address and try again'),
+          { status: 422 }
+        );
+      }
+
+      const html = await r.text();
+      console.log(`[import-url] strategy="${strategy.name}" SUCCESS — ${html.length} bytes`);
+      return { html, strategy: strategy.name, finalUrl };
+
+    } catch (err) {
+      clearTimeout(timer);
+      if (err.status) throw err; // propagate our own errors
+      if (err.name === 'AbortError') {
+        console.log(`[import-url] strategy="${strategy.name}" TIMEOUT`);
+        lastError = 'timeout';
+        continue;
+      }
+      console.log(`[import-url] strategy="${strategy.name}" ERROR: ${err.message}`);
+      lastError = err.message;
+      continue;
+    }
+  }
+
+  // All strategies exhausted
+  if (lastError === 'timeout') {
+    throw Object.assign(
+      new Error('The page timed out. The website may be slow or unavailable.'),
+      { status: 408 }
+    );
+  }
+  console.log(`[import-url] BLOCKED (all strategies) status=${lastStatus} url="${url}"`);
+  return { blocked: true, status: lastStatus };
+}
+
 async function handleImportUrlPreview(body, ctx) {
   const { url } = body;
   if (!url || typeof url !== 'string') {
@@ -2134,36 +2260,85 @@ async function handleImportUrlPreview(body, ctx) {
     throw Object.assign(new Error('Only http/https URLs are supported'), { status: 400 });
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20000);
-  let html;
-  try {
-    const r = await fetch(url, {
-      signal:  controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept':     'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9,pt;q=0.8',
-      },
-    });
-    clearTimeout(timer);
-    if (!r.ok) throw Object.assign(new Error(`Page returned HTTP ${r.status} — it may require a login or be unavailable`), { status: 422 });
-    const ct = r.headers.get('content-type') || '';
-    if (!ct.includes('html') && !ct.includes('text/plain')) {
-      throw Object.assign(new Error('URL does not appear to be a web page (unexpected content type)'), { status: 422 });
-    }
-    html = await r.text();
-  } catch (err) {
-    clearTimeout(timer);
-    if (err.status) throw err;
-    if (err.name === 'AbortError') throw Object.assign(new Error('Page timed out after 20 seconds'), { status: 408 });
-    throw Object.assign(new Error(`Could not fetch page: ${err.message}`), { status: 422 });
+  const result = await fetchWithStrategies(url, parsedUrl);
+
+  // Blocked — return a structured response (not an error) so the frontend can show fallback UI
+  if (result.blocked) {
+    return { blocked: true, url };
   }
 
-  const extracted = extractHtmlContent(html, url);
-  console.log(`[import-url] ${url} — ${extracted.text.length} chars, ${extracted.images.length} images`);
+  const extracted = extractHtmlContent(result.html, result.finalUrl || url);
+  console.log(`[import-url] extracted — ${extracted.text.length} chars, ${extracted.images.length} images`);
 
   const preview = await normalizeWithClaude(extracted, url);
+  return { preview };
+}
+
+// Normalizes user-pasted article text (or lightly HTML-pasted content) using Claude.
+// Skips the HTTP fetch step — content is provided directly by the user.
+async function handleImportTextPreview(body, ctx) {
+  const { text, sourceUrl = '', title = '', destination = '' } = body;
+  if (!text || typeof text !== 'string' || text.trim().length < 50) {
+    throw Object.assign(
+      new Error('Please paste at least 50 characters of article content'),
+      { status: 400 }
+    );
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw Object.assign(
+      new Error('AI service not configured — add ANTHROPIC_API_KEY to environment'),
+      { status: 503 }
+    );
+  }
+
+  // If the pasted text looks like HTML, run it through the HTML cleaner
+  let cleanText;
+  let images = [];
+  if (/<[a-zA-Z][^>]*>/.test(text)) {
+    const fromHtml = extractHtmlContent(text, sourceUrl || 'https://unknown');
+    cleanText = fromHtml.text;
+    images    = fromHtml.images;
+    console.log(`[import-text] detected HTML in pasted content — cleaned to ${cleanText.length} chars, ${images.length} images`);
+  } else {
+    cleanText = text.length > 14000 ? text.slice(0, 14000) + '\n... [truncated]' : text;
+    console.log(`[import-text] plain text — ${cleanText.length} chars`);
+  }
+
+  const extracted = {
+    pageTitle:     title,
+    ogTitle:       title,
+    ogDescription: '',
+    ogImage:       '',
+    images,
+    text: cleanText,
+  };
+
+  const preview = await normalizeWithClaude(extracted, sourceUrl);
+
+  // Preserve the source URL even if Claude didn't pick it up
+  if (sourceUrl) {
+    if (!preview.seo) preview.seo = {};
+    preview.seo.canonicalSourceUrl = sourceUrl;
+  }
+
+  // Patch destination/title hints if user provided them and Claude left them blank
+  if (destination && !preview.basics?.destination) {
+    if (!preview.basics) preview.basics = {};
+    preview.basics.destination = destination;
+  }
+  if (title && (!preview.basics?.title || preview.basics.title === 'Untitled')) {
+    if (!preview.basics) preview.basics = {};
+    preview.basics.title = title;
+  }
+
+  // Surface that images were not auto-imported
+  if (!preview.warnings) preview.warnings = [];
+  if (!images.length) {
+    preview.warnings.push('Images could not be imported automatically from pasted text — add cover, day and gallery images manually after saving the draft.');
+  }
+  preview.warnings.push('Content was imported from pasted text. Review all fields before publishing.');
+
   return { preview };
 }
 

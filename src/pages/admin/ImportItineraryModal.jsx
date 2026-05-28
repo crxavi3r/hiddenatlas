@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useNavigate }       from 'react-router-dom';
-import { X, Upload, Link, FileText, AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Loader } from 'lucide-react';
+import { X, Upload, Link, FileText, AlertTriangle, CheckCircle, ChevronDown, ChevronUp, Loader, ClipboardPaste, ExternalLink } from 'lucide-react';
 
 // ── Style tokens (matches ItinerariesCMSPage) ─────────────────────────────────
 const overlay = {
@@ -10,8 +10,7 @@ const overlay = {
 };
 const modalBox = {
   background: '#FAFAF8', borderRadius: '12px', width: '100%', maxWidth: '740px',
-  boxShadow: '0 8px 40px rgba(0,0,0,0.22)', position: 'relative',
-  margin: 'auto',
+  boxShadow: '0 8px 40px rgba(0,0,0,0.22)', position: 'relative', margin: 'auto',
 };
 const btnPrimary = {
   padding: '9px 20px', borderRadius: '5px', border: 'none', cursor: 'pointer',
@@ -26,13 +25,25 @@ const inputStyle = {
   fontSize: '13px', background: 'white', color: '#1C1A16', boxSizing: 'border-box',
   fontFamily: 'inherit',
 };
-const labelStyle = { display: 'block', fontSize: '11px', fontWeight: '600', color: '#6B6156', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.4px' };
-const sectionCard = { background: 'white', border: '1px solid #E8E3DA', borderRadius: '8px', padding: '16px', marginBottom: '12px' };
+const labelStyle = {
+  display: 'block', fontSize: '11px', fontWeight: '600', color: '#6B6156',
+  marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.4px',
+};
+const sectionCard = {
+  background: 'white', border: '1px solid #E8E3DA', borderRadius: '8px',
+  padding: '16px', marginBottom: '12px',
+};
 const badge = (color, bg) => ({
   display: 'inline-block', fontSize: '10px', fontWeight: '700',
   color, background: bg, padding: '2px 7px', borderRadius: '10px',
   letterSpacing: '0.3px', textTransform: 'uppercase',
 });
+
+const SOURCE_TABS = [
+  { key: 'url',   icon: <Link size={12} />,          label: 'Import from URL' },
+  { key: 'csv',   icon: <FileText size={12} />,      label: 'Import from CSV' },
+  { key: 'paste', icon: <ClipboardPaste size={12} />, label: 'Paste Content' },
+];
 
 function InferredBadge() {
   return <span style={badge('#8C8070', '#F4F1EC')}>Inferred</span>;
@@ -49,9 +60,7 @@ function CollapsibleSection({ title, count, children, defaultOpen = false }) {
       >
         <span style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16' }}>
           {title}
-          {count != null && (
-            <span style={{ fontSize: '11px', color: '#8C8070', marginLeft: '6px', fontWeight: '400' }}>({count})</span>
-          )}
+          {count != null && <span style={{ fontSize: '11px', color: '#8C8070', marginLeft: '6px', fontWeight: '400' }}>({count})</span>}
         </span>
         {open ? <ChevronUp size={14} color="#8C8070" /> : <ChevronDown size={14} color="#8C8070" />}
       </button>
@@ -64,32 +73,56 @@ function CollapsibleSection({ title, count, children, defaultOpen = false }) {
 export default function ImportItineraryModal({ getToken, onClose }) {
   const navigate = useNavigate();
 
-  const [source,   setSource]   = useState('url');           // 'url' | 'csv'
-  const [step,     setStep]     = useState('input');         // 'input' | 'loading' | 'preview' | 'saving' | 'done'
-  const [url,      setUrl]      = useState('');
-  const [csvText,  setCsvText]  = useState('');
-  const [preview,  setPreview]  = useState(null);
-  const [edited,   setEdited]   = useState({});              // user overrides on basics
-  const [error,    setError]    = useState('');
-  const [savedId,  setSavedId]  = useState(null);
+  // step: 'input' | 'loading' | 'blocked' | 'preview' | 'saving' | 'done'
+  const [step,          setStep]         = useState('input');
+  // source: 'url' | 'csv' | 'paste'
+  const [source,        setSource]       = useState('url');
+  const [url,           setUrl]          = useState('');
+  const [csvText,       setCsvText]      = useState('');
+  const [pasteText,     setPasteText]    = useState('');
+  const [pasteSourceUrl, setPasteSourceUrl] = useState('');
+  const [blockedUrl,    setBlockedUrl]   = useState('');
+  const [preview,       setPreview]      = useState(null);
+  const [edited,        setEdited]       = useState({});
+  const [error,         setError]        = useState('');
+  const [savedId,       setSavedId]      = useState(null);
   const fileRef = useRef(null);
 
-  // Merge preview basics with user edits
   const basics = preview ? { ...preview.basics, ...edited } : {};
 
+  // ── Extraction ───────────────────────────────────────────────────────────────
   async function doExtract() {
     setError('');
     setStep('loading');
     try {
       const token = await getToken();
-      const body  = source === 'url' ? { url } : { csv: csvText };
-      const action = source === 'url' ? 'import-url-preview' : 'import-csv-preview';
-      const res = await fetch(`/api/itinerary-cms?action=${action}`, {
+      let action, bodyPayload;
+
+      if (source === 'url') {
+        action       = 'import-url-preview';
+        bodyPayload  = { url };
+      } else if (source === 'csv') {
+        action       = 'import-csv-preview';
+        bodyPayload  = { csv: csvText };
+      } else {
+        action       = 'import-text-preview';
+        bodyPayload  = { text: pasteText, sourceUrl: pasteSourceUrl };
+      }
+
+      const res  = await fetch(`/api/itinerary-cms?action=${action}`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body:    JSON.stringify(body),
+        body:    JSON.stringify(bodyPayload),
       });
       const json = await res.json();
+
+      // Server signals the page blocked automatic import — show fallback UI
+      if (json.blocked) {
+        setBlockedUrl(json.url || url);
+        setStep('blocked');
+        return;
+      }
+
       if (!res.ok || json.error) throw new Error(json.error || 'Extraction failed');
       setPreview(json.preview);
       setEdited({});
@@ -100,13 +133,14 @@ export default function ImportItineraryModal({ getToken, onClose }) {
     }
   }
 
+  // ── Save ─────────────────────────────────────────────────────────────────────
   async function doSave() {
     setError('');
     setStep('saving');
     try {
-      const token = await getToken();
+      const token       = await getToken();
       const finalPreview = { ...preview, basics };
-      const res = await fetch('/api/itinerary-cms?action=import-confirm', {
+      const res  = await fetch('/api/itinerary-cms?action=import-confirm', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify({ preview: finalPreview }),
@@ -121,10 +155,11 @@ export default function ImportItineraryModal({ getToken, onClose }) {
     }
   }
 
+  // ── Template download ─────────────────────────────────────────────────────────
   async function downloadTemplate() {
     try {
       const token = await getToken();
-      const res = await fetch('/api/itinerary-cms?action=import-csv-template', {
+      const res   = await fetch('/api/itinerary-cms?action=import-csv-template', {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
@@ -152,51 +187,73 @@ export default function ImportItineraryModal({ getToken, onClose }) {
 
   const isInferred = (field) => preview?.inferredFields?.includes(field);
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  const canExtract = () => {
+    if (source === 'url')   return url.trim().length > 0;
+    if (source === 'csv')   return csvText.trim().length > 0;
+    if (source === 'paste') return pasteText.trim().length >= 50;
+    return false;
+  };
+
+  const extractLabel = () => {
+    if (source === 'url')   return 'Extract Itinerary';
+    if (source === 'csv')   return 'Parse CSV';
+    if (source === 'paste') return 'Extract from Text';
+    return 'Extract';
+  };
+
+  const loadingLabel = () => {
+    if (source === 'url')   return 'Fetching and extracting content…';
+    if (source === 'csv')   return 'Parsing CSV…';
+    if (source === 'paste') return 'Extracting itinerary from text…';
+    return 'Processing…';
+  };
+
+  const stepSubtitle = () => {
+    if (step === 'input')   return 'Extract itinerary content from a URL, CSV file, or pasted text';
+    if (step === 'loading') return loadingLabel();
+    if (step === 'blocked') return 'Automatic import was blocked — use a manual fallback';
+    if (step === 'preview') return 'Review extracted content before saving as draft';
+    if (step === 'saving')  return 'Saving draft…';
+    if (step === 'done')    return 'Itinerary saved as draft';
+    return '';
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div style={overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={modalBox}>
 
-        {/* Header */}
+        {/* ── Header ── */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px 16px', borderBottom: '1px solid #E8E3DA' }}>
           <div>
             <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '18px', fontWeight: '600', color: '#1C1A16', margin: 0 }}>
               Import Itinerary
             </h2>
-            <p style={{ fontSize: '12px', color: '#8C8070', margin: '3px 0 0' }}>
-              {step === 'input'   && 'Extract itinerary content from a URL or CSV file'}
-              {step === 'loading' && 'Extracting content...'}
-              {step === 'preview' && 'Review the extracted content before saving as draft'}
-              {step === 'saving'  && 'Saving draft...'}
-              {step === 'done'    && 'Itinerary saved as draft'}
-            </p>
+            <p style={{ fontSize: '12px', color: '#8C8070', margin: '3px 0 0' }}>{stepSubtitle()}</p>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#8C8070', display: 'flex' }}>
             <X size={18} />
           </button>
         </div>
 
-        {/* Step: input */}
-        {(step === 'input') && (
+        {/* ── Step: input ── */}
+        {step === 'input' && (
           <div style={{ padding: '20px 24px 24px' }}>
 
             {/* Source tabs */}
             <div style={{ display: 'flex', gap: '2px', background: '#F0EDE8', borderRadius: '7px', padding: '3px', marginBottom: '20px', width: 'fit-content' }}>
-              {[
-                { key: 'url', icon: <Link size={12} />, label: 'Import from URL' },
-                { key: 'csv', icon: <FileText size={12} />, label: 'Import from CSV' },
-              ].map(({ key, icon, label }) => (
+              {SOURCE_TABS.map(({ key, icon, label }) => (
                 <button
                   key={key}
                   onClick={() => { setSource(key); setError(''); }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '6px',
-                    padding: '7px 16px', border: 'none', borderRadius: '5px', cursor: 'pointer',
+                    padding: '7px 14px', border: 'none', borderRadius: '5px', cursor: 'pointer',
                     fontSize: '12.5px', fontWeight: source === key ? '600' : '400',
                     background: source === key ? 'white' : 'transparent',
                     color: source === key ? '#1C1A16' : '#6B6156',
                     boxShadow: source === key ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
-                    transition: 'all 0.12s',
+                    transition: 'all 0.12s', whiteSpace: 'nowrap',
                   }}
                 >
                   {icon}{label}
@@ -204,7 +261,7 @@ export default function ImportItineraryModal({ getToken, onClose }) {
               ))}
             </div>
 
-            {/* URL input */}
+            {/* URL tab */}
             {source === 'url' && (
               <div>
                 <label style={labelStyle}>Page URL</label>
@@ -214,17 +271,18 @@ export default function ImportItineraryModal({ getToken, onClose }) {
                   onChange={e => setUrl(e.target.value)}
                   placeholder="https://example.com/travel-guide-article"
                   style={inputStyle}
-                  onKeyDown={e => { if (e.key === 'Enter' && url) doExtract(); }}
+                  onKeyDown={e => { if (e.key === 'Enter' && canExtract()) doExtract(); }}
                   autoFocus
                 />
                 <p style={{ fontSize: '11.5px', color: '#8C8070', marginTop: '7px' }}>
-                  Paste a public travel article or blog post. The content will be extracted and transformed into the HiddenAtlas itinerary structure.
-                  Some fields will be inferred from the article and should be reviewed before saving.
+                  Paste a public travel article or blog post URL. Content is fetched server-side and transformed
+                  into the HiddenAtlas structure. Some travel sites block automated requests — if that happens,
+                  use the <strong>Paste Content</strong> tab instead.
                 </p>
               </div>
             )}
 
-            {/* CSV input */}
+            {/* CSV tab */}
             {source === 'csv' && (
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -235,11 +293,7 @@ export default function ImportItineraryModal({ getToken, onClose }) {
                 </div>
                 <div
                   onClick={() => fileRef.current?.click()}
-                  style={{
-                    border: '2px dashed #D5CEC4', borderRadius: '8px', padding: '28px 20px',
-                    textAlign: 'center', cursor: 'pointer', background: csvText ? '#F6F9F8' : 'white',
-                    transition: 'border-color 0.15s',
-                  }}
+                  style={{ border: '2px dashed #D5CEC4', borderRadius: '8px', padding: '28px 20px', textAlign: 'center', cursor: 'pointer', background: csvText ? '#F6F9F8' : 'white' }}
                   onDragOver={e => e.preventDefault()}
                   onDrop={e => {
                     e.preventDefault();
@@ -255,8 +309,41 @@ export default function ImportItineraryModal({ getToken, onClose }) {
                 </div>
                 <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={handleFileChange} />
                 <p style={{ fontSize: '11.5px', color: '#8C8070', marginTop: '7px' }}>
-                  Download the template above to see the supported column structure. Required: <code>title</code>, <code>slug</code> or <code>destination</code>. Days go in separate rows with <code>dayNumber</code> populated.
+                  Required columns: <code>title</code>, <code>slug</code> or <code>destination</code>. Add one row per day with <code>dayNumber</code> populated. Download the template for the full column list.
                 </p>
+              </div>
+            )}
+
+            {/* Paste Content tab */}
+            {source === 'paste' && (
+              <div>
+                <label style={labelStyle}>Article content</label>
+                <textarea
+                  value={pasteText}
+                  onChange={e => setPasteText(e.target.value)}
+                  placeholder="Paste the full article text here. You can copy it directly from the browser. Plain text or HTML both work."
+                  style={{ ...inputStyle, minHeight: '180px', resize: 'vertical', lineHeight: '1.5' }}
+                  autoFocus
+                />
+                <p style={{ fontSize: '11px', color: pasteText.length < 50 && pasteText.length > 0 ? '#C0392B' : '#8C8070', marginTop: '5px' }}>
+                  {pasteText.length < 50 && pasteText.length > 0
+                    ? `Paste at least 50 characters (${pasteText.length} so far)`
+                    : `${pasteText.length} characters — plain text or HTML accepted`
+                  }
+                </p>
+                <div style={{ marginTop: '12px' }}>
+                  <label style={labelStyle}>Source URL (optional)</label>
+                  <input
+                    type="url"
+                    value={pasteSourceUrl}
+                    onChange={e => setPasteSourceUrl(e.target.value)}
+                    placeholder="https://original-article-url.com"
+                    style={inputStyle}
+                  />
+                  <p style={{ fontSize: '11.5px', color: '#8C8070', marginTop: '5px' }}>
+                    Stored internally for traceability. Not published with the itinerary.
+                  </p>
+                </div>
               </div>
             )}
 
@@ -272,31 +359,128 @@ export default function ImportItineraryModal({ getToken, onClose }) {
               <button
                 type="button"
                 onClick={doExtract}
-                disabled={source === 'url' ? !url.trim() : !csvText.trim()}
-                style={{ ...btnPrimary, opacity: (source === 'url' ? !url.trim() : !csvText.trim()) ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: '7px' }}
+                disabled={!canExtract()}
+                style={{ ...btnPrimary, opacity: canExtract() ? 1 : 0.45, display: 'flex', alignItems: 'center', gap: '7px' }}
               >
-                {source === 'url' ? <Link size={13} /> : <Upload size={13} />}
-                {source === 'url' ? 'Extract Itinerary' : 'Parse CSV'}
+                {source === 'url' && <Link size={13} />}
+                {source === 'csv' && <Upload size={13} />}
+                {source === 'paste' && <ClipboardPaste size={13} />}
+                {extractLabel()}
               </button>
             </div>
           </div>
         )}
 
-        {/* Step: loading */}
+        {/* ── Step: loading ── */}
         {step === 'loading' && (
           <div style={{ padding: '60px 24px', textAlign: 'center' }}>
             <Loader size={28} color="#1B6B65" style={{ animation: 'spin 1s linear infinite', marginBottom: '16px' }} />
-            <p style={{ fontSize: '14px', color: '#1C1A16', fontWeight: '500', margin: '0 0 6px' }}>
-              {source === 'url' ? 'Fetching and extracting content…' : 'Parsing CSV…'}
-            </p>
+            <p style={{ fontSize: '14px', color: '#1C1A16', fontWeight: '500', margin: '0 0 6px' }}>{loadingLabel()}</p>
             <p style={{ fontSize: '12px', color: '#8C8070', margin: 0 }}>
-              {source === 'url' ? 'This may take 10-20 seconds for AI extraction.' : 'Validating fields and building preview.'}
+              {source === 'url' ? 'This may take 15–25 seconds for AI extraction.' : source === 'paste' ? 'AI is structuring the content…' : 'Validating fields and building preview.'}
             </p>
             <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
           </div>
         )}
 
-        {/* Step: saving */}
+        {/* ── Step: blocked ── */}
+        {step === 'blocked' && (
+          <div style={{ padding: '28px 24px 28px' }}>
+            <div style={{ background: '#FFF8EE', border: '1px solid #E8D8A8', borderRadius: '10px', padding: '20px 20px 18px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '14px' }}>
+                <AlertTriangle size={20} color="#C9A96E" style={{ flexShrink: 0, marginTop: '1px' }} />
+                <div>
+                  <p style={{ fontSize: '14px', fontWeight: '600', color: '#1C1A16', margin: '0 0 5px' }}>
+                    This website blocked automatic import requests
+                  </p>
+                  <p style={{ fontSize: '13px', color: '#4A433A', margin: 0, lineHeight: '1.5' }}>
+                    Some travel blogs use bot protection that prevents server-side fetching.
+                    You can still import this article using one of the options below.
+                  </p>
+                </div>
+              </div>
+
+              {blockedUrl && (
+                <p style={{ fontSize: '11px', color: '#8C8070', margin: '0 0 14px', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                  {blockedUrl}
+                </p>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <p style={{ fontSize: '11.5px', fontWeight: '600', color: '#6B6156', textTransform: 'uppercase', letterSpacing: '0.3px', margin: '0 0 2px' }}>
+                  Continue with:
+                </p>
+
+                {/* Option 1 — Paste content */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPasteSourceUrl(blockedUrl);
+                    setSource('paste');
+                    setStep('input');
+                    setError('');
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'white', border: '1px solid #D5CEC4', borderRadius: '8px', padding: '12px 16px', cursor: 'pointer', textAlign: 'left', width: '100%' }}
+                >
+                  <ClipboardPaste size={16} color="#1B6B65" style={{ flexShrink: 0 }} />
+                  <div>
+                    <p style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16', margin: '0 0 2px' }}>
+                      Paste article content
+                    </p>
+                    <p style={{ fontSize: '12px', color: '#6B6156', margin: 0 }}>
+                      Open the article in your browser, select all text, copy and paste it here
+                    </p>
+                  </div>
+                </button>
+
+                {/* Option 2 — CSV */}
+                <button
+                  type="button"
+                  onClick={() => { setSource('csv'); setStep('input'); setError(''); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'white', border: '1px solid #D5CEC4', borderRadius: '8px', padding: '12px 16px', cursor: 'pointer', textAlign: 'left', width: '100%' }}
+                >
+                  <FileText size={16} color="#4A433A" style={{ flexShrink: 0 }} />
+                  <div>
+                    <p style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16', margin: '0 0 2px' }}>
+                      Import via CSV
+                    </p>
+                    <p style={{ fontSize: '12px', color: '#6B6156', margin: 0 }}>
+                      Fill in the structured CSV template with the itinerary details
+                    </p>
+                  </div>
+                </button>
+
+                {/* Option 3 — Open in browser */}
+                {blockedUrl && (
+                  <a
+                    href={blockedUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'white', border: '1px solid #D5CEC4', borderRadius: '8px', padding: '12px 16px', cursor: 'pointer', textDecoration: 'none', width: '100%', boxSizing: 'border-box' }}
+                  >
+                    <ExternalLink size={16} color="#4A433A" style={{ flexShrink: 0 }} />
+                    <div>
+                      <p style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16', margin: '0 0 2px' }}>
+                        Open page in browser
+                      </p>
+                      <p style={{ fontSize: '12px', color: '#6B6156', margin: 0 }}>
+                        Read the article, then come back and paste the content
+                      </p>
+                    </div>
+                  </a>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+              <button type="button" onClick={() => setStep('input')} style={btnSecondary}>
+                Back
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step: saving ── */}
         {step === 'saving' && (
           <div style={{ padding: '60px 24px', textAlign: 'center' }}>
             <Loader size={28} color="#1B6B65" style={{ animation: 'spin 1s linear infinite', marginBottom: '16px' }} />
@@ -305,13 +489,13 @@ export default function ImportItineraryModal({ getToken, onClose }) {
           </div>
         )}
 
-        {/* Step: done */}
+        {/* ── Step: done ── */}
         {step === 'done' && (
           <div style={{ padding: '48px 24px', textAlign: 'center' }}>
             <CheckCircle size={36} color="#1B6B65" style={{ marginBottom: '16px' }} />
             <p style={{ fontSize: '15px', fontWeight: '600', color: '#1C1A16', margin: '0 0 6px' }}>Draft saved successfully</p>
             <p style={{ fontSize: '13px', color: '#6B6156', margin: '0 0 24px' }}>
-              The itinerary has been created as a draft. All fields are editable in the CMS editor.
+              The itinerary has been created as a draft. All fields are editable in the CMS editor before publishing.
             </p>
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
               <button type="button" onClick={onClose} style={btnSecondary}>Back to list</button>
@@ -326,31 +510,32 @@ export default function ImportItineraryModal({ getToken, onClose }) {
           </div>
         )}
 
-        {/* Step: preview */}
+        {/* ── Step: preview ── */}
         {step === 'preview' && preview && (
           <div style={{ padding: '20px 24px 24px', overflowY: 'auto', maxHeight: 'calc(100vh - 120px)' }}>
 
             {/* Inferred fields notice */}
             {preview.inferredFields?.length > 0 && (
-              <div style={{ background: '#FBF8F1', border: '1px solid #E8D9B8', borderRadius: '7px', padding: '10px 14px', marginBottom: '14px', fontSize: '12px', color: '#7A6130', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <div style={{ background: '#FBF8F1', border: '1px solid #E8D9B8', borderRadius: '7px', padding: '10px 14px', marginBottom: '12px', fontSize: '12px', color: '#7A6130', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                 <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: '1px' }} />
                 <span>
-                  Some fields were inferred by AI and should be reviewed:{' '}
-                  <strong>{preview.inferredFields.join(', ')}</strong>.
-                  Fields marked <InferredBadge /> were not explicitly stated in the source.
+                  Fields marked <InferredBadge /> were inferred by AI, not explicitly stated in the source:{' '}
+                  <strong>{preview.inferredFields.join(', ')}</strong>. Review before publishing.
                 </span>
               </div>
             )}
 
             {/* Warnings */}
             {preview.warnings?.length > 0 && (
-              <div style={{ background: '#FDF3F3', border: '1px solid #F5C6C6', borderRadius: '7px', padding: '10px 14px', marginBottom: '14px', fontSize: '12px', color: '#8B2020' }}>
-                <strong>Warnings:</strong>{' '}
-                {preview.warnings.join(' · ')}
+              <div style={{ background: '#FDF3F3', border: '1px solid #F5C6C6', borderRadius: '7px', padding: '10px 14px', marginBottom: '12px', fontSize: '12px', color: '#8B2020' }}>
+                <strong>Warnings:</strong>
+                <ul style={{ margin: '4px 0 0', paddingLeft: '16px' }}>
+                  {preview.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                </ul>
               </div>
             )}
 
-            {/* Basics — always open, key fields editable */}
+            {/* Basics — key fields editable */}
             <div style={sectionCard}>
               <p style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16', margin: '0 0 14px' }}>Basics</p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -372,14 +557,22 @@ export default function ImportItineraryModal({ getToken, onClose }) {
                 </div>
                 <div>
                   <label style={labelStyle}>Duration (days)</label>
-                  <input type="number" min="1" max="365" value={basics.durationDays || ''} onChange={e => setBasic('durationDays', e.target.value ? parseInt(e.target.value, 10) : null)} style={inputStyle} />
+                  <input
+                    type="number" min="1" max="365"
+                    value={basics.durationDays || ''}
+                    onChange={e => setBasic('durationDays', e.target.value ? parseInt(e.target.value, 10) : null)}
+                    style={inputStyle}
+                  />
                 </div>
                 <div>
                   <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    Slug
-                    <span style={{ fontSize: '10px', color: '#8C8070', textTransform: 'none', fontWeight: '400' }}>(editable — must be unique)</span>
+                    Slug <span style={{ fontSize: '10px', color: '#8C8070', textTransform: 'none', fontWeight: '400' }}>(must be unique)</span>
                   </label>
-                  <input value={basics.slug || ''} onChange={e => setBasic('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))} style={{ ...inputStyle, fontFamily: 'monospace' }} />
+                  <input
+                    value={basics.slug || ''}
+                    onChange={e => setBasic('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+                    style={{ ...inputStyle, fontFamily: 'monospace' }}
+                  />
                 </div>
               </div>
             </div>
@@ -391,13 +584,17 @@ export default function ImportItineraryModal({ getToken, onClose }) {
                   <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: '6px' }}>
                     Tagline {isInferred('tagline') && <InferredBadge />}
                   </label>
-                  <p style={{ fontSize: '13px', color: '#1C1A16', background: '#F8F6F2', padding: '8px 10px', borderRadius: '5px', margin: 0 }}>{preview.overview?.tagline || '—'}</p>
+                  <p style={{ fontSize: '13px', color: '#1C1A16', background: '#F8F6F2', padding: '8px 10px', borderRadius: '5px', margin: 0 }}>
+                    {preview.overview?.tagline || '—'}
+                  </p>
                 </div>
                 <div>
                   <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: '6px' }}>
                     Description {isInferred('description') && <InferredBadge />}
                   </label>
-                  <p style={{ fontSize: '13px', color: '#1C1A16', background: '#F8F6F2', padding: '8px 10px', borderRadius: '5px', margin: 0, lineHeight: '1.6' }}>{preview.overview?.description || '—'}</p>
+                  <p style={{ fontSize: '13px', color: '#1C1A16', background: '#F8F6F2', padding: '8px 10px', borderRadius: '5px', margin: 0, lineHeight: '1.6' }}>
+                    {preview.overview?.description || '—'}
+                  </p>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                   <div>
@@ -509,8 +706,7 @@ export default function ImportItineraryModal({ getToken, onClose }) {
                     <label style={labelStyle}>Cover Image</label>
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                       <img
-                        src={preview.images.cover}
-                        alt="Cover"
+                        src={preview.images.cover} alt="Cover"
                         style={{ width: '80px', height: '56px', objectFit: 'cover', borderRadius: '5px', border: '1px solid #E8E3DA', flexShrink: 0 }}
                         onError={e => { e.target.style.display = 'none'; }}
                       />
@@ -524,9 +720,7 @@ export default function ImportItineraryModal({ getToken, onClose }) {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '6px' }}>
                       {preview.images.gallery.map((imgUrl, i) => (
                         <img
-                          key={i}
-                          src={imgUrl}
-                          alt={`Gallery ${i + 1}`}
+                          key={i} src={imgUrl} alt={`Gallery ${i + 1}`}
                           style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: '5px', border: '1px solid #E8E3DA' }}
                           onError={e => { e.target.style.display = 'none'; }}
                         />
@@ -547,13 +741,13 @@ export default function ImportItineraryModal({ getToken, onClose }) {
                   </div>
                 )}
                 {preview.seo.seoDescription && (
-                  <div>
+                  <div style={{ marginBottom: '8px' }}>
                     <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: '6px' }}>Meta Description {isInferred('seoDescription') && <InferredBadge />}</label>
                     <p style={{ fontSize: '13px', color: '#1C1A16', margin: 0 }}>{preview.seo.seoDescription}</p>
                   </div>
                 )}
                 {preview.seo.canonicalSourceUrl && (
-                  <div style={{ marginTop: '8px' }}>
+                  <div>
                     <label style={labelStyle}>Source URL</label>
                     <p style={{ fontSize: '11px', color: '#8C8070', margin: 0, wordBreak: 'break-all', fontFamily: 'monospace' }}>{preview.seo.canonicalSourceUrl}</p>
                   </div>
@@ -574,7 +768,7 @@ export default function ImportItineraryModal({ getToken, onClose }) {
                   ))}
                 </div>
                 <p style={{ fontSize: '11.5px', color: '#8C8070', margin: '8px 0 0' }}>
-                  Coordinates will be generated by the AI route map tool after saving.
+                  Precise coordinates can be generated by the AI route map tool after saving.
                 </p>
               </CollapsibleSection>
             )}
@@ -589,7 +783,7 @@ export default function ImportItineraryModal({ getToken, onClose }) {
             {/* Footer */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #E8E3DA', gap: '10px', flexWrap: 'wrap' }}>
               <p style={{ fontSize: '11.5px', color: '#8C8070', margin: 0 }}>
-                The itinerary will be saved as a draft. Nothing will be published automatically.
+                Saved as draft only. Nothing is published automatically.
               </p>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button type="button" onClick={() => setStep('input')} style={btnSecondary}>Back</button>
