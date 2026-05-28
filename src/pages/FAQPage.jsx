@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { useSEO } from '../hooks/useSEO';
+import FormattedText from '../components/FormattedText';
 
 const faqs = [
   {
@@ -123,7 +124,11 @@ function FAQAccordion({ question, answer }) {
       </button>
       {open && (
         <div style={{ paddingBottom: '22px' }}>
-          <p style={{ fontSize: '16px', color: '#4A433A', lineHeight: '1.75' }}>{answer}</p>
+          <FormattedText
+            text={answer}
+            style={{ fontSize: '16px', color: '#4A433A', lineHeight: '1.75' }}
+            spacing="12px"
+          />
         </div>
       )}
     </div>

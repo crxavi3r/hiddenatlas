@@ -10,6 +10,7 @@ import { useApi } from '../lib/api';
 import { getCoverImage, getMapImage } from '../lib/itineraryImages';
 import { resolveDayImages, resolveGalleryImages, resolveResearchImages } from '../lib/resolveItineraryImages';
 import { useTrack } from '../hooks/useTrack';
+import FormattedText from '../components/FormattedText';
 import JapanRouteMap from '../components/JapanRouteMap';
 import MoroccoRouteMap from '../components/MoroccoRouteMap';
 import PhilippinesRouteMap from '../components/PhilippinesRouteMap';
@@ -282,9 +283,11 @@ function DayEntry({ day, index, isLocked, isLast }) {
         <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '20px', fontWeight: '600', color: '#1C1A16', marginBottom: '10px' }}>
           {day.title}
         </h3>
-        <p style={{ fontSize: '15px', color: '#6B6156', lineHeight: '1.7', marginBottom: day.bullets?.length ? '16px' : '0' }}>
-          {day.desc}
-        </p>
+        <FormattedText
+          text={day.desc}
+          style={{ fontSize: '15px', color: '#6B6156', lineHeight: '1.7', marginBottom: day.bullets?.length ? '16px' : '0' }}
+          spacing="14px"
+        />
 
         {day.bullets?.length > 0 && (
           <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -308,9 +311,11 @@ function DayEntry({ day, index, isLocked, isLast }) {
             <p style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '1.2px', textTransform: 'uppercase', color: '#C9A96E', marginBottom: '4px' }}>
               Insider Tip
             </p>
-            <p style={{ fontSize: '13.5px', color: '#4A433A', lineHeight: '1.6', margin: 0 }}>
-              {day.tip}
-            </p>
+            <FormattedText
+              text={day.tip}
+              style={{ fontSize: '13.5px', color: '#4A433A', lineHeight: '1.6', margin: 0 }}
+              spacing="10px"
+            />
           </div>
         )}
 
@@ -1223,7 +1228,11 @@ export default function ItineraryDetailPage() {
               <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: '600', color: '#1C1A16', marginBottom: '16px' }}>
                 Overview
               </h2>
-              <p style={{ fontSize: '17px', color: '#4A433A', lineHeight: '1.8' }}>{description}</p>
+              <FormattedText
+                text={description}
+                style={{ fontSize: '17px', color: '#4A433A', lineHeight: '1.8' }}
+                spacing="16px"
+              />
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '24px' }}>
                 {category && (
                   <span style={{ padding: '6px 14px', borderRadius: '3px', background: '#F4F1EC', color: '#6B6156', fontSize: '12px', fontWeight: '600', letterSpacing: '0.5px' }}>
@@ -1453,9 +1462,11 @@ export default function ItineraryDetailPage() {
                   Why This Journey Is Special
                 </h2>
                 <div style={{ borderLeft: '3px solid #C9A96E', paddingLeft: '24px' }}>
-                  <p style={{ fontSize: '17px', color: '#4A433A', lineHeight: '1.85', fontStyle: 'italic' }}>
-                    {whySpecial}
-                  </p>
+                  <FormattedText
+                    text={whySpecial}
+                    style={{ fontSize: '17px', color: '#4A433A', lineHeight: '1.85', fontStyle: 'italic' }}
+                    spacing="16px"
+                  />
                 </div>
               </section>
             )}
@@ -1481,9 +1492,11 @@ export default function ItineraryDetailPage() {
                   <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#1B6B65', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Route size={16} color="white" />
                   </div>
-                  <p style={{ fontSize: '15px', color: '#2C5F5A', lineHeight: '1.7', fontWeight: '500' }}>
-                    {routeOverview}
-                  </p>
+                  <FormattedText
+                    text={routeOverview}
+                    style={{ fontSize: '15px', color: '#2C5F5A', lineHeight: '1.7', fontWeight: '500' }}
+                    spacing="12px"
+                  />
                 </div>
               </section>
             )}
