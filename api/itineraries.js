@@ -102,20 +102,40 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store');
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
+      // Primary query — unchanged from original; always safe.
+      const WHERE = `
+         WHERE  (status = 'published' OR "isPublished" = true)
+           AND  ("isPrivate" = false OR "isPrivate" IS NULL)
+           AND  ("isCollection" = false OR "isCollection" IS NULL)
+           AND  ("parentId" IS NULL OR "parentId" = '')
+           AND  (type IS NULL OR type != 'custom')`;
+
       const { rows } = await pool.query(
         `SELECT slug, title, subtitle, destination, country, region,
                 "durationDays", type, "accessType", price,
                 "isPrivate", "isCollection", "parentId",
                 "coverImage", description, status, "isPublished"
-         FROM   "Itinerary"
-         WHERE  (status = 'published' OR "isPublished" = true)
-           AND  ("isPrivate" = false OR "isPrivate" IS NULL)
-           AND  ("isCollection" = false OR "isCollection" IS NULL)
-           AND  ("parentId" IS NULL OR "parentId" = '')
-           AND  (type IS NULL OR type != 'custom')
+         FROM   "Itinerary" ${WHERE}
          ORDER BY "updatedAt" DESC`
       );
-      return res.json({ itineraries: rows });
+
+      // Enrichment query — fetches card metadata from content JSON.
+      // Isolated in its own try/catch: if it fails for any reason (missing
+      // column, cast error, etc.) itineraries still appear, just without tags.
+      const metaMap = {};
+      try {
+        const { rows: meta } = await pool.query(
+          `SELECT slug, (content::jsonb)->'tripFacts' AS "tripFacts"
+           FROM   "Itinerary" ${WHERE}`
+        );
+        for (const r of meta) {
+          if (r.tripFacts && typeof r.tripFacts === 'object') metaMap[r.slug] = r.tripFacts;
+        }
+      } catch (metaErr) {
+        console.error('[itineraries/list] tripFacts enrichment failed (non-fatal):', metaErr.message);
+      }
+
+      return res.json({ itineraries: rows.map(r => ({ ...r, tripFacts: metaMap[r.slug] || null })) });
     } catch (err) {
       console.error('[itineraries/list] query failed:', err.message);
       if (err.message?.includes('does not exist')) return res.json({ itineraries: [] });

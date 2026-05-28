@@ -138,6 +138,7 @@ function DesignerSelect({ creators, value, onChange }) {
 // Normalise a raw DB row into the shape ItineraryCard expects.
 function normalizeDbRow(row) {
   const isPremium = row.type === 'premium' || row.accessType === 'paid';
+  const tf = (row.tripFacts && typeof row.tripFacts === 'object') ? row.tripFacts : {};
   return {
     id:          row.slug,
     slug:        row.slug,
@@ -145,13 +146,13 @@ function normalizeDbRow(row) {
     subtitle:    row.subtitle    || '',
     country:     row.country     || row.destination || row.region || '',
     duration:    row.durationDays ? `${row.durationDays} days` : '',
-    groupSize:   '',
+    groupSize:   tf.groupSize    || '',
     isPremium,
     price:       Number(row.price) || 0,
     tag:         isPremium ? 'Premium' : 'Free Journey',
     coverImage:  row.coverImage  || '',
     description: row.description || '',
-    bestFor:     [],
+    bestFor:     Array.isArray(tf.bestFor) ? tf.bestFor : [],
     status:      'published',
     parentId:    row.parentId    || null,
   };
