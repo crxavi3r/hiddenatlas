@@ -99,7 +99,7 @@ export default async function handler(req, res) {
   // listing page. Includes itineraries created via CMS that are not in the
   // static data file. Short cache so publish is visible within ~30 s.
   if (action === 'list') {
-    res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=30');
+    res.setHeader('Cache-Control', 'no-store');
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
       const { rows } = await pool.query(
