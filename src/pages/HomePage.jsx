@@ -103,8 +103,8 @@ export default function HomePage() {
   };
 
   useSEO({
-    title: 'HiddenAtlas — Travel itineraries designed by people who know the places',
-    description: 'Travel itineraries designed by people who know the places. Real routes, boutique stays, and local knowledge from designers who\'ve actually been there.',
+    title: 'HiddenAtlas — Travel Guides Created by Travel Designers',
+    description: 'A marketplace of curated travel itineraries created by local experts, creators and travel designers. Discover better routes, hidden places and practical trip plans.',
     canonical: 'https://www.hiddenatlas.travel/',
     ogImage: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1200&q=80',
     schemas: [
@@ -114,7 +114,7 @@ export default function HomePage() {
         name: 'HiddenAtlas',
         url: 'https://www.hiddenatlas.travel',
         logo: 'https://www.hiddenatlas.travel/assets/logo-hiddenatlas.svg',
-        description: 'Travel itineraries designed by people who know the places. Real routes, boutique stays, and local knowledge from designers who\'ve actually been there.',
+        description: 'A marketplace of curated travel itineraries created by local experts, creators and travel designers. Discover better routes, hidden places and practical trip plans.',
         contactPoint: {
           '@type': 'ContactPoint',
           email: 'contact@hiddenatlas.travel',

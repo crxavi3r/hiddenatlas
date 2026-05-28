@@ -10,9 +10,9 @@ import { useEffect } from 'react';
 
 const SITE_NAME = 'HiddenAtlas';
 export const SITE_URL = 'https://www.hiddenatlas.travel';
-const DEFAULT_TITLE = 'HiddenAtlas — Curated Luxury Travel Itineraries';
+const DEFAULT_TITLE = 'HiddenAtlas — Travel Guides Created by Travel Designers';
 const DEFAULT_DESCRIPTION =
-  'Expert-crafted travel itineraries for discerning travelers. Boutique stays, hidden routes, real local knowledge. No tourist traps, no guesswork.';
+  'A marketplace of curated travel itineraries created by local experts, creators and travel designers. Discover better routes, hidden places and practical trip plans.';
 // Absolute URL required — relative paths are not resolved by social/OG crawlers.
 const DEFAULT_OG_IMAGE = `${SITE_URL}/assets/logo-hiddenatlas.svg`;
 
