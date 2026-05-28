@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { Plus, RefreshCw, Eye, Edit2, Copy, Trash2, Globe, EyeOff, Instagram, X, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
+import { Plus, RefreshCw, Eye, Edit2, Copy, Trash2, Globe, EyeOff, Instagram, X, ChevronLeft, ChevronRight, ExternalLink, Upload } from 'lucide-react';
 import { itineraries as STATIC_ITINERARIES } from '../../data/itineraries';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { resolveCoverImage } from '../../lib/resolveCoverImage';
 import { useUserCtx } from '../../lib/useUserCtx.jsx';
+import ImportItineraryModal from './ImportItineraryModal.jsx';
 
 // ── Shared style tokens ───────────────────────────────────────────────────────
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
@@ -794,7 +795,8 @@ export default function ItinerariesCMSPage() {
   const [typeFilter,     setTypeFilter]     = useState('all');   // all | free | premium | custom
   const [creatorFilter,  setCreatorFilter]  = useState('');      // creator id or ''
   const [allCreators,    setAllCreators]    = useState([]);      // for filter dropdown
-  const [instagramModal, setInstagramModal] = useState(null);    // itinerary | null
+  const [instagramModal,  setInstagramModal]  = useState(null);    // itinerary | null
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // An itinerary is deletable if: admin (always), or designer owns it and it's a draft.
   function canDelete(it) {
@@ -1003,6 +1005,13 @@ export default function ItinerariesCMSPage() {
         />
       )}
 
+      {showImportModal && (
+        <ImportItineraryModal
+          getToken={getToken}
+          onClose={() => { setShowImportModal(false); load(); }}
+        />
+      )}
+
       {deleteError && (
         <div style={{
           position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
@@ -1061,6 +1070,13 @@ export default function ItinerariesCMSPage() {
               )}
             </>
           )}
+          <button
+            onClick={() => setShowImportModal(true)}
+            style={{ ...btnSecondary, display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Upload size={13} />
+            Import Itinerary
+          </button>
           <button
             onClick={() => navigate('/admin/itineraries/new')}
             style={{ ...btnPrimary, display: 'flex', alignItems: 'center', gap: '6px' }}

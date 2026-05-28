@@ -21,6 +21,10 @@
 // POST /api/itinerary-cms?action=save-pdf-url&id=:id      — saves blob URL + increments version after client upload
 // POST /api/itinerary-cms?action=ai-generate
 // POST /api/itinerary-cms?action=generate-route-map&id=:id — AI-extracts route stops with coordinates from itinerary content
+// GET  /api/itinerary-cms?action=import-csv-template       — returns sample CSV template for import
+// POST /api/itinerary-cms?action=import-url-preview        — fetch URL, AI-extract preview JSON (no DB write)
+// POST /api/itinerary-cms?action=import-csv-preview        — parse CSV, return preview JSON (no DB write)
+// POST /api/itinerary-cms?action=import-confirm            — create draft itinerary from preview JSON
 
 import pg                         from 'pg';
 import { resolveUserCtx }         from './_lib/resolveUserCtx.js';
@@ -139,6 +143,7 @@ export default async function handler(req, res) {
       if (action === 'check-version-duplicate') return res.json(await handleCheckVersionDuplicate(pool, req.query.parentSlug || '', req.query.variant || '', req.query.id || null));
       if (action === 'migration-status')  { adminOnly(); return res.json(await handleMigrationStatus(pool)); }
       if (action === 'upload-pdf-token')  { await assertOwnership(pool, id, ctx); return res.json(await handleUploadPDFToken(pool, id)); }
+      if (action === 'import-csv-template') return res.json(handleImportCsvTemplate());
       return res.status(400).json({ error: 'Unknown GET action' });
     }
 
@@ -170,6 +175,9 @@ export default async function handler(req, res) {
       if (action === 'generate-route-map')   { await assertOwnership(pool, id, ctx); return res.json(await handleGenerateRouteMap(pool, id)); }
       if (action === 'backfill-pricing')  { adminOnly(); return res.json(await handleBackfillPricing(pool)); }
       if (action === 'resolve-images')    return res.json(await handleResolveImages(body));
+      if (action === 'import-url-preview') return res.json(await handleImportUrlPreview(body, ctx));
+      if (action === 'import-csv-preview') return res.json(await handleImportCsvPreview(body, ctx));
+      if (action === 'import-confirm')     return res.json(await handleImportConfirm(pool, body, ctx));
       return res.status(400).json({ error: 'Unknown POST action' });
     }
   } catch (err) {
@@ -1878,4 +1886,502 @@ function buildContentFromStatic(item) {
     pdfConfig: { showRouteMap: true, showHotels: true },
     seo:       { metaTitle: '', metaDescription: '' },
   };
+}
+
+// ── Itinerary Import ──────────────────────────────────────────────────────────
+// POST /api/itinerary-cms?action=import-url-preview
+// POST /api/itinerary-cms?action=import-csv-preview
+// POST /api/itinerary-cms?action=import-confirm
+// GET  /api/itinerary-cms?action=import-csv-template
+
+function slugify(text) {
+  return String(text)
+    .toLowerCase()
+    .replace(/[àáâãäåā]/g, 'a').replace(/[èéêëē]/g, 'e')
+    .replace(/[ìíîïī]/g, 'i').replace(/[òóôõöō]/g, 'o')
+    .replace(/[ùúûüū]/g, 'u').replace(/[ñ]/g, 'n').replace(/[ç]/g, 'c')
+    .replace(/[^a-z0-9\s-]/g, '').trim()
+    .replace(/\s+/g, '-').replace(/-{2,}/g, '-').slice(0, 80);
+}
+
+// Simple RFC-4180 CSV parser — no external deps.
+function parseSimpleCSV(csvString) {
+  const lines = csvString.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  const nonEmpty = lines.filter(l => l.trim());
+  if (!nonEmpty.length) return [];
+
+  const parseRow = (line) => {
+    const fields = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+        else inQuotes = !inQuotes;
+      } else if (ch === ',' && !inQuotes) {
+        fields.push(current);
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    fields.push(current);
+    return fields.map(f => f.trim());
+  };
+
+  const headers = parseRow(nonEmpty[0]);
+  return nonEmpty.slice(1)
+    .filter(l => l.trim())
+    .map(line => {
+      const values = parseRow(line);
+      const row = {};
+      headers.forEach((h, i) => { if (h) row[h] = values[i] ?? ''; });
+      return row;
+    });
+}
+
+// Strips HTML to structured text for Claude extraction.
+function extractHtmlContent(html, sourceUrl) {
+  let cleaned = html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+    .replace(/<header[\s\S]*?<\/header>/gi, '')
+    .replace(/<footer[\s\S]*?<\/footer>/gi, '')
+    .replace(/<aside[\s\S]*?<\/aside>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '');
+
+  const getMeta = (prop) => {
+    const m = html.match(new RegExp(`<meta\\s[^>]*(?:property|name)=["']${prop}["'][^>]*content=["']([^"']+)["']`, 'i'))
+           || html.match(new RegExp(`<meta\\s[^>]*content=["']([^"']+)["'][^>]*(?:property|name)=["']${prop}["']`, 'i'));
+    return m ? m[1].trim() : '';
+  };
+
+  const ogTitle       = getMeta('og:title')       || getMeta('twitter:title');
+  const ogDescription = getMeta('og:description') || getMeta('twitter:description') || getMeta('description');
+  const ogImage       = getMeta('og:image')        || getMeta('twitter:image');
+  const pageTitle     = (html.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1]?.trim() || '';
+
+  // Extract images
+  const images = [];
+  const imgRegex = /<img\b[^>]+>/gi;
+  let imgMatch;
+  while ((imgMatch = imgRegex.exec(cleaned)) !== null) {
+    const tag = imgMatch[0];
+    const src = (tag.match(/\bsrc=["']([^"']+)["']/) || [])[1] || '';
+    const alt = (tag.match(/\balt=["']([^"']*)["']/) || [])[1] || '';
+    if (src && !src.startsWith('data:')) {
+      try {
+        const absUrl = new URL(src, sourceUrl).href;
+        if (absUrl.startsWith('http')) images.push({ url: absUrl, alt });
+      } catch { /* skip invalid URLs */ }
+    }
+  }
+
+  // Convert to plain text
+  let text = cleaned
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/h[1-6]>/gi, '\n\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ').replace(/&#\d+;/g, ' ').replace(/&[a-z]+;/g, ' ')
+    .replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+
+  if (text.length > 14000) text = text.slice(0, 14000) + '\n... [truncated]';
+
+  return { pageTitle, ogTitle, ogDescription, ogImage, images: images.slice(0, 20), text };
+}
+
+async function normalizeWithClaude(extracted, sourceUrl) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw Object.assign(new Error('AI service not configured — add ANTHROPIC_API_KEY to environment'), { status: 503 });
+  }
+
+  const imgList = extracted.images.slice(0, 12)
+    .map((img, i) => `${i + 1}. ${img.url}${img.alt ? ` [alt: "${img.alt}"]` : ''}`)
+    .join('\n');
+
+  const systemPrompt = `You are a travel content editor for HiddenAtlas, a premium boutique travel planning service. Extract and normalise a travel article into a structured itinerary. Be concise, editorial, and accurate. Return ONLY valid JSON, no markdown, no code fences.`;
+
+  const userPrompt = `Extract structured itinerary data from this travel article.
+
+PAGE METADATA:
+Page title: ${extracted.pageTitle || '(none)'}
+OG title: ${extracted.ogTitle || '(none)'}
+OG description: ${extracted.ogDescription || '(none)'}
+OG image: ${extracted.ogImage || '(none)'}
+Source URL: ${sourceUrl}
+
+ARTICLE TEXT:
+${extracted.text}
+
+IMAGES FOUND:
+${imgList || '(none)'}
+
+Return this exact JSON (use empty string / empty array / null for missing data):
+
+{
+  "basics": {
+    "title": "concise editorial headline, destination-focused, not the blog title",
+    "subtitle": "evocative sub-line that includes duration if known, e.g. '10 Day Road Trip'",
+    "destination": "main destination name, e.g. 'Puglia, Italy'",
+    "durationDays": null,
+    "slug": "url-safe-slug, e.g. puglia-10-day-road-trip",
+    "country": "country name",
+    "region": "region or province"
+  },
+  "overview": {
+    "tagline": "max 80 chars — evocative one-liner",
+    "description": "100-200 words editorial overview suitable for HiddenAtlas itinerary listing",
+    "category": "one of: Road Trip, City Break, Island Journey, Cultural Route, Nature Escape, Luxury Escape",
+    "pace": "one of: Relaxed, Balanced, Fast",
+    "bestFor": ["select from: Couples, Families, Friend Groups, Adventurers, Solo"],
+    "groupSize": "e.g. '2-4 people'",
+    "highlights": ["up to 6 editorial highlights, max 60 chars each"]
+  },
+  "days": [
+    {
+      "dayNumber": 1,
+      "title": "Day title",
+      "description": "2-3 sentence day description",
+      "highlights": ["short activity highlights"],
+      "insiderTip": "optional insider tip string, or empty string",
+      "imageUrl": "image URL from article clearly associated with this day, or null"
+    }
+  ],
+  "sections": {
+    "hotels": [{"name": "hotel name", "type": "Boutique Hotel", "note": "one sentence description"}],
+    "practicalNotes": "practical advice: transport, best season, visa, budget tips",
+    "faq": [{"q": "question", "a": "answer"}],
+    "routeOverview": "1-2 sentence route summary",
+    "whySpecial": "1-2 sentences on what makes this destination special"
+  },
+  "images": {
+    "cover": "best cover image URL — prefer og:image, or null",
+    "gallery": ["article image URLs, max 8"],
+    "dayImages": [{"dayNumber": 1, "url": "image url"}]
+  },
+  "seo": {
+    "seoTitle": "SEO title max 60 chars",
+    "seoDescription": "meta description max 155 chars",
+    "canonicalSourceUrl": "${sourceUrl}"
+  },
+  "routeMap": {
+    "stops": [{"order": 1, "name": "place name", "latitude": null, "longitude": null, "dayNumber": 1}]
+  },
+  "warnings": ["describe any issues: missing duration, blocked images, inferred data, etc."],
+  "inferredFields": ["field names that were inferred rather than explicitly stated, e.g. category, pace, bestFor"]
+}`;
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key':         process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type':      'application/json',
+    },
+    body: JSON.stringify({
+      model:      'claude-sonnet-4-6',
+      max_tokens: 4096,
+      system:     systemPrompt,
+      messages:   [{ role: 'user', content: userPrompt }],
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw Object.assign(
+      new Error(`AI extraction failed (${response.status}): ${errText.slice(0, 200)}`),
+      { status: 502 }
+    );
+  }
+
+  const aiJson  = await response.json();
+  const rawText = (aiJson.content?.[0]?.text || '').trim();
+
+  let preview;
+  try {
+    preview = JSON.parse(rawText);
+  } catch {
+    const match = rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || rawText.match(/(\{[\s\S]*\})/);
+    try { preview = match ? JSON.parse(match[1] || match[0]) : null; } catch { preview = null; }
+  }
+
+  if (!preview?.basics) {
+    throw Object.assign(
+      new Error('AI returned an invalid structure — the page may be blocked or have too little content'),
+      { status: 502 }
+    );
+  }
+
+  return preview;
+}
+
+async function handleImportUrlPreview(body, ctx) {
+  const { url } = body;
+  if (!url || typeof url !== 'string') {
+    throw Object.assign(new Error('url is required'), { status: 400 });
+  }
+
+  let parsedUrl;
+  try { parsedUrl = new URL(url); } catch {
+    throw Object.assign(new Error('Invalid URL — must be a full https:// address'), { status: 400 });
+  }
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    throw Object.assign(new Error('Only http/https URLs are supported'), { status: 400 });
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  let html;
+  try {
+    const r = await fetch(url, {
+      signal:  controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept':     'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9,pt;q=0.8',
+      },
+    });
+    clearTimeout(timer);
+    if (!r.ok) throw Object.assign(new Error(`Page returned HTTP ${r.status} — it may require a login or be unavailable`), { status: 422 });
+    const ct = r.headers.get('content-type') || '';
+    if (!ct.includes('html') && !ct.includes('text/plain')) {
+      throw Object.assign(new Error('URL does not appear to be a web page (unexpected content type)'), { status: 422 });
+    }
+    html = await r.text();
+  } catch (err) {
+    clearTimeout(timer);
+    if (err.status) throw err;
+    if (err.name === 'AbortError') throw Object.assign(new Error('Page timed out after 20 seconds'), { status: 408 });
+    throw Object.assign(new Error(`Could not fetch page: ${err.message}`), { status: 422 });
+  }
+
+  const extracted = extractHtmlContent(html, url);
+  console.log(`[import-url] ${url} — ${extracted.text.length} chars, ${extracted.images.length} images`);
+
+  const preview = await normalizeWithClaude(extracted, url);
+  return { preview };
+}
+
+async function handleImportCsvPreview(body, ctx) {
+  const { csv } = body;
+  if (!csv || typeof csv !== 'string') {
+    throw Object.assign(new Error('csv content is required'), { status: 400 });
+  }
+
+  const rows = parseSimpleCSV(csv);
+  if (!rows.length) {
+    throw Object.assign(new Error('CSV is empty or could not be parsed — check the file format'), { status: 400 });
+  }
+
+  const errors = [];
+  const first  = rows[0];
+
+  if (!first.title)                    errors.push('Missing required column: title');
+  if (!first.slug && !first.destination) errors.push('Missing required column: slug or destination');
+  if (errors.length) throw Object.assign(new Error(errors.join('; ')), { status: 400 });
+
+  const slug = first.slug || slugify((first.destination || first.title || 'imported-itinerary'));
+
+  const inferredFields = [];
+  if (!first.category) inferredFields.push('category');
+  if (!first.pace)     inferredFields.push('pace');
+  if (!first.tagline)  inferredFields.push('tagline');
+
+  const bestFor = first.bestFor
+    ? first.bestFor.split(/[,|]/).map(s => s.trim()).filter(Boolean)
+    : [];
+
+  const highlights = first.highlights
+    ? first.highlights.split('|').map(s => s.trim()).filter(Boolean)
+    : [];
+
+  // Aggregate per-day rows (dayNumber populated)
+  const dayMap = {};
+  for (const row of rows) {
+    const dn = parseInt(row.dayNumber, 10);
+    if (!isNaN(dn) && dn > 0) {
+      if (!dayMap[dn]) {
+        dayMap[dn] = {
+          dayNumber:   dn,
+          title:       row.dayTitle       || `Day ${dn}`,
+          description: row.dayDescription || '',
+          highlights:  row.dayHighlights
+            ? row.dayHighlights.split('|').map(s => s.trim()).filter(Boolean)
+            : [],
+          insiderTip: row.insiderTip || '',
+          imageUrl:   row.imageUrl   || null,
+        };
+      }
+    }
+  }
+  const days = Object.values(dayMap).sort((a, b) => a.dayNumber - b.dayNumber);
+
+  const hotels = rows
+    .filter(r => r.hotelName)
+    .map(r => ({ name: r.hotelName, type: r.hotelType || 'Hotel', note: r.hotelNote || '' }));
+
+  const faq = rows
+    .filter(r => r.faqQuestion && r.faqAnswer)
+    .map(r => ({ q: r.faqQuestion, a: r.faqAnswer }));
+
+  const durationDays = first.durationDays
+    ? parseInt(first.durationDays, 10)
+    : (days.length || null);
+
+  const preview = {
+    basics: {
+      title:        first.title        || '',
+      subtitle:     first.subtitle     || '',
+      destination:  first.destination  || '',
+      durationDays: isNaN(durationDays) ? null : durationDays,
+      slug,
+      country:      first.country      || '',
+      region:       first.region       || '',
+    },
+    overview: {
+      tagline:     first.tagline     || '',
+      description: first.description || '',
+      category:    first.category    || '',
+      pace:        first.pace        || '',
+      bestFor,
+      groupSize:   first.groupSize   || '',
+      highlights,
+    },
+    days,
+    sections: {
+      hotels,
+      practicalNotes: first.practicalNotes || '',
+      faq,
+      routeOverview:  first.routeOverview  || '',
+      whySpecial:     first.whySpecial     || '',
+    },
+    images:   { cover: first.coverImage || null, gallery: [], dayImages: [] },
+    seo: {
+      seoTitle:           first.seoTitle       || '',
+      seoDescription:     first.seoDescription || '',
+      canonicalSourceUrl: '',
+    },
+    routeMap:      { stops: [] },
+    warnings:      [],
+    inferredFields,
+  };
+
+  return { preview };
+}
+
+async function handleImportConfirm(pool, body, ctx) {
+  const { preview, ownerDesignerId } = body;
+  if (!preview?.basics) {
+    throw Object.assign(new Error('Invalid preview data'), { status: 400 });
+  }
+
+  const { basics, overview, days, sections, images, seo, routeMap } = preview;
+
+  // Build a unique slug
+  let slug = slugify(basics.slug || basics.title || 'imported-itinerary');
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const candidate = attempt === 0 ? slug : `${slug}-${attempt + 1}`;
+    const { rows: found } = await pool.query(
+      `SELECT id FROM "Itinerary" WHERE slug = $1 LIMIT 1`, [candidate]
+    );
+    if (!found.length) { slug = candidate; break; }
+    if (attempt === 49) slug = `${slug}-${Date.now()}`;
+  }
+
+  // Map preview to content JSONB
+  const content = {
+    hero: {
+      title:       basics.title    || '',
+      subtitle:    basics.subtitle || '',
+      tagline:     overview?.tagline   || '',
+      coverImage:  images?.cover   || '',
+    },
+    summary: {
+      shortDescription: overview?.description   || '',
+      whySpecial:       sections?.whySpecial    || '',
+      routeOverview:    sections?.routeOverview || '',
+      highlights:       overview?.highlights    || [],
+      included:         [],
+    },
+    tripFacts: {
+      groupSize:  overview?.groupSize || '',
+      difficulty: overview?.pace      || 'Moderate',
+      bestFor:    overview?.bestFor   || [],
+      category:   overview?.category  || '',
+    },
+    days: (days || []).map((d, i) => ({
+      day:     d.dayNumber || i + 1,
+      title:   d.title       || '',
+      desc:    d.description || '',
+      bullets: d.highlights  || [],
+      tip:     d.insiderTip  || '',
+      img:     d.imageUrl    || '',
+    })),
+    sections: {
+      hotels: (sections?.hotels || []).map(h => ({
+        name: h.name || '', type: h.type || 'Hotel', note: h.note || '',
+      })),
+      practicalNotes: sections?.practicalNotes || '',
+      faq: (sections?.faq || []).map(f => ({ q: f.q || '', a: f.a || '' })),
+    },
+    pdfConfig: { showRouteMap: true, showHotels: true },
+    seo:       { metaTitle: seo?.seoTitle || '', metaDescription: seo?.seoDescription || '' },
+    routeMap:  {
+      showOnSite: false,
+      imageUrl:   '', alt: '', caption: '',
+      stops: (routeMap?.stops || []).map((s, i) => ({
+        id:        `stop-${i + 1}`,
+        order:     s.order     || i + 1,
+        name:      s.name      || '',
+        latitude:  typeof s.latitude  === 'number' ? s.latitude  : null,
+        longitude: typeof s.longitude === 'number' ? s.longitude : null,
+        dayNumber: s.dayNumber || null,
+        source:    'imported',
+        visible:   true,
+      })),
+    },
+  };
+
+  // Creator assignment — admins may pass ownerDesignerId; non-admins are forced to their own
+  let creatorId = null;
+  if (ctx.isAdmin && ownerDesignerId) {
+    // Verify the creator exists
+    const { rows: cr } = await pool.query(`SELECT id FROM "Creator" WHERE id = $1 LIMIT 1`, [ownerDesignerId]);
+    if (cr.length) creatorId = ownerDesignerId;
+  }
+  // handleCreate will override creatorId for non-admins automatically
+
+  const createBody = {
+    title:        basics.title       || 'Imported Itinerary',
+    subtitle:     basics.subtitle    || '',
+    slug,
+    destination:  basics.destination || '',
+    country:      basics.country     || '',
+    region:       basics.region      || '',
+    durationDays: basics.durationDays || null,
+    type:         'free',
+    isPrivate:    false,
+    coverImage:   images?.cover || '',
+    content,
+    status:       'draft',
+    creatorId,
+  };
+
+  console.log(`[import-confirm] creating draft: "${createBody.title}" slug="${slug}"`);
+  return handleCreate(pool, createBody, ctx);
+}
+
+function handleImportCsvTemplate() {
+  const csv = [
+    'title,subtitle,destination,durationDays,country,region,tagline,description,category,pace,bestFor,groupSize,slug,seoTitle,seoDescription,highlights,coverImage,routeOverview,whySpecial,practicalNotes,dayNumber,dayTitle,dayDescription,dayHighlights,insiderTip,imageUrl,hotelName,hotelType,hotelNote,faqQuestion,faqAnswer',
+    '"10 Days in Puglia","Southern Italy Road Trip","Puglia, Italy",10,"Italy","Puglia","Ancient trulli and sun-bleached piazzas","Discover the soul of southern Italy across 10 leisurely days through trulli villages, baroque towns, and a rugged coastline.","Road Trip","Relaxed","Couples|Families","2-6 people","puglia-10-days","10 Days in Puglia, Italy | Road Trip","Explore Puglia\'s trulli villages, whitewashed towns and seafood coast in 10 days.","Trulli of Alberobello|Baroque Lecce|Polignano cliffs|Ostuni hilltop|Otranto castle|Adriatic seafood","","Drive along the Valle d\'Itria and the Adriatic coast","The light in Puglia is unlike anywhere else in Europe","Rent a car. Best visited April-June or September-October. Cash useful in smaller towns.","","","","","","","","","","",""',
+    '"","","","","","","","","","","","","","","","","","","","","1","Arrival in Bari","Fly into Bari Karol Wojtyla Airport and check into the old quarter. Explore the Basilica di San Nicola and the seafront promenade before dinner in the Murattiano district.","Basilica di San Nicola|Seafront promenade|Old town dinner","Try focaccia barese from a street bakery","","","","","","",""',
+    '"","","","","","","","","","","","","","","","","","","","","2","Alberobello and the Valle d\'Itria","Drive south through the Valle d\'Itria to Alberobello, home to over 1,500 trulli houses. Explore the Rione Monti district.","Rione Monti trulli|Locorotondo walls|Valle d\'Itria overlook","Visit early morning before tour groups arrive","","Masseria Torre Coccaro","Masseria Hotel","A historic working farm converted into a boutique retreat surrounded by olive groves","",""',
+  ].join('\n');
+  return { csv };
 }
