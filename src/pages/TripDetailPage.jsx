@@ -212,11 +212,11 @@ const btnSecondary = {
 };
 
 // ─────────────────────────────────────────────
-// WorkspaceNav — sticky horizontal tab bar
+// WorkspaceNav — sticky horizontal tab bar (desktop/tablet only, hidden on mobile via CSS)
 // ─────────────────────────────────────────────
 function WorkspaceNav({ activeTab, onChange }) {
   return (
-    <nav style={{
+    <nav className="workspace-tab-bar" style={{
       position: 'sticky', top: '64px', zIndex: 100,
       background: 'rgba(250,250,248,0.95)',
       backdropFilter: 'blur(8px)',
@@ -224,7 +224,13 @@ function WorkspaceNav({ activeTab, onChange }) {
     }}>
       <div style={{
         maxWidth: '960px', margin: '0 auto',
-        display: 'flex', overflowX: 'auto',
+        display: 'flex',
+        overflowX: 'auto',
+        // Prevent the scrollable tab row from being dragged vertically,
+        // which causes horizontal jumps during vertical page scroll on touch.
+        touchAction: 'pan-x',
+        overscrollBehaviorX: 'contain',
+        WebkitOverflowScrolling: 'touch',
         padding: '0 20px',
         scrollbarWidth: 'none',
         msOverflowStyle: 'none',
@@ -258,17 +264,27 @@ function WorkspaceNav({ activeTab, onChange }) {
 }
 
 // ─────────────────────────────────────────────
-// Mobile bottom nav
+// Mobile bottom nav (mobile only, hidden on desktop via CSS)
+// 5 tabs: Overview, Days, Map, Notes, Bookings
 // ─────────────────────────────────────────────
+const MOBILE_TABS = ['overview', 'days', 'map', 'notes', 'bookings'];
+
 function MobileNav({ activeTab, onChange }) {
-  const primary = TABS.filter(t => ['overview','days','map','notes'].includes(t.id));
+  const tabs = TABS.filter(t => MOBILE_TABS.includes(t.id));
   return (
-    <div style={{
-      position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 200,
-      background: 'white', borderTop: `1px solid ${BORDER}`,
-      display: 'flex', padding: '8px 0 20px',
-    }}>
-      {primary.map(({ id, label, Icon }) => {
+    <div
+      className="workspace-bottom-nav"
+      style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 200,
+        background: 'white',
+        borderTop: `1px solid ${BORDER}`,
+        // flex is applied via CSS for display toggling
+        paddingTop: '8px',
+        // Safe area for iPhone home bar
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
+    >
+      {tabs.map(({ id, label, Icon }) => {
         const active = activeTab === id;
         return (
           <button
@@ -276,14 +292,18 @@ function MobileNav({ activeTab, onChange }) {
             onClick={() => onChange(id)}
             style={{
               flex: 1, display: 'flex', flexDirection: 'column',
-              alignItems: 'center', gap: '4px',
+              alignItems: 'center', gap: '3px',
+              padding: '2px 0 10px',
               background: 'none', border: 'none', cursor: 'pointer',
               color: active ? TEAL : '#B5A09A',
               transition: 'color 0.15s',
             }}
           >
-            <Icon size={20} />
-            <span style={{ fontSize: '10px', fontWeight: '600', letterSpacing: '0.5px' }}>
+            <Icon size={20} strokeWidth={active ? 2.5 : 1.75} />
+            <span style={{
+              fontSize: '9.5px', fontWeight: '600', letterSpacing: '0.3px',
+              lineHeight: 1,
+            }}>
               {label === 'Day by Day' ? 'Days' : label}
             </span>
           </button>
@@ -1913,11 +1933,12 @@ export default function TripDetailPage() {
         </div>
       </section>
 
-      {/* ── Workspace nav ──────────────────────────────────── */}
+      {/* ── Workspace nav (desktop/tablet) ─────────────────── */}
       <WorkspaceNav activeTab={activeTab} onChange={setActiveTab} />
 
       {/* ── Tab content ─────────────────────────────────────── */}
-      <div style={{ paddingBottom: '100px' }}>
+      {/* paddingBottom on desktop; on mobile CSS overrides to account for bottom nav + safe area */}
+      <div className="workspace-content" style={{ paddingBottom: '100px' }}>
         {activeTab === 'overview' && (
           <OverviewTab workspace={workspace} onEditDetails={() => setShowDetails(true)} />
         )}
@@ -1964,10 +1985,8 @@ export default function TripDetailPage() {
         )}
       </div>
 
-      {/* ── Mobile bottom nav ──────────────────────────────── */}
-      <div style={{ display: 'none' }} className="mobile-nav-wrapper">
-        <MobileNav activeTab={activeTab} onChange={setActiveTab} />
-      </div>
+      {/* ── Mobile bottom nav (always rendered, CSS controls visibility) ── */}
+      <MobileNav activeTab={activeTab} onChange={setActiveTab} />
 
       {/* ── Modals ─────────────────────────────────────────── */}
       {showDetails && (
@@ -2012,10 +2031,32 @@ export default function TripDetailPage() {
         />
       )}
 
-      {/* Mobile nav — CSS media query controlled */}
       <style>{`
-        @media (max-width: 640px) {
-          .mobile-nav-wrapper { display: block !important; }
+        /* ── Workspace responsive navigation ──────────────────────────────
+           Desktop (≥769px): horizontal sticky tab bar, no bottom nav.
+           Mobile  (≤768px): bottom nav only, no horizontal tab bar.
+        ─────────────────────────────────────────────────────────────────── */
+
+        /* Bottom nav: hidden by default, shown only on mobile */
+        .workspace-bottom-nav {
+          display: none;
+        }
+
+        @media (max-width: 768px) {
+          /* Hide horizontal tabs on mobile — prevents scroll-induced horizontal jumps */
+          .workspace-tab-bar {
+            display: none !important;
+          }
+
+          /* Show bottom nav as a flex row on mobile */
+          .workspace-bottom-nav {
+            display: flex !important;
+          }
+
+          /* Push content above bottom nav (64px nav + 8px top pad + safe area) */
+          .workspace-content {
+            padding-bottom: calc(72px + env(safe-area-inset-bottom)) !important;
+          }
         }
       `}</style>
     </div>
