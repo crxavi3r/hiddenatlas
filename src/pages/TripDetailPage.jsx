@@ -335,9 +335,9 @@ function TripDetailsModal({ workspace, open, onClose, onSave, saving }) {
 // AddItemModal — add custom item to a day
 // ─────────────────────────────────────────────
 function AddItemModal({ open, tripId, tripDayId, dayNumber, onClose, onSave, saving }) {
-  const [form, setForm] = useState({ type: 'place', title: '', time: '', location: '', duration: '', notes: '' });
+  const [form, setForm] = useState({ type: 'place', title: '', time: '', locationName: '', durationMinutes: '', notes: '' });
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
-  function reset() { setForm({ type: 'place', title: '', time: '', location: '', duration: '', notes: '' }); }
+  function reset() { setForm({ type: 'place', title: '', time: '', locationName: '', durationMinutes: '', notes: '' }); }
 
   return (
     <Modal open={open} onClose={() => { reset(); onClose(); }} title={`Add to Day ${dayNumber || ''}`}>
@@ -353,12 +353,12 @@ function AddItemModal({ open, tripId, tripDayId, dayNumber, onClose, onSave, sav
         <FormField label="Time (optional)">
           <input type="text" value={form.time} onChange={e => set('time', e.target.value)} placeholder="e.g. 10:00" style={inputStyle} />
         </FormField>
-        <FormField label="Duration (optional)">
-          <input type="text" value={form.duration} onChange={e => set('duration', e.target.value)} placeholder="e.g. 2 hours" style={inputStyle} />
+        <FormField label="Duration in minutes (optional)">
+          <input type="number" min="0" value={form.durationMinutes} onChange={e => set('durationMinutes', e.target.value)} placeholder="e.g. 90" style={inputStyle} />
         </FormField>
       </div>
       <FormField label="Location (optional)">
-        <input type="text" value={form.location} onChange={e => set('location', e.target.value)} placeholder="e.g. Marrakech medina" style={inputStyle} />
+        <input type="text" value={form.locationName} onChange={e => set('locationName', e.target.value)} placeholder="e.g. Marrakech medina" style={inputStyle} />
       </FormField>
       <FormField label="Notes (optional)">
         <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Any details..." rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
@@ -412,15 +412,15 @@ function AddNoteModal({ open, tripId, tripDayId, dayNumber, onClose, onSave, sav
 // AddBookingModal
 // ─────────────────────────────────────────────
 function AddBookingModal({ open, tripId, tripDayId, dayNumber, onClose, onSave, saving }) {
-  const [form, setForm] = useState({ category: 'hotel', title: '', date: '', time: '', location: '', provider: '', reference: '', notes: '', url: '' });
+  const [form, setForm] = useState({ type: 'hotel', title: '', date: '', time: '', locationName: '', provider: '', confirmationReference: '', notes: '', url: '' });
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
-  function reset() { setForm({ category: 'hotel', title: '', date: '', time: '', location: '', provider: '', reference: '', notes: '', url: '' }); }
+  function reset() { setForm({ type: 'hotel', title: '', date: '', time: '', locationName: '', provider: '', confirmationReference: '', notes: '', url: '' }); }
 
   return (
     <Modal open={open} onClose={() => { reset(); onClose(); }} title={dayNumber ? `Add booking — Day ${dayNumber}` : 'Add booking'} wide>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-        <FormField label="Category">
-          <select value={form.category} onChange={e => set('category', e.target.value)} style={inputStyle}>
+        <FormField label="Type">
+          <select value={form.type} onChange={e => set('type', e.target.value)} style={inputStyle}>
             {BOOKING_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
         </FormField>
@@ -440,10 +440,10 @@ function AddBookingModal({ open, tripId, tripDayId, dayNumber, onClose, onSave, 
         </FormField>
       </div>
       <FormField label="Location">
-        <input type="text" value={form.location} onChange={e => set('location', e.target.value)} placeholder="Address or area" style={inputStyle} />
+        <input type="text" value={form.locationName} onChange={e => set('locationName', e.target.value)} placeholder="Address or area" style={inputStyle} />
       </FormField>
       <FormField label="Confirmation / Reference">
-        <input type="text" value={form.reference} onChange={e => set('reference', e.target.value)} placeholder="e.g. #ABC123456" style={inputStyle} />
+        <input type="text" value={form.confirmationReference} onChange={e => set('confirmationReference', e.target.value)} placeholder="e.g. #ABC123456" style={inputStyle} />
       </FormField>
       <FormField label="Booking URL (optional)">
         <input type="url" value={form.url} onChange={e => set('url', e.target.value)} placeholder="https://..." style={inputStyle} />
@@ -470,9 +470,27 @@ const TYPE_COLORS = {
   break: '#8C8070', note: '#C9A96E',
 };
 
+function formatItemTime(item) {
+  if (item.startTime && item.endTime) return `${item.startTime} → ${item.endTime}`;
+  if (item.time) return item.time;
+  return null;
+}
+
+function formatDuration(minutes) {
+  if (!minutes) return null;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
 function ItemCard({ item, onDelete }) {
   const color = TYPE_COLORS[item.type] || MUTED;
   const typeLabel = ITEM_TYPES.find(t => t.value === item.type)?.label || item.type;
+  const timeDisplay = formatItemTime(item);
+  const durationDisplay = formatDuration(item.durationMinutes);
+  const metaParts = [timeDisplay, durationDisplay, item.locationName].filter(Boolean);
 
   return (
     <div style={{
@@ -497,13 +515,11 @@ function ItemCard({ item, onDelete }) {
             </span>
           )}
         </div>
-        <p style={{ fontSize: '14px', fontWeight: '600', color: CHAR, marginBottom: item.location || item.time ? '4px' : 0 }}>
+        <p style={{ fontSize: '14px', fontWeight: '600', color: CHAR, marginBottom: metaParts.length ? '4px' : 0 }}>
           {item.title}
         </p>
-        {(item.time || item.duration || item.location) && (
-          <p style={{ fontSize: '12.5px', color: MUTED }}>
-            {[item.time, item.duration, item.location].filter(Boolean).join(' · ')}
-          </p>
+        {metaParts.length > 0 && (
+          <p style={{ fontSize: '12.5px', color: MUTED }}>{metaParts.join(' · ')}</p>
         )}
         {item.notes && (
           <p style={{ fontSize: '13px', color: MUTED, marginTop: '5px', lineHeight: '1.5' }}>{item.notes}</p>
@@ -560,8 +576,8 @@ const CAT_COLORS = {
 };
 
 function BookingCard({ booking, onDelete }) {
-  const color = CAT_COLORS[booking.category] || MUTED;
-  const catLabel = BOOKING_CATEGORIES.find(c => c.value === booking.category)?.label || booking.category;
+  const color = CAT_COLORS[booking.type] || MUTED;
+  const catLabel = BOOKING_CATEGORIES.find(c => c.value === booking.type)?.label || booking.type;
 
   return (
     <div style={{
@@ -583,14 +599,14 @@ function BookingCard({ booking, onDelete }) {
             )}
           </div>
           <p style={{ fontSize: '15px', fontWeight: '600', color: CHAR, marginBottom: '4px' }}>{booking.title}</p>
-          {(booking.location || booking.provider) && (
+          {(booking.locationName || booking.provider) && (
             <p style={{ fontSize: '13px', color: MUTED, marginBottom: '4px' }}>
-              {[booking.location, booking.provider].filter(Boolean).join(' · ')}
+              {[booking.locationName, booking.provider].filter(Boolean).join(' · ')}
             </p>
           )}
-          {booking.reference && (
+          {booking.confirmationReference && (
             <p style={{ fontSize: '12px', fontFamily: 'monospace', color: TEAL, background: '#EFF6F5', padding: '3px 8px', borderRadius: '3px', display: 'inline-block' }}>
-              {booking.reference}
+              {booking.confirmationReference}
             </p>
           )}
           {booking.notes && (
@@ -1001,7 +1017,7 @@ function MapTab({ workspace }) {
   const mapImageUrl = content?.routeMap?.imageUrl || null;
   const mapAlt = content?.routeMap?.alt || `${itinerary?.title || 'Route'} map`;
 
-  const userPlaces = tripItems.filter(i => i.location || i.type === 'place');
+  const userPlaces = tripItems.filter(i => i.locationName || i.type === 'place');
 
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: 'clamp(32px, 5vw, 56px) 24px' }}>
@@ -1062,7 +1078,7 @@ function MapTab({ workspace }) {
                 <MapPin size={14} color={GOLD} style={{ flexShrink: 0, marginTop: '2px' }} />
                 <div>
                   <p style={{ fontSize: '14px', fontWeight: '600', color: CHAR }}>{place.title}</p>
-                  {place.location && <p style={{ fontSize: '12.5px', color: MUTED }}>{place.location}</p>}
+                  {place.locationName && <p style={{ fontSize: '12.5px', color: MUTED }}>{place.locationName}</p>}
                 </div>
               </div>
             ))}
@@ -1147,7 +1163,7 @@ function BookingsTab({ workspace, onAddBooking, onDeleteBooking }) {
   const { tripBookings } = workspace;
 
   const byCategory = BOOKING_CATEGORIES.reduce((acc, cat) => {
-    acc[cat.value] = tripBookings.filter(b => b.category === cat.value);
+    acc[cat.value] = tripBookings.filter(b => b.type === cat.value);
     return acc;
   }, {});
 
@@ -1435,11 +1451,12 @@ export default function TripDetailPage() {
         }));
         setEditNote(null);
       } else {
-        const body = { ...form, tripDayId: addNoteCtx?.dayId || null, type: addNoteCtx?.dayId ? 'day' : 'general' };
+        const noteType = addNoteCtx?.dayId ? 'day' : 'general';
+        const body = { ...form, tripDayId: addNoteCtx?.dayId || null, noteType };
         const res  = await api.post(`/api/trips?id=${id}&action=note`, body);
         if (!res.ok) throw new Error('Save failed');
         const { id: newId } = await res.json();
-        const newNote = { id: newId, tripId: id, tripDayId: addNoteCtx?.dayId || null, type: body.type, ...form, createdAt: new Date().toISOString() };
+        const newNote = { id: newId, tripId: id, tripDayId: addNoteCtx?.dayId || null, noteType, ...form, createdAt: new Date().toISOString() };
         setWorkspace(w => ({ ...w, tripNotes: [...w.tripNotes, newNote] }));
         setAddNoteCtx(null);
       }

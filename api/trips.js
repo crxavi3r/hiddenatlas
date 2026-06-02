@@ -172,9 +172,10 @@ export default async function handler(req, res) {
       );
 
       const { rows: tripItems } = await pool.query(
-        `SELECT id, "tripId", "tripDayId", type, title, description,
-                time, duration, location, notes, "bookingRef",
-                status, "isHidden", "sortOrder", "sourceItemId", metadata,
+        `SELECT id, "tripId", "tripDayId", "dayNumber", type, title, description,
+                time, "startTime", "endTime", "durationMinutes", "locationName",
+                notes, "bookingReference", provider, url,
+                status, "isHidden", "isLocked", "sortOrder", metadata,
                 "createdAt", "updatedAt"
          FROM "TripItem"
          WHERE "tripId" = $1 AND "isHidden" = false
@@ -183,8 +184,8 @@ export default async function handler(req, res) {
       );
 
       const { rows: tripNotes } = await pool.query(
-        `SELECT id, "tripId", "tripDayId", "tripItemId", type, title, content,
-                "createdAt", "updatedAt"
+        `SELECT id, "tripId", "tripDayId", "tripItemId", "dayNumber", title, content,
+                "noteType", "isPinned", "createdAt", "updatedAt"
          FROM "TripNote"
          WHERE "tripId" = $1
          ORDER BY "createdAt" ASC`,
@@ -192,9 +193,9 @@ export default async function handler(req, res) {
       );
 
       const { rows: tripBookings } = await pool.query(
-        `SELECT id, "tripId", "tripDayId", "tripItemId", category, title,
-                date, time, location, provider, reference, notes, url,
-                "attachmentUrl", "createdAt", "updatedAt"
+        `SELECT id, "tripId", "tripDayId", "tripItemId", "dayNumber", type, title,
+                date, time, "locationName", provider, "confirmationReference", notes, url,
+                "attachmentUrl", status, "createdAt", "updatedAt"
          FROM "TripBooking"
          WHERE "tripId" = $1
          ORDER BY date ASC NULLS LAST, "createdAt" ASC`,
@@ -272,15 +273,17 @@ export default async function handler(req, res) {
       const owned = await getOwnedTrip(id);
       if (!owned) return res.status(404).json({ error: 'Trip not found' });
 
-      const { tripDayId, type, title, description, time, duration, location, notes, sortOrder } = req.body || {};
+      const { tripDayId, type, title, description, time, startTime, endTime, durationMinutes, locationName, notes, sortOrder } = req.body || {};
       if (!title) return res.status(400).json({ error: 'title is required' });
 
       const { rows } = await pool.query(
-        `INSERT INTO "TripItem" (id, "tripId", "tripDayId", type, title, description, time, duration, location, notes, "sortOrder", "createdAt", "updatedAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+        `INSERT INTO "TripItem" (id, "tripId", "tripDayId", type, title, description, time, "startTime", "endTime", "durationMinutes", "locationName", notes, "sortOrder", "createdAt", "updatedAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
          RETURNING id`,
         [id, tripDayId || null, type || 'place', title, description || null,
-         time || null, duration || null, location || null, notes || null,
+         time || null, startTime || null, endTime || null,
+         durationMinutes != null ? Number(durationMinutes) : null,
+         locationName || null, notes || null,
          sortOrder != null ? Number(sortOrder) : 0]
       );
       return res.status(200).json({ id: rows[0].id });
@@ -296,16 +299,19 @@ export default async function handler(req, res) {
       );
       if (!itemRows.length) return res.status(404).json({ error: 'Item not found' });
 
-      const { type, title, description, time, duration, location, notes, bookingRef, status, sortOrder } = req.body || {};
+      const { type, title, description, time, startTime, endTime, durationMinutes, locationName, notes, bookingReference, status, sortOrder } = req.body || {};
       await pool.query(
         `UPDATE "TripItem"
          SET type = COALESCE($1, type), title = COALESCE($2, title),
-             description = $3, time = $4, duration = $5, location = $6, notes = $7,
-             "bookingRef" = $8, status = COALESCE($9, status),
-             "sortOrder" = COALESCE($10, "sortOrder"), "updatedAt" = NOW()
-         WHERE id = $11`,
+             description = $3, time = $4, "startTime" = $5, "endTime" = $6,
+             "durationMinutes" = $7, "locationName" = $8, notes = $9,
+             "bookingReference" = $10, status = COALESCE($11, status),
+             "sortOrder" = COALESCE($12, "sortOrder"), "updatedAt" = NOW()
+         WHERE id = $13`,
         [type || null, title || null, description || null, time || null,
-         duration || null, location || null, notes || null, bookingRef || null,
+         startTime || null, endTime || null,
+         durationMinutes != null ? Number(durationMinutes) : null,
+         locationName || null, notes || null, bookingReference || null,
          status || null, sortOrder != null ? Number(sortOrder) : null, itemId]
       );
       return res.status(200).json({ ok: true });
@@ -330,14 +336,14 @@ export default async function handler(req, res) {
       const owned = await getOwnedTrip(id);
       if (!owned) return res.status(404).json({ error: 'Trip not found' });
 
-      const { tripDayId, tripItemId, type, title, content } = req.body || {};
+      const { tripDayId, tripItemId, noteType, title, content } = req.body || {};
       if (!content) return res.status(400).json({ error: 'content is required' });
 
       const { rows } = await pool.query(
-        `INSERT INTO "TripNote" (id, "tripId", "tripDayId", "tripItemId", type, title, content, "createdAt", "updatedAt")
+        `INSERT INTO "TripNote" (id, "tripId", "tripDayId", "tripItemId", "noteType", title, content, "createdAt", "updatedAt")
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW(), NOW())
          RETURNING id`,
-        [id, tripDayId || null, tripItemId || null, type || 'general', title || null, content]
+        [id, tripDayId || null, tripItemId || null, noteType || 'general', title || null, content]
       );
       return res.status(200).json({ id: rows[0].id });
     }
@@ -381,16 +387,16 @@ export default async function handler(req, res) {
       const owned = await getOwnedTrip(id);
       if (!owned) return res.status(404).json({ error: 'Trip not found' });
 
-      const { tripDayId, tripItemId, category, title, date, time, location, provider, reference, notes, url } = req.body || {};
+      const { tripDayId, tripItemId, type, title, date, time, locationName, provider, confirmationReference, notes, url } = req.body || {};
       if (!title) return res.status(400).json({ error: 'title is required' });
 
       const { rows } = await pool.query(
-        `INSERT INTO "TripBooking" (id, "tripId", "tripDayId", "tripItemId", category, title, date, time, location, provider, reference, notes, url, "createdAt", "updatedAt")
+        `INSERT INTO "TripBooking" (id, "tripId", "tripDayId", "tripItemId", type, title, date, time, "locationName", provider, "confirmationReference", notes, url, "createdAt", "updatedAt")
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
          RETURNING id`,
-        [id, tripDayId || null, tripItemId || null, category || 'other', title,
-         date || null, time || null, location || null, provider || null,
-         reference || null, notes || null, url || null]
+        [id, tripDayId || null, tripItemId || null, type || 'other', title,
+         date || null, time || null, locationName || null, provider || null,
+         confirmationReference || null, notes || null, url || null]
       );
       return res.status(200).json({ id: rows[0].id });
     }
@@ -405,15 +411,15 @@ export default async function handler(req, res) {
       );
       if (!bookingRows.length) return res.status(404).json({ error: 'Booking not found' });
 
-      const { category, title, date, time, location, provider, reference, notes, url } = req.body || {};
+      const { type, title, date, time, locationName, provider, confirmationReference, notes, url } = req.body || {};
       await pool.query(
         `UPDATE "TripBooking"
-         SET category = COALESCE($1, category), title = COALESCE($2, title),
-             date = $3, time = $4, location = $5, provider = $6,
-             reference = $7, notes = $8, url = $9, "updatedAt" = NOW()
+         SET type = COALESCE($1, type), title = COALESCE($2, title),
+             date = $3, time = $4, "locationName" = $5, provider = $6,
+             "confirmationReference" = $7, notes = $8, url = $9, "updatedAt" = NOW()
          WHERE id = $10`,
-        [category || null, title || null, date || null, time || null,
-         location || null, provider || null, reference || null,
+        [type || null, title || null, date || null, time || null,
+         locationName || null, provider || null, confirmationReference || null,
          notes || null, url || null, bookingId]
       );
       return res.status(200).json({ ok: true });

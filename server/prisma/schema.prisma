@@ -275,24 +275,35 @@ model TripDay {
 // status: planned | booked | done | skipped
 // ─────────────────────────────────────────────
 model TripItem {
-  id           String   @id @default(uuid())
-  tripId       String
-  tripDayId    String?
-  type         String   @default("place")
-  title        String
-  description  String?
-  time         String?
-  duration     String?
-  location     String?
-  notes        String?
-  bookingRef   String?
-  status       String   @default("planned")
-  isHidden     Boolean  @default(false)
-  sortOrder    Int      @default(0)
-  sourceItemId String?  // if shadowing an original itinerary item
-  metadata     Json     @default("{}")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @default(now())  // updated via raw SQL
+  id              String   @id @default(uuid())
+  tripId          String
+  tripDayId       String?
+  dayNumber       Int?
+  sourceType      String?
+  sourceKey       String?
+  sourceTitle     String?
+  title           String
+  description     String?
+  type            String   @default("place")
+  locationName    String?
+  address         String?
+  latitude        Float?
+  longitude       Float?
+  startTime       String?
+  endTime         String?
+  durationMinutes Int?
+  status          String   @default("planned")
+  notes           String?
+  bookingReference String?
+  provider        String?
+  url             String?
+  isHidden        Boolean  @default(false)
+  isLocked        Boolean  @default(false)
+  sortOrder       Int      @default(0)
+  metadata        Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now())  // updated via raw SQL
+  time            String?  // compatibility display field
 
   trip           Trip          @relation(fields: [tripId],    references: [id], onDelete: Cascade)
   tripDay        TripDay?      @relation(fields: [tripDayId], references: [id])
@@ -305,16 +316,19 @@ model TripItem {
 
 // ─────────────────────────────────────────────
 // TripNote  (general, day, item, or private notes)
-// type: general | day | item | private
+// noteType: general | day | item | private
 // ─────────────────────────────────────────────
 model TripNote {
   id         String   @id @default(uuid())
   tripId     String
   tripDayId  String?
   tripItemId String?
-  type       String   @default("general")
+  dayNumber  Int?
   title      String?
   content    String
+  noteType   String   @default("general")
+  isPinned   Boolean  @default(false)
+  metadata   Json     @default("{}")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @default(now())  // updated via raw SQL
 
@@ -329,26 +343,31 @@ model TripNote {
 
 // ─────────────────────────────────────────────
 // TripBooking  (hotels, flights, restaurants, etc.)
-// category: hotel | restaurant | experience | transfer | flight | event | other
+// type: hotel | restaurant | experience | transfer | flight | event | other
 // ─────────────────────────────────────────────
 model TripBooking {
-  id            String    @id @default(uuid())
-  tripId        String
-  tripDayId     String?
-  tripItemId    String?
-  category      String    @default("other")
-  title         String
-  date          DateTime?
-  time          String?
-  location      String?
-  provider      String?
-  reference     String?
-  notes         String?
-  url           String?
-  attachmentUrl String?
-  metadata      Json      @default("{}")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @default(now())  // updated via raw SQL
+  id                    String    @id @default(uuid())
+  tripId                String
+  tripDayId             String?
+  tripItemId            String?
+  dayNumber             Int?
+  type                  String    @default("other")
+  title                 String
+  provider              String?
+  date                  DateTime?
+  time                  String?
+  locationName          String?
+  address               String?
+  latitude              Float?
+  longitude             Float?
+  confirmationReference String?
+  notes                 String?
+  url                   String?
+  attachmentUrl         String?
+  status                String?
+  metadata              Json      @default("{}")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @default(now())  // updated via raw SQL
 
   trip     Trip      @relation(fields: [tripId],     references: [id], onDelete: Cascade)
   tripDay  TripDay?  @relation(fields: [tripDayId],  references: [id])
