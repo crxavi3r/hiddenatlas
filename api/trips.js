@@ -4,6 +4,67 @@ import { verifyAuth } from './_lib/verifyAuth.js';
 
 const { Pool } = pg;
 
+// ─────────────────────────────────────────────
+// Booking validation helper
+// ─────────────────────────────────────────────
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function validateBooking(type, body, meta) {
+  const errs = [];
+
+  if (body.date && !DATE_RE.test(body.date))
+    errs.push('Invalid date format — use YYYY-MM-DD');
+  if (body.time && !TIME_RE.test(body.time))
+    errs.push('Invalid time format — use HH:mm');
+
+  // All metadata time fields must be HH:mm
+  const metaTimeKeys = ['checkInTime','checkOutTime','departureTime','arrivalTime','pickupTime','endTime'];
+  for (const k of metaTimeKeys) {
+    if (meta[k] && !TIME_RE.test(meta[k]))
+      errs.push(`Invalid ${k} — use HH:mm`);
+  }
+  // All metadata date fields must be YYYY-MM-DD
+  const metaDateKeys = ['checkInDate','checkOutDate','departureDate','arrivalDate'];
+  for (const k of metaDateKeys) {
+    if (meta[k] && !DATE_RE.test(meta[k]))
+      errs.push(`Invalid ${k} — use YYYY-MM-DD`);
+  }
+
+  if (type === 'hotel') {
+    if (!meta.checkInDate)  errs.push('checkInDate is required for hotel bookings');
+    if (!meta.checkOutDate) errs.push('checkOutDate is required for hotel bookings');
+    if (meta.checkInDate && meta.checkOutDate &&
+        DATE_RE.test(meta.checkInDate) && DATE_RE.test(meta.checkOutDate)) {
+      if (meta.checkOutDate < meta.checkInDate)
+        errs.push('Check-out date must be on or after check-in date');
+      if (meta.checkOutDate === meta.checkInDate &&
+          meta.checkInTime && meta.checkOutTime &&
+          TIME_RE.test(meta.checkInTime) && TIME_RE.test(meta.checkOutTime) &&
+          meta.checkOutTime <= meta.checkInTime)
+        errs.push('Same-day check-out time must be after check-in time');
+    }
+  }
+
+  if (type === 'flight') {
+    const { departureDate: dd, arrivalDate: ad, departureTime: dt, arrivalTime: at } = meta;
+    if (dd && ad && dt && at &&
+        DATE_RE.test(dd) && DATE_RE.test(ad) &&
+        TIME_RE.test(dt) && TIME_RE.test(at) &&
+        dd === ad && at <= dt)
+      errs.push('Same-day arrival time must be after departure time');
+  }
+
+  if (type === 'event') {
+    const st = body.time;
+    const et = meta.endTime;
+    if (st && et && TIME_RE.test(st) && TIME_RE.test(et) && et <= st)
+      errs.push('End time must be after start time');
+  }
+
+  return errs;
+}
+
 // GET    /api/trips                          — list all trips for user
 // GET    /api/trips?id=<uuid>                — get single trip with days (basic)
 // GET    /api/trips?id=<uuid>&action=workspace — full workspace data (trip + itinerary + items + notes + bookings + assets)
@@ -396,16 +457,21 @@ export default async function handler(req, res) {
       const owned = await getOwnedTrip(id);
       if (!owned) return res.status(404).json({ error: 'Trip not found' });
 
-      const { tripDayId, tripItemId, type, title, date, time, locationName, provider, confirmationReference, notes, url } = req.body || {};
+      const { tripDayId, tripItemId, type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata } = req.body || {};
       if (!title) return res.status(400).json({ error: 'title is required' });
 
+      const meta = (metadata && typeof metadata === 'object') ? metadata : {};
+      const bookingType = type || 'other';
+      const valErrs = validateBooking(bookingType, { date, time }, meta);
+      if (valErrs.length) return res.status(400).json({ error: 'Validation failed', errors: valErrs });
+
       const { rows } = await pool.query(
-        `INSERT INTO "TripBooking" (id, "tripId", "tripDayId", "tripItemId", type, title, date, time, "locationName", provider, "confirmationReference", notes, url, "createdAt", "updatedAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+        `INSERT INTO "TripBooking" (id, "tripId", "tripDayId", "tripItemId", type, title, date, time, "locationName", provider, "confirmationReference", notes, url, metadata, "createdAt", "updatedAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, NOW(), NOW())
          RETURNING id`,
-        [id, tripDayId || null, tripItemId || null, type || 'other', title,
+        [id, tripDayId || null, tripItemId || null, bookingType, title,
          date || null, time || null, locationName || null, provider || null,
-         confirmationReference || null, notes || null, url || null]
+         confirmationReference || null, notes || null, url || null, JSON.stringify(meta)]
       );
       return res.status(200).json({ id: rows[0].id });
     }
@@ -413,23 +479,30 @@ export default async function handler(req, res) {
     // Update TripBooking
     if (req.method === 'POST' && action === 'booking' && bookingId) {
       const { rows: bookingRows } = await pool.query(
-        `SELECT tb.id FROM "TripBooking" tb
+        `SELECT tb.id, tb.type AS "currentType" FROM "TripBooking" tb
          JOIN "Trip" t ON t.id = tb."tripId"
          WHERE tb.id = $1 AND t."userId" = $2`,
         [bookingId, userId]
       );
       if (!bookingRows.length) return res.status(404).json({ error: 'Booking not found' });
 
-      const { type, title, date, time, locationName, provider, confirmationReference, notes, url } = req.body || {};
+      const { type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata } = req.body || {};
+
+      const meta = (metadata && typeof metadata === 'object') ? metadata : {};
+      const bookingType = type || bookingRows[0].currentType || 'other';
+      const valErrs = validateBooking(bookingType, { date, time }, meta);
+      if (valErrs.length) return res.status(400).json({ error: 'Validation failed', errors: valErrs });
+
       await pool.query(
         `UPDATE "TripBooking"
          SET type = COALESCE($1, type), title = COALESCE($2, title),
              date = $3, time = $4, "locationName" = $5, provider = $6,
-             "confirmationReference" = $7, notes = $8, url = $9, "updatedAt" = NOW()
-         WHERE id = $10`,
+             "confirmationReference" = $7, notes = $8, url = $9,
+             metadata = $10::jsonb, "updatedAt" = NOW()
+         WHERE id = $11`,
         [type || null, title || null, date || null, time || null,
          locationName || null, provider || null, confirmationReference || null,
-         notes || null, url || null, bookingId]
+         notes || null, url || null, JSON.stringify(meta), bookingId]
       );
       return res.status(200).json({ ok: true });
     }

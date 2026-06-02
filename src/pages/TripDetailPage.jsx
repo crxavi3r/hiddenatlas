@@ -459,7 +459,7 @@ const BOOKING_DEFAULTS = { type: 'hotel', title: '', date: '', time: '', locatio
 
 function initBookingForm(booking) {
   if (!booking) return BOOKING_DEFAULTS;
-  const meta = booking.metadata || {};
+  const meta = (booking.metadata && typeof booking.metadata === 'object') ? booking.metadata : {};
   return {
     type: booking.type || 'hotel',
     title: booking.title || '',
@@ -474,6 +474,50 @@ function initBookingForm(booking) {
   };
 }
 
+// ─────────────────────────────────────────────
+// Booking validation — runs client-side before submit
+// ─────────────────────────────────────────────
+function validateBookingForm(form) {
+  const errs = {};
+  const m = form.meta || {};
+
+  if (form.type === 'hotel') {
+    if (!m.checkInDate)  errs.checkInDate  = 'Check-in date is required.';
+    if (!m.checkOutDate) errs.checkOutDate = 'Check-out date is required.';
+    if (m.checkInDate && m.checkOutDate) {
+      if (m.checkOutDate < m.checkInDate)
+        errs.checkOutDate = 'Check-out must be after check-in.';
+      else if (m.checkOutDate === m.checkInDate && m.checkInTime && m.checkOutTime) {
+        if (m.checkOutTime <= m.checkInTime)
+          errs.checkOutTime = 'Same-day check-out must be later than check-in time.';
+      }
+    }
+  }
+
+  if (form.type === 'event') {
+    const st = form.time, et = m.endTime;
+    if (st && et && et <= st)
+      errs.endTime = 'End time must be after start time.';
+  }
+
+  if (form.type === 'flight') {
+    const { departureDate: dd, arrivalDate: ad, departureTime: dt, arrivalTime: at } = m;
+    if (dd && ad && dt && at && dd === ad && at <= dt)
+      errs.arrivalTime = 'Same-day arrival time must be after departure time.';
+  }
+
+  return errs;
+}
+
+// Inline field error
+function FieldError({ msg }) {
+  if (!msg) return null;
+  return <p style={{ fontSize: '11.5px', color: '#B04040', marginTop: '4px', lineHeight: 1.4 }}>{msg}</p>;
+}
+
+// ─────────────────────────────────────────────
+// BookingModal — type-adaptive, supports create + edit
+// ─────────────────────────────────────────────
 function BookingModal({ open, dayNumber, editBooking, onClose, onSave, saving }) {
   const [form, setForm] = useState(BOOKING_DEFAULTS);
 
@@ -488,15 +532,34 @@ function BookingModal({ open, dayNumber, editBooking, onClose, onSave, saving })
     if (isDirty() && !window.confirm('Discard changes?')) return;
     onClose();
   }
-  function handleTypeChange(t) {
-    setForm(f => ({ ...f, type: t, meta: {} })); // reset meta on type switch
+  function handleTypeChange(t) { setForm(f => ({ ...f, type: t, meta: {} })); }
+
+  // Live validation — errors shown as user edits
+  const errors = validateBookingForm(form);
+  const hasErrors = Object.keys(errors).length > 0;
+
+  function handleSave() {
+    if (hasErrors || !form.title.trim()) return;
+    // Promote metadata dates/times to top-level date/time for sort order
+    let finalDate = form.date;
+    let finalTime = form.time;
+    if (form.type === 'hotel') {
+      finalDate = form.meta.checkInDate || form.date;
+      finalTime = form.meta.checkInTime || form.time;
+    } else if (form.type === 'flight') {
+      finalDate = form.meta.departureDate || form.date;
+      finalTime = form.meta.departureTime || form.time;
+    }
+    onSave({ ...form, date: finalDate, time: finalTime, metadata: form.meta });
   }
 
   const isEdit = !!editBooking;
-  const title = isEdit ? `Edit ${form.type}` : dayNumber ? `Add booking — Day ${dayNumber}` : 'Add booking';
+  const modalTitle = isEdit
+    ? `Edit ${BOOKING_CATEGORIES.find(c => c.value === form.type)?.label || form.type}`
+    : dayNumber ? `Add booking — Day ${dayNumber}` : 'Add booking';
 
   return (
-    <Modal open={open} onRequestClose={requestClose} title={title} wide>
+    <Modal open={open} onRequestClose={requestClose} title={modalTitle} wide>
       {/* Type selector */}
       <FormField label="Type">
         <select value={form.type} onChange={e => handleTypeChange(e.target.value)} style={inputStyle}>
@@ -504,47 +567,56 @@ function BookingModal({ open, dayNumber, editBooking, onClose, onSave, saving })
         </select>
       </FormField>
 
-      {/* Type-adaptive fields */}
+      {/* ── Hotel ─────────────────────────────────────────────── */}
       {form.type === 'hotel' && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-            <FormField label="Check-in date">
+            <FormField label="Check-in date *">
               <input type="date" value={form.meta.checkInDate || ''} onChange={e => setMeta('checkInDate', e.target.value)} style={inputStyle} />
+              <FieldError msg={errors.checkInDate} />
             </FormField>
-            <FormField label="Check-out date">
+            <FormField label="Check-out date *">
               <input type="date" value={form.meta.checkOutDate || ''} onChange={e => setMeta('checkOutDate', e.target.value)} style={inputStyle} />
+              <FieldError msg={errors.checkOutDate} />
             </FormField>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
             <FormField label="Check-in time (optional)">
-              <input type="text" value={form.meta.checkInTime || ''} onChange={e => setMeta('checkInTime', e.target.value)} placeholder="15:00" style={inputStyle} />
+              <input type="time" value={form.meta.checkInTime || ''} onChange={e => setMeta('checkInTime', e.target.value)} style={inputStyle} />
             </FormField>
             <FormField label="Check-out time (optional)">
-              <input type="text" value={form.meta.checkOutTime || ''} onChange={e => setMeta('checkOutTime', e.target.value)} placeholder="11:00" style={inputStyle} />
+              <input type="time" value={form.meta.checkOutTime || ''} onChange={e => setMeta('checkOutTime', e.target.value)} style={inputStyle} />
+              <FieldError msg={errors.checkOutTime} />
             </FormField>
           </div>
         </>
       )}
+
+      {/* ── Restaurant ────────────────────────────────────────── */}
       {form.type === 'restaurant' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
           <FormField label="Reservation date">
             <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
           </FormField>
           <FormField label="Reservation time">
-            <input type="text" value={form.time} onChange={e => set('time', e.target.value)} placeholder="20:00" style={inputStyle} />
+            <input type="time" value={form.time} onChange={e => set('time', e.target.value)} style={inputStyle} />
           </FormField>
         </div>
       )}
+
+      {/* ── Experience ────────────────────────────────────────── */}
       {form.type === 'experience' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
           <FormField label="Date">
             <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
           </FormField>
           <FormField label="Start time (optional)">
-            <input type="text" value={form.time} onChange={e => set('time', e.target.value)} placeholder="09:00" style={inputStyle} />
+            <input type="time" value={form.time} onChange={e => set('time', e.target.value)} style={inputStyle} />
           </FormField>
         </div>
       )}
+
+      {/* ── Flight ────────────────────────────────────────────── */}
       {form.type === 'flight' && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
@@ -552,7 +624,16 @@ function BookingModal({ open, dayNumber, editBooking, onClose, onSave, saving })
               <input type="date" value={form.meta.departureDate || ''} onChange={e => setMeta('departureDate', e.target.value)} style={inputStyle} />
             </FormField>
             <FormField label="Departure time">
-              <input type="text" value={form.meta.departureTime || ''} onChange={e => setMeta('departureTime', e.target.value)} placeholder="06:30" style={inputStyle} />
+              <input type="time" value={form.meta.departureTime || ''} onChange={e => setMeta('departureTime', e.target.value)} style={inputStyle} />
+            </FormField>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+            <FormField label="Arrival date (optional)">
+              <input type="date" value={form.meta.arrivalDate || ''} onChange={e => setMeta('arrivalDate', e.target.value)} style={inputStyle} />
+            </FormField>
+            <FormField label="Arrival time (optional)">
+              <input type="time" value={form.meta.arrivalTime || ''} onChange={e => setMeta('arrivalTime', e.target.value)} style={inputStyle} />
+              <FieldError msg={errors.arrivalTime} />
             </FormField>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
@@ -565,6 +646,8 @@ function BookingModal({ open, dayNumber, editBooking, onClose, onSave, saving })
           </div>
         </>
       )}
+
+      {/* ── Transfer ──────────────────────────────────────────── */}
       {form.type === 'transfer' && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
@@ -572,12 +655,12 @@ function BookingModal({ open, dayNumber, editBooking, onClose, onSave, saving })
               <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
             </FormField>
             <FormField label="Pickup time">
-              <input type="text" value={form.meta.pickupTime || ''} onChange={e => setMeta('pickupTime', e.target.value)} placeholder="08:00" style={inputStyle} />
+              <input type="time" value={form.meta.pickupTime || ''} onChange={e => setMeta('pickupTime', e.target.value)} style={inputStyle} />
             </FormField>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
             <FormField label="Pickup location">
-              <input type="text" value={form.meta.pickupLocation || ''} onChange={e => setMeta('pickupLocation', e.target.value)} placeholder="Hotel name or address" style={inputStyle} />
+              <input type="text" value={form.meta.pickupLocation || ''} onChange={e => setMeta('pickupLocation', e.target.value)} placeholder="Hotel or address" style={inputStyle} />
             </FormField>
             <FormField label="Drop-off location">
               <input type="text" value={form.meta.dropoffLocation || ''} onChange={e => setMeta('dropoffLocation', e.target.value)} placeholder="Airport or address" style={inputStyle} />
@@ -585,28 +668,38 @@ function BookingModal({ open, dayNumber, editBooking, onClose, onSave, saving })
           </div>
         </>
       )}
+
+      {/* ── Event ─────────────────────────────────────────────── */}
       {form.type === 'event' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-          <FormField label="Date">
-            <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+            <FormField label="Date">
+              <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
+            </FormField>
+            <FormField label="Start time">
+              <input type="time" value={form.time} onChange={e => set('time', e.target.value)} style={inputStyle} />
+            </FormField>
+          </div>
+          <FormField label="End time (optional)">
+            <input type="time" value={form.meta.endTime || ''} onChange={e => setMeta('endTime', e.target.value)} style={inputStyle} />
+            <FieldError msg={errors.endTime} />
           </FormField>
-          <FormField label="Start time">
-            <input type="text" value={form.time} onChange={e => set('time', e.target.value)} placeholder="19:00" style={inputStyle} />
-          </FormField>
-        </div>
+        </>
       )}
+
+      {/* ── Other ─────────────────────────────────────────────── */}
       {form.type === 'other' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
           <FormField label="Date (optional)">
             <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
           </FormField>
           <FormField label="Time (optional)">
-            <input type="text" value={form.time} onChange={e => set('time', e.target.value)} placeholder="—" style={inputStyle} />
+            <input type="time" value={form.time} onChange={e => set('time', e.target.value)} style={inputStyle} />
           </FormField>
         </div>
       )}
 
-      {/* Common fields */}
+      {/* ── Common fields ──────────────────────────────────────── */}
       <FormField label="Name / Title">
         <input type="text" value={form.title} onChange={e => set('title', e.target.value)}
           placeholder={form.type === 'hotel' ? 'Hotel name' : form.type === 'flight' ? 'Airline + flight no.' : form.type === 'restaurant' ? 'Restaurant name' : 'Name or title'}
@@ -654,9 +747,22 @@ function BookingModal({ open, dayNumber, editBooking, onClose, onSave, saving })
         <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Special requests, contact info, etc." rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
       </FormField>
 
+      {/* Summary of validation errors (if any) */}
+      {hasErrors && (
+        <div style={{ padding: '10px 14px', background: '#FFF0F0', border: '1px solid #F5C6C6', borderRadius: '6px', marginBottom: '4px' }}>
+          {Object.values(errors).map((msg, i) => (
+            <p key={i} style={{ fontSize: '12px', color: '#B04040', margin: i > 0 ? '4px 0 0' : 0 }}>• {msg}</p>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
         <button style={btnSecondary} onClick={requestClose}>Cancel</button>
-        <button style={btnPrimary} onClick={() => onSave({ ...form, metadata: form.meta })} disabled={saving || !form.title.trim()}>
+        <button
+          style={{ ...btnPrimary, opacity: (hasErrors || !form.title.trim()) ? 0.5 : 1 }}
+          onClick={handleSave}
+          disabled={saving || hasErrors || !form.title.trim()}
+        >
           {saving ? (isEdit ? 'Updating...' : 'Saving...') : (isEdit ? 'Update booking' : 'Save booking')}
         </button>
       </div>
