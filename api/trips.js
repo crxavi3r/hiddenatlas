@@ -4,12 +4,24 @@ import { verifyAuth } from './_lib/verifyAuth.js';
 
 const { Pool } = pg;
 
-// GET    /api/trips                  — list all trips for user
-// GET    /api/trips?id=<uuid>         — get single trip with days
-// POST   /api/trips                  — save new trip (body: { trip, source })
-// POST   /api/trips?id=<uuid>        — log audit event (body: { eventType, metadata })
-// POST   /api/trips?action=track     — log client-side analytics event (optional auth)
-// DELETE /api/trips?id=<uuid>        — delete trip
+// GET    /api/trips                          — list all trips for user
+// GET    /api/trips?id=<uuid>                — get single trip with days (basic)
+// GET    /api/trips?id=<uuid>&action=workspace — full workspace data (trip + itinerary + items + notes + bookings + assets)
+// POST   /api/trips                          — save new trip (body: { trip, source })
+// POST   /api/trips?id=<uuid>                — log audit event (body: { eventType, metadata })
+// POST   /api/trips?action=track             — log client-side analytics event (optional auth)
+// POST   /api/trips?id=<uuid>&action=details — update trip personal fields
+// POST   /api/trips?id=<uuid>&action=item    — create TripItem
+// POST   /api/trips?action=item&itemId=<id>  — update TripItem
+// POST   /api/trips?action=delete-item&itemId=<id> — delete TripItem
+// POST   /api/trips?id=<uuid>&action=note    — create TripNote
+// POST   /api/trips?action=note&noteId=<id>  — update TripNote
+// POST   /api/trips?action=delete-note&noteId=<id> — delete TripNote
+// POST   /api/trips?id=<uuid>&action=booking — create TripBooking
+// POST   /api/trips?action=booking&bookingId=<id> — update TripBooking
+// POST   /api/trips?action=delete-booking&bookingId=<id> — delete TripBooking
+// POST   /api/trips?action=day&dayId=<id>    — update TripDay overrides
+// DELETE /api/trips?id=<uuid>                — delete trip
 export default async function handler(req, res) {
   if (!['GET', 'POST', 'DELETE'].includes(req.method)) {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -20,7 +32,6 @@ export default async function handler(req, res) {
   }
 
   // ── POST /api/trips?action=track — analytics event (optional auth) ─────────
-  // Consolidated from the former /api/events endpoint.
   // Auth is optional: anonymous events are recorded with userId = NULL.
   if (req.method === 'POST' && req.query.action === 'track') {
     const { eventType, itinerarySlug, pagePath, source, sessionId, deviceType, metadata } = req.body ?? {};
@@ -66,7 +77,7 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
 
-  const { id } = req.query;
+  const { id, action, itemId, noteId, bookingId, dayId } = req.query;
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
@@ -76,6 +87,15 @@ export default async function handler(req, res) {
     );
     if (!users.length) return res.status(404).json({ error: 'User not found' });
     const userId = users[0].id;
+
+    // ── Helper: verify trip ownership ──────────────────────────────────────
+    async function getOwnedTrip(tripId) {
+      const { rows } = await pool.query(
+        `SELECT id FROM "Trip" WHERE id = $1 AND "userId" = $2`,
+        [tripId, userId]
+      );
+      return rows[0] || null;
+    }
 
     // ── GET /api/trips — list all trips ────────────────────────────────────
     if (req.method === 'GET' && !id) {
@@ -103,7 +123,100 @@ export default async function handler(req, res) {
       return res.status(200).json(rows);
     }
 
-    // ── GET /api/trips?id= — single trip ───────────────────────────────────
+    // ── GET /api/trips?id=&action=workspace — full workspace data ─────────
+    if (req.method === 'GET' && id && action === 'workspace') {
+      const { rows: tripRows } = await pool.query(
+        `SELECT
+           id, "userId", "itinerarySlug", "itineraryId", title, destination, country,
+           duration, "durationDays", overview, highlights, hotels, experiences,
+           source, "coverImage", subtitle, "heroImage",
+           "startDate", "endDate", travellers,
+           "accommodationSummary", "arrivalInfo", "departureInfo", "generalNotes",
+           "createdAt", "updatedAt"
+         FROM "Trip"
+         WHERE id = $1 AND "userId" = $2`,
+        [id, userId]
+      );
+      if (!tripRows.length) return res.status(404).json({ error: 'Trip not found' });
+      const trip = tripRows[0];
+
+      // Resolve itinerary via itineraryId (FK) or itinerarySlug (legacy)
+      let itinerary = null;
+      if (trip.itineraryId) {
+        const { rows } = await pool.query(
+          `SELECT id, slug, title, subtitle, description, destination, country, "durationDays",
+                  "coverImage", "pdfUrl", content, type, "accessType"
+           FROM "Itinerary" WHERE id = $1`,
+          [trip.itineraryId]
+        );
+        itinerary = rows[0] || null;
+      }
+      if (!itinerary && trip.itinerarySlug) {
+        const { rows } = await pool.query(
+          `SELECT id, slug, title, subtitle, description, destination, country, "durationDays",
+                  "coverImage", "pdfUrl", content, type, "accessType"
+           FROM "Itinerary" WHERE slug = $1`,
+          [trip.itinerarySlug]
+        );
+        itinerary = rows[0] || null;
+      }
+
+      const { rows: tripDays } = await pool.query(
+        `SELECT id, "tripId", "dayNumber", title, description,
+                "sourceDayNumber", "titleOverride", "descriptionOverride",
+                notes, "sortOrder", "isHidden", "updatedAt"
+         FROM "TripDay"
+         WHERE "tripId" = $1
+         ORDER BY "sortOrder" ASC, "dayNumber" ASC`,
+        [id]
+      );
+
+      const { rows: tripItems } = await pool.query(
+        `SELECT id, "tripId", "tripDayId", type, title, description,
+                time, duration, location, notes, "bookingRef",
+                status, "isHidden", "sortOrder", "sourceItemId", metadata,
+                "createdAt", "updatedAt"
+         FROM "TripItem"
+         WHERE "tripId" = $1 AND "isHidden" = false
+         ORDER BY "tripDayId" NULLS LAST, "sortOrder" ASC, "createdAt" ASC`,
+        [id]
+      );
+
+      const { rows: tripNotes } = await pool.query(
+        `SELECT id, "tripId", "tripDayId", "tripItemId", type, title, content,
+                "createdAt", "updatedAt"
+         FROM "TripNote"
+         WHERE "tripId" = $1
+         ORDER BY "createdAt" ASC`,
+        [id]
+      );
+
+      const { rows: tripBookings } = await pool.query(
+        `SELECT id, "tripId", "tripDayId", "tripItemId", category, title,
+                date, time, location, provider, reference, notes, url,
+                "attachmentUrl", "createdAt", "updatedAt"
+         FROM "TripBooking"
+         WHERE "tripId" = $1
+         ORDER BY date ASC NULLS LAST, "createdAt" ASC`,
+        [id]
+      );
+
+      let assets = [];
+      if (itinerary?.id) {
+        const { rows } = await pool.query(
+          `SELECT id, "itineraryId", "assetType", url, alt, caption, "sortOrder", source, active, "createdAt"
+           FROM "ItineraryAsset"
+           WHERE "itineraryId" = $1 AND active = true
+           ORDER BY "sortOrder" ASC, "createdAt" ASC`,
+          [itinerary.id]
+        );
+        assets = rows;
+      }
+
+      return res.status(200).json({ trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, assets });
+    }
+
+    // ── GET /api/trips?id= — single trip (basic) ───────────────────────────
     if (req.method === 'GET' && id) {
       const { rows: trips } = await pool.query(
         `SELECT id, title, destination, country, duration, overview,
@@ -123,6 +236,223 @@ export default async function handler(req, res) {
         [id]
       );
       return res.status(200).json({ ...trips[0], days });
+    }
+
+    // ── Workspace POST mutations ────────────────────────────────────────────
+    // These are checked before the generic POST+id audit-event handler.
+
+    // Update trip personal details
+    if (req.method === 'POST' && action === 'details' && id) {
+      const owned = await getOwnedTrip(id);
+      if (!owned) return res.status(404).json({ error: 'Trip not found' });
+
+      const {
+        startDate, endDate, travellers, accommodationSummary,
+        arrivalInfo, departureInfo, generalNotes, subtitle, heroImage,
+      } = req.body || {};
+
+      await pool.query(
+        `UPDATE "Trip"
+         SET "startDate" = $1, "endDate" = $2, travellers = $3,
+             "accommodationSummary" = $4, "arrivalInfo" = $5, "departureInfo" = $6,
+             "generalNotes" = $7, subtitle = $8, "heroImage" = $9, "updatedAt" = NOW()
+         WHERE id = $10`,
+        [
+          startDate || null, endDate || null,
+          travellers != null ? Number(travellers) : null,
+          accommodationSummary || null, arrivalInfo || null, departureInfo || null,
+          generalNotes || null, subtitle || null, heroImage || null, id,
+        ]
+      );
+      return res.status(200).json({ ok: true });
+    }
+
+    // Create TripItem
+    if (req.method === 'POST' && action === 'item' && id && !itemId) {
+      const owned = await getOwnedTrip(id);
+      if (!owned) return res.status(404).json({ error: 'Trip not found' });
+
+      const { tripDayId, type, title, description, time, duration, location, notes, sortOrder } = req.body || {};
+      if (!title) return res.status(400).json({ error: 'title is required' });
+
+      const { rows } = await pool.query(
+        `INSERT INTO "TripItem" (id, "tripId", "tripDayId", type, title, description, time, duration, location, notes, "sortOrder", "createdAt", "updatedAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+         RETURNING id`,
+        [id, tripDayId || null, type || 'place', title, description || null,
+         time || null, duration || null, location || null, notes || null,
+         sortOrder != null ? Number(sortOrder) : 0]
+      );
+      return res.status(200).json({ id: rows[0].id });
+    }
+
+    // Update TripItem
+    if (req.method === 'POST' && action === 'item' && itemId) {
+      const { rows: itemRows } = await pool.query(
+        `SELECT ti.id FROM "TripItem" ti
+         JOIN "Trip" t ON t.id = ti."tripId"
+         WHERE ti.id = $1 AND t."userId" = $2`,
+        [itemId, userId]
+      );
+      if (!itemRows.length) return res.status(404).json({ error: 'Item not found' });
+
+      const { type, title, description, time, duration, location, notes, bookingRef, status, sortOrder } = req.body || {};
+      await pool.query(
+        `UPDATE "TripItem"
+         SET type = COALESCE($1, type), title = COALESCE($2, title),
+             description = $3, time = $4, duration = $5, location = $6, notes = $7,
+             "bookingRef" = $8, status = COALESCE($9, status),
+             "sortOrder" = COALESCE($10, "sortOrder"), "updatedAt" = NOW()
+         WHERE id = $11`,
+        [type || null, title || null, description || null, time || null,
+         duration || null, location || null, notes || null, bookingRef || null,
+         status || null, sortOrder != null ? Number(sortOrder) : null, itemId]
+      );
+      return res.status(200).json({ ok: true });
+    }
+
+    // Delete TripItem
+    if (req.method === 'POST' && action === 'delete-item' && itemId) {
+      const { rows } = await pool.query(
+        `DELETE FROM "TripItem" USING "Trip"
+         WHERE "TripItem".id = $1
+           AND "TripItem"."tripId" = "Trip".id
+           AND "Trip"."userId" = $2
+         RETURNING "TripItem".id`,
+        [itemId, userId]
+      );
+      if (!rows.length) return res.status(404).json({ error: 'Item not found' });
+      return res.status(200).json({ ok: true });
+    }
+
+    // Create TripNote
+    if (req.method === 'POST' && action === 'note' && id && !noteId) {
+      const owned = await getOwnedTrip(id);
+      if (!owned) return res.status(404).json({ error: 'Trip not found' });
+
+      const { tripDayId, tripItemId, type, title, content } = req.body || {};
+      if (!content) return res.status(400).json({ error: 'content is required' });
+
+      const { rows } = await pool.query(
+        `INSERT INTO "TripNote" (id, "tripId", "tripDayId", "tripItemId", type, title, content, "createdAt", "updatedAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW(), NOW())
+         RETURNING id`,
+        [id, tripDayId || null, tripItemId || null, type || 'general', title || null, content]
+      );
+      return res.status(200).json({ id: rows[0].id });
+    }
+
+    // Update TripNote
+    if (req.method === 'POST' && action === 'note' && noteId) {
+      const { rows: noteRows } = await pool.query(
+        `SELECT tn.id FROM "TripNote" tn
+         JOIN "Trip" t ON t.id = tn."tripId"
+         WHERE tn.id = $1 AND t."userId" = $2`,
+        [noteId, userId]
+      );
+      if (!noteRows.length) return res.status(404).json({ error: 'Note not found' });
+
+      const { title, content } = req.body || {};
+      await pool.query(
+        `UPDATE "TripNote"
+         SET title = $1, content = COALESCE($2, content), "updatedAt" = NOW()
+         WHERE id = $3`,
+        [title || null, content || null, noteId]
+      );
+      return res.status(200).json({ ok: true });
+    }
+
+    // Delete TripNote
+    if (req.method === 'POST' && action === 'delete-note' && noteId) {
+      const { rows } = await pool.query(
+        `DELETE FROM "TripNote" USING "Trip"
+         WHERE "TripNote".id = $1
+           AND "TripNote"."tripId" = "Trip".id
+           AND "Trip"."userId" = $2
+         RETURNING "TripNote".id`,
+        [noteId, userId]
+      );
+      if (!rows.length) return res.status(404).json({ error: 'Note not found' });
+      return res.status(200).json({ ok: true });
+    }
+
+    // Create TripBooking
+    if (req.method === 'POST' && action === 'booking' && id && !bookingId) {
+      const owned = await getOwnedTrip(id);
+      if (!owned) return res.status(404).json({ error: 'Trip not found' });
+
+      const { tripDayId, tripItemId, category, title, date, time, location, provider, reference, notes, url } = req.body || {};
+      if (!title) return res.status(400).json({ error: 'title is required' });
+
+      const { rows } = await pool.query(
+        `INSERT INTO "TripBooking" (id, "tripId", "tripDayId", "tripItemId", category, title, date, time, location, provider, reference, notes, url, "createdAt", "updatedAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+         RETURNING id`,
+        [id, tripDayId || null, tripItemId || null, category || 'other', title,
+         date || null, time || null, location || null, provider || null,
+         reference || null, notes || null, url || null]
+      );
+      return res.status(200).json({ id: rows[0].id });
+    }
+
+    // Update TripBooking
+    if (req.method === 'POST' && action === 'booking' && bookingId) {
+      const { rows: bookingRows } = await pool.query(
+        `SELECT tb.id FROM "TripBooking" tb
+         JOIN "Trip" t ON t.id = tb."tripId"
+         WHERE tb.id = $1 AND t."userId" = $2`,
+        [bookingId, userId]
+      );
+      if (!bookingRows.length) return res.status(404).json({ error: 'Booking not found' });
+
+      const { category, title, date, time, location, provider, reference, notes, url } = req.body || {};
+      await pool.query(
+        `UPDATE "TripBooking"
+         SET category = COALESCE($1, category), title = COALESCE($2, title),
+             date = $3, time = $4, location = $5, provider = $6,
+             reference = $7, notes = $8, url = $9, "updatedAt" = NOW()
+         WHERE id = $10`,
+        [category || null, title || null, date || null, time || null,
+         location || null, provider || null, reference || null,
+         notes || null, url || null, bookingId]
+      );
+      return res.status(200).json({ ok: true });
+    }
+
+    // Delete TripBooking
+    if (req.method === 'POST' && action === 'delete-booking' && bookingId) {
+      const { rows } = await pool.query(
+        `DELETE FROM "TripBooking" USING "Trip"
+         WHERE "TripBooking".id = $1
+           AND "TripBooking"."tripId" = "Trip".id
+           AND "Trip"."userId" = $2
+         RETURNING "TripBooking".id`,
+        [bookingId, userId]
+      );
+      if (!rows.length) return res.status(404).json({ error: 'Booking not found' });
+      return res.status(200).json({ ok: true });
+    }
+
+    // Update TripDay overrides
+    if (req.method === 'POST' && action === 'day' && dayId) {
+      const { rows: dayRows } = await pool.query(
+        `SELECT td.id FROM "TripDay" td
+         JOIN "Trip" t ON t.id = td."tripId"
+         WHERE td.id = $1 AND t."userId" = $2`,
+        [dayId, userId]
+      );
+      if (!dayRows.length) return res.status(404).json({ error: 'Day not found' });
+
+      const { titleOverride, descriptionOverride, notes, isHidden } = req.body || {};
+      await pool.query(
+        `UPDATE "TripDay"
+         SET "titleOverride" = $1, "descriptionOverride" = $2, notes = $3,
+             "isHidden" = COALESCE($4, "isHidden"), "updatedAt" = NOW()
+         WHERE id = $5`,
+        [titleOverride || null, descriptionOverride || null, notes || null,
+         isHidden != null ? Boolean(isHidden) : null, dayId]
+      );
+      return res.status(200).json({ ok: true });
     }
 
     // ── POST /api/trips?id= — log audit event ──────────────────────────────
@@ -167,7 +497,7 @@ export default async function handler(req, res) {
         ? trip.itinerarySlug
         : null;
 
-      // ── Deduplication ────────────────────────────────────────────────────
+      // ── Deduplication ─────────────────────────────────────────────────────
       if (itinerarySlug) {
         const { rows: existing } = await pool.query(
           `SELECT id FROM "Trip" WHERE "userId" = $1 AND "itinerarySlug" = $2 LIMIT 1`,
@@ -179,12 +509,9 @@ export default async function handler(req, res) {
       } else {
         const { rows: existing } = await pool.query(
           `SELECT id FROM "Trip"
-           WHERE "userId" = $1
-             AND destination = $2
-             AND source = $3
+           WHERE "userId" = $1 AND destination = $2 AND source = $3
              AND "createdAt" > NOW() - INTERVAL '1 hour'
-           ORDER BY "createdAt" DESC
-           LIMIT 1`,
+           ORDER BY "createdAt" DESC LIMIT 1`,
           [userId, trip.destination, tripSource]
         );
         if (existing.length) {
@@ -192,7 +519,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // ── Resolve itineraryId from slug (for workspace FK) ─────────────────
+      // ── Resolve itineraryId from slug (for workspace FK) ──────────────────
       let itineraryId = null;
       if (itinerarySlug) {
         const { rows: itin } = await pool.query(
@@ -202,7 +529,7 @@ export default async function handler(req, res) {
         itineraryId = itin[0]?.id || null;
       }
 
-      // ── Insert ───────────────────────────────────────────────────────────
+      // ── Insert ────────────────────────────────────────────────────────────
       const { rows: trips } = await pool.query(
         `INSERT INTO "Trip" (id, "userId", "itinerarySlug", "itineraryId", title, destination, country, duration, overview, highlights, hotels, experiences, source, "coverImage", "createdAt")
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, NOW())
@@ -210,19 +537,15 @@ export default async function handler(req, res) {
          DO NOTHING
          RETURNING id`,
         [
-          userId,
-          itinerarySlug,
-          itineraryId,
-          trip.destination,
-          trip.destination,
+          userId, itinerarySlug, itineraryId,
+          trip.destination, trip.destination,
           trip.country    || '',
           trip.duration   || '',
           trip.overview   || '',
           JSON.stringify(trip.highlights  || []),
           JSON.stringify(trip.hotels      || []),
           JSON.stringify(trip.experiences || []),
-          tripSource,
-          coverImage,
+          tripSource, coverImage,
         ]
       );
 
@@ -240,7 +563,6 @@ export default async function handler(req, res) {
 
       const tripId = trips[0].id;
 
-      // Insert TripDay rows
       const days = Array.isArray(trip.days) ? trip.days : [];
       for (const day of days) {
         await pool.query(
@@ -251,8 +573,7 @@ export default async function handler(req, res) {
       }
 
       await createTripEvent(pool, {
-        userId,
-        tripId,
+        userId, tripId,
         eventType: 'SAVED',
         metadata: {
           destination: trip.destination,

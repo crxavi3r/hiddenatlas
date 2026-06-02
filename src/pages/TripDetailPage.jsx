@@ -1300,7 +1300,7 @@ export default function TripDetailPage() {
     if (!isLoaded) return;
     if (!isSignedIn) { navigate('/sign-in'); return; }
 
-    api.get(`/api/trip-workspace?id=${id}`)
+    api.get(`/api/trips?id=${id}&action=workspace`)
       .then(res => {
         if (res.status === 404) { setStatus('notfound'); return; }
         if (!res.ok) throw new Error('Load failed');
@@ -1380,7 +1380,7 @@ export default function TripDetailPage() {
   async function handleSaveDetails(form) {
     setSavingDetails(true);
     try {
-      const res = await api.post(`/api/trip-workspace?id=${id}&action=details`, form);
+      const res = await api.post(`/api/trips?id=${id}&action=details`, form);
       if (!res.ok) throw new Error('Save failed');
       setWorkspace(w => ({ ...w, trip: { ...w.trip, ...form } }));
       setShowDetails(false);
@@ -1397,7 +1397,7 @@ export default function TripDetailPage() {
     setSavingItem(true);
     try {
       const body = { ...form, tripDayId: addItemCtx.dayId };
-      const res  = await api.post(`/api/trip-workspace?id=${id}&action=item`, body);
+      const res  = await api.post(`/api/trips?id=${id}&action=item`, body);
       if (!res.ok) throw new Error('Save failed');
       const { id: newId } = await res.json();
       const newItem = { id: newId, tripId: id, tripDayId: addItemCtx.dayId, ...form, status: 'planned', isHidden: false, sortOrder: 0, createdAt: new Date().toISOString() };
@@ -1413,7 +1413,7 @@ export default function TripDetailPage() {
   // ── Delete TripItem ───────────────────────────────────────────
   async function handleDeleteItem(itemId) {
     try {
-      const res = await api.post(`/api/trip-workspace?action=delete-item&itemId=${itemId}`, {});
+      const res = await api.post(`/api/trips?action=delete-item&itemId=${itemId}`, {});
       if (!res.ok) throw new Error('Delete failed');
       setWorkspace(w => ({ ...w, tripItems: w.tripItems.filter(i => i.id !== itemId) }));
     } catch {
@@ -1427,7 +1427,7 @@ export default function TripDetailPage() {
     try {
       if (editNote) {
         // Update existing
-        const res = await api.post(`/api/trip-workspace?action=note&noteId=${editNote.id}`, form);
+        const res = await api.post(`/api/trips?action=note&noteId=${editNote.id}`, form);
         if (!res.ok) throw new Error('Update failed');
         setWorkspace(w => ({
           ...w,
@@ -1436,7 +1436,7 @@ export default function TripDetailPage() {
         setEditNote(null);
       } else {
         const body = { ...form, tripDayId: addNoteCtx?.dayId || null, type: addNoteCtx?.dayId ? 'day' : 'general' };
-        const res  = await api.post(`/api/trip-workspace?id=${id}&action=note`, body);
+        const res  = await api.post(`/api/trips?id=${id}&action=note`, body);
         if (!res.ok) throw new Error('Save failed');
         const { id: newId } = await res.json();
         const newNote = { id: newId, tripId: id, tripDayId: addNoteCtx?.dayId || null, type: body.type, ...form, createdAt: new Date().toISOString() };
@@ -1454,7 +1454,7 @@ export default function TripDetailPage() {
   // ── Delete TripNote ───────────────────────────────────────────
   async function handleDeleteNote(noteId) {
     try {
-      const res = await api.post(`/api/trip-workspace?action=delete-note&noteId=${noteId}`, {});
+      const res = await api.post(`/api/trips?action=delete-note&noteId=${noteId}`, {});
       if (!res.ok) throw new Error('Delete failed');
       setWorkspace(w => ({ ...w, tripNotes: w.tripNotes.filter(n => n.id !== noteId) }));
     } catch {
@@ -1467,7 +1467,7 @@ export default function TripDetailPage() {
     setSavingBooking(true);
     try {
       const body = { ...form, tripDayId: addBookingCtx?.dayId || null };
-      const res  = await api.post(`/api/trip-workspace?id=${id}&action=booking`, body);
+      const res  = await api.post(`/api/trips?id=${id}&action=booking`, body);
       if (!res.ok) throw new Error('Save failed');
       const { id: newId } = await res.json();
       const newBooking = { id: newId, tripId: id, tripDayId: addBookingCtx?.dayId || null, ...form, createdAt: new Date().toISOString() };
@@ -1483,7 +1483,7 @@ export default function TripDetailPage() {
   // ── Delete TripBooking ────────────────────────────────────────
   async function handleDeleteBooking(bookingId) {
     try {
-      const res = await api.post(`/api/trip-workspace?action=delete-booking&bookingId=${bookingId}`, {});
+      const res = await api.post(`/api/trips?action=delete-booking&bookingId=${bookingId}`, {});
       if (!res.ok) throw new Error('Delete failed');
       setWorkspace(w => ({ ...w, tripBookings: w.tripBookings.filter(b => b.id !== bookingId) }));
     } catch {
