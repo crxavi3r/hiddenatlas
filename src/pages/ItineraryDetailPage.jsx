@@ -573,10 +573,9 @@ export default function ItineraryDetailPage() {
   }, [itinerary?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Mobile sticky bar — watches sidebar, mobile top CTA, and (for locked) the lock gate.
-  // Bar is visible when none of these elements are in the viewport.
-  const sidebarRef     = useRef(null);
-  const lockGateRef    = useRef(null);
-  const mobileTopCtaRef = useRef(null);
+  // Bar is visible when neither the sidebar nor the lock gate is in the viewport.
+  const sidebarRef  = useRef(null);
+  const lockGateRef = useRef(null);
   const [ctaInView, setCtaInView] = useState(false);
   const [mobileDownloading, setMobileDownloading]   = useState(false);
   const [mobileDownloadError, setMobileDownloadError] = useState(null);
@@ -585,7 +584,6 @@ export default function ItineraryDetailPage() {
     if (accessState === 'checking' || accessState === 'verifying') { setCtaInView(false); return; }
     const targets = [
       sidebarRef.current,
-      mobileTopCtaRef.current,
       (accessState === 'locked' && isPremium) ? lockGateRef.current : null,
     ].filter(Boolean);
     if (!targets.length) return;
@@ -1206,22 +1204,6 @@ export default function ItineraryDetailPage() {
           {/* ── Left: Content ── */}
           <div>
 
-            {/* Mobile-only top CTA — hidden on desktop via .ha-mobile-top-cta CSS */}
-            <MobileTopCTA
-              accessState={accessState}
-              isPremium={isPremium}
-              price={price}
-              onBuy={() => {
-                track('PDF_CTA_CLICK', { itinerarySlug: itinerary.id, source: 'download_pdf_mobile_top_cta' });
-                handleBuyClick();
-              }}
-              onDownload={() => handleMobileDownload('download_pdf_mobile_top_cta')}
-              purchasing={purchasing}
-              downloading={mobileDownloading}
-              downloadError={mobileDownloadError}
-              innerRef={mobileTopCtaRef}
-            />
-
             {/* Duration selector — child itineraries only */}
             {itinerary.parentId && (() => {
               const parent = itineraries.find(it => it.id === itinerary.parentId);
@@ -1678,7 +1660,6 @@ export default function ItineraryDetailPage() {
       <style>{`
         @media (min-width: 768px) {
           .ha-mobile-buy-bar { display: none !important; }
-          .ha-mobile-top-cta { display: none !important; }
         }
         @media (max-width: 767px) {
           .ha-detail-body { padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)) !important; }
@@ -1842,93 +1823,6 @@ function FreeSidebar({ itinerary, onDownload }) {
           Want something tailored? Work directly with the designer behind each journey.
         </p>
       </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Mobile top CTA card — shown between hero and Overview on mobile
-// ─────────────────────────────────────────────────────────────
-function MobileTopCTA({ accessState, isPremium, onBuy, onDownload, purchasing, downloading, downloadError, innerRef }) {
-  if (accessState === 'checking' || accessState === 'verifying') return null;
-
-  const isLocked = accessState === 'locked';
-
-  let title, subtitle, btnLabel, btnBg, btnDisabled, handler;
-  if (isLocked) {
-    title       = 'Premium Guide';
-    subtitle    = 'Unlock the full itinerary, PDF and hidden details.';
-    btnLabel    = purchasing  ? 'Processing…'   : 'Unlock Full Itinerary';
-    handler     = onBuy;
-    btnBg       = purchasing  ? '#8C8070'        : '#C9A96E';
-    btnDisabled = purchasing;
-  } else if (isPremium) {
-    title       = 'Your itinerary is ready';
-    subtitle    = 'Download the full PDF guide and save it for offline use.';
-    btnLabel    = downloading ? 'Preparing PDF…' : 'Download PDF';
-    handler     = onDownload;
-    btnBg       = downloading ? '#4A9E98'        : '#1B6B65';
-    btnDisabled = downloading;
-  } else {
-    title       = 'Free PDF Guide';
-    subtitle    = 'Download this itinerary and save it for later.';
-    btnLabel    = downloading ? 'Preparing PDF…' : 'Download Free';
-    handler     = onDownload;
-    btnBg       = downloading ? '#4A9E98'        : '#1B6B65';
-    btnDisabled = downloading;
-  }
-
-  return (
-    <div
-      ref={innerRef}
-      className="ha-mobile-top-cta"
-      style={{
-        background: 'white', border: '1px solid #E8E3DA',
-        borderRadius: '10px', padding: '20px',
-        marginBottom: '40px',
-        boxShadow: '0 2px 16px rgba(28,26,22,0.06)',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '16px' }}>
-        <div style={{
-          width: '36px', height: '36px', borderRadius: '50%', flexShrink: 0,
-          background: isLocked ? '#F4F1EC' : '#EFF6F5',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          {isLocked
-            ? <Lock size={15} color="#8C8070" />
-            : <Download size={15} color="#1B6B65" />
-          }
-        </div>
-        <div>
-          <p style={{ fontSize: '14px', fontWeight: '700', color: '#1C1A16', marginBottom: '3px' }}>
-            {title}
-          </p>
-          <p style={{ fontSize: '13px', color: '#6B6156', lineHeight: '1.5' }}>
-            {subtitle}
-          </p>
-        </div>
-      </div>
-      <button
-        onClick={handler}
-        disabled={btnDisabled}
-        style={{
-          width: '100%', padding: '13px',
-          background: btnBg, color: 'white', border: 'none', borderRadius: '4px',
-          fontSize: '14px', fontWeight: '700', letterSpacing: '0.3px',
-          cursor: btnDisabled ? 'wait' : 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-          transition: 'background 0.2s',
-        }}
-      >
-        {!isLocked && <Download size={15} />}
-        {btnLabel}
-      </button>
-      {downloadError && !isLocked && (
-        <p style={{ fontSize: '12px', color: '#B04040', textAlign: 'center', marginTop: '8px' }}>
-          {downloadError}
-        </p>
-      )}
     </div>
   );
 }
