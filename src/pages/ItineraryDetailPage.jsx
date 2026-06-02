@@ -40,10 +40,21 @@ const DB_ROUTE_MAP_COMPONENTS = {
   'croatia-by-sea-dubrovnik-hvar-and-split': CroatiaRouteMap,
 };
 
+// Build a /custom href with designer, destination, and itinerary context.
+function buildCustomizeHref(itinerary, creator) {
+  const params = new URLSearchParams();
+  if (creator?.slug) params.set('designer', creator.slug);
+  const dest = itinerary?.destination || itinerary?.country;
+  if (dest) params.set('destination', dest);
+  if (itinerary?.id) params.set('itinerary', itinerary.id);
+  const qs = params.toString();
+  return qs ? `/custom?${qs}` : '/custom';
+}
+
 // ─────────────────────────────────────────────────────────────
 // Sidebar — locked state
 // ─────────────────────────────────────────────────────────────
-function LockedSidebar({ itinerary, onBuy, purchasing, purchaseError }) {
+function LockedSidebar({ itinerary, onBuy, purchasing, purchaseError, customizeHref }) {
   const { price } = itinerary;
   const allFeatures = [
     'Save 20+ hours of travel planning',
@@ -125,7 +136,7 @@ function LockedSidebar({ itinerary, onBuy, purchasing, purchaseError }) {
         </p>
 
         <Link
-          to="/custom"
+          to={customizeHref ?? '/custom'}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
             width: '100%', padding: '12px',
@@ -886,6 +897,9 @@ export default function ItineraryDetailPage() {
   const hasAccess = accessState === 'unlocked';
 
   // For variant itineraries (e.g. california-american-west-12-days), assets live
+  // Pre-built href for all "Customize This Route" CTAs — includes designer, destination, itinerary slug.
+  const customizeHref = buildCustomizeHref(itinerary, creator);
+
   // in the parent's content folder. Non-variant itineraries use their own id.
   const assetSlug    = itinerary.parentId || itinerary.id;
   const assetVariant = itinerary.variant; // 'premium'|'essential'|'short'|undefined
@@ -1180,7 +1194,7 @@ export default function ItineraryDetailPage() {
               </div>
             </div>
             <Link
-              to={`/custom?designer=${encodeURIComponent(creator.slug)}`}
+              to={customizeHref}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '6px',
                 padding: '10px 20px', background: '#1B6B65', color: 'white',
@@ -1626,6 +1640,7 @@ export default function ItineraryDetailPage() {
                 onBuy={handleBuyClick}
                 purchasing={purchasing}
                 purchaseError={purchaseError}
+                customizeHref={customizeHref}
               />
             )}
             {accessState === 'unlocked' && (
@@ -1633,7 +1648,7 @@ export default function ItineraryDetailPage() {
                 ? <UnlockedSidebar itinerary={itinerary} onDownload={handlePremiumDownload} />
                 : (
                   // Free itinerary — download sidebar with auth-aware save
-                  <FreeSidebar itinerary={itinerary} onDownload={handleFreeDownload} />
+                  <FreeSidebar itinerary={itinerary} onDownload={handleFreeDownload} customizeHref={customizeHref} />
                 )
             )}
           </div>
@@ -1746,7 +1761,7 @@ function MobileStickyBar({ accessState, isPremium, price, onBuy, onDownload, pur
 // ─────────────────────────────────────────────────────────────
 // Free itinerary sidebar (unchanged flow)
 // ─────────────────────────────────────────────────────────────
-function FreeSidebar({ itinerary, onDownload }) {
+function FreeSidebar({ itinerary, onDownload, customizeHref }) {
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState(null);
   const { included = [] } = itinerary;
@@ -1808,7 +1823,7 @@ function FreeSidebar({ itinerary, onDownload }) {
           <p style={{ fontSize: '12px', color: '#B04040', textAlign: 'center', margin: '-4px 0 12px' }}>{downloadError}</p>
         )}
         <Link
-          to="/custom"
+          to={customizeHref ?? '/custom'}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
             width: '100%', padding: '12px',

@@ -192,6 +192,8 @@ export default function CustomPlanningPage() {
   const api = useApi();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const sourceItinerary  = searchParams.get('itinerary')  || '';
+  const sourceDestination = searchParams.get('destination') || '';
   const [designer, setDesigner]   = useState(null);
   const [designers, setDesigners] = useState(null); // null = loading
   const [designerPlans, setDesignerPlans] = useState(null); // null = not loaded, [] = no plans
@@ -262,6 +264,13 @@ export default function CustomPlanningPage() {
     }));
   }, [isLoaded, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Prefill destination from ?destination= query param (set by "Customize This Route" CTA)
+  useEffect(() => {
+    if (sourceDestination) {
+      setFormData(prev => ({ ...prev, destination: prev.destination || sourceDestination }));
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Verify Stripe payment on return from checkout
   useEffect(() => {
     const sessionId = searchParams.get('session_id');
@@ -326,6 +335,13 @@ export default function CustomPlanningPage() {
     setSubmitting(true);
     setSubmitError(null);
 
+    // Append source itinerary context to notes (from ?itinerary= param via "Customize This Route")
+    const finalNotes = [
+      sourceItinerary ? `Customization of itinerary: ${sourceItinerary}` : '',
+      formData.notes?.trim(),
+    ].filter(Boolean).join('\n\n');
+    const enrichedFormData = sourceItinerary ? { ...formData, notes: finalNotes } : formData;
+
     // Resolve pricing: prefer designer's custom plans when available
     const activePlans      = Array.isArray(designerPlans) ? designerPlans : [];
     const selectedPlanId   = resolveDesignerPlan(activePlans, formData.groupSize)?.id ?? null;
@@ -340,7 +356,7 @@ export default function CustomPlanningPage() {
         const res = await api.post('/api/checkout?action=custom-session', {
           tierKey:       tier?.key ?? null,
           pricingPlanId: selectedPlanId,
-          formData,
+          formData:      enrichedFormData,
           designerSlug:  designer?.slug ?? null,
         });
         const data = await res.json();
@@ -355,7 +371,7 @@ export default function CustomPlanningPage() {
       // Review-first flow (custom quote or 13+)
       try {
         const res = await api.post('/api/custom', {
-          ...formData,
+          ...enrichedFormData,
           designerSlug:  designer?.slug ?? null,
           pricingPlanId: selectedPlanId,
         });
@@ -876,6 +892,22 @@ export default function CustomPlanningPage() {
                   : 'The more you share, the better we can plan. We\'ll be in touch within 48 hours.'
                 }
               </p>
+
+              {/* Itinerary context note — shown when arriving from "Customize This Route" */}
+              {sourceItinerary && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '12px 16px',
+                  background: '#EFF6F5', border: '1px solid #C8E0DD',
+                  borderRadius: '6px', marginBottom: '32px',
+                }}>
+                  <span style={{ fontSize: '16px', lineHeight: 1 }}>✦</span>
+                  <p style={{ fontSize: '13px', color: '#1B6B65', lineHeight: '1.5' }}>
+                    You are requesting a tailored version of this itinerary.
+                    The destination has been prefilled below.
+                  </p>
+                </div>
+              )}
 
               {/* Mobile pricing block */}
               <MobilePricingBlock tiers={displayTiers} />
