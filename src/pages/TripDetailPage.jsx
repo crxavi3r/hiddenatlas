@@ -212,11 +212,11 @@ const btnSecondary = {
 };
 
 // ─────────────────────────────────────────────
-// WorkspaceNav — sticky horizontal tab bar (desktop/tablet only, hidden on mobile via CSS)
+// WorkspaceNav — sticky horizontal scrollable tab bar (all screen sizes)
 // ─────────────────────────────────────────────
 function WorkspaceNav({ activeTab, onChange }) {
   return (
-    <nav className="workspace-tab-bar" style={{
+    <nav style={{
       position: 'sticky', top: '64px', zIndex: 100,
       background: 'rgba(250,250,248,0.95)',
       backdropFilter: 'blur(8px)',
@@ -225,9 +225,14 @@ function WorkspaceNav({ activeTab, onChange }) {
       <div style={{
         maxWidth: '960px', margin: '0 auto',
         display: 'flex',
+        // overflowY: hidden is the critical fix:
+        // without it, a touch with any vertical component makes the
+        // overflow-x:auto container try to respond vertically, causing the
+        // visible horizontal jump. Clamping Y to hidden passes vertical scroll
+        // straight through to the page.
         overflowX: 'auto',
-        // Prevent the scrollable tab row from being dragged vertically,
-        // which causes horizontal jumps during vertical page scroll on touch.
+        overflowY: 'hidden',
+        // Tell the browser this container owns horizontal panning only
         touchAction: 'pan-x',
         overscrollBehaviorX: 'contain',
         WebkitOverflowScrolling: 'touch',
@@ -263,55 +268,7 @@ function WorkspaceNav({ activeTab, onChange }) {
   );
 }
 
-// ─────────────────────────────────────────────
-// Mobile bottom nav (mobile only, hidden on desktop via CSS)
-// 5 tabs: Overview, Days, Map, Notes, Bookings
-// ─────────────────────────────────────────────
-const MOBILE_TABS = ['overview', 'days', 'map', 'notes', 'bookings'];
-
-function MobileNav({ activeTab, onChange }) {
-  const tabs = TABS.filter(t => MOBILE_TABS.includes(t.id));
-  return (
-    <div
-      className="workspace-bottom-nav"
-      style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 200,
-        background: 'white',
-        borderTop: `1px solid ${BORDER}`,
-        // flex is applied via CSS for display toggling
-        paddingTop: '8px',
-        // Safe area for iPhone home bar
-        paddingBottom: 'env(safe-area-inset-bottom)',
-      }}
-    >
-      {tabs.map(({ id, label, Icon }) => {
-        const active = activeTab === id;
-        return (
-          <button
-            key={id}
-            onClick={() => onChange(id)}
-            style={{
-              flex: 1, display: 'flex', flexDirection: 'column',
-              alignItems: 'center', gap: '3px',
-              padding: '2px 0 10px',
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: active ? TEAL : '#B5A09A',
-              transition: 'color 0.15s',
-            }}
-          >
-            <Icon size={20} strokeWidth={active ? 2.5 : 1.75} />
-            <span style={{
-              fontSize: '9.5px', fontWeight: '600', letterSpacing: '0.3px',
-              lineHeight: 1,
-            }}>
-              {label === 'Day by Day' ? 'Days' : label}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+// MobileNav removed — horizontal tab bar now covers all screen sizes.
 
 // ─────────────────────────────────────────────
 // TripDetailsModal — edit personal trip fields
@@ -2044,7 +2001,7 @@ export default function TripDetailPage() {
 
       {/* ── Tab content ─────────────────────────────────────── */}
       {/* paddingBottom on desktop; on mobile CSS overrides to account for bottom nav + safe area */}
-      <div className="workspace-content" style={{ paddingBottom: '100px' }}>
+      <div style={{ paddingBottom: '100px' }}>
         {activeTab === 'overview' && (
           <OverviewTab workspace={workspace} onEditDetails={() => setShowDetails(true)} />
         )}
@@ -2091,9 +2048,6 @@ export default function TripDetailPage() {
         )}
       </div>
 
-      {/* ── Mobile bottom nav (always rendered, CSS controls visibility) ── */}
-      <MobileNav activeTab={activeTab} onChange={setActiveTab} />
-
       {/* ── Modals ─────────────────────────────────────────── */}
       {showDetails && (
         <TripDetailsModal
@@ -2137,34 +2091,8 @@ export default function TripDetailPage() {
         />
       )}
 
-      <style>{`
-        /* ── Workspace responsive navigation ──────────────────────────────
-           Desktop (≥769px): horizontal sticky tab bar, no bottom nav.
-           Mobile  (≤768px): bottom nav only, no horizontal tab bar.
-        ─────────────────────────────────────────────────────────────────── */
-
-        /* Bottom nav: hidden by default, shown only on mobile */
-        .workspace-bottom-nav {
-          display: none;
-        }
-
-        @media (max-width: 768px) {
-          /* Hide horizontal tabs on mobile — prevents scroll-induced horizontal jumps */
-          .workspace-tab-bar {
-            display: none !important;
-          }
-
-          /* Show bottom nav as a flex row on mobile */
-          .workspace-bottom-nav {
-            display: flex !important;
-          }
-
-          /* Push content above bottom nav (64px nav + 8px top pad + safe area) */
-          .workspace-content {
-            padding-bottom: calc(72px + env(safe-area-inset-bottom)) !important;
-          }
-        }
-      `}</style>
+      {/* Hide scrollbar on the tab row in all browsers */}
+      <style>{`nav .workspace-tabs-inner::-webkit-scrollbar { display: none; }`}</style>
     </div>
   );
 }
