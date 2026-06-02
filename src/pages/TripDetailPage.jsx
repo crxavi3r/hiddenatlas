@@ -11,6 +11,28 @@ import { useApi } from '../lib/api';
 import { itineraries as staticItineraries } from '../data/itineraries';
 import { useSEO } from '../hooks/useSEO';
 import { useIsMobile } from '../hooks/useIsMobile';
+import JapanRouteMap from '../components/JapanRouteMap';
+import MoroccoRouteMap from '../components/MoroccoRouteMap';
+import PhilippinesRouteMap from '../components/PhilippinesRouteMap';
+import AmericanWestRouteMap from '../components/AmericanWestRouteMap';
+import AmericanWest12DaysRouteMap from '../components/AmericanWest12DaysRouteMap';
+import AmericanWest8DaysRouteMap from '../components/AmericanWest8DaysRouteMap';
+import TuscanyRouteMap from '../components/TuscanyRouteMap';
+import CroatiaRouteMap from '../components/CroatiaRouteMap';
+import NorthernEnglandRouteMap from '../components/NorthernEnglandRouteMap';
+
+const ROUTE_MAP_COMPONENTS = {
+  'japan-grand-cultural-journey':             JapanRouteMap,
+  'morocco-motorcycle-expedition':            MoroccoRouteMap,
+  'philippines-island-journey':               PhilippinesRouteMap,
+  'california-american-west':                 AmericanWestRouteMap,
+  'california-american-west-16-days':         AmericanWestRouteMap,
+  'california-american-west-12-days':         AmericanWest12DaysRouteMap,
+  'california-american-west-8-days':          AmericanWest8DaysRouteMap,
+  'northern-england-roadtrip':                NorthernEnglandRouteMap,
+  'tuscany-wine-roads-in-7-days':             TuscanyRouteMap,
+  'croatia-by-sea-dubrovnik-hvar-and-split':  CroatiaRouteMap,
+};
 
 // ─────────────────────────────────────────────
 // Design tokens
@@ -105,29 +127,27 @@ function getDayImage(dayNumber, assets) {
 // ─────────────────────────────────────────────
 // Primitive UI
 // ─────────────────────────────────────────────
-function Modal({ open, onClose, title, children, wide }) {
+// onRequestClose: called when user clicks X or presses Escape — caller decides whether to confirm
+function Modal({ open, onRequestClose, title, children, wide }) {
   useEffect(() => {
     if (!open) return;
-    const esc = e => { if (e.key === 'Escape') onClose(); };
+    const esc = e => { if (e.key === 'Escape') onRequestClose?.(); };
     document.addEventListener('keydown', esc);
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', esc);
       document.body.style.overflow = '';
     };
-  }, [open, onClose]);
+  }, [open, onRequestClose]);
 
   if (!open) return null;
   return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(28,26,22,0.5)',
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-        padding: '0',
-      }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
+    // backdrop does NOT close the modal — prevents accidental data loss
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: 'rgba(28,26,22,0.5)',
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+    }}>
       <div style={{
         background: 'white',
         borderRadius: '16px 16px 0 0',
@@ -142,7 +162,7 @@ function Modal({ open, onClose, title, children, wide }) {
             {title}
           </h3>
           <button
-            onClick={onClose}
+            onClick={onRequestClose}
             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: MUTED }}
           >
             <X size={20} />
@@ -287,11 +307,18 @@ function TripDetailsModal({ workspace, open, onClose, onSave, saving }) {
     departureInfo:        trip.departureInfo        || '',
     generalNotes:         trip.generalNotes         || '',
   });
-
   function set(key, val) { setForm(f => ({ ...f, [key]: val })); }
+  function isDirty() {
+    return form.startDate || form.endDate || form.travellers || form.accommodationSummary ||
+           form.arrivalInfo || form.departureInfo || form.generalNotes;
+  }
+  function requestClose() {
+    if (isDirty() && !window.confirm('Discard changes?')) return;
+    onClose();
+  }
 
   return (
-    <Modal open={open} onClose={onClose} title="Your trip details" wide>
+    <Modal open={open} onRequestClose={requestClose} title="Your trip details" wide>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
         <FormField label="Departure date">
           <input type="date" value={form.startDate} onChange={e => set('startDate', e.target.value)} style={inputStyle} />
@@ -313,16 +340,10 @@ function TripDetailsModal({ workspace, open, onClose, onSave, saving }) {
         <input type="text" value={form.departureInfo} onChange={e => set('departureInfo', e.target.value)} placeholder="e.g. MAR–LIS, Air France AF1235, 17:20" style={inputStyle} />
       </FormField>
       <FormField label="General notes">
-        <textarea
-          value={form.generalNotes}
-          onChange={e => set('generalNotes', e.target.value)}
-          placeholder="Anything useful to remember..."
-          rows={3}
-          style={{ ...inputStyle, resize: 'vertical' }}
-        />
+        <textarea value={form.generalNotes} onChange={e => set('generalNotes', e.target.value)} placeholder="Anything useful to remember..." rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
       </FormField>
       <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
-        <button style={btnSecondary} onClick={onClose}>Cancel</button>
+        <button style={btnSecondary} onClick={requestClose}>Cancel</button>
         <button style={btnPrimary} onClick={() => onSave(form)} disabled={saving}>
           {saving ? 'Saving...' : 'Save details'}
         </button>
@@ -334,13 +355,18 @@ function TripDetailsModal({ workspace, open, onClose, onSave, saving }) {
 // ─────────────────────────────────────────────
 // AddItemModal — add custom item to a day
 // ─────────────────────────────────────────────
-function AddItemModal({ open, tripId, tripDayId, dayNumber, onClose, onSave, saving }) {
-  const [form, setForm] = useState({ type: 'place', title: '', time: '', locationName: '', durationMinutes: '', notes: '' });
+function AddItemModal({ open, dayNumber, onClose, onSave, saving }) {
+  const EMPTY = { type: 'place', title: '', time: '', locationName: '', durationMinutes: '', notes: '' };
+  const [form, setForm] = useState(EMPTY);
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
-  function reset() { setForm({ type: 'place', title: '', time: '', locationName: '', durationMinutes: '', notes: '' }); }
+  function isDirty() { return form.title || form.locationName || form.notes || form.time; }
+  function requestClose() {
+    if (isDirty() && !window.confirm('Discard changes?')) return;
+    setForm(EMPTY); onClose();
+  }
 
   return (
-    <Modal open={open} onClose={() => { reset(); onClose(); }} title={`Add to Day ${dayNumber || ''}`}>
+    <Modal open={open} onRequestClose={requestClose} title={`Add to Day ${dayNumber || ''}`}>
       <FormField label="Type">
         <select value={form.type} onChange={e => set('type', e.target.value)} style={inputStyle}>
           {ITEM_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -349,12 +375,13 @@ function AddItemModal({ open, tripId, tripDayId, dayNumber, onClose, onSave, sav
       <FormField label="Name / Title">
         <input type="text" value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. Djemaa el-Fna" style={inputStyle} autoFocus />
       </FormField>
+      {/* Time + Duration in aligned columns */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
         <FormField label="Time (optional)">
-          <input type="text" value={form.time} onChange={e => set('time', e.target.value)} placeholder="e.g. 10:00" style={inputStyle} />
+          <input type="text" value={form.time} onChange={e => set('time', e.target.value)} placeholder="10:00" style={inputStyle} />
         </FormField>
-        <FormField label="Duration in minutes (optional)">
-          <input type="number" min="0" value={form.durationMinutes} onChange={e => set('durationMinutes', e.target.value)} placeholder="e.g. 90" style={inputStyle} />
+        <FormField label="Duration (min)">
+          <input type="number" min="0" value={form.durationMinutes} onChange={e => set('durationMinutes', e.target.value)} placeholder="90" style={inputStyle} />
         </FormField>
       </div>
       <FormField label="Location (optional)">
@@ -364,7 +391,7 @@ function AddItemModal({ open, tripId, tripDayId, dayNumber, onClose, onSave, sav
         <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Any details..." rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
       </FormField>
       <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-        <button style={btnSecondary} onClick={() => { reset(); onClose(); }}>Cancel</button>
+        <button style={btnSecondary} onClick={requestClose}>Cancel</button>
         <button style={btnPrimary} onClick={() => onSave(form)} disabled={saving || !form.title.trim()}>
           {saving ? 'Adding...' : 'Add item'}
         </button>
@@ -376,30 +403,27 @@ function AddItemModal({ open, tripId, tripDayId, dayNumber, onClose, onSave, sav
 // ─────────────────────────────────────────────
 // AddNoteModal
 // ─────────────────────────────────────────────
-function AddNoteModal({ open, tripId, tripDayId, dayNumber, onClose, onSave, saving, editNote }) {
+function AddNoteModal({ open, dayNumber, onClose, onSave, saving, editNote }) {
   const [form, setForm] = useState({ title: '', content: '' });
   useEffect(() => {
     if (open) setForm({ title: editNote?.title || '', content: editNote?.content || '' });
   }, [open, editNote]);
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+  function requestClose() {
+    if (form.content && !window.confirm('Discard changes?')) return;
+    onClose();
+  }
 
   return (
-    <Modal open={open} onClose={onClose} title={editNote ? 'Edit note' : dayNumber ? `Note for Day ${dayNumber}` : 'Add note'}>
+    <Modal open={open} onRequestClose={requestClose} title={editNote ? 'Edit note' : dayNumber ? `Note for Day ${dayNumber}` : 'Add note'}>
       <FormField label="Title (optional)">
         <input type="text" value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. Things to pack" style={inputStyle} />
       </FormField>
       <FormField label="Note">
-        <textarea
-          value={form.content}
-          onChange={e => set('content', e.target.value)}
-          placeholder="Write your note..."
-          rows={5}
-          style={{ ...inputStyle, resize: 'vertical' }}
-          autoFocus
-        />
+        <textarea value={form.content} onChange={e => set('content', e.target.value)} placeholder="Write your note..." rows={5} style={{ ...inputStyle, resize: 'vertical' }} autoFocus />
       </FormField>
       <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-        <button style={btnSecondary} onClick={onClose}>Cancel</button>
+        <button style={btnSecondary} onClick={requestClose}>Cancel</button>
         <button style={btnPrimary} onClick={() => onSave(form)} disabled={saving || !form.content.trim()}>
           {saving ? 'Saving...' : editNote ? 'Update note' : 'Save note'}
         </button>
@@ -409,52 +433,211 @@ function AddNoteModal({ open, tripId, tripDayId, dayNumber, onClose, onSave, sav
 }
 
 // ─────────────────────────────────────────────
-// AddBookingModal
+// BookingModal — type-adaptive, supports create + edit
 // ─────────────────────────────────────────────
-function AddBookingModal({ open, tripId, tripDayId, dayNumber, onClose, onSave, saving }) {
-  const [form, setForm] = useState({ type: 'hotel', title: '', date: '', time: '', locationName: '', provider: '', confirmationReference: '', notes: '', url: '' });
+const BOOKING_DEFAULTS = { type: 'hotel', title: '', date: '', time: '', locationName: '', provider: '', confirmationReference: '', notes: '', url: '', meta: {} };
+
+function initBookingForm(booking) {
+  if (!booking) return BOOKING_DEFAULTS;
+  const meta = booking.metadata || {};
+  return {
+    type: booking.type || 'hotel',
+    title: booking.title || '',
+    date: booking.date ? String(booking.date).slice(0, 10) : '',
+    time: booking.time || '',
+    locationName: booking.locationName || '',
+    provider: booking.provider || '',
+    confirmationReference: booking.confirmationReference || '',
+    notes: booking.notes || '',
+    url: booking.url || '',
+    meta,
+  };
+}
+
+function BookingModal({ open, dayNumber, editBooking, onClose, onSave, saving }) {
+  const [form, setForm] = useState(BOOKING_DEFAULTS);
+
+  useEffect(() => {
+    if (open) setForm(initBookingForm(editBooking));
+  }, [open, editBooking]);
+
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
-  function reset() { setForm({ type: 'hotel', title: '', date: '', time: '', locationName: '', provider: '', confirmationReference: '', notes: '', url: '' }); }
+  function setMeta(k, v) { setForm(f => ({ ...f, meta: { ...f.meta, [k]: v } })); }
+  function isDirty() { return form.title || form.locationName || form.notes; }
+  function requestClose() {
+    if (isDirty() && !window.confirm('Discard changes?')) return;
+    onClose();
+  }
+  function handleTypeChange(t) {
+    setForm(f => ({ ...f, type: t, meta: {} })); // reset meta on type switch
+  }
+
+  const isEdit = !!editBooking;
+  const title = isEdit ? `Edit ${form.type}` : dayNumber ? `Add booking — Day ${dayNumber}` : 'Add booking';
 
   return (
-    <Modal open={open} onClose={() => { reset(); onClose(); }} title={dayNumber ? `Add booking — Day ${dayNumber}` : 'Add booking'} wide>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-        <FormField label="Type">
-          <select value={form.type} onChange={e => set('type', e.target.value)} style={inputStyle}>
-            {BOOKING_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-          </select>
-        </FormField>
-        <FormField label="Date">
-          <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
-        </FormField>
-      </div>
+    <Modal open={open} onRequestClose={requestClose} title={title} wide>
+      {/* Type selector */}
+      <FormField label="Type">
+        <select value={form.type} onChange={e => handleTypeChange(e.target.value)} style={inputStyle}>
+          {BOOKING_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </select>
+      </FormField>
+
+      {/* Type-adaptive fields */}
+      {form.type === 'hotel' && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+            <FormField label="Check-in date">
+              <input type="date" value={form.meta.checkInDate || ''} onChange={e => setMeta('checkInDate', e.target.value)} style={inputStyle} />
+            </FormField>
+            <FormField label="Check-out date">
+              <input type="date" value={form.meta.checkOutDate || ''} onChange={e => setMeta('checkOutDate', e.target.value)} style={inputStyle} />
+            </FormField>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+            <FormField label="Check-in time (optional)">
+              <input type="text" value={form.meta.checkInTime || ''} onChange={e => setMeta('checkInTime', e.target.value)} placeholder="15:00" style={inputStyle} />
+            </FormField>
+            <FormField label="Check-out time (optional)">
+              <input type="text" value={form.meta.checkOutTime || ''} onChange={e => setMeta('checkOutTime', e.target.value)} placeholder="11:00" style={inputStyle} />
+            </FormField>
+          </div>
+        </>
+      )}
+      {form.type === 'restaurant' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+          <FormField label="Reservation date">
+            <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
+          </FormField>
+          <FormField label="Reservation time">
+            <input type="text" value={form.time} onChange={e => set('time', e.target.value)} placeholder="20:00" style={inputStyle} />
+          </FormField>
+        </div>
+      )}
+      {form.type === 'experience' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+          <FormField label="Date">
+            <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
+          </FormField>
+          <FormField label="Start time (optional)">
+            <input type="text" value={form.time} onChange={e => set('time', e.target.value)} placeholder="09:00" style={inputStyle} />
+          </FormField>
+        </div>
+      )}
+      {form.type === 'flight' && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+            <FormField label="Departure date">
+              <input type="date" value={form.meta.departureDate || ''} onChange={e => setMeta('departureDate', e.target.value)} style={inputStyle} />
+            </FormField>
+            <FormField label="Departure time">
+              <input type="text" value={form.meta.departureTime || ''} onChange={e => setMeta('departureTime', e.target.value)} placeholder="06:30" style={inputStyle} />
+            </FormField>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+            <FormField label="From (airport)">
+              <input type="text" value={form.meta.from || ''} onChange={e => setMeta('from', e.target.value)} placeholder="LIS" style={inputStyle} />
+            </FormField>
+            <FormField label="To (airport)">
+              <input type="text" value={form.meta.to || ''} onChange={e => setMeta('to', e.target.value)} placeholder="MAD" style={inputStyle} />
+            </FormField>
+          </div>
+        </>
+      )}
+      {form.type === 'transfer' && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+            <FormField label="Date">
+              <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
+            </FormField>
+            <FormField label="Pickup time">
+              <input type="text" value={form.meta.pickupTime || ''} onChange={e => setMeta('pickupTime', e.target.value)} placeholder="08:00" style={inputStyle} />
+            </FormField>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+            <FormField label="Pickup location">
+              <input type="text" value={form.meta.pickupLocation || ''} onChange={e => setMeta('pickupLocation', e.target.value)} placeholder="Hotel name or address" style={inputStyle} />
+            </FormField>
+            <FormField label="Drop-off location">
+              <input type="text" value={form.meta.dropoffLocation || ''} onChange={e => setMeta('dropoffLocation', e.target.value)} placeholder="Airport or address" style={inputStyle} />
+            </FormField>
+          </div>
+        </>
+      )}
+      {form.type === 'event' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+          <FormField label="Date">
+            <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
+          </FormField>
+          <FormField label="Start time">
+            <input type="text" value={form.time} onChange={e => set('time', e.target.value)} placeholder="19:00" style={inputStyle} />
+          </FormField>
+        </div>
+      )}
+      {form.type === 'other' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+          <FormField label="Date (optional)">
+            <input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={inputStyle} />
+          </FormField>
+          <FormField label="Time (optional)">
+            <input type="text" value={form.time} onChange={e => set('time', e.target.value)} placeholder="—" style={inputStyle} />
+          </FormField>
+        </div>
+      )}
+
+      {/* Common fields */}
       <FormField label="Name / Title">
-        <input type="text" value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. Riad Farnatchi" style={inputStyle} autoFocus />
+        <input type="text" value={form.title} onChange={e => set('title', e.target.value)}
+          placeholder={form.type === 'hotel' ? 'Hotel name' : form.type === 'flight' ? 'Airline + flight no.' : form.type === 'restaurant' ? 'Restaurant name' : 'Name or title'}
+          style={inputStyle} autoFocus />
       </FormField>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-        <FormField label="Time">
-          <input type="text" value={form.time} onChange={e => set('time', e.target.value)} placeholder="e.g. 15:00" style={inputStyle} />
+      {form.type !== 'transfer' && form.type !== 'flight' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+          <FormField label="Location">
+            <input type="text" value={form.locationName} onChange={e => set('locationName', e.target.value)} placeholder="City or address" style={inputStyle} />
+          </FormField>
+          <FormField label="Provider / Platform">
+            <input type="text" value={form.provider} onChange={e => set('provider', e.target.value)} placeholder="e.g. Booking.com" style={inputStyle} />
+          </FormField>
+        </div>
+      )}
+      {form.type === 'flight' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+          <FormField label="Airline / Provider">
+            <input type="text" value={form.provider} onChange={e => set('provider', e.target.value)} placeholder="Air France" style={inputStyle} />
+          </FormField>
+          <FormField label="Flight number">
+            <input type="text" value={form.confirmationReference} onChange={e => set('confirmationReference', e.target.value)} placeholder="AF1234" style={inputStyle} />
+          </FormField>
+        </div>
+      )}
+      {form.type !== 'flight' && (
+        <FormField label="Confirmation / Reference (optional)">
+          <input type="text" value={form.confirmationReference} onChange={e => set('confirmationReference', e.target.value)} placeholder="#ABC123" style={inputStyle} />
         </FormField>
-        <FormField label="Provider">
-          <input type="text" value={form.provider} onChange={e => set('provider', e.target.value)} placeholder="e.g. Booking.com" style={inputStyle} />
+      )}
+      {form.type === 'experience' && (
+        <FormField label="Duration (minutes, optional)">
+          <input type="number" min="0" value={form.meta.durationMinutes || ''} onChange={e => setMeta('durationMinutes', e.target.value)} placeholder="90" style={inputStyle} />
         </FormField>
-      </div>
-      <FormField label="Location">
-        <input type="text" value={form.locationName} onChange={e => set('locationName', e.target.value)} placeholder="Address or area" style={inputStyle} />
-      </FormField>
-      <FormField label="Confirmation / Reference">
-        <input type="text" value={form.confirmationReference} onChange={e => set('confirmationReference', e.target.value)} placeholder="e.g. #ABC123456" style={inputStyle} />
-      </FormField>
+      )}
+      {form.type === 'restaurant' && (
+        <FormField label="Party size (optional)">
+          <input type="number" min="1" value={form.meta.partySize || ''} onChange={e => setMeta('partySize', e.target.value)} placeholder="2" style={inputStyle} />
+        </FormField>
+      )}
       <FormField label="Booking URL (optional)">
         <input type="url" value={form.url} onChange={e => set('url', e.target.value)} placeholder="https://..." style={inputStyle} />
       </FormField>
       <FormField label="Notes (optional)">
-        <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Check-in time, contact, etc." rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
+        <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Special requests, contact info, etc." rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
       </FormField>
+
       <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-        <button style={btnSecondary} onClick={() => { reset(); onClose(); }}>Cancel</button>
-        <button style={btnPrimary} onClick={() => onSave(form)} disabled={saving || !form.title.trim()}>
-          {saving ? 'Adding...' : 'Save booking'}
+        <button style={btnSecondary} onClick={requestClose}>Cancel</button>
+        <button style={btnPrimary} onClick={() => onSave({ ...form, metadata: form.meta })} disabled={saving || !form.title.trim()}>
+          {saving ? (isEdit ? 'Updating...' : 'Saving...') : (isEdit ? 'Update booking' : 'Save booking')}
         </button>
       </div>
     </Modal>
@@ -575,7 +758,7 @@ const CAT_COLORS = {
   flight: '#4A2D7D', transfer: '#7D5A2D', event: '#2D7D4A', other: MUTED,
 };
 
-function BookingCard({ booking, onDelete }) {
+function BookingCard({ booking, onDelete, onEdit }) {
   const color = CAT_COLORS[booking.type] || MUTED;
   const catLabel = BOOKING_CATEGORIES.find(c => c.value === booking.type)?.label || booking.type;
 
@@ -618,10 +801,53 @@ function BookingCard({ booking, onDelete }) {
             </a>
           )}
         </div>
-        <button onClick={() => onDelete(booking.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C8BFB5', padding: '2px', flexShrink: 0 }}>
-          <Trash2 size={14} />
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+          <button onClick={() => onEdit(booking)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '2px', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '11px' }} title="Edit booking">
+            <Pencil size={12} />
+          </button>
+          <button onClick={() => onDelete(booking.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C8BFB5', padding: '2px' }} title="Delete booking">
+            <Trash2 size={12} />
+          </button>
+        </div>
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// DayBookingItem — booking displayed inside a day
+// ─────────────────────────────────────────────
+function DayBookingItem({ booking, onEdit }) {
+  const color = CAT_COLORS[booking.type] || MUTED;
+  const catLabel = BOOKING_CATEGORIES.find(c => c.value === booking.type)?.label || booking.type;
+  const meta = booking.metadata || {};
+  const timeDisplay = booking.type === 'hotel'
+    ? (meta.checkInDate ? `Check-in ${meta.checkInDate}` : null)
+    : booking.time || null;
+
+  return (
+    <div style={{
+      display: 'flex', gap: '10px', alignItems: 'flex-start',
+      padding: '10px 14px', background: 'white',
+      border: `1px solid ${BORDER}`, borderRadius: '8px',
+      borderLeft: `3px solid ${color}`,
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+          <span style={{ fontSize: '9.5px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', color, background: `${color}12`, padding: '2px 6px', borderRadius: '3px' }}>
+            {catLabel}
+          </span>
+          {timeDisplay && <span style={{ fontSize: '11px', color: MUTED }}>{timeDisplay}</span>}
+        </div>
+        <p style={{ fontSize: '13.5px', fontWeight: '600', color: CHAR }}>{booking.title}</p>
+        {booking.locationName && <p style={{ fontSize: '12px', color: MUTED }}>{booking.locationName}</p>}
+        {booking.confirmationReference && (
+          <p style={{ fontSize: '11px', fontFamily: 'monospace', color: TEAL, marginTop: '2px' }}>{booking.confirmationReference}</p>
+        )}
+      </div>
+      <button onClick={() => onEdit(booking)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '2px', flexShrink: 0 }} title="Edit booking">
+        <Pencil size={12} />
+      </button>
     </div>
   );
 }
@@ -629,54 +855,40 @@ function BookingCard({ booking, onDelete }) {
 // ─────────────────────────────────────────────
 // DaySection — one full day in the timeline
 // ─────────────────────────────────────────────
-function DaySection({ tripDay, itinDay, dayItems, dayNotes, isLast, assets, onAddItem, onAddNote, onDeleteItem }) {
+function DaySection({ tripDay, itinDay, dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditBooking }) {
   const [expanded, setExpanded] = useState(true);
-  const [showActions, setShowActions] = useState(false);
 
-  const title = tripDay.titleOverride || itinDay?.title || tripDay.title || `Day ${tripDay.dayNumber}`;
-  const desc  = tripDay.descriptionOverride || itinDay?.description || tripDay.description || '';
+  const title   = tripDay.titleOverride || itinDay?.title || tripDay.title || `Day ${tripDay.dayNumber}`;
+  const desc    = tripDay.descriptionOverride || itinDay?.description || tripDay.description || '';
   const bullets = itinDay?.bullets || [];
-  const tip = itinDay?.tip || '';
-  const img = getDayImage(tripDay.dayNumber, assets) || itinDay?.img || null;
+  const tip     = itinDay?.tip || '';
+  const img     = getDayImage(tripDay.dayNumber, assets) || itinDay?.img || null;
 
   if (tripDay.isHidden) return null;
 
+  const pillStyle = {
+    display: 'inline-flex', alignItems: 'center', gap: '5px',
+    padding: '7px 13px', background: 'white',
+    border: `1px solid ${BORDER}`, borderRadius: '20px',
+    fontSize: '12px', fontWeight: '600', color: MUTED,
+    cursor: 'pointer', transition: 'all 0.15s',
+  };
+
   return (
     <div style={{ display: 'flex', gap: '20px' }}>
-      {/* Timeline */}
+      {/* Timeline dot */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-        <div style={{
-          width: '36px', height: '36px', borderRadius: '50%',
-          background: TEAL, color: 'white',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '13px', fontWeight: '700', flexShrink: 0, zIndex: 1,
-        }}>
+        <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: TEAL, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '700', flexShrink: 0, zIndex: 1 }}>
           {tripDay.dayNumber}
         </div>
-        {!isLast && (
-          <div style={{ width: '1px', flex: 1, background: BORDER, minHeight: '32px' }} />
-        )}
+        {!isLast && <div style={{ width: '1px', flex: 1, background: BORDER, minHeight: '32px' }} />}
       </div>
 
       {/* Content */}
       <div style={{ flex: 1, paddingBottom: '40px', minWidth: 0 }}>
-        {/* Day header */}
-        <button
-          onClick={() => setExpanded(e => !e)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            background: 'none', border: 'none', cursor: 'pointer',
-            textAlign: 'left', padding: 0, width: '100%', marginBottom: '10px',
-          }}
-        >
-          <span style={{ fontSize: '10.5px', fontWeight: '700', letterSpacing: '1.8px', textTransform: 'uppercase', color: TEAL }}>
-            Day {tripDay.dayNumber}
-          </span>
-          <ChevronDown
-            size={14}
-            color={MUTED}
-            style={{ transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s', marginLeft: 'auto' }}
-          />
+        <button onClick={() => setExpanded(e => !e)} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0, width: '100%', marginBottom: '10px' }}>
+          <span style={{ fontSize: '10.5px', fontWeight: '700', letterSpacing: '1.8px', textTransform: 'uppercase', color: TEAL }}>Day {tripDay.dayNumber}</span>
+          <ChevronDown size={14} color={MUTED} style={{ transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s', marginLeft: 'auto' }} />
         </button>
 
         <h3 style={{ fontFamily: SERIF, fontSize: '20px', fontWeight: '600', color: CHAR, marginBottom: expanded ? '10px' : '0', lineHeight: '1.3' }}>
@@ -685,11 +897,7 @@ function DaySection({ tripDay, itinDay, dayItems, dayNotes, isLast, assets, onAd
 
         {expanded && (
           <>
-            {desc && (
-              <p style={{ fontSize: '15px', color: MUTED, lineHeight: '1.75', marginBottom: bullets.length ? '14px' : '0' }}>
-                {desc}
-              </p>
-            )}
+            {desc && <p style={{ fontSize: '15px', color: MUTED, lineHeight: '1.75', marginBottom: bullets.length ? '14px' : '0' }}>{desc}</p>}
 
             {bullets.length > 0 && (
               <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 14px', display: 'flex', flexDirection: 'column', gap: '7px' }}>
@@ -704,26 +912,24 @@ function DaySection({ tripDay, itinDay, dayItems, dayNotes, isLast, assets, onAd
 
             {tip && (
               <div style={{ padding: '12px 16px', background: LIGHT, borderRadius: '6px', borderLeft: `3px solid ${GOLD}`, marginBottom: '14px' }}>
-                <p style={{ fontSize: '10.5px', fontWeight: '700', letterSpacing: '1.2px', textTransform: 'uppercase', color: GOLD, marginBottom: '4px' }}>
-                  Insider Tip
-                </p>
+                <p style={{ fontSize: '10.5px', fontWeight: '700', letterSpacing: '1.2px', textTransform: 'uppercase', color: GOLD, marginBottom: '4px' }}>Insider Tip</p>
                 <p style={{ fontSize: '13.5px', color: '#4A433A', lineHeight: '1.6' }}>{tip}</p>
               </div>
             )}
 
-            {img && (
-              <img
-                src={img} alt={title}
-                style={{ width: '100%', maxWidth: '460px', height: '200px', objectFit: 'cover', borderRadius: '8px', marginBottom: '16px' }}
-              />
-            )}
+            {img && <img src={img} alt={title} style={{ width: '100%', maxWidth: '460px', height: '200px', objectFit: 'cover', borderRadius: '8px', marginBottom: '16px' }} />}
 
             {/* User items */}
             {dayItems.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                {dayItems.map(item => (
-                  <ItemCard key={item.id} item={item} onDelete={onDeleteItem} />
-                ))}
+                {dayItems.map(item => <ItemCard key={item.id} item={item} onDelete={onDeleteItem} />)}
+              </div>
+            )}
+
+            {/* Day bookings */}
+            {dayBookings.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                {dayBookings.map(b => <DayBookingItem key={b.id} booking={b} onEdit={onEditBooking} />)}
               </div>
             )}
 
@@ -731,10 +937,7 @@ function DaySection({ tripDay, itinDay, dayItems, dayNotes, isLast, assets, onAd
             {dayNotes.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
                 {dayNotes.map(n => (
-                  <div key={n.id} style={{
-                    padding: '10px 14px', background: `${GOLD}08`,
-                    border: `1px dashed ${GOLD}40`, borderRadius: '6px',
-                  }}>
+                  <div key={n.id} style={{ padding: '10px 14px', background: `${GOLD}08`, border: `1px dashed ${GOLD}40`, borderRadius: '6px' }}>
                     {n.title && <p style={{ fontSize: '10.5px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', color: GOLD, marginBottom: '3px' }}>{n.title}</p>}
                     <p style={{ fontSize: '13px', color: CHAR, lineHeight: '1.5' }}>{n.content}</p>
                   </div>
@@ -744,32 +947,19 @@ function DaySection({ tripDay, itinDay, dayItems, dayNotes, isLast, assets, onAd
 
             {/* Add actions */}
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
-              <button
-                onClick={() => onAddItem(tripDay.id, tripDay.dayNumber)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '5px',
-                  padding: '7px 13px', background: 'white',
-                  border: `1px solid ${BORDER}`, borderRadius: '20px',
-                  fontSize: '12px', fontWeight: '600', color: MUTED,
-                  cursor: 'pointer', transition: 'all 0.15s',
-                }}
+              <button style={pillStyle} onClick={() => onAddItem(tripDay.id, tripDay.dayNumber)}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = TEAL; e.currentTarget.style.color = TEAL; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}
-              >
+                onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}>
                 <Plus size={12} /> Add place
               </button>
-              <button
-                onClick={() => onAddNote(tripDay.id, tripDay.dayNumber)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '5px',
-                  padding: '7px 13px', background: 'white',
-                  border: `1px solid ${BORDER}`, borderRadius: '20px',
-                  fontSize: '12px', fontWeight: '600', color: MUTED,
-                  cursor: 'pointer', transition: 'all 0.15s',
-                }}
+              <button style={pillStyle} onClick={() => onAddBooking(tripDay.id, tripDay.dayNumber)}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = CAT_COLORS.hotel; e.currentTarget.style.color = CAT_COLORS.hotel; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}>
+                <Bookmark size={12} /> Add booking
+              </button>
+              <button style={pillStyle} onClick={() => onAddNote(tripDay.id, tripDay.dayNumber)}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD; e.currentTarget.style.color = GOLD; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}
-              >
+                onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}>
                 <FileText size={12} /> Add note
               </button>
             </div>
@@ -965,8 +1155,8 @@ function OverviewTab({ workspace, onEditDetails }) {
 // ─────────────────────────────────────────────
 // DaysTab
 // ─────────────────────────────────────────────
-function DaysTab({ workspace, onAddItem, onAddNote, onDeleteItem }) {
-  const { itinerary, tripDays, tripItems, tripNotes, assets } = workspace;
+function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditBooking }) {
+  const { itinerary, tripDays, tripItems, tripNotes, tripBookings, assets } = workspace;
   const content = parseContent(itinerary?.content);
   const itinDays = (content?.days || []).map(normalizeDay);
 
@@ -987,6 +1177,7 @@ function DaysTab({ workspace, onAddItem, onAddNote, onDeleteItem }) {
           const itinDay = itinDays.find(d => d.dayNumber === tripDay.dayNumber) || null;
           const dayItems = tripItems.filter(item => item.tripDayId === tripDay.id);
           const dayNotes = tripNotes.filter(n => n.tripDayId === tripDay.id);
+          const dayBookings = tripBookings.filter(b => b.tripDayId === tripDay.id);
           return (
             <DaySection
               key={tripDay.id}
@@ -994,11 +1185,14 @@ function DaysTab({ workspace, onAddItem, onAddNote, onDeleteItem }) {
               itinDay={itinDay}
               dayItems={dayItems}
               dayNotes={dayNotes}
+              dayBookings={dayBookings}
               isLast={i === sorted.length - 1}
               assets={assets}
               onAddItem={onAddItem}
               onAddNote={onAddNote}
+              onAddBooking={onAddBooking}
               onDeleteItem={onDeleteItem}
+              onEditBooking={onEditBooking}
             />
           );
         })}
@@ -1011,31 +1205,41 @@ function DaysTab({ workspace, onAddItem, onAddNote, onDeleteItem }) {
 // MapTab
 // ─────────────────────────────────────────────
 function MapTab({ workspace }) {
-  const { itinerary, tripItems } = workspace;
+  const { itinerary, tripItems, tripBookings } = workspace;
+  const slug = itinerary?.slug;
   const content = parseContent(itinerary?.content);
   const stops = content?.routeMap?.stops || [];
   const mapImageUrl = content?.routeMap?.imageUrl || null;
   const mapAlt = content?.routeMap?.alt || `${itinerary?.title || 'Route'} map`;
 
-  const userPlaces = tripItems.filter(i => i.locationName || i.type === 'place');
+  const RouteMapComponent = ROUTE_MAP_COMPONENTS[slug] || null;
+  const userPlaces = [
+    ...tripItems.filter(i => i.locationName || i.type === 'place'),
+    ...tripBookings.filter(b => b.locationName),
+  ];
+  const hasVisual = RouteMapComponent || mapImageUrl;
 
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto', padding: 'clamp(32px, 5vw, 56px) 24px' }}>
-      {mapImageUrl && (
+    <div style={{ maxWidth: '960px', margin: '0 auto', padding: 'clamp(32px, 5vw, 56px) 24px' }}>
+
+      {/* Static route map component (highest fidelity) */}
+      {RouteMapComponent && (
         <section style={{ marginBottom: '40px' }}>
-          <img
-            src={mapImageUrl}
-            alt={mapAlt}
-            style={{ width: '100%', borderRadius: '12px', maxHeight: '480px', objectFit: 'cover' }}
-          />
+          <RouteMapComponent />
+        </section>
+      )}
+
+      {/* Fallback: CMS-uploaded map image */}
+      {!RouteMapComponent && mapImageUrl && (
+        <section style={{ marginBottom: '40px' }}>
+          <img src={mapImageUrl} alt={mapAlt} style={{ width: '100%', borderRadius: '12px', maxHeight: '520px', objectFit: 'cover' }} />
           {content?.routeMap?.caption && (
-            <p style={{ fontSize: '13px', color: MUTED, textAlign: 'center', marginTop: '10px' }}>
-              {content.routeMap.caption}
-            </p>
+            <p style={{ fontSize: '13px', color: MUTED, textAlign: 'center', marginTop: '10px' }}>{content.routeMap.caption}</p>
           )}
         </section>
       )}
 
+      {/* Route stop list — shown as companion when map exists, or primary fallback */}
       {stops.length > 0 && (
         <section style={{ marginBottom: '40px' }}>
           <h3 style={{ fontFamily: SERIF, fontSize: '20px', fontWeight: '600', color: CHAR, marginBottom: '20px' }}>
@@ -1051,15 +1255,9 @@ function MapTab({ workspace }) {
                   {i < stops.length - 1 && <div style={{ width: '1px', flex: 1, background: BORDER, minHeight: '20px' }} />}
                 </div>
                 <div style={{ paddingBottom: '20px' }}>
-                  <p style={{ fontSize: '14.5px', fontWeight: '600', color: CHAR }}>
-                    {stop.name || stop.location || `Stop ${i + 1}`}
-                  </p>
-                  {stop.dayNumber && (
-                    <p style={{ fontSize: '12px', color: MUTED }}>Day {stop.dayNumber}</p>
-                  )}
-                  {stop.description && (
-                    <p style={{ fontSize: '13.5px', color: MUTED, lineHeight: '1.6', marginTop: '3px' }}>{stop.description}</p>
-                  )}
+                  <p style={{ fontSize: '14.5px', fontWeight: '600', color: CHAR }}>{stop.name || stop.location || `Stop ${i + 1}`}</p>
+                  {stop.dayNumber && <p style={{ fontSize: '12px', color: MUTED }}>Day {stop.dayNumber}</p>}
+                  {stop.description && <p style={{ fontSize: '13.5px', color: MUTED, lineHeight: '1.6', marginTop: '3px' }}>{stop.description}</p>}
                 </div>
               </div>
             ))}
@@ -1067,8 +1265,9 @@ function MapTab({ workspace }) {
         </section>
       )}
 
+      {/* User-added places and bookings with locations */}
       {userPlaces.length > 0 && (
-        <section>
+        <section style={{ marginBottom: '40px' }}>
           <h3 style={{ fontFamily: SERIF, fontSize: '20px', fontWeight: '600', color: CHAR, marginBottom: '16px' }}>
             Your places
           </h3>
@@ -1086,7 +1285,7 @@ function MapTab({ workspace }) {
         </section>
       )}
 
-      {!mapImageUrl && stops.length === 0 && (
+      {!hasVisual && stops.length === 0 && (
         <div style={{ textAlign: 'center', padding: '60px 24px' }}>
           <Map size={40} color={BORDER} style={{ marginBottom: '16px' }} />
           <p style={{ fontSize: '15px', color: MUTED }}>No route map available for this itinerary.</p>
@@ -1159,7 +1358,7 @@ function NotesTab({ workspace, onAddNote, onDeleteNote, onEditNote }) {
 // ─────────────────────────────────────────────
 // BookingsTab
 // ─────────────────────────────────────────────
-function BookingsTab({ workspace, onAddBooking, onDeleteBooking }) {
+function BookingsTab({ workspace, onAddBooking, onDeleteBooking, onEditBooking }) {
   const { tripBookings } = workspace;
 
   const byCategory = BOOKING_CATEGORIES.reduce((acc, cat) => {
@@ -1198,7 +1397,7 @@ function BookingsTab({ workspace, onAddBooking, onDeleteBooking }) {
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {items.map(b => (
-                <BookingCard key={b.id} booking={b} onDelete={onDeleteBooking} />
+                <BookingCard key={b.id} booking={b} onDelete={onDeleteBooking} onEdit={onEditBooking} />
               ))}
             </div>
           </section>
@@ -1211,7 +1410,7 @@ function BookingsTab({ workspace, onAddBooking, onDeleteBooking }) {
 // ─────────────────────────────────────────────
 // PdfTab
 // ─────────────────────────────────────────────
-function PdfTab({ workspace, onDownload, downloadState }) {
+function PdfTab({ workspace, onDownload, onDownloadPersonalised, downloadState, downloadPersonalisedState }) {
   const { trip, itinerary } = workspace;
 
   return (
@@ -1226,7 +1425,7 @@ function PdfTab({ workspace, onDownload, downloadState }) {
       {/* Original itinerary PDF */}
       <div style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: '12px', padding: '28px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px' }}>
-          <div>
+          <div style={{ flex: 1 }}>
             <p style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: TEAL, marginBottom: '6px' }}>
               Original itinerary
             </p>
@@ -1237,48 +1436,38 @@ function PdfTab({ workspace, onDownload, downloadState }) {
               The full editorial guide as designed by the creator.
             </p>
           </div>
-          <button
-            onClick={onDownload}
-            disabled={downloadState === 'downloading'}
-            style={{
-              ...btnPrimary,
-              flexShrink: 0,
-              opacity: downloadState === 'downloading' ? 0.7 : 1,
-            }}
-          >
+          <button onClick={onDownload} disabled={downloadState === 'downloading'} style={{ ...btnPrimary, flexShrink: 0, opacity: downloadState === 'downloading' ? 0.7 : 1 }}>
             <Download size={14} />
             {downloadState === 'downloading' ? 'Preparing...' : 'Download'}
           </button>
         </div>
         {downloadState === 'error' && (
-          <p style={{ fontSize: '12px', color: '#B04040', marginTop: '10px' }}>
-            Download failed. Please try again.
-          </p>
+          <p style={{ fontSize: '12px', color: '#B04040', marginTop: '10px' }}>Download failed. Please try again.</p>
         )}
       </div>
 
-      {/* Personalised PDF — coming soon */}
-      <div style={{ background: STONE, border: `1px dashed ${BORDER}`, borderRadius: '12px', padding: '28px', opacity: 0.7 }}>
+      {/* Personalised PDF */}
+      <div style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: '12px', padding: '28px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px' }}>
-          <div>
+          <div style={{ flex: 1 }}>
             <p style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: GOLD, marginBottom: '6px' }}>
-              Personalised PDF
+              Your custom guide
             </p>
             <p style={{ fontFamily: SERIF, fontSize: '18px', fontWeight: '600', color: CHAR, marginBottom: '6px' }}>
-              Your custom guide
+              Personalised itinerary
             </p>
             <p style={{ fontSize: '13.5px', color: MUTED }}>
               Includes your notes, bookings, custom places and travel dates.
             </p>
           </div>
-          <span style={{
-            flexShrink: 0, padding: '7px 14px', background: LIGHT,
-            border: `1px solid ${BORDER}`, borderRadius: '6px',
-            fontSize: '12px', fontWeight: '700', letterSpacing: '0.5px', color: '#B5A09A',
-          }}>
-            Coming soon
-          </span>
+          <button onClick={onDownloadPersonalised} disabled={downloadPersonalisedState === 'downloading'} style={{ ...btnPrimary, flexShrink: 0, background: GOLD, opacity: downloadPersonalisedState === 'downloading' ? 0.7 : 1 }}>
+            <Download size={14} />
+            {downloadPersonalisedState === 'downloading' ? 'Preparing...' : 'Download'}
+          </button>
         </div>
+        {downloadPersonalisedState === 'error' && (
+          <p style={{ fontSize: '12px', color: '#B04040', marginTop: '10px' }}>Download failed. Please try again.</p>
+        )}
       </div>
     </div>
   );
@@ -1301,15 +1490,17 @@ export default function TripDetailPage() {
   const [deleting, setDeleting]       = useState(false);
 
   // Modal states
-  const [showDetails, setShowDetails]       = useState(false);
-  const [savingDetails, setSavingDetails]   = useState(false);
-  const [addItemCtx, setAddItemCtx]         = useState(null);  // { dayId, dayNumber }
-  const [savingItem, setSavingItem]         = useState(false);
-  const [addNoteCtx, setAddNoteCtx]         = useState(null);  // { dayId, dayNumber } or null for general
-  const [editNote, setEditNote]             = useState(null);  // note object for editing
-  const [savingNote, setSavingNote]         = useState(false);
-  const [addBookingCtx, setAddBookingCtx]   = useState(null);
-  const [savingBooking, setSavingBooking]   = useState(false);
+  const [showDetails, setShowDetails]           = useState(false);
+  const [savingDetails, setSavingDetails]       = useState(false);
+  const [addItemCtx, setAddItemCtx]             = useState(null);   // { dayId, dayNumber }
+  const [savingItem, setSavingItem]             = useState(false);
+  const [addNoteCtx, setAddNoteCtx]             = useState(null);   // { dayId, dayNumber } or {}
+  const [editNote, setEditNote]                 = useState(null);   // note object for editing
+  const [savingNote, setSavingNote]             = useState(false);
+  const [bookingCtx, setBookingCtx]             = useState(null);   // { dayId, dayNumber } or {}
+  const [editingBooking, setEditingBooking]     = useState(null);   // booking object for editing
+  const [savingBooking, setSavingBooking]       = useState(false);
+  const [downloadPersonalisedState, setDownloadPersonalisedState] = useState('idle');
 
   // ── Load workspace ────────────────────────────────────────────
   useEffect(() => {
@@ -1330,51 +1521,98 @@ export default function TripDetailPage() {
       .catch(() => setStatus('error'));
   }, [isLoaded, isSignedIn, id]);
 
-  // ── Download PDF ──────────────────────────────────────────────
+  function triggerBlobDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Download original itinerary PDF ──────────────────────────
   async function handleDownload() {
     if (!workspace || downloadState === 'downloading') return;
     setDownloadState('downloading');
 
     const { trip, itinerary } = workspace;
     const slug = itinerary?.slug || trip.itinerarySlug;
+    const filename = `${(slug || trip.destination || 'trip').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-hiddenatlas.pdf`;
 
     const audit = () => api.post(`/api/trips?id=${id}`, {
       eventType: 'DOWNLOADED',
-      metadata: { source: 'workspace_pdf', destination: trip.destination },
+      metadata: { source: 'workspace_original_pdf', destination: trip.destination },
     }).catch(() => {});
 
     try {
-      if (slug && (trip.source === 'FREE_JOURNEY' || trip.source === 'PREMIUM_JOURNEY')) {
-        // Try to download the editorial PDF for catalog itineraries
+      // 1. Try itinerary pdfUrl (Vercel Blob — the real designer PDF)
+      if (itinerary?.pdfUrl) {
+        try {
+          const res = await fetch(itinerary.pdfUrl);
+          if (res.ok) {
+            const blob = await res.blob();
+            triggerBlobDownload(blob, filename);
+            setDownloadState('done'); audit(); return;
+          }
+        } catch { /* fall through */ }
+      }
+
+      // 2. Try secure API download endpoint
+      if (slug) {
+        try {
+          const res = await api.get(`/api/itineraries?action=download&slug=${slug}`);
+          if (res.ok) {
+            const blob = await res.blob();
+            triggerBlobDownload(blob, filename);
+            setDownloadState('done'); audit(); return;
+          }
+        } catch { /* fall through */ }
+      }
+
+      // 3. Try static catalog PDF generation (older itineraries with full static data)
+      if (slug) {
         const matched = staticItineraries.find(it => it.id === slug || it.slug === slug);
         if (matched) {
           const { downloadItineraryPDF } = await import('../utils/downloadPDF');
           await downloadItineraryPDF(matched);
-          setDownloadState('done');
-          audit();
-          return;
+          setDownloadState('done'); audit(); return;
         }
       }
 
-      // AI_GENERATED or unmatched: use TripPDF
+      // 4. Fallback: TripPDF (AI-generated trips or anything else)
       const [{ pdf }, { TripPDF }] = await Promise.all([
         import('@react-pdf/renderer'),
         import('../components/TripPDF'),
       ]);
       const { createElement } = await import('react');
       const blob = await pdf(createElement(TripPDF, { trip })).toBlob();
-      const fn = `${(trip.destination || 'trip').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-itinerary.pdf`;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = fn;
-      document.body.appendChild(a); a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      setDownloadState('done');
-      audit();
+      triggerBlobDownload(blob, filename);
+      setDownloadState('done'); audit();
     } catch (err) {
       console.error('[TripDetailPage] download error:', err.message);
       setDownloadState('error');
+    }
+  }
+
+  // ── Download personalised PDF ─────────────────────────────────
+  async function handleDownloadPersonalised() {
+    if (!workspace || downloadPersonalisedState === 'downloading') return;
+    setDownloadPersonalisedState('downloading');
+    const { trip, itinerary, tripDays, tripItems, tripNotes, tripBookings } = workspace;
+    const content = parseContent(itinerary?.content);
+    const filename = `${(trip.destination || 'trip').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-my-trip.pdf`;
+    try {
+      const [{ pdf }, { WorkspacePDF }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('../components/WorkspacePDF'),
+      ]);
+      const { createElement } = await import('react');
+      const blob = await pdf(createElement(WorkspacePDF, { trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, content })).toBlob();
+      triggerBlobDownload(blob, filename);
+      setDownloadPersonalisedState('done');
+    } catch (err) {
+      console.error('[TripDetailPage] personalised PDF error:', err.message);
+      setDownloadPersonalisedState('error');
     }
   }
 
@@ -1483,13 +1721,25 @@ export default function TripDetailPage() {
   async function handleSaveBooking(form) {
     setSavingBooking(true);
     try {
-      const body = { ...form, tripDayId: addBookingCtx?.dayId || null };
-      const res  = await api.post(`/api/trips?id=${id}&action=booking`, body);
-      if (!res.ok) throw new Error('Save failed');
-      const { id: newId } = await res.json();
-      const newBooking = { id: newId, tripId: id, tripDayId: addBookingCtx?.dayId || null, ...form, createdAt: new Date().toISOString() };
-      setWorkspace(w => ({ ...w, tripBookings: [...w.tripBookings, newBooking] }));
-      setAddBookingCtx(null);
+      if (editingBooking) {
+        // Update existing booking
+        const res = await api.post(`/api/trips?action=booking&bookingId=${editingBooking.id}`, form);
+        if (!res.ok) throw new Error('Update failed');
+        setWorkspace(w => ({
+          ...w,
+          tripBookings: w.tripBookings.map(b => b.id === editingBooking.id ? { ...b, ...form } : b),
+        }));
+      } else {
+        // Create new booking
+        const body = { ...form, tripDayId: bookingCtx?.dayId || null };
+        const res  = await api.post(`/api/trips?id=${id}&action=booking`, body);
+        if (!res.ok) throw new Error('Save failed');
+        const { id: newId } = await res.json();
+        const newBooking = { id: newId, tripId: id, tripDayId: bookingCtx?.dayId || null, ...form, createdAt: new Date().toISOString() };
+        setWorkspace(w => ({ ...w, tripBookings: [...w.tripBookings, newBooking] }));
+      }
+      setBookingCtx(null);
+      setEditingBooking(null);
     } catch {
       alert('Could not save booking. Please try again.');
     } finally {
@@ -1677,7 +1927,9 @@ export default function TripDetailPage() {
             workspace={workspace}
             onAddItem={(dayId, dayNumber) => setAddItemCtx({ dayId, dayNumber })}
             onAddNote={(dayId, dayNumber) => setAddNoteCtx({ dayId, dayNumber })}
+            onAddBooking={(dayId, dayNumber) => { setEditingBooking(null); setBookingCtx({ dayId, dayNumber }); }}
             onDeleteItem={handleDeleteItem}
+            onEditBooking={b => { setEditingBooking(b); setBookingCtx({}); }}
           />
         )}
 
@@ -1695,13 +1947,20 @@ export default function TripDetailPage() {
         {activeTab === 'bookings' && (
           <BookingsTab
             workspace={workspace}
-            onAddBooking={(dayId, dayNumber) => setAddBookingCtx({ dayId, dayNumber })}
+            onAddBooking={() => { setEditingBooking(null); setBookingCtx({}); }}
             onDeleteBooking={handleDeleteBooking}
+            onEditBooking={b => { setEditingBooking(b); setBookingCtx({}); }}
           />
         )}
 
         {activeTab === 'pdf' && (
-          <PdfTab workspace={workspace} onDownload={handleDownload} downloadState={downloadState} />
+          <PdfTab
+            workspace={workspace}
+            onDownload={handleDownload}
+            downloadState={downloadState}
+            onDownloadPersonalised={handleDownloadPersonalised}
+            downloadPersonalisedState={downloadPersonalisedState}
+          />
         )}
       </div>
 
@@ -1724,8 +1983,6 @@ export default function TripDetailPage() {
       {addItemCtx && (
         <AddItemModal
           open={!!addItemCtx}
-          tripId={id}
-          tripDayId={addItemCtx.dayId}
           dayNumber={addItemCtx.dayNumber}
           onClose={() => setAddItemCtx(null)}
           onSave={handleSaveItem}
@@ -1736,8 +1993,6 @@ export default function TripDetailPage() {
       {(addNoteCtx !== null) && (
         <AddNoteModal
           open={addNoteCtx !== null}
-          tripId={id}
-          tripDayId={addNoteCtx?.dayId || null}
           dayNumber={addNoteCtx?.dayNumber || null}
           onClose={() => { setAddNoteCtx(null); setEditNote(null); }}
           onSave={handleSaveNote}
@@ -1746,13 +2001,12 @@ export default function TripDetailPage() {
         />
       )}
 
-      {addBookingCtx && (
-        <AddBookingModal
-          open={!!addBookingCtx}
-          tripId={id}
-          tripDayId={addBookingCtx?.dayId || null}
-          dayNumber={addBookingCtx?.dayNumber || null}
-          onClose={() => setAddBookingCtx(null)}
+      {(bookingCtx !== null) && (
+        <BookingModal
+          open={bookingCtx !== null}
+          dayNumber={bookingCtx?.dayNumber || null}
+          editBooking={editingBooking}
+          onClose={() => { setBookingCtx(null); setEditingBooking(null); }}
           onSave={handleSaveBooking}
           saving={savingBooking}
         />
