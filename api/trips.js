@@ -90,6 +90,7 @@ export default async function handler(req, res) {
            t.source,
            t."coverImage",
            t."itinerarySlug",
+           t."itineraryId",
            t."createdAt",
            COUNT(d.id)::int AS "dayCount"
          FROM "Trip" t
@@ -106,7 +107,8 @@ export default async function handler(req, res) {
     if (req.method === 'GET' && id) {
       const { rows: trips } = await pool.query(
         `SELECT id, title, destination, country, duration, overview,
-                highlights, hotels, experiences, source, "coverImage", "createdAt"
+                highlights, hotels, experiences, source, "coverImage",
+                "itinerarySlug", "itineraryId", "createdAt"
          FROM "Trip"
          WHERE id = $1 AND "userId" = $2`,
         [id, userId]
@@ -190,16 +192,27 @@ export default async function handler(req, res) {
         }
       }
 
+      // ── Resolve itineraryId from slug (for workspace FK) ─────────────────
+      let itineraryId = null;
+      if (itinerarySlug) {
+        const { rows: itin } = await pool.query(
+          `SELECT id FROM "Itinerary" WHERE slug = $1 LIMIT 1`,
+          [itinerarySlug]
+        );
+        itineraryId = itin[0]?.id || null;
+      }
+
       // ── Insert ───────────────────────────────────────────────────────────
       const { rows: trips } = await pool.query(
-        `INSERT INTO "Trip" (id, "userId", "itinerarySlug", title, destination, country, duration, overview, highlights, hotels, experiences, source, "coverImage", "createdAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12, NOW())
+        `INSERT INTO "Trip" (id, "userId", "itinerarySlug", "itineraryId", title, destination, country, duration, overview, highlights, hotels, experiences, source, "coverImage", "createdAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, NOW())
          ON CONFLICT ("userId", "itinerarySlug") WHERE "itinerarySlug" IS NOT NULL
          DO NOTHING
          RETURNING id`,
         [
           userId,
           itinerarySlug,
+          itineraryId,
           trip.destination,
           trip.destination,
           trip.country    || '',

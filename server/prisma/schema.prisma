@@ -108,6 +108,7 @@ model Itinerary {
   aiGenerations     ItineraryAIGeneration[]
   customRequests    CustomRequest[]
   instagramLogs     InstagramPublishLog[]
+  trips             Trip[]
 
   @@index([status])
   @@index([accessType])
@@ -192,12 +193,13 @@ model Purchase {
 }
 
 // ─────────────────────────────────────────────
-// Trip  (AI-generated, saved by user)
+// Trip  (user saved trip / personal copy)
 // ─────────────────────────────────────────────
 model Trip {
   id             String    @id @default(uuid())
   userId         String
   itinerarySlug  String?   // stable slug for curated itineraries; null for AI_GENERATED
+  itineraryId    String?   // FK to Itinerary.id — preferred link; itinerarySlug kept for compat
   title          String
   destination    String
   country        String    @default("")
@@ -207,12 +209,35 @@ model Trip {
   hotels         Json      @default("[]")  // { name, type, note }[]
   experiences    Json      @default("[]")  // String[]
   source         String    @default("AI_GENERATED")  // AI_GENERATED | FREE_JOURNEY | PREMIUM_JOURNEY
-  createdAt      DateTime  @default(now())
+  coverImage     String?
 
-  user User     @relation(fields: [userId], references: [id])
-  days TripDay[]
+  // ── Personal planning fields ───────────────
+  subtitle             String?
+  durationDays         Int?
+  heroImage            String?
+  startDate            DateTime?
+  endDate              DateTime?
+  travellers           Int?
+  accommodationSummary String?
+  arrivalInfo          String?
+  departureInfo        String?
+  generalNotes         String?
+  personalPdfConfig    Json      @default("{}")
+  itinerarySnapshot    Json      @default("{}")
+  lastSyncedAt         DateTime?
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now())  // updated via raw SQL
+
+  user      User        @relation(fields: [userId], references: [id])
+  itinerary Itinerary?  @relation(fields: [itineraryId], references: [id])
+  days      TripDay[]
+  items     TripItem[]
+  notes     TripNote[]
+  bookings  TripBooking[]
 
   @@index([userId])
+  @@index([itineraryId])
   // Partial unique enforced at DB level via a raw migration index (WHERE itinerarySlug IS NOT NULL)
 }
 
@@ -220,15 +245,118 @@ model Trip {
 // TripDay  (one row per day of a saved trip)
 // ─────────────────────────────────────────────
 model TripDay {
-  id          String @id @default(uuid())
-  tripId      String
-  dayNumber   Int
-  title       String @default("")
-  description String @default("")
+  id                  String   @id @default(uuid())
+  tripId              String
+  dayNumber           Int
+  title               String   @default("")
+  description         String   @default("")
 
-  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  // ── Override & personal fields ─────────────
+  sourceDayNumber     Int?
+  titleOverride       String?
+  descriptionOverride String?
+  notes               String?   // simple day-level text note
+  sortOrder           Int       @default(0)
+  isHidden            Boolean   @default(false)
+  resetToOriginal     Boolean   @default(false)
+  updatedAt           DateTime  @default(now())  // updated via raw SQL
+
+  trip        Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  items       TripItem[]
+  dayNotes    TripNote[]
+  dayBookings TripBooking[]
 
   @@index([tripId])
+}
+
+// ─────────────────────────────────────────────
+// TripItem  (custom places, restaurants, hotels, etc. added by user)
+// type: place | restaurant | hotel | transfer | flight | event | note | break | itinerary_item
+// status: planned | booked | done | skipped
+// ─────────────────────────────────────────────
+model TripItem {
+  id           String   @id @default(uuid())
+  tripId       String
+  tripDayId    String?
+  type         String   @default("place")
+  title        String
+  description  String?
+  time         String?
+  duration     String?
+  location     String?
+  notes        String?
+  bookingRef   String?
+  status       String   @default("planned")
+  isHidden     Boolean  @default(false)
+  sortOrder    Int      @default(0)
+  sourceItemId String?  // if shadowing an original itinerary item
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now())  // updated via raw SQL
+
+  trip           Trip          @relation(fields: [tripId],    references: [id], onDelete: Cascade)
+  tripDay        TripDay?      @relation(fields: [tripDayId], references: [id])
+  noteRecords    TripNote[]
+  bookingRecords TripBooking[]
+
+  @@index([tripId])
+  @@index([tripDayId])
+}
+
+// ─────────────────────────────────────────────
+// TripNote  (general, day, item, or private notes)
+// type: general | day | item | private
+// ─────────────────────────────────────────────
+model TripNote {
+  id         String   @id @default(uuid())
+  tripId     String
+  tripDayId  String?
+  tripItemId String?
+  type       String   @default("general")
+  title      String?
+  content    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now())  // updated via raw SQL
+
+  trip     Trip      @relation(fields: [tripId],     references: [id], onDelete: Cascade)
+  tripDay  TripDay?  @relation(fields: [tripDayId],  references: [id])
+  tripItem TripItem? @relation(fields: [tripItemId], references: [id])
+
+  @@index([tripId])
+  @@index([tripDayId])
+  @@index([tripItemId])
+}
+
+// ─────────────────────────────────────────────
+// TripBooking  (hotels, flights, restaurants, etc.)
+// category: hotel | restaurant | experience | transfer | flight | event | other
+// ─────────────────────────────────────────────
+model TripBooking {
+  id            String    @id @default(uuid())
+  tripId        String
+  tripDayId     String?
+  tripItemId    String?
+  category      String    @default("other")
+  title         String
+  date          DateTime?
+  time          String?
+  location      String?
+  provider      String?
+  reference     String?
+  notes         String?
+  url           String?
+  attachmentUrl String?
+  metadata      Json      @default("{}")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now())  // updated via raw SQL
+
+  trip     Trip      @relation(fields: [tripId],     references: [id], onDelete: Cascade)
+  tripDay  TripDay?  @relation(fields: [tripDayId],  references: [id])
+  tripItem TripItem? @relation(fields: [tripItemId], references: [id])
+
+  @@index([tripId])
+  @@index([tripDayId])
+  @@index([tripItemId])
 }
 
 // ─────────────────────────────────────────────
