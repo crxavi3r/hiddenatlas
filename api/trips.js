@@ -109,10 +109,19 @@ export default async function handler(req, res) {
            t.overview,
            t.source,
            t."coverImage",
+           t."heroImage",
            t."itinerarySlug",
            t."itineraryId",
            t."createdAt",
-           COUNT(d.id)::int AS "dayCount"
+           COUNT(d.id)::int AS "dayCount",
+           COALESCE(
+             t."heroImage",
+             t."coverImage",
+             (SELECT i."coverImage" FROM "Itinerary" i
+              WHERE (t."itineraryId" IS NOT NULL AND i.id = t."itineraryId")
+                 OR (t."itineraryId" IS NULL AND t."itinerarySlug" IS NOT NULL AND i.slug = t."itinerarySlug")
+              LIMIT 1)
+           ) AS "resolvedCoverImage"
          FROM "Trip" t
          LEFT JOIN "TripDay" d ON d."tripId" = t.id
          WHERE t."userId" = $1
@@ -525,20 +534,31 @@ export default async function handler(req, res) {
         }
       }
 
-      // ── Resolve itineraryId from slug (for workspace FK) ──────────────────
+      // ── Resolve itineraryId + copy itinerary metadata ─────────────────────
       let itineraryId = null;
+      let itinCoverImage = null;
+      let itinSubtitle = null;
+      let itinDurationDays = null;
       if (itinerarySlug) {
         const { rows: itin } = await pool.query(
-          `SELECT id FROM "Itinerary" WHERE slug = $1 LIMIT 1`,
+          `SELECT id, "coverImage", subtitle, "durationDays" FROM "Itinerary" WHERE slug = $1 LIMIT 1`,
           [itinerarySlug]
         );
-        itineraryId = itin[0]?.id || null;
+        if (itin[0]) {
+          itineraryId    = itin[0].id;
+          itinCoverImage = itin[0].coverImage || null;
+          itinSubtitle   = itin[0].subtitle   || null;
+          itinDurationDays = itin[0].durationDays || null;
+        }
       }
+
+      // Prefer request-provided image; fall back to itinerary cover
+      const resolvedCoverImage = coverImage || itinCoverImage || null;
 
       // ── Insert ────────────────────────────────────────────────────────────
       const { rows: trips } = await pool.query(
-        `INSERT INTO "Trip" (id, "userId", "itinerarySlug", "itineraryId", title, destination, country, duration, overview, highlights, hotels, experiences, source, "coverImage", "createdAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, NOW())
+        `INSERT INTO "Trip" (id, "userId", "itinerarySlug", "itineraryId", title, destination, country, duration, overview, highlights, hotels, experiences, source, "coverImage", "heroImage", subtitle, "durationDays", "createdAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, $14, $15, $16, NOW())
          ON CONFLICT ("userId", "itinerarySlug") WHERE "itinerarySlug" IS NOT NULL
          DO NOTHING
          RETURNING id`,
@@ -551,7 +571,11 @@ export default async function handler(req, res) {
           JSON.stringify(trip.highlights  || []),
           JSON.stringify(trip.hotels      || []),
           JSON.stringify(trip.experiences || []),
-          tripSource, coverImage,
+          tripSource,
+          resolvedCoverImage,
+          resolvedCoverImage,                        // heroImage mirrors coverImage on save
+          trip.subtitle || itinSubtitle || null,
+          trip.durationDays || itinDurationDays || null,
         ]
       );
 
