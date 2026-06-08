@@ -751,7 +751,20 @@ export default function ItineraryDetailPage() {
     } else if (!isLoaded) {
       console.warn('[ItineraryDetail] Clerk not loaded — proceeding without save');
     } else {
-      console.log('[ItineraryDetail] not signed in — proceeding without save');
+      // Anonymous download — record to Event table (nullable userId) so admin can count it.
+      fetch('/api/trips?action=track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType:     'ITINERARY_DOWNLOAD',
+          itinerarySlug: itinerary.id || itinerary.slug || null,
+          source:        'free_itinerary',
+          metadata: {
+            destination: itinerary.destination || itinerary.title || null,
+            title:       itinerary.title || null,
+          },
+        }),
+      }).catch(() => {});
     }
     console.log('[ItineraryDetail] proceeding with PDF generation (free)');
     // Pass merged days (dbDays ?? staticDays) so the PDF matches what the site shows.

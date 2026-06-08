@@ -158,8 +158,12 @@ export default function DownloadsPage() {
               <div key={i} style={{ padding: '14px 16px', borderTop: i > 0 ? '1px solid #F4F1EC' : 'none', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
                   <div style={{ minWidth: 0 }}>
-                    <p style={{ fontWeight: '600', color: '#1C1A16', fontSize: '13px' }}>{d.name || '—'}</p>
-                    <p style={{ color: '#8C8070', fontSize: '12px', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.email}</p>
+                    <p style={{ fontWeight: '600', color: d.name ? '#1C1A16' : '#B5AA99', fontSize: '13px', fontStyle: d.name ? 'normal' : 'italic' }}>
+                      {d.name || 'Anonymous visitor'}
+                    </p>
+                    <p style={{ color: '#8C8070', fontSize: '12px', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {d.email || 'Guest download'}
+                    </p>
                   </div>
                   <span style={{ fontSize: '10.5px', fontWeight: '600', color: '#6B6156', background: '#F4F1EC', padding: '2px 7px', borderRadius: '8px', flexShrink: 0, marginLeft: '10px' }}>
                     {sourceLabel(d.trip_source)}
@@ -201,8 +205,12 @@ export default function DownloadsPage() {
                       <tr key={i} style={{ borderTop: '1px solid #F4F1EC', background: i % 2 === 0 ? 'white' : '#FAFAF8' }}>
                         <td style={{ padding: '10px 14px', color: '#8C8070', fontSize: '12px', whiteSpace: 'nowrap' }}>{fmtDate(d.createdAt)}</td>
                         <td style={{ padding: '10px 14px' }}>
-                          <p style={{ fontWeight: '500', color: '#1C1A16' }}>{d.name || '—'}</p>
-                          <p style={{ color: '#8C8070', fontSize: '11.5px' }}>{d.email}</p>
+                          <p style={{ fontWeight: '500', color: d.name ? '#1C1A16' : '#B5AA99', fontStyle: d.name ? 'normal' : 'italic' }}>
+                            {d.name || 'Anonymous visitor'}
+                          </p>
+                          <p style={{ color: '#8C8070', fontSize: '11.5px' }}>
+                            {d.email || 'Guest download'}
+                          </p>
                         </td>
                         <td style={{ padding: '10px 14px', color: '#4A433A', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {d.title || d.itinerarySlug || '—'}

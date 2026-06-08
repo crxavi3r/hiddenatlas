@@ -1458,48 +1458,109 @@ async function getCustomRequests(pool, statusParam, offset, noLimit = false, ctx
 }
 
 // ── Downloads ─────────────────────────────────────────────────────────────────
+// getDownloads — returns all download events including anonymous.
+// Two sources:
+//   TripEvent with eventType='DOWNLOADED'      → authenticated user downloads (userId required by schema)
+//   Event      with eventType='ITINERARY_DOWNLOAD' → anonymous downloads (userId nullable)
+// Both queries use LEFT JOIN on User so null userId rows are never dropped.
 async function getDownloads(pool, cutoff, offset, creatorId = null) {
   if (!creatorId) {
     const { rows: downloads } = await pool.query(`
+      -- Authenticated downloads (TripEvent)
       SELECT
-        te."createdAt", u.email, u.name,
+        te."createdAt",
+        u.email,
+        u.name,
         COALESCE(t.title, te.metadata->>'title', te.metadata->>'destination') AS title,
-        t."itinerarySlug", t.source AS trip_source, t.destination
+        COALESCE(t."itinerarySlug", te.metadata->>'itinerarySlug')             AS "itinerarySlug",
+        COALESCE(t.source, te.metadata->>'source')                             AS trip_source,
+        COALESCE(t.destination, te.metadata->>'destination')                   AS destination
       FROM "TripEvent" te
-      JOIN "User" u ON u.id=te."userId"
-      LEFT JOIN "Trip" t ON t.id=te."tripId"
-      WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1
-      ORDER BY te."createdAt" DESC
+      LEFT JOIN "User" u ON u.id = te."userId"
+      LEFT JOIN "Trip" t ON t.id = te."tripId"
+      WHERE te."eventType" = 'DOWNLOADED' AND te."createdAt" >= $1
+
+      UNION ALL
+
+      -- Anonymous / tracked downloads (Event table)
+      SELECT
+        e."createdAt",
+        u.email,
+        u.name,
+        COALESCE(i.title, e.metadata->>'title', e.metadata->>'destination') AS title,
+        e."itinerarySlug",
+        COALESCE(e.metadata->>'source', i.type)                             AS trip_source,
+        COALESCE(i.destination, e.metadata->>'destination')                 AS destination
+      FROM "Event" e
+      LEFT JOIN "User" u ON u.id = e."userId"
+      LEFT JOIN "Itinerary" i ON i.slug = e."itinerarySlug"
+      WHERE e."eventType" = 'ITINERARY_DOWNLOAD' AND e."createdAt" >= $1
+
+      ORDER BY "createdAt" DESC
       LIMIT 50 OFFSET $2
     `, [cutoff, offset]);
 
     const { rows: [{ total }] } = await pool.query(`
-      SELECT COUNT(*) AS total FROM "TripEvent"
-      WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1
+      SELECT COUNT(*) AS total FROM (
+        SELECT id FROM "TripEvent"
+        WHERE "eventType" = 'DOWNLOADED' AND "createdAt" >= $1
+        UNION ALL
+        SELECT id FROM "Event"
+        WHERE "eventType" = 'ITINERARY_DOWNLOAD' AND "createdAt" >= $1
+      ) combined
     `, [cutoff]);
 
     return { downloads, total: parseInt(total, 10) };
   }
 
+  // Creator-filtered: show downloads for that creator's itineraries only
   const { rows: downloads } = await pool.query(`
+    -- Authenticated downloads for creator's itineraries
     SELECT
-      te."createdAt", u.email, u.name,
-      COALESCE(t.title, te.metadata->>'title', te.metadata->>'destination') AS title,
-      t."itinerarySlug", t.source AS trip_source, t.destination
+      te."createdAt",
+      u.email,
+      u.name,
+      COALESCE(t.title, i.title, te.metadata->>'title') AS title,
+      COALESCE(t."itinerarySlug", i.slug)               AS "itinerarySlug",
+      COALESCE(t.source, te.metadata->>'source')        AS trip_source,
+      COALESCE(t.destination, i.destination, te.metadata->>'destination') AS destination
     FROM "TripEvent" te
-    JOIN "User" u ON u.id = te."userId"
-    JOIN "Trip" t ON t.id = te."tripId"
-    JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
-    WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $3
-    ORDER BY te."createdAt" DESC
+    LEFT JOIN "User" u ON u.id = te."userId"
+    LEFT JOIN "Trip" t ON t.id = te."tripId"
+    LEFT JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
+    WHERE te."eventType" = 'DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $3
+
+    UNION ALL
+
+    -- Anonymous downloads for creator's itineraries
+    SELECT
+      e."createdAt",
+      u.email,
+      u.name,
+      i.title,
+      e."itinerarySlug",
+      i.type AS trip_source,
+      i.destination
+    FROM "Event" e
+    LEFT JOIN "User" u ON u.id = e."userId"
+    JOIN "Itinerary" i ON i.slug = e."itinerarySlug"
+    WHERE e."eventType" = 'ITINERARY_DOWNLOAD' AND e."createdAt" >= $1 AND i.creator_id = $3
+
+    ORDER BY "createdAt" DESC
     LIMIT 50 OFFSET $2
   `, [cutoff, offset, creatorId]);
 
   const { rows: [{ total }] } = await pool.query(`
-    SELECT COUNT(*) AS total FROM "TripEvent" te
-    JOIN "Trip" t ON t.id = te."tripId"
-    JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
-    WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $2
+    SELECT COUNT(*) AS total FROM (
+      SELECT te.id FROM "TripEvent" te
+      LEFT JOIN "Trip" t ON t.id = te."tripId"
+      JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
+      WHERE te."eventType" = 'DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $2
+      UNION ALL
+      SELECT e.id FROM "Event" e
+      JOIN "Itinerary" i ON i.slug = e."itinerarySlug"
+      WHERE e."eventType" = 'ITINERARY_DOWNLOAD' AND e."createdAt" >= $1 AND i.creator_id = $2
+    ) combined
   `, [cutoff, creatorId]);
 
   return { downloads, total: parseInt(total, 10) };
