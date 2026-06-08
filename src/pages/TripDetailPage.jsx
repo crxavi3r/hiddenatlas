@@ -991,10 +991,6 @@ function DayBookingItem({ booking, onEdit }) {
 // ─────────────────────────────────────────────
 // DaySection — one full day in the timeline
 // ─────────────────────────────────────────────
-const TRIP_STOP_ICONS = {
-  winery: '🍷', restaurant: '🍽', hotel: '🏨', beach: '🏖', museum: '🏛',
-  viewpoint: '👁', transfer: '🚌', experience: '✨', walk: '🚶', free_time: '☕',
-};
 
 function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditBooking }) {
   const [expanded, setExpanded] = useState(true);
@@ -1047,12 +1043,11 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
                   {itinDayStops.map((stop, i) => (
                     <li key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                      <span style={{ fontSize: '13px', flexShrink: 0, marginTop: '1px', opacity: 0.65 }}>
-                        {TRIP_STOP_ICONS[stop.type] || '•'}
-                      </span>
+                      <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#C9A96E', flexShrink: 0, marginTop: '9px' }} />
                       <span style={{ fontSize: '14px', color: '#4A433A', lineHeight: '1.6' }}>
                         <strong style={{ color: CHAR, fontWeight: '600' }}>{stop.title}</strong>
                         {stop.description && <span style={{ color: MUTED }}> — {stop.description}</span>}
+                        {stop.isOptional && <span style={{ fontSize: '11px', color: '#B5AA99', marginLeft: '8px', fontWeight: '500', letterSpacing: '0.3px' }}>Optional</span>}
                         {stop.suggestedTime && <span style={{ fontSize: '12px', color: '#B5AA99', marginLeft: '6px' }}>{stop.suggestedTime}</span>}
                       </span>
                     </li>

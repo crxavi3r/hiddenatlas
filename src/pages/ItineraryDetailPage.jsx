@@ -258,10 +258,6 @@ function UnlockedSidebar({ itinerary, onDownload }) {
   );
 }
 
-const STOP_TYPE_ICONS = {
-  winery: '🍷', restaurant: '🍽', hotel: '🏨', beach: '🏖', museum: '🏛',
-  viewpoint: '👁', transfer: '🚌', experience: '✨', walk: '🚶', free_time: '☕',
-};
 
 // ─────────────────────────────────────────────────────────────
 // Day entry — renders locked or unlocked
@@ -314,13 +310,14 @@ function DayEntry({ day, index, isLocked, isLast, dayStops = [] }) {
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {dayStops.map((stop, si) => (
                 <li key={si} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: '13px', flexShrink: 0, marginTop: '1px', opacity: 0.7 }}>
-                    {STOP_TYPE_ICONS[stop.type] || '•'}
-                  </span>
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#C9A96E', flexShrink: 0, marginTop: '9px' }} />
                   <span style={{ fontSize: '14px', color: '#4A433A', lineHeight: '1.6' }}>
                     <strong style={{ color: '#1C1A16', fontWeight: '600' }}>{stop.title}</strong>
                     {stop.description && (
                       <span style={{ color: '#6B6156' }}> — {stop.description}</span>
+                    )}
+                    {stop.isOptional && (
+                      <span style={{ fontSize: '11px', color: '#B5AA99', marginLeft: '8px', fontWeight: '500', letterSpacing: '0.3px' }}>Optional</span>
                     )}
                     {stop.suggestedTime && (
                       <span style={{ fontSize: '12px', color: '#B5AA99', marginLeft: '6px' }}>{stop.suggestedTime}</span>
