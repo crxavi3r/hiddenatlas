@@ -10,6 +10,19 @@ export async function downloadItineraryPDF(itinerary) {
     import('./imgToBase64'),
   ]);
 
+  // Fetch structured day stops (gracefully empty if not yet migrated or no stops)
+  let dayStops = [];
+  const slug = itinerary.slug || itinerary.id;
+  if (slug) {
+    try {
+      const res = await fetch(`/api/itineraries?action=content&slug=${encodeURIComponent(slug)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.dayStops)) dayStops = data.dayStops;
+      }
+    } catch { /* non-fatal */ }
+  }
+
   const assetSlug    = itinerary.parentId || itinerary.id;
   const assetVariant = itinerary.variant;
 
@@ -52,6 +65,7 @@ export async function downloadItineraryPDF(itinerary) {
     coverImage: finalCoverImage || null,
     mapImage:   getMapImage(assetSlug, assetVariant),
     days:       daysWithBase64,
+    dayStops,
   };
 
   const doc  = createElement(ItineraryPDF, { itinerary: resolvedItinerary });

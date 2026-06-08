@@ -3023,7 +3023,71 @@ async function handleImportConfirm(pool, body, ctx) {
   };
 
   console.log(`[import-confirm] creating draft: "${createBody.title}" slug="${slug}"`);
-  return handleCreate(pool, createBody, ctx);
+  const result = await handleCreate(pool, createBody, ctx);
+
+  // Create structured day stops from imported data.
+  // Priority: preview.days[].dayStops (if AI output includes them) → parse highlights as stops.
+  const itineraryId = result?.itinerary?.id;
+  if (itineraryId) {
+    try {
+      let stopsToCreate = [];
+
+      for (const d of (days || [])) {
+        const dayNum = d.dayNumber || 0;
+        if (!dayNum) continue;
+
+        // If the preview already has structured dayStops (future AI schema), use them
+        if (Array.isArray(d.dayStops) && d.dayStops.length) {
+          d.dayStops.forEach((s, si) => {
+            if (!s.title?.trim()) return;
+            stopsToCreate.push({ dayNum, sortOrder: si, ...s });
+          });
+        } else if (Array.isArray(d.highlights) && d.highlights.length) {
+          // Fall back: convert bullet highlights to basic stops (showOnMap=false until coords added)
+          d.highlights.forEach((h, hi) => {
+            if (!h?.trim()) return;
+            const colonIdx = h.indexOf(':');
+            const title = colonIdx > 0 ? h.slice(0, colonIdx).trim() : h.trim();
+            const desc  = colonIdx > 0 ? h.slice(colonIdx + 1).trim() : null;
+            stopsToCreate.push({ dayNum, sortOrder: hi, title, description: desc, type: 'attraction', showOnMap: false });
+          });
+        }
+      }
+
+      if (stopsToCreate.length) {
+        for (const s of stopsToCreate) {
+          const stopType = DAY_STOP_TYPES.includes(s.type) ? s.type : 'attraction';
+          await pool.query(
+            `INSERT INTO "ItineraryDayStop"
+               ("itineraryId", "dayNumber", title, description, type,
+                "locationName", address, latitude, longitude,
+                "suggestedTime", "durationMinutes", "sortOrder",
+                "isOptional", "isMajorStop", "showOnMap", "bookingRecommended", "bookingUrl", notes)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+            [
+              itineraryId, s.dayNum,
+              s.title.trim(), s.description || null, stopType,
+              s.locationName || null, s.address || null,
+              s.latitude != null ? Number(s.latitude) : null,
+              s.longitude != null ? Number(s.longitude) : null,
+              s.suggestedTime || null,
+              s.durationMinutes != null ? Number(s.durationMinutes) : null,
+              Number(s.sortOrder ?? 0),
+              Boolean(s.isOptional), Boolean(s.isMajorStop),
+              s.showOnMap !== false,
+              Boolean(s.bookingRecommended), s.bookingUrl || null, s.notes || null,
+            ]
+          );
+        }
+        console.log(`[import-confirm] created ${stopsToCreate.length} day stops for itinerary ${itineraryId}`);
+      }
+    } catch (e) {
+      // Non-fatal — log and continue. Table may not be migrated yet.
+      console.warn(`[import-confirm] day stop creation failed:`, e.message);
+    }
+  }
+
+  return result;
 }
 
 // ── Day Stop CRUD ─────────────────────────────────────────────────────────────

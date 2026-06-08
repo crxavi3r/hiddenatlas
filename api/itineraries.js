@@ -294,8 +294,24 @@ export default async function handler(req, res) {
         [it.id]
       );
 
+      // Structured day stops — gracefully empty if table not yet migrated
+      let dayStops = [];
+      try {
+        const { rows: stopRows } = await pool.query(
+          `SELECT "dayNumber", title, description, type,
+                  "locationName", "suggestedTime", "durationMinutes",
+                  "sortOrder", "isOptional", "isMajorStop", "showOnMap",
+                  "bookingRecommended", "bookingUrl"
+           FROM "ItineraryDayStop"
+           WHERE "itineraryId" = $1
+           ORDER BY "dayNumber" ASC, "sortOrder" ASC`,
+          [it.id]
+        );
+        dayStops = stopRows;
+      } catch { /* table not yet migrated — callers fall back to bullets */ }
+
       res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=30');
-      return res.json({ itinerary: it, assets: assetRes.rows, isAdmin, canPreview });
+      return res.json({ itinerary: it, assets: assetRes.rows, dayStops, isAdmin, canPreview });
     } catch (err) {
       console.error('[itineraries/public]', err.message);
       return res.status(500).json({ error: 'Database error' });

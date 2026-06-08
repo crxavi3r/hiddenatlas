@@ -1323,9 +1323,10 @@ function RouteMapPage({ itinerary }) {
 
 function DayPage({ day, index, itinerary }) {
   const { title: itinTitle, country } = itinerary;
-  const { title, desc, description, bullets = [], activities = [], stay, imgs = [], tip } = day;
+  const { title, desc, description, bullets = [], activities = [], dayStops = [], stay, imgs = [], tip } = day;
   const body       = desc || description || null;
-  const highlights = bullets.length ? bullets : activities;
+  // Prefer structured stops; fall back to bullets/activities
+  const highlights = dayStops.length ? [] : (bullets.length ? bullets : activities);
   const resolvedImgs = imgs.map(imgUrl).filter(Boolean);
 
   return (
@@ -1352,7 +1353,26 @@ function DayPage({ day, index, itinerary }) {
         </View>
 
 
-        {/* Bullet highlights */}
+        {/* Structured day stops — preferred over legacy bullets */}
+        {dayStops.length > 0 ? (
+          <View style={[s.dayBullets, { marginBottom: 12 }]}>
+            {dayStops.map((stop, i) => (
+              <View key={i} wrap={false} style={[s.dayBulletRow, { alignItems: 'flex-start' }]}>
+                <View style={[s.dayBulletDot, { marginTop: 5 }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.dayBulletText, { fontFamily: 'Helvetica-Bold' }]}>
+                    {stop.title}{stop.description ? ` — ${stop.description}` : ''}
+                  </Text>
+                  {stop.suggestedTime ? (
+                    <Text style={{ fontSize: 8.5, color: C.muted, marginTop: 1 }}>{stop.suggestedTime}</Text>
+                  ) : null}
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {/* Bullet highlights (legacy fallback) */}
         {highlights.length > 0 ? (
           <View style={s.dayBullets}>
             {highlights.map((h, i) => (
@@ -1891,6 +1911,8 @@ function AccommodationPage({ itinerary }) {
 
 export default function ItineraryPDF({ itinerary }) {
   const { days = [] } = itinerary;
+  // Structured day stops — may be injected by downloadPDF.js after fetching from API
+  const allDayStops = itinerary.dayStops || [];
 
   // pdfConfig toggles.
   // showRouteMap adds a RouteOverviewPage (SVG map if PDF_ROUTE_MAPS has an entry,
@@ -1947,7 +1969,12 @@ export default function ItineraryPDF({ itinerary }) {
     ...(showRouteOverview ? [<RouteOverviewPage key="route-detail" itinerary={itinerary} />] : []),
     ...(hasMapPng    ? [<DestinationMapPage    key="map"       itinerary={itinerary} />] : []),
     ...(hasSvgMap    ? [<DestinationSvgMapPage key="svg-map"   itinerary={itinerary} />] : []),
-    ...days.map((day, i) => <DayPage key={`day-${i}`} day={day} index={i} itinerary={itinerary} />),
+    ...days.map((day, i) => {
+      const dayNum  = day.day || day.dayNumber || (i + 1);
+      const dayStops = allDayStops.filter(s => s.dayNumber === dayNum)
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+      return <DayPage key={`day-${i}`} day={{ ...day, dayStops }} index={i} itinerary={itinerary} />;
+    }),
     ...(hasHotels    ? [<AccommodationPage key="accommodation" itinerary={itinerary} />] : []),
     ...(hasTransport ? [<TransportPage key="transport"          itinerary={itinerary} />] : []),
     ...(hasClosing   ? [<ClosingPage   key="closing"            itinerary={itinerary} />] : []),

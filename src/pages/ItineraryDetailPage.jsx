@@ -502,7 +502,8 @@ export default function ItineraryDetailPage() {
         }
         const data = await res.json();
         setDbItinerary(normalizeDbItinerary(data.itinerary));
-        if (data.assets?.length) setDbAssets(data.assets);
+        if (data.assets?.length)    setDbAssets(data.assets);
+        if (data.dayStops?.length)  setDbDayStops(data.dayStops);
         setDbLoading(false);
       } catch (e) {
         if (!cancelled) {

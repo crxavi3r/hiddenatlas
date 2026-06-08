@@ -1789,7 +1789,7 @@ export default function TripDetailPage() {
   async function handleDownloadPersonalised() {
     if (!workspace || downloadPersonalisedState === 'downloading') return;
     setDownloadPersonalisedState('downloading');
-    const { trip, itinerary, tripDays, tripItems, tripNotes, tripBookings } = workspace;
+    const { trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, itineraryDayStops = [] } = workspace;
     const content = parseContent(itinerary?.content);
     const filename = `${(trip.destination || 'trip').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-my-trip.pdf`;
     try {
@@ -1798,7 +1798,7 @@ export default function TripDetailPage() {
         import('../components/WorkspacePDF'),
       ]);
       const { createElement } = await import('react');
-      const blob = await pdf(createElement(WorkspacePDF, { trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, content })).toBlob();
+      const blob = await pdf(createElement(WorkspacePDF, { trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, content, itineraryDayStops })).toBlob();
       triggerBlobDownload(blob, filename);
       setDownloadPersonalisedState('done');
     } catch (err) {
