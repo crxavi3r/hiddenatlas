@@ -20,7 +20,7 @@ import AmericanWest8DaysRouteMap from '../components/AmericanWest8DaysRouteMap';
 import TuscanyRouteMap from '../components/TuscanyRouteMap';
 import CroatiaRouteMap from '../components/CroatiaRouteMap';
 import NorthernEnglandRouteMap from '../components/NorthernEnglandRouteMap';
-import DynamicRouteMap from '../components/DynamicRouteMap';
+import PublicRouteMap from '../components/PublicRouteMap';
 
 const ROUTE_MAP_COMPONENTS = {
   'japan-grand-cultural-journey':             JapanRouteMap,
@@ -1403,7 +1403,7 @@ function MapTab({ workspace }) {
       {/* Dynamic route map from structured day stops (highest priority) */}
       {dayStopsValid.length >= 2 && (
         <section style={{ marginBottom: '40px' }}>
-          <DynamicRouteMap stops={dayStopsValid} />
+          <PublicRouteMap stops={dayStopsValid} isUnlocked={true} height={380} />
         </section>
       )}
 

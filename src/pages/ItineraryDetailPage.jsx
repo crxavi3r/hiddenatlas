@@ -20,7 +20,7 @@ import AmericanWest8DaysRouteMap from '../components/AmericanWest8DaysRouteMap';
 import TuscanyRouteMap from '../components/TuscanyRouteMap';
 import CroatiaRouteMap from '../components/CroatiaRouteMap';
 import NorthernEnglandRouteMap from '../components/NorthernEnglandRouteMap';
-import InteractiveRouteMap from '../components/InteractiveRouteMap';
+import PublicRouteMap from '../components/PublicRouteMap';
 
 // Always-on route maps for curated/static itineraries (no CMS toggle required)
 const ROUTE_MAP_COMPONENTS = {
@@ -1357,7 +1357,7 @@ export default function ItineraryDetailPage() {
                     {subtitle}
                   </p>
                   {hasCMSStops ? (
-                    <InteractiveRouteMap stops={cmsStops} isUnlocked={hasAccess} onDaySelect={scrollToDay} />
+                    <PublicRouteMap stops={cmsStops} isUnlocked={hasAccess} onDaySelect={scrollToDay} />
                   ) : RouteMapComponent ? (
                     <RouteMapComponent isUnlocked={hasAccess} onDaySelect={scrollToDay} />
                   ) : (
@@ -1407,6 +1407,7 @@ export default function ItineraryDetailPage() {
                   isMajorStop: s.isMajorStop,
                   type: s.isMajorStop ? 'major' : (i === 0 || i === dbDayStops.length - 1 ? 'major' : 'stop'),
                   visible: true, order: i + 1,
+                  description: s.description || null,
                 }));
               const hasDayStops = dayStopsValid.length >= 2;
               const validStops = hasDayStops ? dayStopsValid : (itinerary.routeMapStops || [])
@@ -1441,7 +1442,7 @@ export default function ItineraryDetailPage() {
                     {itinerary.subtitle}
                   </p>
                   {hasValidStops ? (
-                    <InteractiveRouteMap stops={validStops} onDaySelect={scrollToDay} isUnlocked={hasAccess || !isPremium} />
+                    <PublicRouteMap stops={validStops} onDaySelect={scrollToDay} isUnlocked={hasAccess || !isPremium} />
                   ) : DbRouteMapComponent ? (
                     <DbRouteMapComponent isUnlocked={hasAccess} onDaySelect={scrollToDay} />
                   ) : (

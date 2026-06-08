@@ -1749,8 +1749,15 @@ function CTAPage({ itinerary }) {
 
 function RouteOverviewPage({ itinerary }) {
   const { title, country, duration, days = [], routeMapImageUrl, routeMapAlt, routeMapCaption } = itinerary;
-  const entry       = PDF_ROUTE_MAPS[itinerary.id];
-  const routeStops  = itinerary.routeMapStops || [];
+  const entry = PDF_ROUTE_MAPS[itinerary.id];
+
+  // Prefer structured ItineraryDayStop records over old CMS route map stops
+  const rawDayStops = (itinerary.dayStops || [])
+    .filter(s => s.showOnMap !== false && s.latitude != null && s.longitude != null)
+    .sort((a, b) => (a.dayNumber - b.dayNumber) || (a.sortOrder - b.sortOrder))
+    .map(s => ({ name: s.title, latitude: s.latitude, longitude: s.longitude, type: s.isMajorStop ? 'major' : 'stop', dayNumber: s.dayNumber }));
+  const hasDayStops = rawDayStops.length >= 2;
+  const routeStops  = hasDayStops ? rawDayStops : (itinerary.routeMapStops || []);
   // CMS stops take priority over any hardcoded SVG component.
   const hasValidStops = routeStops.filter(s => s.latitude != null && s.longitude != null).length >= 2;
 
@@ -1927,8 +1934,10 @@ export default function ItineraryPDF({ itinerary }) {
   const routeMapImageUrl = itinerary.routeMapImageUrl || null;
 
   // CMS stops — evaluated first so all conditions below can reference hasValidStops.
+  // Prefer structured ItineraryDayStop records; fall back to CMS route map stops.
   const routeMapStops  = itinerary.routeMapStops || [];
-  const hasValidStops  = routeMapStops.filter(s => s.latitude != null && s.longitude != null).length >= 2;
+  const validDayStops  = (itinerary.dayStops || []).filter(s => s.showOnMap !== false && s.latitude != null && s.longitude != null);
+  const hasValidStops  = validDayStops.length >= 2 || routeMapStops.filter(s => s.latitude != null && s.longitude != null).length >= 2;
 
   // Conditions mirror each optional component's own early-return guard so we
   // never invoke a component that would return null.
