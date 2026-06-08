@@ -205,7 +205,7 @@ function emptyStopForm() {
     locationName: '', address: '', latitude: '', longitude: '',
     suggestedTime: '', durationMinutes: '', isOptional: false,
     isMajorStop: false, showOnMap: true, bookingRecommended: false,
-    bookingUrl: '', notes: '',
+    bookingUrl: '', notes: '', routeSegmentType: '',
   };
 }
 
@@ -244,6 +244,18 @@ function DayStopForm({ form, setForm, onSave, onCancel, onGeocode, geocoState, o
           <input value={form.suggestedTime} style={inputStyle} placeholder="e.g. 09:00 or Morning"
             onChange={e => setForm(f => ({ ...f, suggestedTime: e.target.value }))} />
         </div>
+      </div>
+      {/* Route segment type */}
+      <div style={{ marginBottom: '10px' }}>
+        <p style={labelStyle}>Route type (PDF map)</p>
+        <select value={form.routeSegmentType || ''} style={inputStyle}
+          onChange={e => setForm(f => ({ ...f, routeSegmentType: e.target.value }))}>
+          <option value="">Auto-detect</option>
+          <option value="main_route">Main route</option>
+          <option value="day_trip">Day trip (remote callout)</option>
+          <option value="optional_detour">Optional detour (remote callout)</option>
+          <option value="transfer">Transfer</option>
+        </select>
       </div>
       {/* Coordinates + geocoding */}
       <div style={{ marginBottom: '10px' }}>
@@ -418,6 +430,13 @@ function DayStopsEditor({ itineraryId, dayNumber, stops, onRefresh, getToken, ex
     if (!form.title.trim()) { setErr('Stop name is required'); return; }
     setErr(null);
     try {
+      // Merge routeSegmentType into the stop's existing metadata
+      const existingStop = editingId ? stops.find(s => s.id === editingId) : null;
+      const baseMeta = existingStop?.metadata || {};
+      const metadata = { ...baseMeta };
+      if (form.routeSegmentType) metadata.routeSegmentType = form.routeSegmentType;
+      else delete metadata.routeSegmentType;
+
       await callApi('upsert-day-stop', {
         dayNumber,
         ...(editingId ? { stopId: editingId } : {}),
@@ -426,6 +445,7 @@ function DayStopsEditor({ itineraryId, dayNumber, stops, onRefresh, getToken, ex
         longitude:       form.longitude       ? Number(form.longitude)       : null,
         durationMinutes: form.durationMinutes ? Number(form.durationMinutes) : null,
         sortOrder:       editingId ? (stops.find(s => s.id === editingId)?.sortOrder ?? stops.length) : stops.length,
+        metadata,
       });
       onRefresh();
       setAddingOpen(false);
@@ -487,6 +507,7 @@ function DayStopsEditor({ itineraryId, dayNumber, stops, onRefresh, getToken, ex
       isMajorStop: stop.isMajorStop || false, showOnMap: stop.showOnMap !== false,
       bookingRecommended: stop.bookingRecommended || false,
       bookingUrl: stop.bookingUrl || '', notes: stop.notes || '',
+      routeSegmentType: stop.metadata?.routeSegmentType || '',
     });
   }
 

@@ -8,6 +8,79 @@
  * Pure JS — no DOM, no React, safe to import from both web components and PDF.
  */
 
+// ── Haversine distance ────────────────────────────────────────────────────────
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLng = (lng2 - lng1) * (Math.PI / 180);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/**
+ * Split stops into mainStops (fit in viewport) and remoteStops (outliers / day trips).
+ *
+ * Respects metadata.routeSegmentType overrides:
+ *   'main_route'      → always in mainStops
+ *   'day_trip'        → always in remoteStops
+ *   'optional_detour' → always in remoteStops
+ *   (others / absent) → auto-detected via Tukey fence
+ *
+ * @param {object[]} stops  Stops with latitude/longitude
+ * @returns {{ mainStops: object[], remoteStops: object[] }}
+ */
+export function detectOutlierStops(stops) {
+  if (stops.length < 3) return { mainStops: stops, remoteStops: [] };
+
+  // Split explicit overrides first
+  const forceMain   = stops.filter(s => s.metadata?.routeSegmentType === 'main_route');
+  const forceRemote = stops.filter(s => {
+    const t = s.metadata?.routeSegmentType;
+    return t === 'day_trip' || t === 'optional_detour';
+  });
+  const autoStops = stops.filter(s => {
+    const t = s.metadata?.routeSegmentType;
+    return t !== 'main_route' && t !== 'day_trip' && t !== 'optional_detour';
+  });
+
+  // Short-circuit if everything is explicitly categorised
+  if (!autoStops.length) {
+    const main = stops.filter(s => s.metadata?.routeSegmentType !== 'day_trip' && s.metadata?.routeSegmentType !== 'optional_detour');
+    return { mainStops: main.length >= 2 ? main : stops, remoteStops: forceRemote };
+  }
+
+  // Centroid of all stops (not just auto, so it reflects the real geographic centre)
+  const cLat = stops.reduce((s, p) => s + p.latitude,  0) / stops.length;
+  const cLng = stops.reduce((s, p) => s + p.longitude, 0) / stops.length;
+
+  // Distance from centroid for each auto-detected stop
+  const dists = autoStops.map(s => haversineKm(cLat, cLng, s.latitude, s.longitude));
+  const sorted = [...dists].sort((a, b) => a - b);
+  const maxDist = sorted[sorted.length - 1];
+
+  // If all stops are within 2km of each other, nothing is an outlier
+  if (maxDist < 2) return { mainStops: stops, remoteStops: [] };
+
+  // Tukey fence: Q3 + 1.5 × IQR
+  const q1 = sorted[Math.floor(sorted.length * 0.25)];
+  const q3 = sorted[Math.floor(sorted.length * 0.75)];
+  const iqr = q3 - q1;
+  // When all stops are tightly clustered (iqr ≈ 0) use a 3× multiplier to avoid
+  // flagging genuine outliers at the cluster boundary
+  const fence = iqr < 0.5 ? q3 + 3 : q3 + 1.5 * iqr;
+
+  const autoMain   = autoStops.filter((_, i) => dists[i] <= fence);
+  const autoRemote = autoStops.filter((_, i) => dists[i] > fence);
+
+  // Need at least 2 in main for a valid map
+  const allMain = [...forceMain, ...autoMain];
+  if (allMain.length < 2) return { mainStops: stops, remoteStops: [] };
+
+  return { mainStops: allMain, remoteStops: [...forceRemote, ...autoRemote] };
+}
+
 export const ROUTE_MAP_TIER = {
   1: { r: 7,   rActive: 10,  sw: 2.0, fill: '#F2E4CB', edge: '#C9A96E', halo: '#C9A96E', lFs: 11.5, dFs: 8   },
   2: { r: 4.5, rActive: 6.5, sw: 1.5, fill: '#C8D9D5', edge: '#2A5248', halo: '#2A5248', lFs: 9.5,  dFs: 7.5 },

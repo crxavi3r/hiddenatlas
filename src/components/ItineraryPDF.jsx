@@ -6,7 +6,7 @@ import {
   Document, Page, Text, View, Image, StyleSheet,
   Svg, Polygon, Path, Rect, Circle, G,
 } from '@react-pdf/renderer';
-import { buildRouteMapLayout } from '../utils/routeMapLayout';
+import { buildRouteMapLayout, detectOutlierStops } from '../utils/routeMapLayout';
 
 // ── Colour tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -1052,74 +1052,158 @@ function NorthernEnglandRouteSvgMap() {
 
 // ── Dynamic route SVG map — built at render time from structured stops data ────
 //
-// PDF-specific tier config: smaller markers and fonts than web defaults
-const PDF_TIER = {
-  1: { r: 5,   rActive: 5,   sw: 1.8, fill: '#F2E4CB', edge: '#C9A96E', halo: '#C9A96E', lFs: 9,  dFs: 6 },
-  2: { r: 3.5, rActive: 3.5, sw: 1.2, fill: '#C8D9D5', edge: '#2A5248', halo: '#2A5248', lFs: 7,  dFs: 5 },
+// PDF tier config — circles large enough to hold 2-digit numbers
+const PDF_TIER_NUM = {
+  1: { r: 7,   rActive: 7,   sw: 1.8, fill: '#F2E4CB', edge: '#C9A96E', halo: '#C9A96E', lFs: 8, dFs: 6 },
+  2: { r: 5.5, rActive: 5.5, sw: 1.4, fill: '#D5E8E6', edge: '#1B6B65', halo: '#2A5248', lFs: 7, dFs: 5 },
 };
 
-// Projects lat/lng stops to pixel coordinates, draws a route line + markers + labels.
-// Uses buildRouteMapLayout with PDF-specific tiers and tighter bounds.
+/**
+ * DynamicRouteSvgMap — PDF route map with outlier handling.
+ *
+ * Design:
+ * - Detects remote / far-away stops and excludes them from the main viewport.
+ * - Main map shows the central cluster with numbered circle markers.
+ * - Only major stops get inline name labels (reduces SVG clutter).
+ * - A two-column stop list legend appears below the map.
+ * - Remote stops appear in a separate "Day trips / Remote stops" callout.
+ */
 function DynamicRouteSvgMap({ stops = [] }) {
   const valid = (stops || []).filter(s => s.latitude != null && s.longitude != null);
   if (valid.length < 2) return null;
 
-  const SW = PAGE_W - 80;
-  const SH = Math.round(SW * 0.67);
+  // Sort into route order then split on outliers
+  const sorted = [...valid].sort((a, b) =>
+    (a.dayNumber ?? 99) - (b.dayNumber ?? 99) || (a.order ?? 0) - (b.order ?? 0)
+  );
+  const { mainStops, remoteStops } = detectOutlierStops(sorted);
 
-  const layout = buildRouteMapLayout(valid, SW, SH, {
-    pad: 0.12, margin: 18, tiers: PDF_TIER, prioritizeMajor: true,
+  // Sequential numbers: main first, remote continue numbering
+  const numberedMain   = mainStops.map((s, i) => ({ ...s, num: i + 1 }));
+  const numberedRemote = remoteStops.map((s, i) => ({ ...s, num: mainStops.length + i + 1 }));
+
+  const SW = PAGE_W - 80;
+  const SH = Math.round(SW * 0.58); // slightly shorter — legend takes vertical space
+
+  const layout = buildRouteMapLayout(numberedMain, SW, SH, {
+    pad: 0.12, margin: 20, tiers: PDF_TIER_NUM, prioritizeMajor: true,
   });
   if (!layout) return null;
   const { routePathD, labeledStops } = layout;
 
+  // Two-column stop list
+  const colL = numberedMain.filter((_, i) => i % 2 === 0);
+  const colR = numberedMain.filter((_, i) => i % 2 === 1);
+
   return (
-    <Svg width={SW} height={SH} viewBox={`0 0 ${SW} ${SH}`}>
-      {/* Neutral editorial background */}
-      <Rect x="0" y="0" width={SW} height={SH} fill="#F4F1E8" />
-      {/* Route: depth shadow + gold glow + teal dashed line */}
-      <Path d={routePathD} fill="none" stroke="#1C1A16" strokeWidth="2.5" opacity={0.06} strokeLinecap="round" />
-      <Path d={routePathD} fill="none" stroke="#C9A96E" strokeWidth="2" strokeOpacity="0.28" strokeLinecap="round" />
-      <Path d={routePathD} fill="none" stroke="#1B6B65" strokeWidth="1.2" strokeDasharray="6,3.5" strokeLinecap="round" />
-      {/* Stop markers */}
-      {labeledStops.map(({ tier, cfg, cx, cy, r }, i) => (
-        <G key={`m${i}`}>
-          <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r + 2} fill="#FFFFFF" fillOpacity="0.80" />
-          <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r}
-            fill={cfg.fill} stroke={cfg.edge} strokeWidth={cfg.sw}
-          />
-          {tier === 1 && (
-            <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r + 4} fill="none" stroke={cfg.edge} strokeWidth="0.7" strokeOpacity="0.35" />
-          )}
-        </G>
-      ))}
-      {/* Label halos — white backing rendered before label text */}
-      {labeledStops.map(({ stop, tier, labelAnchor, labelX, labelY, fs }, i) => (
-        <Text key={`h${i}`}
-          x={labelX.toFixed(1)} y={labelY.toFixed(1)}
-          textAnchor={labelAnchor}
-          fontFamily={tier === 1 ? 'Helvetica-Bold' : 'Helvetica'}
-          fontSize={fs}
-          fill="#F4F1E8"
-          stroke="#F4F1E8"
-          strokeWidth="2.5"
-        >
-          {stop.name}
-        </Text>
-      ))}
-      {/* Labels — collision-resolved positions */}
-      {labeledStops.map(({ stop, tier, labelAnchor, labelX, labelY, fs }, i) => (
-        <Text key={`l${i}`}
-          x={labelX.toFixed(1)} y={labelY.toFixed(1)}
-          textAnchor={labelAnchor}
-          fontFamily={tier === 1 ? 'Helvetica-Bold' : 'Helvetica'}
-          fontSize={fs}
-          fill="#1C1A16"
-        >
-          {stop.name}
-        </Text>
-      ))}
-    </Svg>
+    <View>
+      {/* ── Main SVG map ── */}
+      <Svg width={SW} height={SH} viewBox={`0 0 ${SW} ${SH}`}>
+        <Rect x="0" y="0" width={SW} height={SH} fill="#F4F1E8" />
+
+        {/* Route line */}
+        <Path d={routePathD} fill="none" stroke="#1C1A16" strokeWidth="2.5" opacity={0.06} strokeLinecap="round" />
+        <Path d={routePathD} fill="none" stroke="#C9A96E" strokeWidth="2" strokeOpacity="0.22" strokeLinecap="round" />
+        <Path d={routePathD} fill="none" stroke="#1B6B65" strokeWidth="1.2" strokeDasharray="6,3.5" strokeLinecap="round" />
+
+        {/* White halos behind circles */}
+        {labeledStops.map(({ cx, cy, r }, i) => (
+          <Circle key={`wh${i}`} cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={(r + 2).toString()} fill="#FFFFFF" fillOpacity="0.75" />
+        ))}
+
+        {/* Marker fills + outer rings for major stops */}
+        {labeledStops.map(({ cx, cy, tier, cfg, r }, i) => (
+          <G key={`mc${i}`}>
+            <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r.toString()} fill={cfg.fill} stroke={cfg.edge} strokeWidth={cfg.sw.toString()} />
+            {tier === 1 && (
+              <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={(r + 4).toString()} fill="none" stroke={cfg.edge} strokeWidth="0.7" strokeOpacity="0.30" />
+            )}
+          </G>
+        ))}
+
+        {/* Numbers inside markers */}
+        {labeledStops.map(({ cx, cy, tier }, i) => {
+          const numStr = String(numberedMain[i].num);
+          const nFs    = numStr.length > 1 ? 5.5 : 6.5;
+          return (
+            <Text key={`mn${i}`}
+              x={cx.toFixed(1)} y={(cy + nFs * 0.38).toFixed(1)}
+              textAnchor="middle" fontFamily="Helvetica-Bold" fontSize={nFs}
+              fill={tier === 1 ? '#7A5A20' : '#0D4440'}>
+              {numStr}
+            </Text>
+          );
+        })}
+
+        {/* Major stop label halos (render first so labels appear on top) */}
+        {labeledStops.reduce((acc, { stop, tier, labelAnchor, labelX, labelY, fs }, i) => {
+          if (tier === 1) acc.push(
+            <Text key={`lh${i}`}
+              x={labelX.toFixed(1)} y={labelY.toFixed(1)}
+              textAnchor={labelAnchor} fontFamily="Helvetica-Bold" fontSize={fs}
+              fill="#F4F1E8" stroke="#F4F1E8" strokeWidth="2.5">
+              {stop.name}
+            </Text>
+          );
+          return acc;
+        }, [])}
+
+        {/* Major stop label text */}
+        {labeledStops.reduce((acc, { stop, tier, labelAnchor, labelX, labelY, fs }, i) => {
+          if (tier === 1) acc.push(
+            <Text key={`lt${i}`}
+              x={labelX.toFixed(1)} y={labelY.toFixed(1)}
+              textAnchor={labelAnchor} fontFamily="Helvetica-Bold" fontSize={fs} fill="#1C1A16">
+              {stop.name}
+            </Text>
+          );
+          return acc;
+        }, [])}
+      </Svg>
+
+      {/* ── Two-column stop list ── */}
+      <View style={{ flexDirection: 'row', marginTop: 8, gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          {colL.map(s => (
+            <View key={s.num} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 3 }}>
+              <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: '#1B6B65', width: 16 }}>
+                {String(s.num).padStart(2, '0')}
+              </Text>
+              <Text style={{ fontSize: 7, color: '#1C1A16', flex: 1 }}>{s.name}</Text>
+            </View>
+          ))}
+        </View>
+        <View style={{ flex: 1 }}>
+          {colR.map(s => (
+            <View key={s.num} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 3 }}>
+              <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: '#1B6B65', width: 16 }}>
+                {String(s.num).padStart(2, '0')}
+              </Text>
+              <Text style={{ fontSize: 7, color: '#1C1A16', flex: 1 }}>{s.name}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* ── Remote stop callout ── */}
+      {numberedRemote.length > 0 && (
+        <View style={{ marginTop: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#F4EDD8', borderRadius: 4 }}>
+          <Text style={{ fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#8C7050', letterSpacing: 1.5, marginBottom: 5 }}>
+            DAY TRIPS / REMOTE STOPS
+          </Text>
+          {numberedRemote.map(s => (
+            <View key={s.num} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 3 }}>
+              <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: '#C9A96E', width: 16 }}>
+                {String(s.num).padStart(2, '0')}
+              </Text>
+              <Text style={{ fontSize: 7, color: '#4A433A', flex: 1 }}>
+                {s.name}{s.dayNumber ? `  ·  Day ${s.dayNumber}` : ''}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -1755,7 +1839,7 @@ function RouteOverviewPage({ itinerary }) {
   const rawDayStops = (itinerary.dayStops || [])
     .filter(s => s.showOnMap !== false && s.latitude != null && s.longitude != null)
     .sort((a, b) => (a.dayNumber - b.dayNumber) || (a.sortOrder - b.sortOrder))
-    .map(s => ({ name: s.title, latitude: s.latitude, longitude: s.longitude, type: s.isMajorStop ? 'major' : 'stop', dayNumber: s.dayNumber }));
+    .map(s => ({ name: s.title, latitude: s.latitude, longitude: s.longitude, type: s.isMajorStop ? 'major' : 'stop', dayNumber: s.dayNumber, order: s.sortOrder, metadata: s.metadata || {} }));
   const hasDayStops = rawDayStops.length >= 2;
   const routeStops  = hasDayStops ? rawDayStops : (itinerary.routeMapStops || []);
   // CMS stops take priority over any hardcoded SVG component.
