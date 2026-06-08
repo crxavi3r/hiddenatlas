@@ -5,6 +5,23 @@ import { verifyAuth } from './_lib/verifyAuth.js';
 const { Pool } = pg;
 
 // ─────────────────────────────────────────────
+// Booking day-mapping helper
+// Returns { dayNumber, tripDayId } given a booking date and the trip's TripDays.
+// dayNumber = differenceInCalendarDays(bookingDate, startDate) + 1
+// ─────────────────────────────────────────────
+function resolveBookingDay(bookingDateStr, startDateStr, tripDays) {
+  if (!bookingDateStr || !startDateStr) return { dayNumber: null, tripDayId: null };
+  const booking = new Date(bookingDateStr + 'T00:00:00Z');
+  const start   = new Date(startDateStr   + 'T00:00:00Z');
+  const diffMs  = booking.getTime() - start.getTime();
+  const diffDays = Math.round(diffMs / 86400000);
+  if (diffDays < 0) return { dayNumber: null, tripDayId: null };   // before trip
+  const dayNumber = diffDays + 1;
+  const matchDay = (tripDays || []).find(d => d.dayNumber === dayNumber);
+  return { dayNumber, tripDayId: matchDay?.id || null };
+}
+
+// ─────────────────────────────────────────────
 // Booking validation helper
 // ─────────────────────────────────────────────
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -457,7 +474,7 @@ export default async function handler(req, res) {
       const owned = await getOwnedTrip(id);
       if (!owned) return res.status(404).json({ error: 'Trip not found' });
 
-      const { tripDayId, tripItemId, type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata } = req.body || {};
+      const { tripItemId, type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata } = req.body || {};
       if (!title) return res.status(400).json({ error: 'title is required' });
 
       const meta = (metadata && typeof metadata === 'object') ? metadata : {};
@@ -465,27 +482,38 @@ export default async function handler(req, res) {
       const valErrs = validateBooking(bookingType, { date, time }, meta);
       if (valErrs.length) return res.status(400).json({ error: 'Validation failed', errors: valErrs });
 
+      // Resolve dayNumber from trip dates
+      const { rows: tripInfo } = await pool.query(
+        `SELECT "startDate", "endDate" FROM "Trip" WHERE id = $1`, [id]
+      );
+      const { rows: tripDayRows } = await pool.query(
+        `SELECT id, "dayNumber" FROM "TripDay" WHERE "tripId" = $1`, [id]
+      );
+      const startDate = tripInfo[0]?.startDate?.toISOString().slice(0, 10) || null;
+      const { dayNumber, tripDayId } = resolveBookingDay(date, startDate, tripDayRows);
+
       const { rows } = await pool.query(
-        `INSERT INTO "TripBooking" (id, "tripId", "tripDayId", "tripItemId", type, title, date, time, "locationName", provider, "confirmationReference", notes, url, metadata, "createdAt", "updatedAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, NOW(), NOW())
-         RETURNING id`,
-        [id, tripDayId || null, tripItemId || null, bookingType, title,
+        `INSERT INTO "TripBooking" (id, "tripId", "tripDayId", "tripItemId", "dayNumber", type, title, date, time, "locationName", provider, "confirmationReference", notes, url, metadata, "createdAt", "updatedAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, NOW(), NOW())
+         RETURNING id, "dayNumber", "tripDayId"`,
+        [id, tripDayId, tripItemId || null, dayNumber, bookingType, title,
          date || null, time || null, locationName || null, provider || null,
          confirmationReference || null, notes || null, url || null, JSON.stringify(meta)]
       );
-      return res.status(200).json({ id: rows[0].id });
+      return res.status(200).json({ id: rows[0].id, dayNumber: rows[0].dayNumber, tripDayId: rows[0].tripDayId });
     }
 
     // Update TripBooking
     if (req.method === 'POST' && action === 'booking' && bookingId) {
       const { rows: bookingRows } = await pool.query(
-        `SELECT tb.id, tb.type AS "currentType" FROM "TripBooking" tb
+        `SELECT tb.id, tb.type AS "currentType", tb."tripId" FROM "TripBooking" tb
          JOIN "Trip" t ON t.id = tb."tripId"
          WHERE tb.id = $1 AND t."userId" = $2`,
         [bookingId, userId]
       );
       if (!bookingRows.length) return res.status(404).json({ error: 'Booking not found' });
 
+      const tripId = bookingRows[0].tripId;
       const { type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata } = req.body || {};
 
       const meta = (metadata && typeof metadata === 'object') ? metadata : {};
@@ -493,18 +521,62 @@ export default async function handler(req, res) {
       const valErrs = validateBooking(bookingType, { date, time }, meta);
       if (valErrs.length) return res.status(400).json({ error: 'Validation failed', errors: valErrs });
 
+      // Resolve dayNumber from trip dates
+      const { rows: tripInfo } = await pool.query(
+        `SELECT "startDate" FROM "Trip" WHERE id = $1`, [tripId]
+      );
+      const { rows: tripDayRows } = await pool.query(
+        `SELECT id, "dayNumber" FROM "TripDay" WHERE "tripId" = $1`, [tripId]
+      );
+      const startDate = tripInfo[0]?.startDate?.toISOString().slice(0, 10) || null;
+      const { dayNumber, tripDayId } = resolveBookingDay(date, startDate, tripDayRows);
+
       await pool.query(
         `UPDATE "TripBooking"
          SET type = COALESCE($1, type), title = COALESCE($2, title),
              date = $3, time = $4, "locationName" = $5, provider = $6,
              "confirmationReference" = $7, notes = $8, url = $9,
-             metadata = $10::jsonb, "updatedAt" = NOW()
-         WHERE id = $11`,
+             metadata = $10::jsonb, "dayNumber" = $11, "tripDayId" = $12,
+             "updatedAt" = NOW()
+         WHERE id = $13`,
         [type || null, title || null, date || null, time || null,
          locationName || null, provider || null, confirmationReference || null,
-         notes || null, url || null, JSON.stringify(meta), bookingId]
+         notes || null, url || null, JSON.stringify(meta), dayNumber, tripDayId, bookingId]
       );
-      return res.status(200).json({ ok: true });
+      return res.status(200).json({ ok: true, dayNumber, tripDayId });
+    }
+
+    // Remap all bookings for a trip when startDate changes
+    if (req.method === 'POST' && action === 'remap-bookings' && id) {
+      const owned = await getOwnedTrip(id);
+      if (!owned) return res.status(404).json({ error: 'Trip not found' });
+
+      const { rows: tripInfo } = await pool.query(
+        `SELECT "startDate" FROM "Trip" WHERE id = $1`, [id]
+      );
+      const startDate = tripInfo[0]?.startDate?.toISOString().slice(0, 10) || null;
+      if (!startDate) return res.status(200).json({ ok: true, remapped: 0 });
+
+      const { rows: tripDayRows } = await pool.query(
+        `SELECT id, "dayNumber" FROM "TripDay" WHERE "tripId" = $1`, [id]
+      );
+      const { rows: bookings } = await pool.query(
+        `SELECT id, date FROM "TripBooking" WHERE "tripId" = $1 AND date IS NOT NULL`, [id]
+      );
+
+      let remapped = 0;
+      for (const b of bookings) {
+        const bookingDate = b.date instanceof Date
+          ? b.date.toISOString().slice(0, 10)
+          : String(b.date).slice(0, 10);
+        const { dayNumber, tripDayId } = resolveBookingDay(bookingDate, startDate, tripDayRows);
+        await pool.query(
+          `UPDATE "TripBooking" SET "dayNumber" = $1, "tripDayId" = $2, "updatedAt" = NOW() WHERE id = $3`,
+          [dayNumber, tripDayId, b.id]
+        );
+        remapped++;
+      }
+      return res.status(200).json({ ok: true, remapped });
     }
 
     // Delete TripBooking

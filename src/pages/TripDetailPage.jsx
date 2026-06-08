@@ -124,6 +124,16 @@ function getDayImage(dayNumber, assets) {
   return match?.url || null;
 }
 
+// Returns dayNumber (1-based) given a booking date string and trip startDate string.
+// Returns null if either is missing or if booking is before start.
+function calcDayNumber(bookingDateStr, startDateStr) {
+  if (!bookingDateStr || !startDateStr) return null;
+  const booking = new Date(bookingDateStr.slice(0, 10) + 'T00:00:00Z');
+  const start   = new Date(startDateStr.slice(0, 10)   + 'T00:00:00Z');
+  const diff = Math.round((booking.getTime() - start.getTime()) / 86400000);
+  return diff < 0 ? null : diff + 1;
+}
+
 // ─────────────────────────────────────────────
 // Primitive UI
 // ─────────────────────────────────────────────
@@ -475,7 +485,7 @@ function FieldError({ msg }) {
 // ─────────────────────────────────────────────
 // BookingModal — type-adaptive, supports create + edit
 // ─────────────────────────────────────────────
-function BookingModal({ open, dayNumber, editBooking, onClose, onSave, saving }) {
+function BookingModal({ open, dayNumber, editBooking, onClose, onSave, saving, tripStartDate, tripEndDate }) {
   const [form, setForm] = useState(BOOKING_DEFAULTS);
 
   useEffect(() => {
@@ -495,18 +505,33 @@ function BookingModal({ open, dayNumber, editBooking, onClose, onSave, saving })
   const errors = validateBookingForm(form);
   const hasErrors = Object.keys(errors).length > 0;
 
+  // Derive the booking's primary date (for day hint)
+  const primaryDate = form.type === 'hotel'
+    ? (form.meta.checkInDate || form.date)
+    : form.type === 'flight'
+    ? (form.meta.departureDate || form.date)
+    : form.date;
+
+  // Day hint: compute dayNumber from trip start date
+  const hintDayNumber = calcDayNumber(primaryDate, tripStartDate);
+  const isBeforeTrip = primaryDate && tripStartDate && primaryDate < tripStartDate.slice(0, 10);
+  const isAfterTrip  = primaryDate && tripEndDate   && primaryDate > tripEndDate.slice(0, 10);
+  const dayHint = !primaryDate ? null
+    : !tripStartDate ? null
+    : isBeforeTrip  ? 'This booking is before your trip.'
+    : isAfterTrip   ? 'This booking is after your trip.'
+    : hintDayNumber ? `This will appear on Day ${hintDayNumber}.`
+    : null;
+
   function handleSave() {
     if (hasErrors || !form.title.trim()) return;
     // Promote metadata dates/times to top-level date/time for sort order
-    let finalDate = form.date;
-    let finalTime = form.time;
-    if (form.type === 'hotel') {
-      finalDate = form.meta.checkInDate || form.date;
-      finalTime = form.meta.checkInTime || form.time;
-    } else if (form.type === 'flight') {
-      finalDate = form.meta.departureDate || form.date;
-      finalTime = form.meta.departureTime || form.time;
-    }
+    let finalDate = primaryDate || form.date;
+    let finalTime = form.type === 'hotel'
+      ? (form.meta.checkInTime || form.time)
+      : form.type === 'flight'
+      ? (form.meta.departureTime || form.time)
+      : form.time;
     onSave({ ...form, date: finalDate, time: finalTime, metadata: form.meta });
   }
 
@@ -704,6 +729,24 @@ function BookingModal({ open, dayNumber, editBooking, onClose, onSave, saving })
         <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Special requests, contact info, etc." rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
       </FormField>
 
+      {/* Day placement hint */}
+      {dayHint && (
+        <p style={{
+          fontSize: '12.5px', fontWeight: '500',
+          color: isBeforeTrip || isAfterTrip ? '#B5600A' : TEAL,
+          background: isBeforeTrip || isAfterTrip ? '#FFF8F0' : '#EFF6F5',
+          border: `1px solid ${isBeforeTrip || isAfterTrip ? '#F5D9B8' : '#C6E4E0'}`,
+          borderRadius: '6px', padding: '8px 12px', marginBottom: '8px',
+        }}>
+          {dayHint}
+        </p>
+      )}
+      {!tripStartDate && primaryDate && (
+        <p style={{ fontSize: '12px', color: '#B5A09A', marginBottom: '8px' }}>
+          Set your travel dates in Trip Details to auto-place this booking.
+        </p>
+      )}
+
       {/* Summary of validation errors (if any) */}
       {hasErrors && (
         <div style={{ padding: '10px 14px', background: '#FFF0F0', border: '1px solid #F5C6C6', borderRadius: '6px', marginBottom: '4px' }}>
@@ -852,7 +895,7 @@ function BookingCard({ booking, onDelete, onEdit }) {
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
             <span style={{
               fontSize: '9.5px', fontWeight: '700', letterSpacing: '1.2px',
               textTransform: 'uppercase', padding: '3px 8px',
@@ -862,6 +905,15 @@ function BookingCard({ booking, onDelete, onEdit }) {
             </span>
             {booking.date && (
               <span style={{ fontSize: '12px', color: MUTED }}>{formatShortDate(booking.date)}</span>
+            )}
+            {booking.dayNumber && (
+              <span style={{
+                fontSize: '10px', fontWeight: '700', letterSpacing: '0.8px',
+                color: TEAL, background: '#EFF6F5',
+                padding: '2px 7px', borderRadius: '3px',
+              }}>
+                Day {booking.dayNumber}
+              </span>
             )}
           </div>
           <p style={{ fontSize: '15px', fontWeight: '600', color: CHAR, marginBottom: '4px' }}>{booking.title}</p>
@@ -1260,7 +1312,11 @@ function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onDeleteItem, 
           const itinDay = itinDays.find(d => d.dayNumber === tripDay.dayNumber) || null;
           const dayItems = tripItems.filter(item => item.tripDayId === tripDay.id);
           const dayNotes = tripNotes.filter(n => n.tripDayId === tripDay.id);
-          const dayBookings = tripBookings.filter(b => b.tripDayId === tripDay.id);
+          // Match by tripDayId (FK) or by dayNumber (fallback for older bookings)
+          const dayBookings = tripBookings.filter(b =>
+            b.tripDayId === tripDay.id ||
+            (!b.tripDayId && b.dayNumber === tripDay.dayNumber)
+          );
           return (
             <DaySection
               key={tripDay.id}
@@ -1442,18 +1498,24 @@ function NotesTab({ workspace, onAddNote, onDeleteNote, onEditNote }) {
 // BookingsTab
 // ─────────────────────────────────────────────
 function BookingsTab({ workspace, onAddBooking, onDeleteBooking, onEditBooking }) {
-  const { tripBookings } = workspace;
+  const { tripBookings, trip } = workspace;
+  const startDate = trip?.startDate ? trip.startDate.slice(0, 10) : null;
 
-  const byCategory = BOOKING_CATEGORIES.reduce((acc, cat) => {
-    acc[cat.value] = tripBookings.filter(b => b.type === cat.value);
-    return acc;
-  }, {});
+  // Sort by date ascending (nulls last), then createdAt
+  const sorted = [...tripBookings].sort((a, b) => {
+    if (!a.date && !b.date) return 0;
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    const da = String(a.date).slice(0, 10);
+    const db = String(b.date).slice(0, 10);
+    return da < db ? -1 : da > db ? 1 : 0;
+  });
 
-  const total = tripBookings.length;
+  const total = sorted.length;
 
   return (
     <div style={{ maxWidth: '720px', margin: '0 auto', padding: 'clamp(32px, 5vw, 56px) 24px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
         <h2 style={{ fontFamily: SERIF, fontSize: '26px', fontWeight: '600', color: CHAR }}>
           Bookings {total > 0 && <span style={{ fontSize: '16px', color: MUTED }}>({total})</span>}
         </h2>
@@ -1461,6 +1523,12 @@ function BookingsTab({ workspace, onAddBooking, onDeleteBooking, onEditBooking }
           <Plus size={14} /> Add booking
         </button>
       </div>
+
+      {!startDate && total > 0 && (
+        <p style={{ fontSize: '13px', color: '#B5A09A', marginBottom: '20px' }}>
+          Set your travel dates in Trip Details to automatically place bookings into days.
+        </p>
+      )}
 
       {total === 0 && (
         <div style={{ textAlign: 'center', padding: '60px 24px', background: 'white', borderRadius: '12px', border: `1px solid ${BORDER}` }}>
@@ -1470,22 +1538,11 @@ function BookingsTab({ workspace, onAddBooking, onDeleteBooking, onEditBooking }
         </div>
       )}
 
-      {BOOKING_CATEGORIES.map(({ value, label }) => {
-        const items = byCategory[value] || [];
-        if (!items.length) return null;
-        return (
-          <section key={value} style={{ marginBottom: '32px' }}>
-            <p style={{ fontSize: '10.5px', fontWeight: '700', letterSpacing: '2px', textTransform: 'uppercase', color: CAT_COLORS[value] || MUTED, marginBottom: '12px' }}>
-              {label}
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {items.map(b => (
-                <BookingCard key={b.id} booking={b} onDelete={onDeleteBooking} onEdit={onEditBooking} />
-              ))}
-            </div>
-          </section>
-        );
-      })}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {sorted.map(b => (
+          <BookingCard key={b.id} booking={b} onDelete={onDeleteBooking} onEdit={onEditBooking} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -1721,7 +1778,22 @@ export default function TripDetailPage() {
       if (!res.ok) throw new Error('Save failed');
       setWorkspace(w => ({ ...w, trip: { ...w.trip, ...form } }));
       setShowDetails(false);
-    } catch (err) {
+      // Remap bookings if start date changed — fire and forget, UI will reload on next open
+      if (form.startDate) {
+        api.post(`/api/trips?id=${id}&action=remap-bookings`, {})
+          .then(r => r.json())
+          .then(data => {
+            if (data.remapped > 0) {
+              // Reload workspace to get updated dayNumbers
+              api.get(`/api/trips?id=${id}&action=workspace`)
+                .then(r => r.json())
+                .then(ws => setWorkspace(ws))
+                .catch(() => {});
+            }
+          })
+          .catch(() => {});
+      }
+    } catch {
       alert('Could not save details. Please try again.');
     } finally {
       setSavingDetails(false);
@@ -1800,7 +1872,7 @@ export default function TripDetailPage() {
     }
   }
 
-  // ── Create TripBooking ────────────────────────────────────────
+  // ── Create / Update TripBooking ───────────────────────────────
   async function handleSaveBooking(form) {
     setSavingBooking(true);
     try {
@@ -1808,17 +1880,22 @@ export default function TripDetailPage() {
         // Update existing booking
         const res = await api.post(`/api/trips?action=booking&bookingId=${editingBooking.id}`, form);
         if (!res.ok) throw new Error('Update failed');
+        const data = await res.json();
         setWorkspace(w => ({
           ...w,
-          tripBookings: w.tripBookings.map(b => b.id === editingBooking.id ? { ...b, ...form } : b),
+          tripBookings: w.tripBookings.map(b =>
+            b.id === editingBooking.id
+              ? { ...b, ...form, dayNumber: data.dayNumber ?? b.dayNumber, tripDayId: data.tripDayId ?? b.tripDayId }
+              : b
+          ),
         }));
       } else {
         // Create new booking
         const body = { ...form, tripDayId: bookingCtx?.dayId || null };
         const res  = await api.post(`/api/trips?id=${id}&action=booking`, body);
         if (!res.ok) throw new Error('Save failed');
-        const { id: newId } = await res.json();
-        const newBooking = { id: newId, tripId: id, tripDayId: bookingCtx?.dayId || null, ...form, createdAt: new Date().toISOString() };
+        const { id: newId, dayNumber, tripDayId } = await res.json();
+        const newBooking = { id: newId, tripId: id, tripDayId: tripDayId || bookingCtx?.dayId || null, dayNumber: dayNumber || null, ...form, createdAt: new Date().toISOString() };
         setWorkspace(w => ({ ...w, tripBookings: [...w.tripBookings, newBooking] }));
       }
       setBookingCtx(null);
@@ -2088,6 +2165,8 @@ export default function TripDetailPage() {
           onClose={() => { setBookingCtx(null); setEditingBooking(null); }}
           onSave={handleSaveBooking}
           saving={savingBooking}
+          tripStartDate={workspace?.trip?.startDate ? workspace.trip.startDate.slice(0, 10) : null}
+          tripEndDate={workspace?.trip?.endDate   ? workspace.trip.endDate.slice(0, 10)   : null}
         />
       )}
 
