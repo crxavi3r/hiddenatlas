@@ -748,6 +748,36 @@ async function _handler(req, res) {
   }
 }
 
+// ── Shared download counting SQL ─────────────────────────────────────────────
+// Counts both authenticated downloads (TripEvent.DOWNLOADED) and anonymous
+// downloads tracked via the Event table (Event.ITINERARY_DOWNLOAD).
+// All usages must stay in sync with getDownloads().
+//
+// countAllDownloads(cutoff)              → scalar n
+// countDownloadsByCreator(cutoff, cId)   → scalar n
+// downloadsByDayCTE(cutoff)              → subquery: (day, downloads)
+// downloadsByDayCreatorCTE(cutoff, cId)  → subquery: (day, downloads)
+// downloadsBySlugCTE(cutoff)             → subquery: (itinerarySlug, downloads)
+// downloadsBySlugCreatorCTE(cutoff, cId) → subquery: (itinerarySlug, downloads)
+//
+// These are plain SQL strings — interpolate into larger queries.
+
+const DOWNLOAD_COUNT_SQL = (cutoff_param, creator_param = null) =>
+  creator_param
+    ? `(
+        SELECT COUNT(*) AS n FROM "TripEvent" te
+        LEFT JOIN "Trip" t ON t.id = te."tripId"
+        JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
+        WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= ${cutoff_param} AND i.creator_id = ${creator_param}
+       ) UNION ALL (
+        SELECT COUNT(*) AS n FROM "Event" e
+        JOIN "Itinerary" i ON i.slug = e."itinerarySlug"
+        WHERE e."eventType"='ITINERARY_DOWNLOAD' AND e."createdAt" >= ${cutoff_param} AND i.creator_id = ${creator_param}
+       )`
+    : `(SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= ${cutoff_param})
+       UNION ALL
+       (SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_DOWNLOAD' AND "createdAt" >= ${cutoff_param})`;
+
 // ── Dashboard KPIs ────────────────────────────────────────────────────────────
 async function getDashboardKPIs(pool, cutoff, creatorId = null) {
   // Site-wide metrics (not filterable by individual designer)
@@ -767,10 +797,16 @@ async function getDashboardKPIs(pool, cutoff, creatorId = null) {
         WHERE e."eventType"='ITINERARY_VIEW' AND e."createdAt" >= $1 AND i.creator_id = $2
       `, [cutoff, creatorId]),
       pool.query(`
-        SELECT COUNT(*) AS n FROM "TripEvent" te
-        JOIN "Trip" t ON t.id = te."tripId"
-        JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
-        WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $2
+        SELECT COALESCE(SUM(n),0) AS n FROM (
+          SELECT COUNT(*) AS n FROM "TripEvent" te
+          LEFT JOIN "Trip" t ON t.id = te."tripId"
+          JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
+          WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $2
+          UNION ALL
+          SELECT COUNT(*) AS n FROM "Event" e
+          JOIN "Itinerary" i ON i.slug = e."itinerarySlug"
+          WHERE e."eventType"='ITINERARY_DOWNLOAD' AND e."createdAt" >= $1 AND i.creator_id = $2
+        ) counts
       `, [cutoff, creatorId]),
       pool.query(`
         SELECT COUNT(*) AS n, COALESCE(SUM(COALESCE("netAmount", amount, 0)),0) AS revenue
@@ -791,7 +827,13 @@ async function getDashboardKPIs(pool, cutoff, creatorId = null) {
   } else {
     [itinViews, downloads, sales] = await Promise.all([
       pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= $1`, [cutoff]),
-      pool.query(`SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1`, [cutoff]),
+      pool.query(`
+        SELECT COALESCE(SUM(n),0) AS n FROM (
+          SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1
+          UNION ALL
+          SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_DOWNLOAD' AND "createdAt" >= $1
+        ) counts
+      `, [cutoff]),
       pool.query(`SELECT COUNT(*) AS n, COALESCE(SUM(COALESCE("netAmount", amount, 0)),0) AS revenue FROM "Purchase" WHERE "purchasedAt" >= $1`, [cutoff]),
     ]);
     discountRow = await pool.query(`
@@ -846,10 +888,17 @@ async function getChartData(pool, cutoff, creatorId = null) {
         GROUP BY DATE("purchasedAt")
       ),
       dl AS (
-        SELECT DATE("createdAt") AS day, COUNT(*) AS downloads
-        FROM "TripEvent"
-        WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1
-        GROUP BY DATE("createdAt")
+        SELECT day, SUM(cnt) AS downloads FROM (
+          SELECT DATE("createdAt") AS day, COUNT(*) AS cnt
+          FROM "TripEvent"
+          WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1
+          GROUP BY DATE("createdAt")
+          UNION ALL
+          SELECT DATE("createdAt") AS day, COUNT(*) AS cnt
+          FROM "Event"
+          WHERE "eventType"='ITINERARY_DOWNLOAD' AND "createdAt" >= $1
+          GROUP BY DATE("createdAt")
+        ) raw GROUP BY day
       )
       SELECT
         d.day::text,
@@ -893,12 +942,20 @@ async function getChartData(pool, cutoff, creatorId = null) {
       GROUP BY DATE(p."purchasedAt")
     ),
     dl AS (
-      SELECT DATE(te."createdAt") AS day, COUNT(*) AS downloads
-      FROM "TripEvent" te
-      JOIN "Trip" t ON t.id = te."tripId"
-      JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
-      WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $2
-      GROUP BY DATE(te."createdAt")
+      SELECT day, SUM(cnt) AS downloads FROM (
+        SELECT DATE(te."createdAt") AS day, COUNT(*) AS cnt
+        FROM "TripEvent" te
+        LEFT JOIN "Trip" t ON t.id = te."tripId"
+        JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
+        WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $2
+        GROUP BY DATE(te."createdAt")
+        UNION ALL
+        SELECT DATE(e."createdAt") AS day, COUNT(*) AS cnt
+        FROM "Event" e
+        JOIN "Itinerary" i ON i.slug = e."itinerarySlug"
+        WHERE e."eventType"='ITINERARY_DOWNLOAD' AND e."createdAt" >= $1 AND i.creator_id = $2
+        GROUP BY DATE(e."createdAt")
+      ) raw GROUP BY day
     )
     SELECT
       d.day::text,
@@ -922,7 +979,13 @@ async function getFunnelData(pool, cutoff, creatorId = null) {
     const [v, iv, dl, p] = await Promise.all([
       pool.query(`SELECT COUNT(DISTINCT COALESCE("userId", "sessionId")) AS n FROM "Event" WHERE "eventType"='PAGE_VIEW' AND "createdAt" >= $1`, [cutoff]),
       pool.query(`SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_VIEW' AND "createdAt" >= $1`, [cutoff]),
-      pool.query(`SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1`, [cutoff]),
+      pool.query(`
+        SELECT COALESCE(SUM(n),0) AS n FROM (
+          SELECT COUNT(*) AS n FROM "TripEvent" WHERE "eventType"='DOWNLOADED' AND "createdAt" >= $1
+          UNION ALL
+          SELECT COUNT(*) AS n FROM "Event" WHERE "eventType"='ITINERARY_DOWNLOAD' AND "createdAt" >= $1
+        ) counts
+      `, [cutoff]),
       pool.query(`SELECT COUNT(*) AS n FROM "Purchase" WHERE "purchasedAt" >= $1`, [cutoff]),
     ]);
     return {
@@ -941,10 +1004,16 @@ async function getFunnelData(pool, cutoff, creatorId = null) {
       WHERE e."eventType"='ITINERARY_VIEW' AND e."createdAt" >= $1 AND i.creator_id = $2
     `, [cutoff, creatorId]),
     pool.query(`
-      SELECT COUNT(*) AS n FROM "TripEvent" te
-      JOIN "Trip" t ON t.id = te."tripId"
-      JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
-      WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $2
+      SELECT COALESCE(SUM(n),0) AS n FROM (
+        SELECT COUNT(*) AS n FROM "TripEvent" te
+        LEFT JOIN "Trip" t ON t.id = te."tripId"
+        JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
+        WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $2
+        UNION ALL
+        SELECT COUNT(*) AS n FROM "Event" e
+        JOIN "Itinerary" i ON i.slug = e."itinerarySlug"
+        WHERE e."eventType"='ITINERARY_DOWNLOAD' AND e."createdAt" >= $1 AND i.creator_id = $2
+      ) counts
     `, [cutoff, creatorId]),
     pool.query(`
       SELECT COUNT(*) AS n FROM "Purchase" p
@@ -980,12 +1049,23 @@ async function getTopItineraries(pool, cutoff, creatorId = null) {
       GROUP BY "itinerarySlug"
     ) v ON v."itinerarySlug" = i.slug
     LEFT JOIN (
-      SELECT t."itinerarySlug", COUNT(*) AS downloads
-      FROM "TripEvent" te JOIN "Trip" t ON t.id = te."tripId"
-      WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1
-        AND t."itinerarySlug" IS NOT NULL
-      GROUP BY t."itinerarySlug"
-    ) d ON d."itinerarySlug" = i.slug
+      SELECT slug, SUM(cnt) AS downloads FROM (
+        -- Authenticated downloads (TripEvent → Trip → itinerarySlug)
+        SELECT t."itinerarySlug" AS slug, COUNT(*) AS cnt
+        FROM "TripEvent" te
+        JOIN "Trip" t ON t.id = te."tripId"
+        WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1
+          AND t."itinerarySlug" IS NOT NULL
+        GROUP BY t."itinerarySlug"
+        UNION ALL
+        -- Anonymous downloads (Event → itinerarySlug)
+        SELECT "itinerarySlug" AS slug, COUNT(*) AS cnt
+        FROM "Event"
+        WHERE "eventType"='ITINERARY_DOWNLOAD' AND "createdAt" >= $1
+          AND "itinerarySlug" IS NOT NULL
+        GROUP BY "itinerarySlug"
+      ) raw GROUP BY slug
+    ) d ON d.slug = i.slug
     LEFT JOIN (
       SELECT "itineraryId",
         COUNT(*) AS sales,
@@ -1030,11 +1110,25 @@ async function getRecentActivity(pool, cutoff, creatorId = null) {
         WHERE u."createdAt" >= $1
         ORDER BY ts DESC LIMIT 15
       ) UNION ALL (
-        SELECT 'download' AS type, u.email, u.name, NULL::text AS country,
+        SELECT 'download' AS type,
+          u.email,
+          u.name,
+          NULL::text AS country,
           COALESCE(te.metadata->>'title', te.metadata->>'destination', 'trip') AS detail,
           te."createdAt" AS ts
-        FROM "TripEvent" te JOIN "User" u ON u.id=te."userId"
+        FROM "TripEvent" te
+        LEFT JOIN "User" u ON u.id = te."userId"
         WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1
+        ORDER BY ts DESC LIMIT 15
+      ) UNION ALL (
+        SELECT 'download' AS type,
+          NULL::text AS email,
+          NULL::text AS name,
+          NULL::text AS country,
+          COALESCE(e.metadata->>'title', e.metadata->>'destination', e."itinerarySlug", 'itinerary') AS detail,
+          e."createdAt" AS ts
+        FROM "Event" e
+        WHERE e."eventType"='ITINERARY_DOWNLOAD' AND e."createdAt" >= $1
         ORDER BY ts DESC LIMIT 15
       ) UNION ALL (
         SELECT 'purchase' AS type,
@@ -1073,14 +1167,24 @@ async function getRecentActivity(pool, cutoff, creatorId = null) {
       WHERE u."createdAt" >= $1
       ORDER BY ts DESC LIMIT 10
     ) UNION ALL (
-      SELECT 'download' AS type, u.email, u.name, NULL::text AS country,
+      SELECT 'download' AS type,
+        u.email, u.name, NULL::text AS country,
         COALESCE(te.metadata->>'title', te.metadata->>'destination', 'trip') AS detail,
         te."createdAt" AS ts
       FROM "TripEvent" te
-      JOIN "User" u ON u.id = te."userId"
-      JOIN "Trip" t ON t.id = te."tripId"
+      LEFT JOIN "User" u ON u.id = te."userId"
+      LEFT JOIN "Trip" t ON t.id = te."tripId"
       JOIN "Itinerary" i ON i.slug = t."itinerarySlug"
       WHERE te."eventType"='DOWNLOADED' AND te."createdAt" >= $1 AND i.creator_id = $2
+      ORDER BY ts DESC LIMIT 15
+    ) UNION ALL (
+      SELECT 'download' AS type,
+        NULL::text AS email, NULL::text AS name, NULL::text AS country,
+        COALESCE(e.metadata->>'title', e.metadata->>'destination', e."itinerarySlug", 'itinerary') AS detail,
+        e."createdAt" AS ts
+      FROM "Event" e
+      JOIN "Itinerary" i ON i.slug = e."itinerarySlug"
+      WHERE e."eventType"='ITINERARY_DOWNLOAD' AND e."createdAt" >= $1 AND i.creator_id = $2
       ORDER BY ts DESC LIMIT 15
     ) UNION ALL (
       SELECT 'purchase' AS type,
