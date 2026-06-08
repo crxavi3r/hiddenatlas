@@ -50,7 +50,9 @@ function injectCSS() {
     .leaflet-control-zoom { border: 1px solid #E8E3DA !important; border-radius: 6px !important; overflow: hidden; }
     .leaflet-control-zoom a { color: ${MUTED} !important; border-bottom-color: #E8E3DA !important; font-size: 14px !important; }
     .leaflet-control-zoom a:hover { color: ${CHAR} !important; background: #F8F5F0 !important; }
-    .leaflet-control-attribution { font-size: 9px !important; background: rgba(255,255,255,0.75) !important; padding: 2px 6px !important; }
+    .leaflet-control-attribution { font-size: 9px !important; font-family: Inter, system-ui, sans-serif !important; background: rgba(255,255,255,0.55) !important; color: rgba(100,90,80,0.75) !important; padding: 2px 7px !important; box-shadow: none !important; border: none !important; }
+    .leaflet-control-attribution a { color: rgba(100,90,80,0.75) !important; text-decoration: none !important; }
+    .leaflet-control-attribution a:hover { color: rgba(27,107,101,0.9) !important; text-decoration: underline !important; }
   `;
   document.head.appendChild(s);
 }
@@ -75,8 +77,9 @@ export default function PublicRouteMap({ stops = [], isUnlocked = true, onDaySel
     if (!mapDivRef.current || mapRef.current) return;
     injectCSS();
     const map = L.map(mapDivRef.current, { zoomControl: true, scrollWheelZoom: false });
+    map.attributionControl.setPrefix(false);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com">CARTO</a>',
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · © <a href="https://carto.com">CARTO</a>',
       subdomains: 'abcd', maxZoom: 18,
     }).addTo(map);
     mapRef.current = map;

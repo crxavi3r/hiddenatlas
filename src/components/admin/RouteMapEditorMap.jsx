@@ -37,6 +37,9 @@ function injectCSS() {
                     color: ${CHAR}; font-family: Inter, system-ui, sans-serif;
                     white-space: nowrap; pointer-events: none; }
     .ha-tip-major::before { display: none; }
+    .leaflet-control-attribution { font-size: 9px !important; font-family: Inter, system-ui, sans-serif !important; background: rgba(255,255,255,0.65) !important; color: rgba(100,90,80,0.80) !important; padding: 2px 7px !important; box-shadow: none !important; border: none !important; }
+    .leaflet-control-attribution a { color: rgba(100,90,80,0.80) !important; text-decoration: none !important; }
+    .leaflet-control-attribution a:hover { color: rgba(27,107,101,0.9) !important; text-decoration: underline !important; }
   `;
   document.head.appendChild(s);
 }
@@ -60,8 +63,9 @@ export default function RouteMapEditorMap({ stops = [], selectedStopId, onSelect
     if (!mapDivRef.current || mapRef.current) return;
     injectCSS();
     const map = L.map(mapDivRef.current, { zoomControl: true, scrollWheelZoom: true });
+    map.attributionControl.setPrefix(false);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com">CARTO</a>',
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · © <a href="https://carto.com">CARTO</a>',
       subdomains: 'abcd', maxZoom: 20,
     }).addTo(map);
     map.on('click', () => onSelectStop?.(null));

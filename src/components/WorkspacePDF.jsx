@@ -159,8 +159,13 @@ function Footer({ label }) {
 }
 
 // ── PDF route map (SVG schematic, numbered markers, outlier detection) ─────────
-const WS_MAP_W = 491; // A4 (595.28) minus paddingHorizontal 52 × 2
-const WS_MAP_H = Math.round(WS_MAP_W * 0.58);
+const WS_MAP_W  = 491; // A4 (595.28) minus paddingHorizontal 52 × 2
+const WS_MAP_H  = Math.round(WS_MAP_W * 0.58); // ~285pt
+const STOP_NUM_W = 22; // fixed width for the numbered index column
+const STOP_FS    = 9;  // readable body font size for stop names
+const STOP_MB    = 5;  // margin-bottom per stop row
+const COL_GAP    = 16; // gap between list columns
+
 const WS_PDF_TIER_NUM = {
   1: { r: 7,   rActive: 7,   sw: 1.8, fill: '#F2E4CB', edge: '#C9A96E', halo: '#C9A96E', lFs: 8, dFs: 6 },
   2: { r: 5.5, rActive: 5.5, sw: 1.4, fill: '#D5E8E6', edge: '#1B6B65', halo: '#2A5248', lFs: 7, dFs: 5 },
@@ -175,32 +180,54 @@ function WorkspaceDynamicSvgMap({ stops = [] }) {
   );
   const { mainStops, remoteStops } = detectOutlierStops(sorted);
 
-  const numberedMain   = mainStops.map((s, i) => ({ ...s, num: i + 1 }));
+  const numberedMain   = mainStops.map((s, i)   => ({ ...s, num: i + 1 }));
   const numberedRemote = remoteStops.map((s, i) => ({ ...s, num: mainStops.length + i + 1 }));
 
-  const layout = buildRouteMapLayout(numberedMain, WS_MAP_W, WS_MAP_H, { pad: 0.12, margin: 20, tiers: WS_PDF_TIER_NUM, prioritizeMajor: true });
+  const layout = buildRouteMapLayout(numberedMain, WS_MAP_W, WS_MAP_H, {
+    pad: 0.12, margin: 20, tiers: WS_PDF_TIER_NUM, prioritizeMajor: true,
+  });
   if (!layout) return null;
   const { routePathD, labeledStops } = layout;
 
-  const colL = numberedMain.filter((_, i) => i % 2 === 0);
-  const colR = numberedMain.filter((_, i) => i % 2 === 1);
+  // Column layout — explicit pixel widths prevent react-pdf shrink-wrap collapse.
+  // ≤12 stops → 2 cols; >12 → 3 cols (still readable at STOP_FS=9).
+  const n        = numberedMain.length;
+  const colCount = n > 12 ? 3 : 2;
+  const perCol   = Math.ceil(n / colCount);
+  const colW     = (WS_MAP_W - COL_GAP * (colCount - 1)) / colCount;
+  // Remote stops always in 2 cols max
+  const remColW  = (WS_MAP_W - COL_GAP) / 2;
+
+  // Top-to-bottom fill: col 0 = stops 0…perCol-1, col 1 = next batch, etc.
+  const cols = Array.from({ length: colCount }, (_, ci) =>
+    numberedMain.slice(ci * perCol, (ci + 1) * perCol)
+  );
 
   return (
-    <View>
+    // Explicit width is critical — prevents the parent alignItems from collapsing columns.
+    <View style={{ width: WS_MAP_W }}>
+
+      {/* ── SVG map ─────────────────────────────────────────────────── */}
       <Svg width={WS_MAP_W} height={WS_MAP_H} viewBox={`0 0 ${WS_MAP_W} ${WS_MAP_H}`}>
         <Rect x="0" y="0" width={WS_MAP_W} height={WS_MAP_H} fill="#F4F1E8" />
+        {/* route line: soft shadow → gold glow → teal dashed */}
         <Path d={routePathD} fill="none" stroke="#1C1A16" strokeWidth="2.5" opacity={0.06} strokeLinecap="round" />
-        <Path d={routePathD} fill="none" stroke="#C9A96E" strokeWidth="2" strokeOpacity="0.22" strokeLinecap="round" />
+        <Path d={routePathD} fill="none" stroke="#C9A96E" strokeWidth="1.8" strokeOpacity="0.20" strokeLinecap="round" />
         <Path d={routePathD} fill="none" stroke="#1B6B65" strokeWidth="1.2" strokeDasharray="6,3.5" strokeLinecap="round" />
+        {/* marker halos */}
         {labeledStops.map(({ cx, cy, r }, i) => (
-          <Circle key={`wh${i}`} cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={(r + 2).toString()} fill="#FFFFFF" fillOpacity="0.75" />
+          <Circle key={`wh${i}`} cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={(r + 2.5).toString()} fill="#FFFFFF" fillOpacity="0.65" />
         ))}
+        {/* marker circles */}
         {labeledStops.map(({ cx, cy, tier, cfg, r }, i) => (
           <G key={`mc${i}`}>
             <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={r.toString()} fill={cfg.fill} stroke={cfg.edge} strokeWidth={cfg.sw.toString()} />
-            {tier === 1 && <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={(r + 4).toString()} fill="none" stroke={cfg.edge} strokeWidth="0.7" strokeOpacity="0.30" />}
+            {tier === 1 && (
+              <Circle cx={cx.toFixed(1)} cy={cy.toFixed(1)} r={(r + 4).toString()} fill="none" stroke={cfg.edge} strokeWidth="0.7" strokeOpacity="0.28" />
+            )}
           </G>
         ))}
+        {/* stop numbers inside markers */}
         {labeledStops.map(({ cx, cy, tier }, i) => {
           const numStr = String(numberedMain[i].num);
           const nFs    = numStr.length > 1 ? 5.5 : 6.5;
@@ -212,6 +239,7 @@ function WorkspaceDynamicSvgMap({ stops = [] }) {
             </Text>
           );
         })}
+        {/* major-stop label halos (legibility on warm bg) */}
         {labeledStops.reduce((acc, { stop, tier, labelAnchor, labelX, labelY, fs }, i) => {
           if (tier === 1) acc.push(
             <Text key={`lh${i}`} x={labelX.toFixed(1)} y={labelY.toFixed(1)}
@@ -222,6 +250,7 @@ function WorkspaceDynamicSvgMap({ stops = [] }) {
           );
           return acc;
         }, [])}
+        {/* major-stop labels */}
         {labeledStops.reduce((acc, { stop, tier, labelAnchor, labelX, labelY, fs }, i) => {
           if (tier === 1) acc.push(
             <Text key={`lt${i}`} x={labelX.toFixed(1)} y={labelY.toFixed(1)}
@@ -232,33 +261,64 @@ function WorkspaceDynamicSvgMap({ stops = [] }) {
           return acc;
         }, [])}
       </Svg>
-      <View style={{ flexDirection: 'row', marginTop: 8, gap: 8 }}>
-        <View style={{ flex: 1 }}>
-          {colL.map(s => (
-            <View key={s.num} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 3 }}>
-              <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: '#1B6B65', width: 16 }}>{String(s.num).padStart(2, '0')}</Text>
-              <Text style={{ fontSize: 7, color: '#1C1A16', flex: 1 }}>{s.name}</Text>
-            </View>
-          ))}
-        </View>
-        <View style={{ flex: 1 }}>
-          {colR.map(s => (
-            <View key={s.num} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 3 }}>
-              <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: '#1B6B65', width: 16 }}>{String(s.num).padStart(2, '0')}</Text>
-              <Text style={{ fontSize: 7, color: '#1C1A16', flex: 1 }}>{s.name}</Text>
-            </View>
-          ))}
-        </View>
+
+      {/* ── "Route stops" section header ────────────────────────────── */}
+      <View style={{ marginTop: 14, paddingTop: 10, borderTopWidth: 0.75, borderTopColor: '#E8E3DA', marginBottom: 9 }}>
+        <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', letterSpacing: 2, textTransform: 'uppercase', color: '#1B6B65' }}>
+          Route stops
+        </Text>
       </View>
+
+      {/* ── Stop columns ────────────────────────────────────────────── */}
+      {/* Explicit column widths prevent react-pdf from collapsing flex children. */}
+      <View style={{ flexDirection: 'row' }}>
+        {cols.map((col, ci) => (
+          <View key={ci} style={{ width: colW, marginRight: ci < colCount - 1 ? COL_GAP : 0 }}>
+            {col.map(s => (
+              <View key={s.num} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: STOP_MB }}>
+                <Text style={{ fontSize: STOP_FS, fontFamily: 'Helvetica-Bold', color: '#1B6B65', width: STOP_NUM_W, flexShrink: 0 }}>
+                  {String(s.num).padStart(2, '0')}
+                </Text>
+                {/* Explicit text width = colW minus number column. Never use flex:1 inside a
+                    container whose parent may shrink-wrap — it collapses to near-zero. */}
+                <Text style={{ fontSize: STOP_FS, color: '#1C1A16', lineHeight: 1.45, width: colW - STOP_NUM_W }}>
+                  {s.name}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+
+      {/* ── Day trips / remote stops ─────────────────────────────────── */}
       {numberedRemote.length > 0 && (
-        <View style={{ marginTop: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#F4EDD8', borderRadius: 4 }}>
-          <Text style={{ fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#8C7050', letterSpacing: 1.5, marginBottom: 5 }}>DAY TRIPS / REMOTE STOPS</Text>
-          {numberedRemote.map(s => (
-            <View key={s.num} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 3 }}>
-              <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: '#C9A96E', width: 16 }}>{String(s.num).padStart(2, '0')}</Text>
-              <Text style={{ fontSize: 7, color: '#4A433A', flex: 1 }}>{s.name}{s.dayNumber ? `  ·  Day ${s.dayNumber}` : ''}</Text>
-            </View>
-          ))}
+        <View style={{ marginTop: 14, paddingTop: 10, paddingBottom: 10, paddingLeft: 12, paddingRight: 12, backgroundColor: '#F9F5EE', borderLeftWidth: 2, borderLeftColor: '#C9A96E' }}>
+          <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', letterSpacing: 1.5, textTransform: 'uppercase', color: '#8C7050', marginBottom: 3 }}>
+            Day trips &amp; remote stops
+          </Text>
+          <Text style={{ fontSize: 8, color: '#9B8870', marginBottom: 8, lineHeight: 1.4 }}>
+            Shown separately to keep the city route readable.
+          </Text>
+          <View style={{ flexDirection: 'row' }}>
+            {[0, 1].map(ci => {
+              const col = numberedRemote.filter((_, ri) => ri % 2 === ci);
+              if (!col.length) return null;
+              return (
+                <View key={ci} style={{ width: remColW, marginRight: ci === 0 ? COL_GAP : 0 }}>
+                  {col.map(s => (
+                    <View key={s.num} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: STOP_MB }}>
+                      <Text style={{ fontSize: STOP_FS, fontFamily: 'Helvetica-Bold', color: '#C9A96E', width: STOP_NUM_W, flexShrink: 0 }}>
+                        {String(s.num).padStart(2, '0')}
+                      </Text>
+                      <Text style={{ fontSize: STOP_FS, color: '#4A433A', lineHeight: 1.45, width: remColW - STOP_NUM_W }}>
+                        {s.name}{s.dayNumber ? `  ·  Day ${s.dayNumber}` : ''}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              );
+            })}
+          </View>
         </View>
       )}
     </View>
@@ -377,19 +437,9 @@ export function WorkspacePDF({ trip, itinerary, tripDays, tripItems, tripNotes, 
           <Text style={S.label}>Route Map</Text>
           <Text style={S.h2}>{tripTitle}</Text>
           <View style={S.divider} />
-          <View style={{ alignItems: 'center', marginBottom: 14 }}>
-            <WorkspaceDynamicSvgMap stops={mapStops} />
-          </View>
-          {majorStops.length > 0 && (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
-              {majorStops.slice(0, 20).map((s, i) => (
-                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: GOLD }} />
-                  <Text style={{ fontSize: 7.5, color: CHAR, fontFamily: 'Helvetica-Bold' }}>{s.name}</Text>
-                </View>
-              ))}
-            </View>
-          )}
+          {/* No alignItems:'center' — that collapses child View widths in react-pdf,
+              causing stop-list columns to shrink and text to wrap letter-by-letter. */}
+          <WorkspaceDynamicSvgMap stops={mapStops} />
           <Footer label={`${tripTitle} · Route Map · HiddenAtlas`} />
         </Page>
       )}
