@@ -192,6 +192,9 @@ export default async function handler(req, res) {
       if (action === 'reorder-day-stops')        { await assertOwnership(pool, id, ctx); return res.json(await handleReorderDayStops(pool, id, body)); }
       if (action === 'generate-stops-from-bullets') { await assertOwnership(pool, id, ctx); return res.json(await handleGenerateStopsFromBullets(pool, id, body)); }
       if (action === 'regenerate-route-from-stops') { await assertOwnership(pool, id, ctx); return res.json(await handleRegenerateRouteFromStops(pool, id)); }
+      if (action === 'geocode-stop')             { await assertOwnership(pool, id, ctx); return res.json(await handleGeocodeStop(pool, id, body)); }
+      if (action === 'apply-geocode-candidate')  { await assertOwnership(pool, id, ctx); return res.json(await handleApplyGeocodeCandidate(pool, id, body)); }
+      if (action === 'geocode-missing-stops')    { await assertOwnership(pool, id, ctx); return res.json(await handleGeocodeMissingStops(pool, id)); }
       return res.status(400).json({ error: 'Unknown POST action' });
     }
   } catch (err) {
@@ -3184,6 +3187,194 @@ async function handleUpsertDayStop(pool, itineraryId, body) {
     ]
   );
   return { stop: rows[0] };
+}
+
+// ── Geocoding helpers ─────────────────────────────────────────────────────────
+const geocodeDelay = ms => new Promise(r => setTimeout(r, ms));
+
+function buildGeocodeQuery(stop, itin) {
+  const parts = [];
+  if (stop.address && stop.address.trim()) {
+    parts.push(stop.address.trim());
+    if (itin.country) parts.push(itin.country);
+  } else {
+    const name = (stop.locationName || stop.title || '').trim();
+    if (name) parts.push(name);
+    if (itin.destination) parts.push(itin.destination);
+    else if (itin.region) parts.push(itin.region);
+    if (itin.country) parts.push(itin.country);
+  }
+  return parts.filter(Boolean).join(', ');
+}
+
+function isClearResult(results) {
+  if (results.length === 1) return true;
+  if (results.length > 1 && parseFloat(results[0].importance) >= 0.6) return true;
+  return false;
+}
+
+function countryMismatch(itinCountry, resultAddress) {
+  if (!itinCountry || !resultAddress) return false;
+  const rc = (resultAddress.country || '').toLowerCase();
+  const ic = itinCountry.toLowerCase();
+  return rc && ic && !rc.includes(ic) && !ic.includes(rc);
+}
+
+async function nominatimSearch(query) {
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5`;
+  const resp = await fetch(url, {
+    headers: {
+      'User-Agent': 'HiddenAtlas/1.0 (hiddenatlas.travel)',
+      'Accept-Language': 'en',
+    },
+  });
+  if (!resp.ok) throw Object.assign(new Error('Geocoding service unavailable'), { status: 503 });
+  return resp.json();
+}
+
+// Geocode a single stop. If stopId provided, auto-saves to DB when result is clear.
+// If no stopId (new stop in form), returns coordinates without saving.
+async function handleGeocodeStop(pool, itineraryId, body) {
+  const { stopId, title, locationName, address } = body;
+
+  let stop;
+  if (stopId) {
+    const { rows } = await pool.query(
+      `SELECT * FROM "ItineraryDayStop" WHERE id = $1 AND "itineraryId" = $2`,
+      [stopId, itineraryId]
+    );
+    if (!rows.length) throw Object.assign(new Error('Stop not found'), { status: 404 });
+    stop = rows[0];
+  } else {
+    stop = { title: title || '', locationName: locationName || '', address: address || '', metadata: {} };
+  }
+
+  const { rows: itinRows } = await pool.query(
+    `SELECT destination, country, region FROM "Itinerary" WHERE id = $1`,
+    [itineraryId]
+  );
+  const itin = itinRows[0] || {};
+  const query = buildGeocodeQuery(stop, itin);
+  if (!query.trim()) return { status: 'not_found', query };
+
+  const results = await nominatimSearch(query);
+  if (!Array.isArray(results) || results.length === 0) return { status: 'not_found', query };
+
+  const clear = isClearResult(results);
+  const r = results[0];
+  const lat = parseFloat(r.lat);
+  const lng = parseFloat(r.lon);
+  const warning = countryMismatch(itin.country, r.address)
+    ? `Result is in ${r.address?.country || '?'} — please confirm this is correct.`
+    : null;
+
+  if (clear) {
+    const geocodingMeta = {
+      provider: 'nominatim', displayName: r.display_name,
+      confidence: 'auto', geocodedAt: new Date().toISOString(),
+    };
+
+    if (stopId) {
+      const existing = stop.metadata || {};
+      const metadata = { ...existing, geocoding: geocodingMeta };
+      const { rows: updated } = await pool.query(
+        `UPDATE "ItineraryDayStop" SET latitude = $1, longitude = $2, metadata = $3, "updatedAt" = NOW()
+         WHERE id = $4 AND "itineraryId" = $5 RETURNING *`,
+        [lat, lng, JSON.stringify(metadata), stopId, itineraryId]
+      );
+      return { status: 'saved', stop: updated[0], result: { lat, lng, displayName: r.display_name }, warning };
+    }
+    return { status: 'found', result: { lat, lng, displayName: r.display_name }, warning };
+  }
+
+  const candidates = results.slice(0, 5).map(r2 => ({
+    lat: parseFloat(r2.lat), lng: parseFloat(r2.lon),
+    displayName: r2.display_name,
+    type: r2.type,
+    importance: parseFloat(r2.importance),
+    country: r2.address?.country || '',
+    city: r2.address?.city || r2.address?.town || r2.address?.village || '',
+  }));
+  return { status: 'candidates', candidates, query };
+}
+
+// Save a user-selected geocoding candidate to a stop.
+async function handleApplyGeocodeCandidate(pool, itineraryId, body) {
+  const { stopId, lat, lng, displayName } = body;
+  if (!stopId || lat == null || lng == null) throw Object.assign(new Error('stopId, lat, lng required'), { status: 400 });
+  const { rows: stopRows } = await pool.query(
+    `SELECT metadata FROM "ItineraryDayStop" WHERE id = $1 AND "itineraryId" = $2`,
+    [stopId, itineraryId]
+  );
+  if (!stopRows.length) throw Object.assign(new Error('Stop not found'), { status: 404 });
+  const existing = stopRows[0].metadata || {};
+  const metadata = {
+    ...existing,
+    geocoding: {
+      provider: 'nominatim', displayName: displayName || '',
+      confidence: 'manual', geocodedAt: new Date().toISOString(),
+    },
+  };
+  const { rows: updated } = await pool.query(
+    `UPDATE "ItineraryDayStop" SET latitude = $1, longitude = $2, metadata = $3, "updatedAt" = NOW()
+     WHERE id = $4 AND "itineraryId" = $5 RETURNING *`,
+    [Number(lat), Number(lng), JSON.stringify(metadata), stopId, itineraryId]
+  );
+  return { stop: updated[0] };
+}
+
+// Bulk geocode all showOnMap stops missing coordinates (max 5 per call, throttled).
+async function handleGeocodeMissingStops(pool, itineraryId) {
+  const { rows: stops } = await pool.query(
+    `SELECT * FROM "ItineraryDayStop"
+     WHERE "itineraryId" = $1 AND "showOnMap" = true
+       AND (latitude IS NULL OR longitude IS NULL)
+     ORDER BY "dayNumber", "sortOrder" LIMIT 5`,
+    [itineraryId]
+  );
+  const { rows: countRows } = await pool.query(
+    `SELECT COUNT(*) FROM "ItineraryDayStop"
+     WHERE "itineraryId" = $1 AND "showOnMap" = true AND (latitude IS NULL OR longitude IS NULL)`,
+    [itineraryId]
+  );
+  const totalMissing = parseInt(countRows[0].count);
+  const { rows: itinRows } = await pool.query(
+    `SELECT destination, country, region FROM "Itinerary" WHERE id = $1`,
+    [itineraryId]
+  );
+  const itin = itinRows[0] || {};
+  const geocoded = [], candidates = [], failed = [];
+
+  for (let i = 0; i < stops.length; i++) {
+    const stop = stops[i];
+    const query = buildGeocodeQuery(stop, itin);
+    if (!query.trim()) { failed.push({ id: stop.id, title: stop.title, reason: 'No search terms' }); continue; }
+    try {
+      const results = await nominatimSearch(query);
+      if (!Array.isArray(results) || results.length === 0) {
+        failed.push({ id: stop.id, title: stop.title, reason: 'Not found', query });
+      } else if (isClearResult(results)) {
+        const r = results[0];
+        const lat = parseFloat(r.lat); const lng = parseFloat(r.lon);
+        const existing = stop.metadata || {};
+        const metadata = { ...existing, geocoding: { provider: 'nominatim', displayName: r.display_name, confidence: 'auto', geocodedAt: new Date().toISOString() } };
+        await pool.query(
+          `UPDATE "ItineraryDayStop" SET latitude = $1, longitude = $2, metadata = $3, "updatedAt" = NOW() WHERE id = $4`,
+          [lat, lng, JSON.stringify(metadata), stop.id]
+        );
+        geocoded.push({ id: stop.id, title: stop.title, lat, lng, displayName: r.display_name });
+      } else {
+        candidates.push({
+          id: stop.id, title: stop.title,
+          candidates: results.slice(0, 3).map(r2 => ({ lat: parseFloat(r2.lat), lng: parseFloat(r2.lon), displayName: r2.display_name, country: r2.address?.country || '' })),
+        });
+      }
+    } catch (err) {
+      failed.push({ id: stop.id, title: stop.title, reason: err.message });
+    }
+    if (i < stops.length - 1) await geocodeDelay(1100); // respect Nominatim 1 req/sec
+  }
+  return { geocoded, candidates, failed, remaining: Math.max(0, totalMissing - stops.length) };
 }
 
 async function handleDeleteDayStop(pool, itineraryId, stopId) {

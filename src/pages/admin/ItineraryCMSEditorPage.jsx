@@ -209,7 +209,9 @@ function emptyStopForm() {
   };
 }
 
-function DayStopForm({ form, setForm, onSave, onCancel }) {
+function DayStopForm({ form, setForm, onSave, onCancel, onGeocode, geocoState, onApplyCandidate, onDismissGeocode }) {
+  const hasCoords = form.latitude !== '' && form.latitude != null && form.longitude !== '' && form.longitude != null;
+  const gs = geocoState || { status: 'idle' };
   return (
     <div style={{ marginTop: '10px', padding: '12px', background: '#FAFAF8', borderRadius: '6px', borderTop: '1px solid #E8E3DA' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
@@ -243,17 +245,71 @@ function DayStopForm({ form, setForm, onSave, onCancel }) {
             onChange={e => setForm(f => ({ ...f, suggestedTime: e.target.value }))} />
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-        <div>
-          <p style={labelStyle}>Latitude</p>
-          <input value={form.latitude} style={inputStyle} type="number" step="any" placeholder="e.g. 40.4168"
-            onChange={e => setForm(f => ({ ...f, latitude: e.target.value }))} />
+      {/* Coordinates + geocoding */}
+      <div style={{ marginBottom: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+          <p style={labelStyle}>Coordinates</p>
+          {onGeocode && gs.status !== 'loading' && gs.status !== 'candidates' && (
+            <button type="button" onClick={onGeocode}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '11.5px', color: '#1B6B65', fontWeight: '600', padding: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <MapPin size={11} /> Find coordinates
+            </button>
+          )}
         </div>
-        <div>
-          <p style={labelStyle}>Longitude</p>
-          <input value={form.longitude} style={inputStyle} type="number" step="any" placeholder="e.g. -3.7038"
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          <input value={form.latitude} style={inputStyle} type="number" step="any" placeholder="Latitude e.g. 40.4168"
+            onChange={e => setForm(f => ({ ...f, latitude: e.target.value }))} />
+          <input value={form.longitude} style={inputStyle} type="number" step="any" placeholder="Longitude e.g. -3.7038"
             onChange={e => setForm(f => ({ ...f, longitude: e.target.value }))} />
         </div>
+        {/* Geocoding feedback */}
+        {gs.status === 'loading' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '12px', color: '#8C8070' }}>
+            <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> Finding coordinates…
+          </div>
+        )}
+        {gs.status === 'found' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', fontSize: '12px', color: '#1B6B65' }}>
+            <Check size={11} /> Coordinates found
+            {gs.warning && <span style={{ color: '#E09B40', marginLeft: '4px' }}>— {gs.warning}</span>}
+          </div>
+        )}
+        {gs.status === 'error' && (
+          <p style={{ fontSize: '12px', color: '#C0392B', marginTop: '6px' }}>
+            {gs.error || 'Could not find coordinates. Try adding a more specific address.'}
+            {onDismissGeocode && <button type="button" onClick={onDismissGeocode} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8C8070', marginLeft: '8px', fontSize: '11px' }}>Dismiss</button>}
+          </p>
+        )}
+        {gs.status === 'candidates' && (
+          <div style={{ marginTop: '8px', background: 'white', border: '1px solid #E8E3DA', borderRadius: '6px', padding: '10px 12px' }}>
+            <p style={{ fontSize: '11.5px', fontWeight: '600', color: '#1C1A16', marginBottom: '8px' }}>
+              Multiple locations found — select one:
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {gs.candidates.map((c, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px', padding: '6px 8px', borderRadius: '4px', background: '#FAFAF8', border: '1px solid #F0EBE2' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: '11.5px', color: '#1C1A16', fontWeight: '500', lineHeight: '1.4', marginBottom: '2px' }}>{c.displayName.split(',').slice(0, 3).join(', ')}</p>
+                    {c.country && <p style={{ fontSize: '10.5px', color: '#8C8070' }}>{c.country}</p>}
+                  </div>
+                  <button type="button" onClick={() => onApplyCandidate && onApplyCandidate(c)}
+                    style={{ ...btnGhost, fontSize: '11px', padding: '4px 10px', flexShrink: 0 }}>
+                    Use this
+                  </button>
+                </div>
+              ))}
+              <button type="button" onClick={onDismissGeocode}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '11px', color: '#8C8070', textAlign: 'left', padding: '2px 0' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+        {!hasCoords && gs.status === 'idle' && form.showOnMap && (
+          <p style={{ fontSize: '11px', color: '#C0392B', marginTop: '4px' }}>
+            No coordinates — stop will not appear on map
+          </p>
+        )}
       </div>
       <div style={{ display: 'flex', gap: '16px', marginBottom: '10px', flexWrap: 'wrap' }}>
         {[
@@ -287,7 +343,7 @@ function DayStopForm({ form, setForm, onSave, onCancel }) {
   );
 }
 
-function DayStopCard({ stop, idx, total, onEdit, onDelete, onMoveUp, onMoveDown, isEditing, form, setForm, onSave, onCancelEdit }) {
+function DayStopCard({ stop, idx, total, onEdit, onDelete, onMoveUp, onMoveDown, isEditing, form, setForm, onSave, onCancelEdit, onGeocode, geocoState, onApplyCandidate, onDismissGeocode }) {
   const missingCoords = stop.showOnMap && (!stop.latitude || !stop.longitude);
   return (
     <div style={{ ...card, marginBottom: '8px', padding: '10px 14px' }}>
@@ -328,7 +384,8 @@ function DayStopCard({ stop, idx, total, onEdit, onDelete, onMoveUp, onMoveDown,
         </div>
       </div>
       {isEditing && (
-        <DayStopForm form={form} setForm={setForm} onSave={onSave} onCancel={onCancelEdit} />
+        <DayStopForm form={form} setForm={setForm} onSave={onSave} onCancel={onCancelEdit}
+          onGeocode={onGeocode} geocoState={geocoState} onApplyCandidate={onApplyCandidate} onDismissGeocode={onDismissGeocode} />
       )}
     </div>
   );
@@ -342,6 +399,8 @@ function DayStopsEditor({ itineraryId, dayNumber, stops, onRefresh, getToken, ex
   const [rebuilding,  setRebuilding]  = useState(false);
   const [rebuildMsg,  setRebuildMsg]  = useState(null);
   const [err,         setErr]         = useState(null);
+  const [geocoState,  setGeocoState]  = useState({ status: 'idle', candidates: [], error: null, warning: null });
+  const [bulkGeoco,   setBulkGeoco]   = useState(null);
 
   async function callApi(action, body = {}, method = 'POST', extraQs = '') {
     const token = await getToken();
@@ -431,7 +490,72 @@ function DayStopsEditor({ itineraryId, dayNumber, stops, onRefresh, getToken, ex
     });
   }
 
+  async function geocodeStop(stopId) {
+    setGeocoState({ status: 'loading', candidates: [], error: null, warning: null });
+    try {
+      const payload = stopId
+        ? { stopId }
+        : { title: form.title, locationName: form.locationName, address: form.address };
+      const res = await callApi('geocode-stop', payload);
+      if (res.status === 'saved' || res.status === 'found') {
+        const { lat, lng } = res.result;
+        setForm(f => ({ ...f, latitude: lat, longitude: lng }));
+        setGeocoState({ status: 'found', candidates: [], error: null, warning: res.warning || null });
+        if (res.status === 'saved') onRefresh();
+        setTimeout(() => setGeocoState({ status: 'idle', candidates: [], error: null, warning: null }), 4000);
+      } else if (res.status === 'candidates') {
+        setGeocoState({ status: 'candidates', candidates: res.candidates, error: null, warning: null });
+      } else {
+        setGeocoState({ status: 'error', candidates: [], error: 'Could not find coordinates. Try adding a more specific address or location name.', warning: null });
+      }
+    } catch (e) {
+      setGeocoState({ status: 'error', candidates: [], error: e.message || 'Geocoding failed', warning: null });
+    }
+  }
+
+  async function applyCandidate(candidate) {
+    const isExisting = !!editingId;
+    try {
+      if (isExisting) {
+        const res = await callApi('apply-geocode-candidate', { stopId: editingId, lat: candidate.lat, lng: candidate.lng, displayName: candidate.displayName });
+        setForm(f => ({ ...f, latitude: res.stop.latitude, longitude: res.stop.longitude }));
+        onRefresh();
+      } else {
+        setForm(f => ({ ...f, latitude: candidate.lat, longitude: candidate.lng }));
+      }
+      setGeocoState({ status: 'found', candidates: [], error: null, warning: null });
+      setTimeout(() => setGeocoState({ status: 'idle', candidates: [], error: null, warning: null }), 4000);
+    } catch (e) {
+      setGeocoState(s => ({ ...s, status: 'error', error: e.message }));
+    }
+  }
+
+  function dismissGeocode() {
+    setGeocoState({ status: 'idle', candidates: [], error: null, warning: null });
+  }
+
+  async function geocodeMissingForDay() {
+    const missing = stops.filter(s => s.showOnMap && (!s.latitude || !s.longitude));
+    if (!missing.length) return;
+    setBulkGeoco({ status: 'running', processed: 0, total: missing.length, found: 0, review: [], failed: [] });
+    let found = 0; const review = []; const failed = [];
+    for (let i = 0; i < missing.length; i++) {
+      const stop = missing[i];
+      try {
+        const res = await callApi('geocode-stop', { stopId: stop.id });
+        if (res.status === 'saved') { found++; }
+        else if (res.status === 'candidates') { review.push({ stop, candidates: res.candidates }); }
+        else { failed.push(stop.title); }
+      } catch { failed.push(stop.title); }
+      setBulkGeoco(s => ({ ...s, processed: s.processed + 1, found, review, failed }));
+      if (i < missing.length - 1) await new Promise(r => setTimeout(r, 1100));
+    }
+    if (found > 0) onRefresh();
+    setBulkGeoco({ status: 'done', processed: missing.length, total: missing.length, found, review, failed });
+  }
+
   const hasBullets = existingBullets?.length > 0;
+  const missingForDay = stops.filter(s => s.showOnMap && (!s.latitude || !s.longitude));
 
   return (
     <div>
@@ -439,12 +563,19 @@ function DayStopsEditor({ itineraryId, dayNumber, stops, onRefresh, getToken, ex
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
         <p style={{ fontSize: '11.5px', color: '#8C8070' }}>
           {stops.length > 0 ? `${stops.length} stop${stops.length !== 1 ? 's' : ''}` : 'No stops yet'}
+          {missingForDay.length > 0 && <span style={{ color: '#C0392B', marginLeft: '6px' }}>· {missingForDay.length} missing coords</span>}
         </p>
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           {hasBullets && stops.length === 0 && (
             <button onClick={generateFromBullets} disabled={generating} style={{ ...btnGhost, fontSize: '11px' }}>
               {generating ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <Wand2 size={11} />}
               Generate from bullets
+            </button>
+          )}
+          {missingForDay.length > 0 && !bulkGeoco?.status === 'running' && (
+            <button onClick={geocodeMissingForDay} disabled={bulkGeoco?.status === 'running'} style={{ ...btnGhost, fontSize: '11px' }}>
+              {bulkGeoco?.status === 'running' ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <MapPin size={11} />}
+              Find missing coords
             </button>
           )}
           {stops.length > 0 && (
@@ -455,6 +586,25 @@ function DayStopsEditor({ itineraryId, dayNumber, stops, onRefresh, getToken, ex
           )}
         </div>
       </div>
+      {/* Bulk geocoding status */}
+      {bulkGeoco && (
+        <div style={{ padding: '8px 12px', background: bulkGeoco.status === 'done' ? '#EFF6F5' : '#FAF8F4', border: '1px solid #E8E3DA', borderRadius: '6px', marginBottom: '8px', fontSize: '12px' }}>
+          {bulkGeoco.status === 'running' && (
+            <span style={{ color: '#8C8070' }}>Finding coordinates… {bulkGeoco.processed}/{bulkGeoco.total}</span>
+          )}
+          {bulkGeoco.status === 'done' && (
+            <div>
+              <p style={{ color: '#1B6B65', fontWeight: '600', marginBottom: bulkGeoco.review.length || bulkGeoco.failed.length ? '4px' : '0' }}>
+                {bulkGeoco.found} coordinate{bulkGeoco.found !== 1 ? 's' : ''} found
+                {bulkGeoco.review.length > 0 && ` · ${bulkGeoco.review.length} need review`}
+                {bulkGeoco.failed.length > 0 && ` · ${bulkGeoco.failed.length} failed`}
+              </p>
+              {bulkGeoco.failed.length > 0 && <p style={{ color: '#C0392B', fontSize: '11px' }}>Failed: {bulkGeoco.failed.join(', ')}</p>}
+              <button type="button" onClick={() => setBulkGeoco(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8C8070', fontSize: '11px', padding: 0, marginTop: '4px' }}>Dismiss</button>
+            </div>
+          )}
+        </div>
+      )}
 
       {err && <p style={{ fontSize: '12px', color: '#C0392B', marginBottom: '8px' }}>{err}</p>}
       {rebuildMsg && <p style={{ fontSize: '12px', color: '#1B6B65', marginBottom: '8px' }}>{rebuildMsg}</p>}
@@ -474,7 +624,11 @@ function DayStopsEditor({ itineraryId, dayNumber, stops, onRefresh, getToken, ex
           onMoveUp={() => moveStop(stop, -1)}
           onMoveDown={() => moveStop(stop, 1)}
           onSave={saveStop}
-          onCancelEdit={() => { setEditingId(null); setForm(emptyStopForm()); }}
+          onCancelEdit={() => { setEditingId(null); setForm(emptyStopForm()); dismissGeocode(); }}
+          onGeocode={editingId === stop.id ? () => geocodeStop(stop.id) : undefined}
+          geocoState={editingId === stop.id ? geocoState : undefined}
+          onApplyCandidate={applyCandidate}
+          onDismissGeocode={dismissGeocode}
         />
       ))}
 
@@ -488,7 +642,13 @@ function DayStopsEditor({ itineraryId, dayNumber, stops, onRefresh, getToken, ex
       {addingOpen && (
         <div style={{ ...card, padding: '12px 14px', marginTop: '6px' }}>
           <p style={{ fontSize: '12px', fontWeight: '600', color: '#1C1A16', marginBottom: '8px' }}>New stop — Day {dayNumber}</p>
-          <DayStopForm form={form} setForm={setForm} onSave={saveStop} onCancel={() => { setAddingOpen(false); setForm(emptyStopForm()); setErr(null); }} />
+          <DayStopForm form={form} setForm={setForm} onSave={saveStop}
+            onCancel={() => { setAddingOpen(false); setForm(emptyStopForm()); setErr(null); dismissGeocode(); }}
+            onGeocode={() => geocodeStop(null)}
+            geocoState={geocoState}
+            onApplyCandidate={applyCandidate}
+            onDismissGeocode={dismissGeocode}
+          />
         </div>
       )}
     </div>
@@ -2505,7 +2665,7 @@ export default function ItineraryCMSEditorPage() {
         {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} setPricingOptions={setPricingOptions} creators={allCreators} isAdmin={isAdmin} myCreatorId={myCreatorId} dayCount={(form.content?.days || []).length} currentId={savedId.current || (isNew ? null : id)} isNew={isNew} hasSavedId={!!savedId.current} slugOverride={slugOverride} onSlugOverride={handleSlugOverride} />}
         {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} onCoverImageChange={handleHeroCoverImage} />}
         {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} dayImages={dayImages} durationDays={form.durationDays} dayStops={dayStops} itineraryId={savedId.current || (isNew ? null : id)} onStopsRefresh={() => loadDayStops(savedId.current || (isNew ? null : id))} getToken={getToken} />}
-        {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} slug={form.slug || ''} onUploadRouteMap={handleUploadRouteMap} onGenerateRouteMap={handleGenerateRouteMap} />}
+        {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} slug={form.slug || ''} onUploadRouteMap={handleUploadRouteMap} onGenerateRouteMap={handleGenerateRouteMap} itineraryId={savedId.current || (isNew ? null : id)} getToken={getToken} />}
         {activeTab === 'images'   && (
           <ImagesTab
             assets={assets} loading={assetsLoading}
@@ -3964,7 +4124,7 @@ function DaysTab({ c, addDay, updateDay, deleteDay, moveDay, assets, onUpload, d
 
 // ── Sections ──────────────────────────────────────────────────────────────────
 // ── Route Map section — inside SectionsTab ────────────────────────────────────
-function RouteMapSection({ c, setContent, slug = '', onUpload, onGenerate }) {
+function RouteMapSection({ c, setContent, slug = '', onUpload, onGenerate, itineraryId, getToken }) {
   const [generating,        setGenerating]        = useState(false);
   const [genError,          setGenError]          = useState(null);
   const [uploading,         setUploading]         = useState(false);
@@ -3973,7 +4133,25 @@ function RouteMapSection({ c, setContent, slug = '', onUpload, onGenerate }) {
   const [showUrlInput,      setShowUrlInput]      = useState(false);
   const [selectedStopId,    setSelectedStopId]    = useState(null);
   const [activeDay,         setActiveDay]         = useState(null);
+  const [bulkGeoco,         setBulkGeoco]         = useState(null);
   const fileRef = useRef(null);
+
+  async function geocodeMissingStops() {
+    if (!itineraryId || !getToken) return;
+    setBulkGeoco({ status: 'running' });
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/itinerary-cms?action=geocode-missing-stops&id=${itineraryId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setBulkGeoco({ status: 'done', ...data });
+    } catch (err) {
+      setBulkGeoco({ status: 'error', error: err.message });
+    }
+  }
 
   const stops         = c('routeMap.stops') || [];
   const imageUrl      = (c('routeMap.imageUrl') || '').trim();
@@ -4049,17 +4227,51 @@ function RouteMapSection({ c, setContent, slug = '', onUpload, onGenerate }) {
 
   return (
     <div style={sectionCard}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
         <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16' }}>Route Map</p>
-        {hasStops && (
-          <button type="button" onClick={doGenerate} disabled={generating}
-            style={{ background: 'none', border: 'none', color: '#8C8070', fontSize: '12px', cursor: generating ? 'not-allowed' : 'pointer', padding: '0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            {generating
-              ? <><span style={{ width: '10px', height: '10px', borderRadius: '50%', border: '1.5px solid #E8E3DA', borderTopColor: '#1B6B65', animation: 'spin 0.6s linear infinite', display: 'inline-block' }} /> Regenerating…</>
-              : '↺ Regenerate from itinerary'}
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {itineraryId && getToken && (
+            <button type="button" onClick={geocodeMissingStops} disabled={bulkGeoco?.status === 'running'}
+              style={{ background: 'none', border: 'none', color: '#1B6B65', fontSize: '12px', cursor: bulkGeoco?.status === 'running' ? 'not-allowed' : 'pointer', padding: '0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {bulkGeoco?.status === 'running'
+                ? <><span style={{ width: '10px', height: '10px', borderRadius: '50%', border: '1.5px solid #E8E3DA', borderTopColor: '#1B6B65', animation: 'spin 0.6s linear infinite', display: 'inline-block' }} /> Finding coordinates…</>
+                : <><MapPin size={11} /> Find missing coordinates</>}
+            </button>
+          )}
+          {hasStops && (
+            <button type="button" onClick={doGenerate} disabled={generating}
+              style={{ background: 'none', border: 'none', color: '#8C8070', fontSize: '12px', cursor: generating ? 'not-allowed' : 'pointer', padding: '0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {generating
+                ? <><span style={{ width: '10px', height: '10px', borderRadius: '50%', border: '1.5px solid #E8E3DA', borderTopColor: '#1B6B65', animation: 'spin 0.6s linear infinite', display: 'inline-block' }} /> Regenerating…</>
+                : '↺ Regenerate from itinerary'}
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Bulk geocoding result */}
+      {bulkGeoco && bulkGeoco.status !== 'running' && (
+        <div style={{ padding: '10px 12px', background: bulkGeoco.status === 'done' ? '#EFF6F5' : '#FFF0F0', border: `1px solid ${bulkGeoco.status === 'done' ? '#B5D8D5' : '#F5C6C6'}`, borderRadius: '6px', marginBottom: '14px', fontSize: '12px' }}>
+          {bulkGeoco.status === 'done' && (
+            <div>
+              <p style={{ color: '#1B6B65', fontWeight: '600', marginBottom: '2px' }}>
+                {bulkGeoco.geocoded?.length ?? 0} coordinates found
+                {bulkGeoco.candidates?.length > 0 && ` · ${bulkGeoco.candidates.length} need review`}
+                {bulkGeoco.failed?.length > 0 && ` · ${bulkGeoco.failed.length} failed`}
+                {bulkGeoco.remaining > 0 && ` · ${bulkGeoco.remaining} remaining`}
+              </p>
+              {bulkGeoco.candidates?.length > 0 && <p style={{ color: '#8C8070' }}>Edit those stops to manually select coordinates.</p>}
+              {bulkGeoco.remaining > 0 && (
+                <button type="button" onClick={geocodeMissingStops} style={{ ...btnGhost, fontSize: '11px', marginTop: '6px' }}>Continue ({bulkGeoco.remaining} more)</button>
+              )}
+            </div>
+          )}
+          {bulkGeoco.status === 'error' && (
+            <p style={{ color: '#C0392B' }}>{bulkGeoco.error}</p>
+          )}
+          <button type="button" onClick={() => setBulkGeoco(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8C8070', fontSize: '11px', padding: 0, marginTop: '4px' }}>Dismiss</button>
+        </div>
+      )}
 
       {/* ── Legacy hardcoded map info (registry entry, no stops yet) ── */}
       {registryEntry && !hasStops && (
@@ -4384,7 +4596,7 @@ function RouteMapSection({ c, setContent, slug = '', onUpload, onGenerate }) {
   );
 }
 
-function SectionsTab({ c, setContent, slug = '', onUploadRouteMap, onGenerateRouteMap }) {
+function SectionsTab({ c, setContent, slug = '', onUploadRouteMap, onGenerateRouteMap, itineraryId, getToken }) {
   return (
     <div style={{ maxWidth: '720px' }}>
       <div style={sectionCard}>
@@ -4413,7 +4625,7 @@ function SectionsTab({ c, setContent, slug = '', onUploadRouteMap, onGenerateRou
         />
       </div>
 
-      <RouteMapSection c={c} setContent={setContent} slug={slug} onUpload={onUploadRouteMap} onGenerate={onGenerateRouteMap} />
+      <RouteMapSection c={c} setContent={setContent} slug={slug} onUpload={onUploadRouteMap} onGenerate={onGenerateRouteMap} itineraryId={itineraryId} getToken={getToken} />
 
       <div style={sectionCard}>
         <p style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '18px' }}>PDF Sections</p>
