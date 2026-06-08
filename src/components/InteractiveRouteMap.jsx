@@ -156,19 +156,21 @@ export default function InteractiveRouteMap({ stops = [], onDaySelect, isUnlocke
                 filter={tier === 1 ? 'url(#irm-node-shadow)' : undefined}
                 style={{ transition: 'r 0.3s ease' }}
               />
-              {/* City name label */}
-              <text
-                x={labelX} y={labelY}
-                textAnchor={labelAnchor} dominantBaseline="auto"
-                fontSize={fs} fontFamily="Georgia, serif"
-                fontWeight={tier === 1 ? '800' : '500'}
-                fill={isFuture ? '#9A9080' : tier === 1 ? '#131210' : '#1C1A16'}
-                style={{ paintOrder: 'stroke', stroke: '#F4F1E8', strokeWidth: '4', strokeLinejoin: 'round', pointerEvents: 'none' }}
-              >
-                {stop.name}
-              </text>
-              {/* Day label (unlocked only) */}
-              {isUnlocked && stop.dayNumber && (
+              {/* City name label — tier 1 always, tier 2 only when active or hovered */}
+              {(tier === 1 || isActive || hovered === i) && (
+                <text
+                  x={labelX} y={labelY}
+                  textAnchor={labelAnchor} dominantBaseline="auto"
+                  fontSize={fs} fontFamily="Georgia, serif"
+                  fontWeight={tier === 1 ? '800' : '500'}
+                  fill={isFuture ? '#9A9080' : tier === 1 ? '#131210' : '#1C1A16'}
+                  style={{ paintOrder: 'stroke', stroke: '#F4F1E8', strokeWidth: '4', strokeLinejoin: 'round', pointerEvents: 'none' }}
+                >
+                  {stop.name}
+                </text>
+              )}
+              {/* Day label (unlocked only, same visibility rule) */}
+              {isUnlocked && stop.dayNumber && (tier === 1 || isActive || hovered === i) && (
                 <text
                   x={labelX} y={labelY + fs * 0.9 + 1}
                   textAnchor={labelAnchor}

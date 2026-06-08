@@ -12,7 +12,7 @@ import { resolveAssetIdentity } from '../../lib/resolveAssetIdentity';
 import { resolveGalleryImages, resolveDayImages, resolveResearchImages } from '../../lib/resolveItineraryImages';
 import PlanModal from '../../components/admin/PlanModal.jsx';
 import { ROUTE_MAP_REGISTRY } from '../../lib/routeMapRegistry.js';
-import DynamicRouteMap from '../../components/DynamicRouteMap.jsx';
+import RouteMapEditorMap from '../../components/admin/RouteMapEditorMap.jsx';
 
 // ── Shared style tokens ───────────────────────────────────────────────────────
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
@@ -3971,6 +3971,8 @@ function RouteMapSection({ c, setContent, slug = '', onUpload, onGenerate }) {
   const [uploadError,       setUploadError]       = useState(null);
   const [showAdvanced,      setShowAdvanced]      = useState(false);
   const [showUrlInput,      setShowUrlInput]      = useState(false);
+  const [selectedStopId,    setSelectedStopId]    = useState(null);
+  const [activeDay,         setActiveDay]         = useState(null);
   const fileRef = useRef(null);
 
   const stops         = c('routeMap.stops') || [];
@@ -3988,7 +3990,7 @@ function RouteMapSection({ c, setContent, slug = '', onUpload, onGenerate }) {
     const next = stops.length + 1;
     setContent('routeMap.stops', [
       ...stops,
-      { id: `stop-${Date.now()}`, order: next, name: '', latitude: null, longitude: null, dayNumber: null, type: 'stop', source: 'manual', visible: true },
+      { id: `stop-${Date.now()}`, order: next, name: '', latitude: null, longitude: null, dayNumber: null, type: 'stop', source: 'manual', visible: true, isOptional: false },
     ]);
   }
   function updateStop(idx, patch) {
@@ -4113,21 +4115,36 @@ function RouteMapSection({ c, setContent, slug = '', onUpload, onGenerate }) {
             <p style={{ fontSize: '12px', color: '#C0392B', marginBottom: '10px' }}>{genError}</p>
           )}
 
-          {/* Preview map */}
-          {validStops.length >= 2 && (
-            <div style={{ marginBottom: '16px' }}>
-              <DynamicRouteMap stops={stops} />
-            </div>
-          )}
+          {/* Interactive Leaflet map */}
+          <div style={{ marginBottom: '16px' }}>
+            <RouteMapEditorMap
+              stops={stops}
+              selectedStopId={selectedStopId}
+              onSelectStop={id => setSelectedStopId(id)}
+              activeDay={activeDay}
+              onDayChange={d => { setActiveDay(d); setSelectedStopId(null); }}
+            />
+          </div>
           {validStops.length < 2 && (
             <div style={{ padding: '10px 14px', background: '#FFF8E1', border: '1px solid #F5D060', borderRadius: '6px', marginBottom: '12px' }}>
               <p style={{ fontSize: '12px', color: '#7A5C00' }}>
-                Add at least 2 stops with coordinates to preview the map.
+                Add at least 2 stops with coordinates to render the map.
               </p>
             </div>
           )}
 
           {/* Stop table */}
+          {activeDay != null && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <span style={{ fontSize: '11.5px', color: '#1B6B65', fontWeight: '600' }}>
+                Filtering: Day {activeDay} ({stops.filter(s => s.dayNumber === activeDay).length} stops)
+              </span>
+              <button type="button" onClick={() => setActiveDay(null)}
+                style={{ fontSize: '11px', color: '#8C8070', background: 'none', border: 'none', cursor: 'pointer', padding: '0', textDecoration: 'underline' }}>
+                Show all
+              </button>
+            </div>
+          )}
           <div style={{ overflowX: 'auto', marginBottom: '10px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
               <thead>
@@ -4138,82 +4155,114 @@ function RouteMapSection({ c, setContent, slug = '', onUpload, onGenerate }) {
                   <th style={{ ...tdStyle, color: '#8C8070', fontWeight: '600', textAlign: 'center', paddingBottom: '6px' }}>Lat</th>
                   <th style={{ ...tdStyle, color: '#8C8070', fontWeight: '600', textAlign: 'center', paddingBottom: '6px' }}>Lng</th>
                   <th style={{ ...tdStyle, color: '#8C8070', fontWeight: '600', textAlign: 'left', paddingBottom: '6px' }}>Type</th>
-                  <th style={{ ...tdStyle, color: '#8C8070', fontWeight: '600', textAlign: 'center', paddingBottom: '6px' }}>Vis</th>
-                  <th style={{ ...tdStyle, width: '56px' }} />
+                  <th style={{ ...tdStyle, color: '#8C8070', fontWeight: '600', textAlign: 'center', paddingBottom: '6px' }} title="Show on map">Map</th>
+                  <th style={{ ...tdStyle, color: '#8C8070', fontWeight: '600', textAlign: 'center', paddingBottom: '6px' }} title="Optional stop">Opt</th>
+                  <th style={{ ...tdStyle, width: '32px' }} />
                 </tr>
               </thead>
               <tbody>
-                {stops.map((stop, i) => (
-                  <tr key={stop.id || i} style={{ borderBottom: '1px solid #F4F0EA' }}>
-                    <td style={tdStyle}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        <button type="button" onClick={() => moveStop(i, -1)} disabled={i === 0}
-                          style={{ background: 'none', border: 'none', cursor: i === 0 ? 'default' : 'pointer', color: i === 0 ? '#D8D0BE' : '#8C8070', padding: '0', lineHeight: 1, fontSize: '10px' }}>▲</button>
-                        <span style={{ fontSize: '11px', color: '#8C8070', textAlign: 'center' }}>{i + 1}</span>
-                        <button type="button" onClick={() => moveStop(i, 1)} disabled={i === stops.length - 1}
-                          style={{ background: 'none', border: 'none', cursor: i === stops.length - 1 ? 'default' : 'pointer', color: i === stops.length - 1 ? '#D8D0BE' : '#8C8070', padding: '0', lineHeight: 1, fontSize: '10px' }}>▼</button>
-                      </div>
-                    </td>
-                    <td style={tdStyle}>
-                      <input
-                        value={stop.name || ''}
-                        style={nameInput}
-                        placeholder="Location name"
-                        onChange={e => updateStop(i, { name: e.target.value })}
-                      />
-                    </td>
-                    <td style={tdStyle}>
-                      <input
-                        type="number" min="1" max="99"
-                        value={stop.dayNumber ?? ''}
-                        style={numInput}
-                        placeholder="—"
-                        onChange={e => updateStop(i, { dayNumber: e.target.value ? parseInt(e.target.value, 10) : null })}
-                      />
-                    </td>
-                    <td style={tdStyle}>
-                      <input
-                        type="number" step="0.00001"
-                        value={stop.latitude ?? ''}
-                        style={coordInput}
-                        placeholder="lat"
-                        onChange={e => updateStop(i, { latitude: e.target.value ? parseFloat(e.target.value) : null })}
-                      />
-                    </td>
-                    <td style={tdStyle}>
-                      <input
-                        type="number" step="0.00001"
-                        value={stop.longitude ?? ''}
-                        style={coordInput}
-                        placeholder="lng"
-                        onChange={e => updateStop(i, { longitude: e.target.value ? parseFloat(e.target.value) : null })}
-                      />
-                    </td>
-                    <td style={tdStyle}>
-                      <select
-                        value={stop.type || (i === 0 || i === stops.length - 1 ? 'major' : 'stop')}
-                        onChange={e => updateStop(i, { type: e.target.value })}
-                        style={{ fontSize: '12px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #E8E3DA', color: '#1C1A16', background: 'white', cursor: 'pointer', minWidth: '90px' }}
-                      >
-                        <option value="major">Major stop</option>
-                        <option value="stop">Route stop</option>
-                      </select>
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      <input type="checkbox"
-                        checked={stop.visible !== false}
-                        onChange={e => updateStop(i, { visible: e.target.checked })}
-                        style={{ width: '14px', height: '14px', accentColor: '#1B6B65', cursor: 'pointer' }}
-                      />
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'right' }}>
-                      <button type="button" onClick={() => removeStop(i)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C0392B', padding: '2px 4px', borderRadius: '3px' }}>
-                        <X size={13} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {stops.map((stop, i) => {
+                  const isFiltered = activeDay != null && stop.dayNumber !== activeDay;
+                  if (isFiltered) return null;
+                  const isSelected = stop.id === selectedStopId;
+                  const missingCoords = stop.latitude == null || stop.longitude == null;
+                  return (
+                    <tr key={stop.id || i}
+                      onClick={() => setSelectedStopId(stop.id === selectedStopId ? null : stop.id)}
+                      style={{
+                        borderBottom: '1px solid #F4F0EA', cursor: 'pointer',
+                        background: isSelected ? '#EFF6F5' : undefined,
+                        outline: isSelected ? '1px solid #1B6B65' : undefined,
+                      }}>
+                      <td style={tdStyle}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <button type="button" onClick={e => { e.stopPropagation(); moveStop(i, -1); }} disabled={i === 0 || activeDay != null}
+                            style={{ background: 'none', border: 'none', cursor: (i === 0 || activeDay != null) ? 'default' : 'pointer', color: (i === 0 || activeDay != null) ? '#D8D0BE' : '#8C8070', padding: '0', lineHeight: 1, fontSize: '10px' }}>▲</button>
+                          <span style={{ fontSize: '11px', color: '#8C8070', textAlign: 'center' }}>{i + 1}</span>
+                          <button type="button" onClick={e => { e.stopPropagation(); moveStop(i, 1); }} disabled={i === stops.length - 1 || activeDay != null}
+                            style={{ background: 'none', border: 'none', cursor: (i === stops.length - 1 || activeDay != null) ? 'default' : 'pointer', color: (i === stops.length - 1 || activeDay != null) ? '#D8D0BE' : '#8C8070', padding: '0', lineHeight: 1, fontSize: '10px' }}>▼</button>
+                        </div>
+                      </td>
+                      <td style={tdStyle}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          {missingCoords && (
+                            <span title="Missing coordinates" style={{ color: '#E09B40', fontSize: '11px', flexShrink: 0 }}>⚠</span>
+                          )}
+                          <input
+                            value={stop.name || ''}
+                            style={nameInput}
+                            placeholder="Location name"
+                            onClick={e => e.stopPropagation()}
+                            onChange={e => updateStop(i, { name: e.target.value })}
+                          />
+                        </div>
+                      </td>
+                      <td style={tdStyle}>
+                        <input
+                          type="number" min="1" max="99"
+                          value={stop.dayNumber ?? ''}
+                          style={numInput}
+                          placeholder="—"
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => updateStop(i, { dayNumber: e.target.value ? parseInt(e.target.value, 10) : null })}
+                        />
+                      </td>
+                      <td style={tdStyle}>
+                        <input
+                          type="number" step="0.00001"
+                          value={stop.latitude ?? ''}
+                          style={coordInput}
+                          placeholder="lat"
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => updateStop(i, { latitude: e.target.value ? parseFloat(e.target.value) : null })}
+                        />
+                      </td>
+                      <td style={tdStyle}>
+                        <input
+                          type="number" step="0.00001"
+                          value={stop.longitude ?? ''}
+                          style={coordInput}
+                          placeholder="lng"
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => updateStop(i, { longitude: e.target.value ? parseFloat(e.target.value) : null })}
+                        />
+                      </td>
+                      <td style={tdStyle}>
+                        <select
+                          value={stop.type || (i === 0 || i === stops.length - 1 ? 'major' : 'stop')}
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => updateStop(i, { type: e.target.value })}
+                          style={{ fontSize: '12px', padding: '3px 4px', borderRadius: '4px', border: '1px solid #E8E3DA', color: '#1C1A16', background: 'white', cursor: 'pointer', minWidth: '90px' }}
+                        >
+                          <option value="major">Major stop</option>
+                          <option value="stop">Route stop</option>
+                        </select>
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        <input type="checkbox"
+                          checked={stop.visible !== false}
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => updateStop(i, { visible: e.target.checked })}
+                          style={{ width: '14px', height: '14px', accentColor: '#1B6B65', cursor: 'pointer' }}
+                        />
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        <input type="checkbox"
+                          checked={stop.isOptional === true}
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => updateStop(i, { isOptional: e.target.checked })}
+                          style={{ width: '14px', height: '14px', accentColor: '#C9A96E', cursor: 'pointer' }}
+                        />
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>
+                        <button type="button" onClick={e => { e.stopPropagation(); removeStop(i); }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C0392B', padding: '2px 4px', borderRadius: '3px' }}>
+                          <X size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
