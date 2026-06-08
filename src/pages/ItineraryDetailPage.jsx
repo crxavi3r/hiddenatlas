@@ -258,10 +258,15 @@ function UnlockedSidebar({ itinerary, onDownload }) {
   );
 }
 
+const STOP_TYPE_ICONS = {
+  winery: '🍷', restaurant: '🍽', hotel: '🏨', beach: '🏖', museum: '🏛',
+  viewpoint: '👁', transfer: '🚌', experience: '✨', walk: '🚶', free_time: '☕',
+};
+
 // ─────────────────────────────────────────────────────────────
 // Day entry — renders locked or unlocked
 // ─────────────────────────────────────────────────────────────
-function DayEntry({ day, index, isLocked, isLast }) {
+function DayEntry({ day, index, isLocked, isLast, dayStops = [] }) {
   return (
     <div id={`day-${day.day}`} style={{ display: 'flex', gap: '24px', position: 'relative' }}>
       {/* Timeline dot */}
@@ -300,7 +305,32 @@ function DayEntry({ day, index, isLocked, isLast }) {
           spacing="14px"
         />
 
-        {day.bullets?.length > 0 && (
+        {/* Structured day stops take priority over legacy bullets */}
+        {dayStops.length > 0 ? (
+          <div style={{ marginBottom: '16px' }}>
+            <p style={{ fontSize: '10.5px', fontWeight: '700', letterSpacing: '1.2px', textTransform: 'uppercase', color: '#8C8070', marginBottom: '10px' }}>
+              Places today
+            </p>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {dayStops.map((stop, si) => (
+                <li key={si} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: '13px', flexShrink: 0, marginTop: '1px', opacity: 0.7 }}>
+                    {STOP_TYPE_ICONS[stop.type] || '•'}
+                  </span>
+                  <span style={{ fontSize: '14px', color: '#4A433A', lineHeight: '1.6' }}>
+                    <strong style={{ color: '#1C1A16', fontWeight: '600' }}>{stop.title}</strong>
+                    {stop.description && (
+                      <span style={{ color: '#6B6156' }}> — {stop.description}</span>
+                    )}
+                    {stop.suggestedTime && (
+                      <span style={{ fontSize: '12px', color: '#B5AA99', marginLeft: '6px' }}>{stop.suggestedTime}</span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : day.bullets?.length > 0 && (
           <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {day.bullets.map((bullet, bi) => (
               <li key={bi} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
@@ -446,6 +476,7 @@ export default function ItineraryDetailPage() {
   const [dbAssets, setDbAssets]                       = useState([]);
   const [dbDays, setDbDays]                           = useState(null);
   const [dbCoverImage, setDbCoverImage]               = useState(null);
+  const [dbDayStops, setDbDayStops]                   = useState([]);
 
   // ── DB fetch for CMS-only itineraries (not in static bundle) ────────────────
   useEffect(() => {
@@ -551,6 +582,7 @@ export default function ItineraryDetailPage() {
         if (data?.days?.length) setDbDays(data.days);
         if (data?.coverImage)   setDbCoverImage(data.coverImage);
         if (data?.routeMap)     setDbRouteMap(data.routeMap);
+        if (data?.dayStops?.length) setDbDayStops(data.dayStops);
         if (process.env.NODE_ENV === 'development') {
           console.log('[ItineraryDetail] content fetch —', slug, {
             showRouteMapOnSite: data?.routeMap?.showOnSite,
@@ -1359,20 +1391,33 @@ export default function ItineraryDetailPage() {
             </section>
 
             {/* CMS-controlled Route Map — after highlights, before gallery.
-                CMS stops always take priority over any registered legacy component.
-                Shown when showOnSite === true (or admin preview). Never renders empty. */}
+                Day stops take priority over CMS route map stops, which take priority
+                over any registered legacy component.
+                Shown when showOnSite === true (or there are day stops with coords, or admin). */}
             {(() => {
               // Section 1 (above) handles always-on itineraries — skip here to avoid duplicates.
               if (ROUTE_MAP_COMPONENTS[itinerary.id]) return null;
 
               const DbRouteMapComponent = DB_ROUTE_MAP_COMPONENTS[itinerary.id];
-              const validStops = (itinerary.routeMapStops || [])
+              // Prefer structured day stops from the DB model
+              const dayStopsValid = dbDayStops
+                .filter(s => s.showOnMap !== false && s.latitude != null && s.longitude != null)
+                .sort((a, b) => (a.dayNumber - b.dayNumber) || (a.sortOrder - b.sortOrder))
+                .map((s, i) => ({
+                  id: s.id, name: s.title, dayNumber: s.dayNumber, day: s.dayNumber,
+                  latitude: s.latitude, longitude: s.longitude,
+                  isMajorStop: s.isMajorStop,
+                  type: s.isMajorStop ? 'major' : (i === 0 || i === dbDayStops.length - 1 ? 'major' : 'stop'),
+                  visible: true, order: i + 1,
+                }));
+              const hasDayStops = dayStopsValid.length >= 2;
+              const validStops = hasDayStops ? dayStopsValid : (itinerary.routeMapStops || [])
                 .filter(s => s.visible !== false && s.latitude != null && s.longitude != null)
                 .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
               const hasValidStops = validStops.length >= 2;
               const hasContent = hasValidStops || DbRouteMapComponent || itinerary.routeMapImageUrl;
               if (!hasContent) return null;
-              if (!itinerary.showRouteMapOnSite && !isAdmin) return null;
+              if (!hasDayStops && !itinerary.showRouteMapOnSite && !isAdmin) return null;
 
               const scrollToDay = dayNum => {
                 const el = document.getElementById(`day-${dayNum}`);
@@ -1462,6 +1507,7 @@ export default function ItineraryDetailPage() {
                   // Premium + no access: blur from day 3 onwards (show 2 as preview)
                   // Premium + access: all unlocked
                   const isLocked = isPremium && !hasAccess && i >= 2;
+                  const thisDayStops = dbDayStops.filter(s => s.dayNumber === day.day);
                   return (
                     <DayEntry
                       key={day.day}
@@ -1469,6 +1515,7 @@ export default function ItineraryDetailPage() {
                       index={i}
                       isLocked={isLocked}
                       isLast={i === resolvedDays.length - 1}
+                      dayStops={isLocked ? [] : thisDayStops}
                     />
                   );
                 })}

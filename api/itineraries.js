@@ -186,7 +186,8 @@ export default async function handler(req, res) {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
       const { rows } = await pool.query(
-        `SELECT (content::jsonb)->'days'     AS days,
+        `SELECT id,
+                (content::jsonb)->'days'     AS days,
                 (content::jsonb)->'routeMap' AS "routeMap",
                 "coverImage"
          FROM   "Itinerary"
@@ -196,11 +197,29 @@ export default async function handler(req, res) {
         [slug]
       );
       if (!rows.length) return res.status(404).json({ error: 'not found' });
+
+      // Fetch structured day stops (new model — gracefully empty if table doesn't exist yet)
+      let dayStops = [];
+      try {
+        const { rows: stopRows } = await pool.query(
+          `SELECT "dayNumber", title, description, type,
+                  "locationName", "suggestedTime", "durationMinutes",
+                  "sortOrder", "isOptional", "isMajorStop", "showOnMap",
+                  "bookingRecommended", "bookingUrl"
+           FROM "ItineraryDayStop"
+           WHERE "itineraryId" = $1
+           ORDER BY "dayNumber" ASC, "sortOrder" ASC`,
+          [rows[0].id]
+        );
+        dayStops = stopRows;
+      } catch { /* table not yet migrated */ }
+
       res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=30');
       return res.json({
         days:       rows[0].days     ?? [],
         routeMap:   rows[0].routeMap ?? null,
         coverImage: rows[0].coverImage ?? null,
+        dayStops,
       });
     } catch (err) {
       console.error('[itineraries/content]', err.message);

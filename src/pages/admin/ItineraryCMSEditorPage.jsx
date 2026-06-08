@@ -190,8 +190,313 @@ function CheckboxGroup({ label, options, value = [], onChange }) {
   );
 }
 
+// ── Day Stops ─────────────────────────────────────────────────────────────────
+
+const STOP_TYPE_LABELS = {
+  attraction: 'Attraction', restaurant: 'Restaurant', hotel: 'Hotel',
+  winery: 'Winery', viewpoint: 'Viewpoint', beach: 'Beach',
+  museum: 'Museum', transfer: 'Transfer', experience: 'Experience',
+  walk: 'Walk', free_time: 'Free Time', other: 'Other',
+};
+
+function emptyStopForm() {
+  return {
+    title: '', type: 'attraction', description: '',
+    locationName: '', address: '', latitude: '', longitude: '',
+    suggestedTime: '', durationMinutes: '', isOptional: false,
+    isMajorStop: false, showOnMap: true, bookingRecommended: false,
+    bookingUrl: '', notes: '',
+  };
+}
+
+function DayStopForm({ form, setForm, onSave, onCancel }) {
+  return (
+    <div style={{ marginTop: '10px', padding: '12px', background: '#FAFAF8', borderRadius: '6px', borderTop: '1px solid #E8E3DA' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+        <div>
+          <p style={labelStyle}>Name *</p>
+          <input value={form.title} style={inputStyle} placeholder="Stop name"
+            onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+        </div>
+        <div>
+          <p style={labelStyle}>Type</p>
+          <select value={form.type} style={inputStyle}
+            onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
+            {Object.entries(STOP_TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{ marginBottom: '10px' }}>
+        <p style={labelStyle}>Short description</p>
+        <input value={form.description} style={inputStyle} placeholder="Brief description of the visit"
+          onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+        <div>
+          <p style={labelStyle}>Location name</p>
+          <input value={form.locationName} style={inputStyle} placeholder="Venue or area name"
+            onChange={e => setForm(f => ({ ...f, locationName: e.target.value }))} />
+        </div>
+        <div>
+          <p style={labelStyle}>Suggested time</p>
+          <input value={form.suggestedTime} style={inputStyle} placeholder="e.g. 09:00 or Morning"
+            onChange={e => setForm(f => ({ ...f, suggestedTime: e.target.value }))} />
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+        <div>
+          <p style={labelStyle}>Latitude</p>
+          <input value={form.latitude} style={inputStyle} type="number" step="any" placeholder="e.g. 40.4168"
+            onChange={e => setForm(f => ({ ...f, latitude: e.target.value }))} />
+        </div>
+        <div>
+          <p style={labelStyle}>Longitude</p>
+          <input value={form.longitude} style={inputStyle} type="number" step="any" placeholder="e.g. -3.7038"
+            onChange={e => setForm(f => ({ ...f, longitude: e.target.value }))} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: '16px', marginBottom: '10px', flexWrap: 'wrap' }}>
+        {[
+          ['showOnMap', 'Show on map'],
+          ['isMajorStop', 'Major stop'],
+          ['isOptional', 'Optional'],
+          ['bookingRecommended', 'Booking recommended'],
+        ].map(([key, label]) => (
+          <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12.5px', cursor: 'pointer', color: '#4A433A', userSelect: 'none' }}>
+            <input type="checkbox" checked={!!form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.checked }))} />
+            {label}
+          </label>
+        ))}
+      </div>
+      {form.bookingRecommended && (
+        <div style={{ marginBottom: '10px' }}>
+          <p style={labelStyle}>Booking URL</p>
+          <input value={form.bookingUrl} style={inputStyle} placeholder="https://…"
+            onChange={e => setForm(f => ({ ...f, bookingUrl: e.target.value }))} />
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+        <button onClick={onSave} style={{ ...btnPrimary, fontSize: '12px', padding: '7px 14px' }}>
+          <Check size={12} /> Save stop
+        </button>
+        <button onClick={onCancel} style={{ ...btnSecondary, fontSize: '12px', padding: '7px 14px' }}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DayStopCard({ stop, idx, total, onEdit, onDelete, onMoveUp, onMoveDown, isEditing, form, setForm, onSave, onCancelEdit }) {
+  const missingCoords = stop.showOnMap && (!stop.latitude || !stop.longitude);
+  return (
+    <div style={{ ...card, marginBottom: '8px', padding: '10px 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', flexShrink: 0, marginTop: '2px' }}>
+          <button onClick={onMoveUp} disabled={idx === 0} style={{ ...iconBtn, opacity: idx === 0 ? 0.3 : 1, padding: '2px' }}>
+            <ChevronUp size={11} />
+          </button>
+          <button onClick={onMoveDown} disabled={idx === total - 1} style={{ ...iconBtn, opacity: idx === total - 1 ? 0.3 : 1, padding: '2px' }}>
+            <ChevronDown size={11} />
+          </button>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#1C1A16' }}>{stop.title}</span>
+            <span style={{ fontSize: '10.5px', color: '#8C8070', background: '#F4F1EC', padding: '2px 7px', borderRadius: '10px' }}>
+              {STOP_TYPE_LABELS[stop.type] || stop.type}
+            </span>
+            {stop.isOptional && <span style={{ fontSize: '10px', color: '#B5AA99' }}>optional</span>}
+            {stop.isMajorStop && <span style={{ fontSize: '10px', color: '#1B6B65', fontWeight: '600' }}>major</span>}
+            {stop.showOnMap && (stop.latitude && stop.longitude)
+              ? <span style={{ fontSize: '10px', color: '#1B6B65', display: 'flex', alignItems: 'center', gap: '2px' }}><MapPin size={10} />on map</span>
+              : missingCoords
+                ? <span style={{ fontSize: '10px', color: '#C0392B', display: 'flex', alignItems: 'center', gap: '2px' }}><MapPin size={10} />no coords</span>
+                : null
+            }
+          </div>
+          {stop.description && <p style={{ fontSize: '12px', color: '#6B6156', margin: '3px 0 0', lineHeight: '1.5' }}>{stop.description}</p>}
+          {stop.suggestedTime && <p style={{ fontSize: '11px', color: '#B5AA99', margin: '2px 0 0' }}>{stop.suggestedTime}</p>}
+        </div>
+        <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
+          <button onClick={onEdit} style={{ ...iconBtn, color: isEditing ? '#1B6B65' : '#8C8070' }}>
+            <Edit2 size={13} />
+          </button>
+          <button onClick={onDelete} style={{ ...iconBtn, color: '#C0392B' }}>
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </div>
+      {isEditing && (
+        <DayStopForm form={form} setForm={setForm} onSave={onSave} onCancel={onCancelEdit} />
+      )}
+    </div>
+  );
+}
+
+function DayStopsEditor({ itineraryId, dayNumber, stops, onRefresh, getToken, existingBullets }) {
+  const [addingOpen,  setAddingOpen]  = useState(false);
+  const [editingId,   setEditingId]   = useState(null);
+  const [form,        setForm]        = useState(emptyStopForm);
+  const [generating,  setGenerating]  = useState(false);
+  const [rebuilding,  setRebuilding]  = useState(false);
+  const [rebuildMsg,  setRebuildMsg]  = useState(null);
+  const [err,         setErr]         = useState(null);
+
+  async function callApi(action, body = {}, method = 'POST', extraQs = '') {
+    const token = await getToken();
+    const res = await fetch(`/api/itinerary-cms?action=${action}&id=${itineraryId}${extraQs}`, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: method === 'POST' ? JSON.stringify(body) : undefined,
+    });
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+    return json;
+  }
+
+  async function saveStop() {
+    if (!form.title.trim()) { setErr('Stop name is required'); return; }
+    setErr(null);
+    try {
+      await callApi('upsert-day-stop', {
+        dayNumber,
+        ...(editingId ? { stopId: editingId } : {}),
+        ...form,
+        latitude:        form.latitude        ? Number(form.latitude)        : null,
+        longitude:       form.longitude       ? Number(form.longitude)       : null,
+        durationMinutes: form.durationMinutes ? Number(form.durationMinutes) : null,
+        sortOrder:       editingId ? (stops.find(s => s.id === editingId)?.sortOrder ?? stops.length) : stops.length,
+      });
+      onRefresh();
+      setAddingOpen(false);
+      setEditingId(null);
+      setForm(emptyStopForm());
+    } catch (e) { setErr(e.message); }
+  }
+
+  async function deleteStop(stop) {
+    if (!window.confirm(`Delete "${stop.title}"?`)) return;
+    try {
+      await callApi('delete-day-stop', {}, 'POST', `&stopId=${stop.id}`);
+      onRefresh();
+    } catch (e) { setErr(e.message); }
+  }
+
+  async function moveStop(stop, dir) {
+    const idx   = stops.indexOf(stop);
+    const other = stops[idx + dir];
+    if (!other) return;
+    try {
+      await callApi('reorder-day-stops', {
+        order: [
+          { id: stop.id,  sortOrder: other.sortOrder },
+          { id: other.id, sortOrder: stop.sortOrder  },
+        ],
+      });
+      onRefresh();
+    } catch (e) { setErr(e.message); }
+  }
+
+  async function generateFromBullets() {
+    setGenerating(true); setErr(null);
+    try {
+      await callApi('generate-stops-from-bullets', { dayNumber });
+      onRefresh();
+    } catch (e) { setErr(e.message); }
+    finally { setGenerating(false); }
+  }
+
+  async function rebuildRouteMap() {
+    setRebuilding(true); setRebuildMsg(null); setErr(null);
+    try {
+      const res = await callApi('regenerate-route-from-stops', {});
+      setRebuildMsg(`Route map rebuilt with ${res.count} stop${res.count !== 1 ? 's' : ''}.`);
+    } catch (e) { setErr(e.message); }
+    finally { setRebuilding(false); }
+  }
+
+  function startEdit(stop) {
+    setEditingId(stop.id);
+    setAddingOpen(false);
+    setForm({
+      title: stop.title || '', type: stop.type || 'attraction',
+      description: stop.description || '', locationName: stop.locationName || '',
+      address: stop.address || '', latitude: stop.latitude ?? '',
+      longitude: stop.longitude ?? '', suggestedTime: stop.suggestedTime || '',
+      durationMinutes: stop.durationMinutes ?? '', isOptional: stop.isOptional || false,
+      isMajorStop: stop.isMajorStop || false, showOnMap: stop.showOnMap !== false,
+      bookingRecommended: stop.bookingRecommended || false,
+      bookingUrl: stop.bookingUrl || '', notes: stop.notes || '',
+    });
+  }
+
+  const hasBullets = existingBullets?.length > 0;
+
+  return (
+    <div>
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+        <p style={{ fontSize: '11.5px', color: '#8C8070' }}>
+          {stops.length > 0 ? `${stops.length} stop${stops.length !== 1 ? 's' : ''}` : 'No stops yet'}
+        </p>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {hasBullets && stops.length === 0 && (
+            <button onClick={generateFromBullets} disabled={generating} style={{ ...btnGhost, fontSize: '11px' }}>
+              {generating ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <Wand2 size={11} />}
+              Generate from bullets
+            </button>
+          )}
+          {stops.length > 0 && (
+            <button onClick={rebuildRouteMap} disabled={rebuilding} style={{ ...btnGhost, fontSize: '11px' }}>
+              {rebuilding ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <MapPin size={11} />}
+              Update route map
+            </button>
+          )}
+        </div>
+      </div>
+
+      {err && <p style={{ fontSize: '12px', color: '#C0392B', marginBottom: '8px' }}>{err}</p>}
+      {rebuildMsg && <p style={{ fontSize: '12px', color: '#1B6B65', marginBottom: '8px' }}>{rebuildMsg}</p>}
+
+      {/* Stop list */}
+      {stops.map((stop, i) => (
+        <DayStopCard
+          key={stop.id}
+          stop={stop}
+          idx={i}
+          total={stops.length}
+          isEditing={editingId === stop.id}
+          form={form}
+          setForm={setForm}
+          onEdit={() => editingId === stop.id ? (setEditingId(null), setForm(emptyStopForm())) : startEdit(stop)}
+          onDelete={() => deleteStop(stop)}
+          onMoveUp={() => moveStop(stop, -1)}
+          onMoveDown={() => moveStop(stop, 1)}
+          onSave={saveStop}
+          onCancelEdit={() => { setEditingId(null); setForm(emptyStopForm()); }}
+        />
+      ))}
+
+      {/* Add new stop */}
+      {!addingOpen && !editingId && (
+        <button onClick={() => { setAddingOpen(true); setForm(emptyStopForm()); setErr(null); }} style={btnGhost}>
+          <Plus size={12} /> Add stop
+        </button>
+      )}
+
+      {addingOpen && (
+        <div style={{ ...card, padding: '12px 14px', marginTop: '6px' }}>
+          <p style={{ fontSize: '12px', fontWeight: '600', color: '#1C1A16', marginBottom: '8px' }}>New stop — Day {dayNumber}</p>
+          <DayStopForm form={form} setForm={setForm} onSave={saveStop} onCancel={() => { setAddingOpen(false); setForm(emptyStopForm()); setErr(null); }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Day card ──────────────────────────────────────────────────────────────────
-function DayCard({ day, index, total, onChange, onDelete, onMove, assets, resolvedDayImage, onUpload }) {
+function DayCard({ day, index, total, onChange, onDelete, onMove, assets, resolvedDayImage, onUpload, dayStops, itineraryId, onStopsRefresh, getToken }) {
   const [open, setOpen] = useState(index === 0);
 
   function upd(field, val) {
@@ -201,14 +506,6 @@ function DayCard({ day, index, total, onChange, onDelete, onMove, assets, resolv
   // resolvedDayImage comes from the shared dayImages map computed in the parent.
   // It already applies priority: DB asset > day.img > FS asset.
   // assets is still passed for the image library browser inside ImagePicker.
-
-  function updBullet(i, val) {
-    const b = [...(day.bullets || [])];
-    b[i] = val;
-    upd('bullets', b);
-  }
-  function addBullet() { upd('bullets', [...(day.bullets || []), '']); }
-  function removeBullet(i) { upd('bullets', (day.bullets || []).filter((_, j) => j !== i)); }
 
   return (
     <div style={{ ...card, marginBottom: '10px', overflow: 'hidden' }}>
@@ -267,21 +564,19 @@ function DayCard({ day, index, total, onChange, onDelete, onMove, assets, resolv
               placeholder="Day narrative…" onChange={e => upd('desc', e.target.value)} />
           </Field>
 
-          <Field label="Highlights / Bullets">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
-              {(day.bullets || []).map((b, i) => (
-                <div key={i} style={{ display: 'flex', gap: '6px' }}>
-                  <input value={b} style={{ ...inputStyle, flex: 1 }}
-                    onChange={e => updBullet(i, e.target.value)} />
-                  <button onClick={() => removeBullet(i)} style={{ ...iconBtn, color: '#C0392B' }}>
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button onClick={addBullet} style={btnGhost}>
-              <Plus size={12} /> Add bullet
-            </button>
+          <Field label="Day Stops / Places to Visit">
+            {itineraryId && onStopsRefresh && getToken ? (
+              <DayStopsEditor
+                itineraryId={itineraryId}
+                dayNumber={day.day}
+                stops={dayStops || []}
+                onRefresh={onStopsRefresh}
+                getToken={getToken}
+                existingBullets={day.bullets}
+              />
+            ) : (
+              <p style={{ fontSize: '12px', color: '#B5AA99' }}>Save the itinerary first to manage day stops.</p>
+            )}
           </Field>
 
           <Field label="Insider Tip">
@@ -711,6 +1006,22 @@ export default function ItineraryCMSEditorPage() {
   const [trimConfirm,    setTrimConfirm]    = useState(null);  // { targetCount, daysToRemove }
   const [slugOverride,   setSlugOverride]   = useState(false); // admin: unlocked slug editing
 
+  // Day stops state (structured per-day stops, separate from JSON content)
+  const [dayStops, setDayStops] = useState([]);
+
+  const loadDayStops = useCallback(async (itId) => {
+    if (!itId) return;
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/itinerary-cms?action=day-stops&id=${itId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (!json.error) setDayStops(json.stops || []);
+    } catch { /* graceful — table may not exist yet */ }
+  }, [getToken]);
+
   const savedId       = useRef(null);  // set after first create
   const slugRef       = useRef('');   // set after load, used by loadAssets for FS scan
   const pdfInFlight   = useRef(false); // guard against concurrent PDF generations
@@ -766,6 +1077,8 @@ export default function ItineraryCMSEditorPage() {
       });
       savedId.current = it.id;
       slugRef.current = it.slug || '';
+      // Load structured day stops (new model — no-ops gracefully if table not migrated yet)
+      loadDayStops(it.id);
       // Fire asset loading with the freshly-fetched identity — does NOT wait on form
       // state (which won't be visible in the closure until the next render).
       loadAssets({
@@ -779,7 +1092,7 @@ export default function ItineraryCMSEditorPage() {
       setLoadError(e.message || 'Failed to load itinerary.');
     }
     finally { setLoading(false); }
-  }, [id, isNew, getToken, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id, isNew, getToken, navigate, loadDayStops]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
@@ -2191,7 +2504,7 @@ export default function ItineraryCMSEditorPage() {
         {/* ── Tab panels ── */}
         {activeTab === 'basics'   && <BasicsTab   form={form} setForm={setForm} onTitleChange={handleTitleChange} pricingOptions={pricingOptions} setPricingOptions={setPricingOptions} creators={allCreators} isAdmin={isAdmin} myCreatorId={myCreatorId} dayCount={(form.content?.days || []).length} currentId={savedId.current || (isNew ? null : id)} isNew={isNew} hasSavedId={!!savedId.current} slugOverride={slugOverride} onSlugOverride={handleSlugOverride} />}
         {activeTab === 'hero'     && <HeroTab     form={form} c={c} setContent={setContent} assets={assets} onUpload={uploadAssetFromPicker} onCoverImageChange={handleHeroCoverImage} />}
-        {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} dayImages={dayImages} durationDays={form.durationDays} />}
+        {activeTab === 'days'     && <DaysTab     c={c} addDay={addDay} updateDay={updateDay} deleteDay={deleteDay} moveDay={moveDay} assets={assets} onUpload={uploadAssetFromPicker} dayImages={dayImages} durationDays={form.durationDays} dayStops={dayStops} itineraryId={savedId.current || (isNew ? null : id)} onStopsRefresh={() => loadDayStops(savedId.current || (isNew ? null : id))} getToken={getToken} />}
         {activeTab === 'sections' && <SectionsTab c={c} setContent={setContent} slug={form.slug || ''} onUploadRouteMap={handleUploadRouteMap} onGenerateRouteMap={handleGenerateRouteMap} />}
         {activeTab === 'images'   && (
           <ImagesTab
@@ -3590,7 +3903,7 @@ function HeroTab({ form, c, setContent, assets, onUpload, onCoverImageChange }) 
 }
 
 // ── Days ──────────────────────────────────────────────────────────────────────
-function DaysTab({ c, addDay, updateDay, deleteDay, moveDay, assets, onUpload, dayImages, durationDays }) {
+function DaysTab({ c, addDay, updateDay, deleteDay, moveDay, assets, onUpload, dayImages, durationDays, dayStops, itineraryId, onStopsRefresh, getToken }) {
   const days     = c('days') || [];
   const hasDays  = days.length > 0;
   const route    = computeRoute(days);
@@ -3639,6 +3952,10 @@ function DaysTab({ c, addDay, updateDay, deleteDay, moveDay, assets, onUpload, d
           assets={assets}
           resolvedDayImage={dayImages?.[day.day] || ''}
           onUpload={onUpload}
+          dayStops={(dayStops || []).filter(s => s.dayNumber === day.day)}
+          itineraryId={itineraryId}
+          onStopsRefresh={onStopsRefresh}
+          getToken={getToken}
         />
       ))}
     </div>

@@ -20,6 +20,7 @@ import AmericanWest8DaysRouteMap from '../components/AmericanWest8DaysRouteMap';
 import TuscanyRouteMap from '../components/TuscanyRouteMap';
 import CroatiaRouteMap from '../components/CroatiaRouteMap';
 import NorthernEnglandRouteMap from '../components/NorthernEnglandRouteMap';
+import DynamicRouteMap from '../components/DynamicRouteMap';
 
 const ROUTE_MAP_COMPONENTS = {
   'japan-grand-cultural-journey':             JapanRouteMap,
@@ -990,12 +991,17 @@ function DayBookingItem({ booking, onEdit }) {
 // ─────────────────────────────────────────────
 // DaySection — one full day in the timeline
 // ─────────────────────────────────────────────
-function DaySection({ tripDay, itinDay, dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditBooking }) {
+const TRIP_STOP_ICONS = {
+  winery: '🍷', restaurant: '🍽', hotel: '🏨', beach: '🏖', museum: '🏛',
+  viewpoint: '👁', transfer: '🚌', experience: '✨', walk: '🚶', free_time: '☕',
+};
+
+function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditBooking }) {
   const [expanded, setExpanded] = useState(true);
 
   const title   = tripDay.titleOverride || itinDay?.title || tripDay.title || `Day ${tripDay.dayNumber}`;
   const desc    = tripDay.descriptionOverride || itinDay?.description || tripDay.description || '';
-  const bullets = itinDay?.bullets || [];
+  const bullets = itinDayStops.length > 0 ? [] : (itinDay?.bullets || []); // suppress bullets if structured stops exist
   const tip     = itinDay?.tip || '';
   const img     = getDayImage(tripDay.dayNumber, assets) || itinDay?.img || null;
 
@@ -1032,7 +1038,28 @@ function DaySection({ tripDay, itinDay, dayItems, dayNotes, dayBookings, isLast,
 
         {expanded && (
           <>
-            {desc && <p style={{ fontSize: '15px', color: MUTED, lineHeight: '1.75', marginBottom: bullets.length ? '14px' : '0' }}>{desc}</p>}
+            {desc && <p style={{ fontSize: '15px', color: MUTED, lineHeight: '1.75', marginBottom: (itinDayStops.length || bullets.length) ? '14px' : '0' }}>{desc}</p>}
+
+            {/* Structured itinerary stops (original template content) */}
+            {itinDayStops.length > 0 && (
+              <div style={{ marginBottom: '14px' }}>
+                <p style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: MUTED, marginBottom: '8px' }}>Places today</p>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                  {itinDayStops.map((stop, i) => (
+                    <li key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                      <span style={{ fontSize: '13px', flexShrink: 0, marginTop: '1px', opacity: 0.65 }}>
+                        {TRIP_STOP_ICONS[stop.type] || '•'}
+                      </span>
+                      <span style={{ fontSize: '14px', color: '#4A433A', lineHeight: '1.6' }}>
+                        <strong style={{ color: CHAR, fontWeight: '600' }}>{stop.title}</strong>
+                        {stop.description && <span style={{ color: MUTED }}> — {stop.description}</span>}
+                        {stop.suggestedTime && <span style={{ fontSize: '12px', color: '#B5AA99', marginLeft: '6px' }}>{stop.suggestedTime}</span>}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {bullets.length > 0 && (
               <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 14px', display: 'flex', flexDirection: 'column', gap: '7px' }}>
@@ -1291,7 +1318,7 @@ function OverviewTab({ workspace, onEditDetails }) {
 // DaysTab
 // ─────────────────────────────────────────────
 function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditBooking }) {
-  const { itinerary, tripDays, tripItems, tripNotes, tripBookings, assets } = workspace;
+  const { itinerary, tripDays, tripItems, tripNotes, tripBookings, assets, itineraryDayStops = [] } = workspace;
   const content = parseContent(itinerary?.content);
   const itinDays = (content?.days || []).map(normalizeDay);
 
@@ -1317,11 +1344,15 @@ function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onDeleteItem, 
             b.tripDayId === tripDay.id ||
             (!b.tripDayId && b.dayNumber === tripDay.dayNumber)
           );
+          // Original itinerary stops for this day (read-only template content)
+          const itinDayStops = itineraryDayStops.filter(s => s.dayNumber === tripDay.dayNumber)
+            .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
           return (
             <DaySection
               key={tripDay.id}
               tripDay={tripDay}
               itinDay={itinDay}
+              itinDayStops={itinDayStops}
               dayItems={dayItems}
               dayNotes={dayNotes}
               dayBookings={dayBookings}
@@ -1344,10 +1375,10 @@ function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onDeleteItem, 
 // MapTab
 // ─────────────────────────────────────────────
 function MapTab({ workspace }) {
-  const { itinerary, tripItems, tripBookings } = workspace;
+  const { itinerary, tripItems, tripBookings, itineraryDayStops = [] } = workspace;
   const slug = itinerary?.slug;
   const content = parseContent(itinerary?.content);
-  const stops = content?.routeMap?.stops || [];
+  const cmsStops = content?.routeMap?.stops || [];
   const mapImageUrl = content?.routeMap?.imageUrl || null;
   const mapAlt = content?.routeMap?.alt || `${itinerary?.title || 'Route'} map`;
 
@@ -1356,20 +1387,40 @@ function MapTab({ workspace }) {
     ...tripItems.filter(i => i.locationName || i.type === 'place'),
     ...tripBookings.filter(b => b.locationName),
   ];
+
+  // Prefer structured day stops from the DB model over CMS route map stops
+  const dayStopsValid = itineraryDayStops
+    .filter(s => s.showOnMap !== false && s.latitude != null && s.longitude != null)
+    .sort((a, b) => (a.dayNumber - b.dayNumber) || (a.sortOrder - b.sortOrder))
+    .map((s, i) => ({
+      id: s.id, name: s.title, dayNumber: s.dayNumber, day: s.dayNumber,
+      description: s.description, latitude: s.latitude, longitude: s.longitude,
+      isMajorStop: s.isMajorStop, type: s.isMajorStop ? 'major' : 'stop',
+      visible: true, order: i + 1,
+    }));
+
+  const stops = dayStopsValid.length >= 2 ? dayStopsValid : cmsStops;
   const hasVisual = RouteMapComponent || mapImageUrl;
 
   return (
     <div style={{ maxWidth: '960px', margin: '0 auto', padding: 'clamp(32px, 5vw, 56px) 24px' }}>
 
-      {/* Static route map component (highest fidelity) */}
-      {RouteMapComponent && (
+      {/* Dynamic route map from structured day stops (highest priority) */}
+      {dayStopsValid.length >= 2 && (
+        <section style={{ marginBottom: '40px' }}>
+          <DynamicRouteMap stops={dayStopsValid} />
+        </section>
+      )}
+
+      {/* Static route map component (legacy hardcoded maps) */}
+      {!dayStopsValid.length && RouteMapComponent && (
         <section style={{ marginBottom: '40px' }}>
           <RouteMapComponent />
         </section>
       )}
 
       {/* Fallback: CMS-uploaded map image */}
-      {!RouteMapComponent && mapImageUrl && (
+      {!dayStopsValid.length && !RouteMapComponent && mapImageUrl && (
         <section style={{ marginBottom: '40px' }}>
           <img src={mapImageUrl} alt={mapAlt} style={{ width: '100%', borderRadius: '12px', maxHeight: '520px', objectFit: 'cover' }} />
           {content?.routeMap?.caption && (

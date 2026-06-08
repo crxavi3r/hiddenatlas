@@ -290,18 +290,34 @@ export default async function handler(req, res) {
       );
 
       let assets = [];
+      let itineraryDayStops = [];
       if (itinerary?.id) {
-        const { rows } = await pool.query(
+        const { rows: assetRows } = await pool.query(
           `SELECT id, "itineraryId", "assetType", url, alt, caption, "sortOrder", source, active, "createdAt"
            FROM "ItineraryAsset"
            WHERE "itineraryId" = $1 AND active = true
            ORDER BY "sortOrder" ASC, "createdAt" ASC`,
           [itinerary.id]
         );
-        assets = rows;
+        assets = assetRows;
+
+        // Original itinerary day stops (template content — read-only for users)
+        try {
+          const { rows: stopRows } = await pool.query(
+            `SELECT id, "dayNumber", title, description, type,
+                    "locationName", "suggestedTime", "durationMinutes",
+                    "sortOrder", "isOptional", "isMajorStop", "showOnMap",
+                    "bookingRecommended", "bookingUrl"
+             FROM "ItineraryDayStop"
+             WHERE "itineraryId" = $1
+             ORDER BY "dayNumber" ASC, "sortOrder" ASC`,
+            [itinerary.id]
+          );
+          itineraryDayStops = stopRows;
+        } catch { /* table not yet migrated */ }
       }
 
-      return res.status(200).json({ trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, assets });
+      return res.status(200).json({ trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, assets, itineraryDayStops });
     }
 
     // ── GET /api/trips?id= — single trip (basic) ───────────────────────────

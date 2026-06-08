@@ -4,8 +4,9 @@
  * Single resolver for route map data — used by both web and PDF renderers.
  *
  * Priority:
- *   1. Normalized CMS stops (itinerary.routeMapStops with valid coordinates)
- *   2. None — callers fall back to legacy hardcoded components if applicable
+ *   1. ItineraryDayStop records (structured DB stops with showOnMap=true + coordinates)
+ *   2. Normalized CMS stops (itinerary.routeMapStops with valid coordinates)
+ *   3. None — callers fall back to legacy hardcoded components if applicable
  *
  * Accepts both internal type values: 'major'/'stop' and 'major_stop'/'route_stop'.
  */
@@ -20,9 +21,10 @@ function normalizeType(type, i, n) {
  * Resolve the canonical route map for an itinerary.
  *
  * @param {object} itinerary  Requires: id, title, routeMapStops?
+ * @param {Array}  [dayStops] Optional ItineraryDayStop records from the DB
  * @returns {{
  *   enabled: boolean,
- *   source: 'normalized' | 'none',
+ *   source: 'day_stops' | 'normalized' | 'none',
  *   title: string,
  *   locations: Array<{
  *     id?: string, name: string, day?: number,
@@ -31,8 +33,38 @@ function normalizeType(type, i, n) {
  *   }>
  * }}
  */
-export function resolveItineraryRouteMap(itinerary) {
+export function resolveItineraryRouteMap(itinerary, dayStops) {
   const id = itinerary.id || itinerary.slug || '';
+
+  // Priority 1: structured DB day stops with showOnMap + coordinates
+  if (Array.isArray(dayStops) && dayStops.length > 0) {
+    const valid = dayStops
+      .filter(s => s.showOnMap !== false && s.latitude != null && s.longitude != null)
+      .sort((a, b) => (a.dayNumber - b.dayNumber) || ((a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
+
+    if (valid.length >= 2) {
+      const locations = valid.map((s, i) => ({
+        id:        s.id,
+        name:      s.title,
+        day:       s.dayNumber,
+        latitude:  s.latitude,
+        longitude: s.longitude,
+        type:      s.isMajorStop ? 'major' : normalizeType(null, i, valid.length),
+        visible:   true,
+        order:     i + 1,
+      }));
+
+      console.log('[resolveRouteMap]', id, {
+        source: 'day_stops',
+        stops: locations.length,
+        days: [...new Set(locations.map(l => l.day))].length,
+      });
+
+      return { enabled: true, source: 'day_stops', title: itinerary.title || '', locations };
+    }
+  }
+
+  // Priority 2: normalized CMS stops from content.routeMap.stops
   const allStops = itinerary.routeMapStops || [];
 
   const valid = allStops

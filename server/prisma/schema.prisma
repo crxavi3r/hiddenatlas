@@ -109,11 +109,48 @@ model Itinerary {
   customRequests    CustomRequest[]
   instagramLogs     InstagramPublishLog[]
   trips             Trip[]
+  dayStops          ItineraryDayStop[]
 
   @@index([status])
   @@index([accessType])
   @@index([updatedAt])
   @@index([creatorId])
+}
+
+// ─────────────────────────────────────────────
+// ItineraryDayStop  (structured per-day stops)
+// ─────────────────────────────────────────────
+model ItineraryDayStop {
+  id                   String   @id @default(uuid())
+  itineraryId          String
+  dayNumber            Int
+  title                String
+  description          String?
+  type                 String   @default("attraction")
+  locationName         String?
+  address              String?
+  latitude             Float?
+  longitude            Float?
+  suggestedTime        String?
+  durationMinutes      Int?
+  sortOrder            Int      @default(0)
+  isOptional           Boolean  @default(false)
+  isMajorStop          Boolean  @default(false)
+  showOnMap            Boolean  @default(true)
+  bookingRecommended   Boolean  @default(false)
+  bookingUrl           String?
+  notes                String?
+  metadata             Json     @default("{}")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @default(now())
+
+  itinerary Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+
+  @@index([itineraryId])
+  @@index([itineraryId, dayNumber])
+  @@index([itineraryId, dayNumber, sortOrder])
+  @@index([showOnMap])
+  @@index([type])
 }
 
 // ─────────────────────────────────────────────

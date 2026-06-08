@@ -26,6 +26,12 @@
 // POST /api/itinerary-cms?action=import-csv-preview         — parse CSV, return preview JSON (no DB write)
 // POST /api/itinerary-cms?action=import-text-preview        — normalise user-pasted article text via AI (no fetch, no DB write)
 // POST /api/itinerary-cms?action=import-confirm             — create draft itinerary from preview JSON
+// GET  /api/itinerary-cms?action=day-stops&id=:id                      — list all ItineraryDayStop rows for an itinerary
+// POST /api/itinerary-cms?action=upsert-day-stop&id=:id                — create or update a day stop (stopId in body = update)
+// POST /api/itinerary-cms?action=delete-day-stop&id=:id&stopId=:stopId — delete a day stop
+// POST /api/itinerary-cms?action=reorder-day-stops&id=:id              — bulk-update sortOrder { order: [{id, sortOrder}] }
+// POST /api/itinerary-cms?action=generate-stops-from-bullets&id=:id    — AI-parse day bullets into structured stops
+// POST /api/itinerary-cms?action=regenerate-route-from-stops&id=:id    — rebuild content.routeMap.stops from DB day stops
 
 import pg                         from 'pg';
 import { resolveUserCtx }         from './_lib/resolveUserCtx.js';
@@ -145,6 +151,7 @@ export default async function handler(req, res) {
       if (action === 'migration-status')  { adminOnly(); return res.json(await handleMigrationStatus(pool)); }
       if (action === 'upload-pdf-token')  { await assertOwnership(pool, id, ctx); return res.json(await handleUploadPDFToken(pool, id)); }
       if (action === 'import-csv-template') return res.json(handleImportCsvTemplate());
+      if (action === 'day-stops')         { await assertOwnership(pool, id, ctx); return res.json(await handleListDayStops(pool, id)); }
       return res.status(400).json({ error: 'Unknown GET action' });
     }
 
@@ -180,6 +187,11 @@ export default async function handler(req, res) {
       if (action === 'import-csv-preview')  return res.json(await handleImportCsvPreview(body));
       if (action === 'import-text-preview') return res.json(await handleImportTextPreview(body));
       if (action === 'import-confirm')      return res.json(await handleImportConfirm(pool, body, ctx));
+      if (action === 'upsert-day-stop')          { await assertOwnership(pool, id, ctx); return res.json(await handleUpsertDayStop(pool, id, body)); }
+      if (action === 'delete-day-stop')          { await assertOwnership(pool, id, ctx); return res.json(await handleDeleteDayStop(pool, id, req.query.stopId)); }
+      if (action === 'reorder-day-stops')        { await assertOwnership(pool, id, ctx); return res.json(await handleReorderDayStops(pool, id, body)); }
+      if (action === 'generate-stops-from-bullets') { await assertOwnership(pool, id, ctx); return res.json(await handleGenerateStopsFromBullets(pool, id, body)); }
+      if (action === 'regenerate-route-from-stops') { await assertOwnership(pool, id, ctx); return res.json(await handleRegenerateRouteFromStops(pool, id)); }
       return res.status(400).json({ error: 'Unknown POST action' });
     }
   } catch (err) {
@@ -3013,6 +3025,246 @@ async function handleImportConfirm(pool, body, ctx) {
   console.log(`[import-confirm] creating draft: "${createBody.title}" slug="${slug}"`);
   return handleCreate(pool, createBody, ctx);
 }
+
+// ── Day Stop CRUD ─────────────────────────────────────────────────────────────
+
+const DAY_STOP_TYPES = [
+  'attraction', 'restaurant', 'hotel', 'winery', 'viewpoint', 'beach',
+  'museum', 'transfer', 'experience', 'walk', 'free_time', 'other',
+];
+
+async function handleListDayStops(pool, itineraryId) {
+  if (!itineraryId) throw Object.assign(new Error('id is required'), { status: 400 });
+  const { rows } = await pool.query(
+    `SELECT id, "itineraryId", "dayNumber", title, description, type,
+            "locationName", address, latitude, longitude,
+            "suggestedTime", "durationMinutes", "sortOrder",
+            "isOptional", "isMajorStop", "showOnMap",
+            "bookingRecommended", "bookingUrl", notes, metadata,
+            "createdAt", "updatedAt"
+     FROM "ItineraryDayStop"
+     WHERE "itineraryId" = $1
+     ORDER BY "dayNumber" ASC, "sortOrder" ASC, "createdAt" ASC`,
+    [itineraryId]
+  );
+  return { stops: rows };
+}
+
+async function handleUpsertDayStop(pool, itineraryId, body) {
+  if (!itineraryId) throw Object.assign(new Error('id is required'), { status: 400 });
+  const {
+    stopId,
+    dayNumber, title, description, type = 'attraction',
+    locationName, address, latitude, longitude,
+    suggestedTime, durationMinutes, sortOrder = 0,
+    isOptional = false, isMajorStop = false, showOnMap = true,
+    bookingRecommended = false, bookingUrl, notes, metadata = {},
+  } = body;
+
+  if (!title?.trim()) throw Object.assign(new Error('title is required'), { status: 400 });
+  if (!dayNumber)     throw Object.assign(new Error('dayNumber is required'), { status: 400 });
+  const stopType = DAY_STOP_TYPES.includes(type) ? type : 'attraction';
+
+  if (stopId) {
+    // Update existing stop
+    const { rows } = await pool.query(
+      `UPDATE "ItineraryDayStop"
+       SET title = $1, description = $2, type = $3,
+           "locationName" = $4, address = $5, latitude = $6, longitude = $7,
+           "suggestedTime" = $8, "durationMinutes" = $9, "sortOrder" = $10,
+           "isOptional" = $11, "isMajorStop" = $12, "showOnMap" = $13,
+           "bookingRecommended" = $14, "bookingUrl" = $15, notes = $16,
+           metadata = $17, "updatedAt" = NOW()
+       WHERE id = $18 AND "itineraryId" = $19
+       RETURNING *`,
+      [
+        title.trim(), description || null, stopType,
+        locationName || null, address || null,
+        latitude != null ? Number(latitude) : null,
+        longitude != null ? Number(longitude) : null,
+        suggestedTime || null,
+        durationMinutes != null ? Number(durationMinutes) : null,
+        Number(sortOrder),
+        Boolean(isOptional), Boolean(isMajorStop), Boolean(showOnMap),
+        Boolean(bookingRecommended), bookingUrl || null, notes || null,
+        metadata,
+        stopId, itineraryId,
+      ]
+    );
+    if (!rows.length) throw Object.assign(new Error('Stop not found'), { status: 404 });
+    return { stop: rows[0] };
+  }
+
+  // Create new stop
+  const { rows } = await pool.query(
+    `INSERT INTO "ItineraryDayStop"
+       ("itineraryId", "dayNumber", title, description, type,
+        "locationName", address, latitude, longitude,
+        "suggestedTime", "durationMinutes", "sortOrder",
+        "isOptional", "isMajorStop", "showOnMap",
+        "bookingRecommended", "bookingUrl", notes, metadata)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+     RETURNING *`,
+    [
+      itineraryId, Number(dayNumber),
+      title.trim(), description || null, stopType,
+      locationName || null, address || null,
+      latitude != null ? Number(latitude) : null,
+      longitude != null ? Number(longitude) : null,
+      suggestedTime || null,
+      durationMinutes != null ? Number(durationMinutes) : null,
+      Number(sortOrder),
+      Boolean(isOptional), Boolean(isMajorStop), Boolean(showOnMap),
+      Boolean(bookingRecommended), bookingUrl || null, notes || null,
+      metadata,
+    ]
+  );
+  return { stop: rows[0] };
+}
+
+async function handleDeleteDayStop(pool, itineraryId, stopId) {
+  if (!stopId) throw Object.assign(new Error('stopId is required'), { status: 400 });
+  await pool.query(
+    `DELETE FROM "ItineraryDayStop" WHERE id = $1 AND "itineraryId" = $2`,
+    [stopId, itineraryId]
+  );
+  return { ok: true };
+}
+
+async function handleReorderDayStops(pool, itineraryId, body) {
+  // body.order: [{ id, sortOrder }]
+  const items = body.order;
+  if (!Array.isArray(items) || !items.length) return { ok: true };
+
+  for (const { id, sortOrder } of items) {
+    if (!id) continue;
+    await pool.query(
+      `UPDATE "ItineraryDayStop" SET "sortOrder" = $1, "updatedAt" = NOW()
+       WHERE id = $2 AND "itineraryId" = $3`,
+      [Number(sortOrder), id, itineraryId]
+    );
+  }
+  return { ok: true };
+}
+
+// AI-assisted: parse existing bullets into structured stops
+async function handleGenerateStopsFromBullets(pool, id, body) {
+  if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
+  if (!process.env.ANTHROPIC_API_KEY) throw Object.assign(new Error('AI not configured'), { status: 503 });
+
+  const { rows } = await pool.query(
+    `SELECT content FROM "Itinerary" WHERE id = $1 LIMIT 1`, [id]
+  );
+  if (!rows.length) throw Object.assign(new Error('Itinerary not found'), { status: 404 });
+
+  const content = typeof rows[0].content === 'string' ? JSON.parse(rows[0].content) : rows[0].content;
+  const days = content?.days || [];
+  if (!days.length) return { stops: [] };
+
+  // Build a compact bullets list for AI
+  const bulletLines = days.flatMap(d =>
+    (d.bullets || []).map(b => `Day ${d.day}: ${b}`)
+  ).join('\n');
+
+  if (!bulletLines.trim()) return { stops: [] };
+
+  const { Anthropic } = await import('@anthropic-ai/sdk');
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  const msg = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 2000,
+    messages: [{
+      role: 'user',
+      content: `Convert these itinerary bullet points into structured day stops. For each bullet, output a JSON object.
+
+Bullets:
+${bulletLines}
+
+Return JSON array. Each item:
+{
+  "dayNumber": <number>,
+  "title": "<main name, before ':' if present>",
+  "description": "<detail after ':' if present, else null>",
+  "type": "<one of: attraction|restaurant|hotel|winery|viewpoint|beach|museum|transfer|experience|walk|free_time|other>",
+  "sortOrder": <0-based within day>
+}
+
+Return ONLY the JSON array, no commentary.`,
+    }],
+  });
+
+  let parsed;
+  try {
+    const text = msg.content[0]?.text || '[]';
+    const match = text.match(/\[[\s\S]*\]/);
+    parsed = JSON.parse(match ? match[0] : '[]');
+  } catch {
+    parsed = [];
+  }
+
+  // Insert all generated stops
+  const created = [];
+  for (const s of parsed) {
+    if (!s.title?.trim() || !s.dayNumber) continue;
+    const stopType = DAY_STOP_TYPES.includes(s.type) ? s.type : 'attraction';
+    const { rows: ins } = await pool.query(
+      `INSERT INTO "ItineraryDayStop"
+         ("itineraryId", "dayNumber", title, description, type, "sortOrder", "showOnMap")
+       VALUES ($1,$2,$3,$4,$5,$6,false)
+       RETURNING *`,
+      [id, Number(s.dayNumber), s.title.trim(), s.description || null, stopType, Number(s.sortOrder ?? 0)]
+    );
+    created.push(ins[0]);
+  }
+
+  console.log(`[generate-stops-from-bullets] itinerary=${id} | created ${created.length} stops`);
+  return { stops: created };
+}
+
+// Rebuild content.routeMap.stops from ItineraryDayStop rows that have coordinates
+async function handleRegenerateRouteFromStops(pool, id) {
+  if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
+
+  const { rows: stopRows } = await pool.query(
+    `SELECT "dayNumber", title, latitude, longitude, "isMajorStop", "sortOrder"
+     FROM "ItineraryDayStop"
+     WHERE "itineraryId" = $1 AND "showOnMap" = true
+       AND latitude IS NOT NULL AND longitude IS NOT NULL
+     ORDER BY "dayNumber" ASC, "sortOrder" ASC`,
+    [id]
+  );
+
+  if (!stopRows.length) return { ok: true, count: 0, message: 'No stops with coordinates found' };
+
+  const stops = stopRows.map((s, i) => ({
+    id:        `stop-${i}-${Date.now()}`,
+    name:      s.title,
+    dayNumber: s.dayNumber,
+    latitude:  s.latitude,
+    longitude: s.longitude,
+    type:      s.isMajorStop || i === 0 || i === stopRows.length - 1 ? 'major' : 'stop',
+    visible:   true,
+    order:     i + 1,
+  }));
+
+  // Patch content.routeMap.stops
+  const { rows } = await pool.query(`SELECT content FROM "Itinerary" WHERE id = $1`, [id]);
+  if (!rows.length) throw Object.assign(new Error('Itinerary not found'), { status: 404 });
+
+  const content = typeof rows[0].content === 'string' ? JSON.parse(rows[0].content) : rows[0].content;
+  content.routeMap = { ...(content.routeMap || {}), stops, showOnSite: true };
+
+  await pool.query(
+    `UPDATE "Itinerary" SET content = $1::jsonb, "updatedAt" = NOW() WHERE id = $2`,
+    [JSON.stringify(content), id]
+  );
+
+  console.log(`[regenerate-route-from-stops] itinerary=${id} | ${stops.length} stops written to routeMap`);
+  return { ok: true, count: stops.length, stops };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 
 function handleImportCsvTemplate() {
   const csv = [
