@@ -260,8 +260,8 @@ export default async function handler(req, res) {
 
       const { rows: tripItems } = await pool.query(
         `SELECT id, "tripId", "tripDayId", "dayNumber", type, title, description,
-                time, "startTime", "endTime", "durationMinutes", "locationName",
-                notes, "bookingReference", provider, url,
+                time, "startTime", "endTime", "durationMinutes", "locationName", address,
+                latitude, longitude, notes, "bookingReference", provider, url,
                 status, "isHidden", "isLocked", "sortOrder", metadata,
                 "createdAt", "updatedAt"
          FROM "TripItem"
@@ -281,7 +281,8 @@ export default async function handler(req, res) {
 
       const { rows: tripBookings } = await pool.query(
         `SELECT id, "tripId", "tripDayId", "tripItemId", "dayNumber", type, title,
-                date, time, "locationName", provider, "confirmationReference", notes, url,
+                date, time, "locationName", address, latitude, longitude,
+                provider, "confirmationReference", notes, url,
                 "attachmentUrl", status, "createdAt", "updatedAt"
          FROM "TripBooking"
          WHERE "tripId" = $1
@@ -305,9 +306,10 @@ export default async function handler(req, res) {
         try {
           const { rows: stopRows } = await pool.query(
             `SELECT id, "dayNumber", title, description, type,
-                    "locationName", "suggestedTime", "durationMinutes",
+                    "locationName", address, latitude, longitude,
+                    "suggestedTime", "durationMinutes",
                     "sortOrder", "isOptional", "isMajorStop", "showOnMap",
-                    "bookingRecommended", "bookingUrl"
+                    "bookingRecommended", "bookingUrl", metadata
              FROM "ItineraryDayStop"
              WHERE "itineraryId" = $1
              ORDER BY "dayNumber" ASC, "sortOrder" ASC`,
@@ -402,20 +404,26 @@ export default async function handler(req, res) {
       );
       if (!itemRows.length) return res.status(404).json({ error: 'Item not found' });
 
-      const { type, title, description, time, startTime, endTime, durationMinutes, locationName, notes, bookingReference, status, sortOrder } = req.body || {};
+      const { type, title, description, time, startTime, endTime, durationMinutes, locationName, notes, bookingReference, status, sortOrder, latitude, longitude } = req.body || {};
       await pool.query(
         `UPDATE "TripItem"
          SET type = COALESCE($1, type), title = COALESCE($2, title),
              description = $3, time = $4, "startTime" = $5, "endTime" = $6,
              "durationMinutes" = $7, "locationName" = $8, notes = $9,
              "bookingReference" = $10, status = COALESCE($11, status),
-             "sortOrder" = COALESCE($12, "sortOrder"), "updatedAt" = NOW()
+             "sortOrder" = COALESCE($12, "sortOrder"),
+             latitude = COALESCE($14::float8, latitude),
+             longitude = COALESCE($15::float8, longitude),
+             "updatedAt" = NOW()
          WHERE id = $13`,
         [type || null, title || null, description || null, time || null,
          startTime || null, endTime || null,
          durationMinutes != null ? Number(durationMinutes) : null,
          locationName || null, notes || null, bookingReference || null,
-         status || null, sortOrder != null ? Number(sortOrder) : null, itemId]
+         status || null, sortOrder != null ? Number(sortOrder) : null,
+         itemId,
+         latitude != null ? Number(latitude) : null,
+         longitude != null ? Number(longitude) : null]
       );
       return res.status(200).json({ ok: true });
     }
@@ -530,7 +538,7 @@ export default async function handler(req, res) {
       if (!bookingRows.length) return res.status(404).json({ error: 'Booking not found' });
 
       const tripId = bookingRows[0].tripId;
-      const { type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata } = req.body || {};
+      const { type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata, latitude, longitude } = req.body || {};
 
       const meta = (metadata && typeof metadata === 'object') ? metadata : {};
       const bookingType = type || bookingRows[0].currentType || 'other';
@@ -553,11 +561,15 @@ export default async function handler(req, res) {
              date = $3, time = $4, "locationName" = $5, provider = $6,
              "confirmationReference" = $7, notes = $8, url = $9,
              metadata = $10::jsonb, "dayNumber" = $11, "tripDayId" = $12,
+             latitude = COALESCE($14::float8, latitude),
+             longitude = COALESCE($15::float8, longitude),
              "updatedAt" = NOW()
          WHERE id = $13`,
         [type || null, title || null, date || null, time || null,
          locationName || null, provider || null, confirmationReference || null,
-         notes || null, url || null, JSON.stringify(meta), dayNumber, tripDayId, bookingId]
+         notes || null, url || null, JSON.stringify(meta), dayNumber, tripDayId, bookingId,
+         latitude != null ? Number(latitude) : null,
+         longitude != null ? Number(longitude) : null]
       );
       return res.status(200).json({ ok: true, dayNumber, tripDayId });
     }

@@ -20,7 +20,7 @@ import AmericanWest8DaysRouteMap from '../components/AmericanWest8DaysRouteMap';
 import TuscanyRouteMap from '../components/TuscanyRouteMap';
 import CroatiaRouteMap from '../components/CroatiaRouteMap';
 import NorthernEnglandRouteMap from '../components/NorthernEnglandRouteMap';
-import PublicRouteMap from '../components/PublicRouteMap';
+import TripRouteMap from '../components/TripRouteMap';
 
 const ROUTE_MAP_COMPONENTS = {
   'japan-grand-cultural-journey':             JapanRouteMap,
@@ -1369,113 +1369,71 @@ function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onDeleteItem, 
 // ─────────────────────────────────────────────
 // MapTab
 // ─────────────────────────────────────────────
-function MapTab({ workspace }) {
-  const { itinerary, tripItems, tripBookings, itineraryDayStops = [] } = workspace;
-  const slug = itinerary?.slug;
+function MapTab({ workspace, onRefresh }) {
+  const { itinerary, trip, tripItems = [], tripBookings = [], itineraryDayStops = [] } = workspace;
+  const slug    = itinerary?.slug;
   const content = parseContent(itinerary?.content);
-  const cmsStops = content?.routeMap?.stops || [];
-  const mapImageUrl = content?.routeMap?.imageUrl || null;
-  const mapAlt = content?.routeMap?.alt || `${itinerary?.title || 'Route'} map`;
 
-  const RouteMapComponent = ROUTE_MAP_COMPONENTS[slug] || null;
-  const userPlaces = [
-    ...tripItems.filter(i => i.locationName || i.type === 'place'),
-    ...tripBookings.filter(b => b.locationName),
-  ];
-
-  // Prefer structured day stops from the DB model over CMS route map stops
-  const dayStopsValid = itineraryDayStops
-    .filter(s => s.showOnMap !== false && s.latitude != null && s.longitude != null)
+  // Prefer structured ItineraryDayStop records (now include lat/lng from API)
+  const itinStops = itineraryDayStops
+    .filter(s => s.showOnMap !== false)
     .sort((a, b) => (a.dayNumber - b.dayNumber) || (a.sortOrder - b.sortOrder))
     .map((s, i) => ({
-      id: s.id, name: s.title, dayNumber: s.dayNumber, day: s.dayNumber,
-      description: s.description, latitude: s.latitude, longitude: s.longitude,
+      id: s.id, name: s.title, dayNumber: s.dayNumber,
+      latitude: s.latitude, longitude: s.longitude,
       isMajorStop: s.isMajorStop, type: s.isMajorStop ? 'major' : 'stop',
-      visible: true, order: i + 1,
+      description: s.description, order: i + 1, metadata: s.metadata || {},
     }));
 
-  const stops = dayStopsValid.length >= 2 ? dayStopsValid : cmsStops;
-  const hasVisual = RouteMapComponent || mapImageUrl;
+  // Legacy fallback: if no structured stops, show a static visual only
+  const RouteMapComponent = itinStops.length === 0 ? (ROUTE_MAP_COMPONENTS[slug] || null) : null;
+  const mapImageUrl = itinStops.length === 0 ? (content?.routeMap?.imageUrl || null) : null;
+
+  const hasLeafletData = itinStops.some(s => s.latitude != null) ||
+    tripItems.some(i => i.latitude != null) ||
+    tripBookings.some(b => b.latitude != null);
 
   return (
-    <div style={{ maxWidth: '960px', margin: '0 auto', padding: 'clamp(32px, 5vw, 56px) 24px' }}>
+    <div style={{ maxWidth: '960px', margin: '0 auto', padding: 'clamp(24px, 4vw, 48px) 24px', paddingBottom: '80px' }}>
 
-      {/* Dynamic route map from structured day stops (highest priority) */}
-      {dayStopsValid.length >= 2 && (
+      {/* Primary: Leaflet map with all data layers */}
+      {(itinStops.length > 0 || tripItems.length > 0 || tripBookings.length > 0) && (
         <section style={{ marginBottom: '40px' }}>
-          <PublicRouteMap stops={dayStopsValid} isUnlocked={true} height={380} />
+          <TripRouteMap
+            itineraryStops={itinStops}
+            tripItems={tripItems}
+            tripBookings={tripBookings}
+            trip={trip}
+            onRefresh={onRefresh}
+          />
         </section>
       )}
 
-      {/* Static route map component (legacy hardcoded maps) */}
-      {!dayStopsValid.length && RouteMapComponent && (
+      {/* Legacy fallback: hardcoded SVG map for old itineraries without structured stops */}
+      {itinStops.length === 0 && RouteMapComponent && (
         <section style={{ marginBottom: '40px' }}>
           <RouteMapComponent />
         </section>
       )}
 
-      {/* Fallback: CMS-uploaded map image */}
-      {!dayStopsValid.length && !RouteMapComponent && mapImageUrl && (
+      {/* Legacy fallback: CMS static map image */}
+      {itinStops.length === 0 && !RouteMapComponent && mapImageUrl && (
         <section style={{ marginBottom: '40px' }}>
-          <img src={mapImageUrl} alt={mapAlt} style={{ width: '100%', borderRadius: '12px', maxHeight: '520px', objectFit: 'cover' }} />
+          <img src={mapImageUrl} alt={content?.routeMap?.alt || `${itinerary?.title || 'Route'} map`}
+            style={{ width: '100%', borderRadius: '12px', maxHeight: '520px', objectFit: 'cover' }} />
           {content?.routeMap?.caption && (
             <p style={{ fontSize: '13px', color: MUTED, textAlign: 'center', marginTop: '10px' }}>{content.routeMap.caption}</p>
           )}
         </section>
       )}
 
-      {/* Route stop list — shown as companion when map exists, or primary fallback */}
-      {stops.length > 0 && (
-        <section style={{ marginBottom: '40px' }}>
-          <h3 style={{ fontFamily: SERIF, fontSize: '20px', fontWeight: '600', color: CHAR, marginBottom: '20px' }}>
-            Route stops
-          </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-            {stops.map((stop, i) => (
-              <div key={i} style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: TEAL, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '700' }}>
-                    {i + 1}
-                  </div>
-                  {i < stops.length - 1 && <div style={{ width: '1px', flex: 1, background: BORDER, minHeight: '20px' }} />}
-                </div>
-                <div style={{ paddingBottom: '20px' }}>
-                  <p style={{ fontSize: '14.5px', fontWeight: '600', color: CHAR }}>{stop.name || stop.location || `Stop ${i + 1}`}</p>
-                  {stop.dayNumber && <p style={{ fontSize: '12px', color: MUTED }}>Day {stop.dayNumber}</p>}
-                  {stop.description && <p style={{ fontSize: '13.5px', color: MUTED, lineHeight: '1.6', marginTop: '3px' }}>{stop.description}</p>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* User-added places and bookings with locations */}
-      {userPlaces.length > 0 && (
-        <section style={{ marginBottom: '40px' }}>
-          <h3 style={{ fontFamily: SERIF, fontSize: '20px', fontWeight: '600', color: CHAR, marginBottom: '16px' }}>
-            Your places
-          </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {userPlaces.map(place => (
-              <div key={place.id} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '12px 14px', background: 'white', border: `1px solid ${BORDER}`, borderRadius: '8px' }}>
-                <MapPin size={14} color={GOLD} style={{ flexShrink: 0, marginTop: '2px' }} />
-                <div>
-                  <p style={{ fontSize: '14px', fontWeight: '600', color: CHAR }}>{place.title}</p>
-                  {place.locationName && <p style={{ fontSize: '12.5px', color: MUTED }}>{place.locationName}</p>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {!hasVisual && stops.length === 0 && (
+      {/* Empty state */}
+      {itinStops.length === 0 && !RouteMapComponent && !mapImageUrl && tripItems.length === 0 && tripBookings.length === 0 && (
         <div style={{ textAlign: 'center', padding: '60px 24px' }}>
           <Map size={40} color={BORDER} style={{ marginBottom: '16px' }} />
-          <p style={{ fontSize: '15px', color: MUTED }}>No route map available for this itinerary.</p>
+          <p style={{ fontSize: '15px', color: MUTED }}>No route map available for this itinerary yet.</p>
           <p style={{ fontSize: '13px', color: '#B5A09A', marginTop: '6px' }}>
-            Add places with locations in Day by Day and they will appear here.
+            Coordinates will appear here once the itinerary stops are geocoded.
           </p>
         </div>
       )}
@@ -2140,7 +2098,9 @@ export default function TripDetailPage() {
           />
         )}
 
-        {activeTab === 'map' && <MapTab workspace={workspace} />}
+        {activeTab === 'map' && <MapTab workspace={workspace} onRefresh={() => {
+          api.get(`/api/trips?id=${id}&action=workspace`).then(r => r.json()).then(d => { if (d) setWorkspace(d); });
+        }} />}
 
         {activeTab === 'notes' && (
           <NotesTab
