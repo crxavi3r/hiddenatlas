@@ -414,7 +414,7 @@ function normalizeDbItinerary(row) {
     parentId:           row.parentId     || null,
     isCollection:       row.isCollection ?? false,
     variant:            row.variant      || null,
-    showRouteMapOnSite: content?.routeMap?.showOnSite === true,
+    showRouteMapOnSite: content?.routeMap?.showOnSite !== false,
     routeMapImageUrl:   content?.routeMap?.imageUrl   || null,
     routeMapAlt:        content?.routeMap?.alt         || null,
     routeMapCaption:    content?.routeMap?.caption     || null,
@@ -453,7 +453,7 @@ export default function ItineraryDetailPage() {
   const itinerary = staticItinerary
     ? {
         ...staticItinerary,
-        showRouteMapOnSite: dbRouteMap?.showOnSite === true,
+        showRouteMapOnSite: dbRouteMap?.showOnSite !== false,
         routeMapStops:      dbRouteMap?.stops       || [],
         routeMapImageUrl:   dbRouteMap?.imageUrl    || null,
         routeMapAlt:        dbRouteMap?.alt         || null,
@@ -1416,7 +1416,7 @@ export default function ItineraryDetailPage() {
               const hasValidStops = validStops.length >= 2;
               const hasContent = hasValidStops || DbRouteMapComponent || itinerary.routeMapImageUrl;
               if (!hasContent) return null;
-              if (!hasDayStops && !itinerary.showRouteMapOnSite && !isAdmin) return null;
+              if (!itinerary.showRouteMapOnSite && !isAdmin) return null;
 
               const scrollToDay = dayNum => {
                 const el = document.getElementById(`day-${dayNum}`);

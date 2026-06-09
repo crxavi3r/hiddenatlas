@@ -1772,7 +1772,7 @@ const EMPTY_CONTENT = {
   sections:  { hotels: [], practicalNotes: '', faq: [] },
   pdfConfig: { showRouteMap: true, showHotels: true },
   seo:       { metaTitle: '', metaDescription: '' },
-  routeMap:  { showOnSite: false, stops: [], imageUrl: '', alt: '', caption: '' },
+  routeMap:  { stops: [], imageUrl: '', alt: '', caption: '' },
 };
 
 // ── PDF image resolution ──────────────────────────────────────────────────────
