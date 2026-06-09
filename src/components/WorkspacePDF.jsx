@@ -185,6 +185,7 @@ function WorkspaceDynamicSvgMap({ stops = [] }) {
 
   const layout = buildRouteMapLayout(numberedMain, WS_MAP_W, WS_MAP_H, {
     pad: 0.12, margin: 20, tiers: WS_PDF_TIER_NUM, prioritizeMajor: true,
+    preserveAspect: true,
   });
   if (!layout) return null;
   const { routePathD, labeledStops } = layout;

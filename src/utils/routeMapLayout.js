@@ -81,6 +81,20 @@ export function detectOutlierStops(stops) {
   return { mainStops: allMain, remoteStops: [...forceRemote, ...autoRemote] };
 }
 
+/**
+ * Parse a coordinate value that may be a number, a dot-decimal string, or a
+ * comma-decimal string (e.g. "41,7401" → 41.7401).
+ * Returns null for any value that cannot be parsed to a finite number.
+ */
+export function parseCoordValue(v) {
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  if (typeof v === 'string') {
+    const n = parseFloat(v.replace(',', '.'));
+    return isFinite(n) ? n : null;
+  }
+  return null;
+}
+
 export const ROUTE_MAP_TIER = {
   1: { r: 7,   rActive: 10,  sw: 2.0, fill: '#F2E4CB', edge: '#C9A96E', halo: '#C9A96E', lFs: 11.5, dFs: 8   },
   2: { r: 4.5, rActive: 6.5, sw: 1.5, fill: '#C8D9D5', edge: '#2A5248', halo: '#2A5248', lFs: 9.5,  dFs: 7.5 },
@@ -105,20 +119,32 @@ export function resolveStopTier(stop, i, n) {
  * @param {boolean}  [opts.prioritizeMajor=false] Place tier-1 labels before tier-2 (PDF mode)
  * @returns {{ proj, pts, fractions, routePathD, labeledStops } | null}
  */
+/**
+ * @param {object}  [opts.preserveAspect=false]  When true, uses a Mercator-corrected
+ *   uniform scale so relative geographic distances are accurate (recommended for PDF).
+ *   When false (default), stretches to fill the canvas (legacy web SVG behaviour).
+ */
 export function buildRouteMapLayout(stops, canvasW, canvasH, {
   pad = 0.25,
   margin = 0,
   tiers = null,
   prioritizeMajor = false,
+  preserveAspect = false,
 } = {}) {
-  const n = stops.length;
+  // ── Normalise coordinates ──────────────────────────────────────────────────
+  // Handles strings, comma-as-decimal-separator ("41,7401"), and NaN values.
+  const normStops = stops
+    .map(s => ({ ...s, latitude: parseCoordValue(s.latitude), longitude: parseCoordValue(s.longitude) }))
+    .filter(s => s.latitude != null && s.longitude != null);
+
+  const n = normStops.length;
   if (n < 2) return null;
 
   const TIER = tiers || ROUTE_MAP_TIER;
 
-  // ── Projection ───────────────────────────────────────────────────────────
-  const lats    = stops.map(s => s.latitude);
-  const lngs    = stops.map(s => s.longitude);
+  // ── Bounding box ──────────────────────────────────────────────────────────
+  const lats    = normStops.map(s => s.latitude);
+  const lngs    = normStops.map(s => s.longitude);
   const latMin  = Math.min(...lats),  latMax  = Math.max(...lats);
   const lngMin  = Math.min(...lngs),  lngMax  = Math.max(...lngs);
   const latSpan = latMax - latMin || 1;
@@ -132,12 +158,39 @@ export function buildRouteMapLayout(stops, canvasW, canvasH, {
   const drawW = canvasW - margin * 2;
   const drawH = canvasH - margin * 2;
 
-  const proj = (lon, lat) => [
-    margin + ((lon - X0) / (X1 - X0)) * drawW,
-    margin + (1 - (lat - Y0) / (Y1 - Y0)) * drawH,
-  ];
+  // ── Projection ────────────────────────────────────────────────────────────
+  let proj;
+  if (preserveAspect) {
+    // Mercator-corrected equirectangular: 1 degree longitude ≈ cos(lat) degrees latitude
+    // Uses a uniform pixel-per-degree scale so relative distances are geographically accurate.
+    const midLat = (Y0 + Y1) / 2;
+    const cosLat = Math.max(Math.cos(midLat * Math.PI / 180), 0.01); // guard against ±90°
 
-  const pts = stops.map(s => proj(s.longitude, s.latitude));
+    const geoW = (X1 - X0) * cosLat;   // east-west span in latitude-degree equivalents
+    const geoH  = Y1 - Y0;              // north-south span in degrees
+
+    const scale = Math.min(
+      geoW > 0 ? drawW / geoW : Infinity,
+      geoH > 0 ? drawH / geoH : Infinity,
+    );
+
+    // Centre the used region inside the canvas
+    const ox = (drawW - geoW * scale) / 2;
+    const oy = (drawH - geoH * scale) / 2;
+
+    proj = (lon, lat) => [
+      margin + ox + (lon - X0) * cosLat * scale,
+      margin + oy + (Y1 - lat) * scale,
+    ];
+  } else {
+    // Legacy: stretch to fill canvas (no aspect preservation)
+    proj = (lon, lat) => [
+      margin + ((lon - X0) / (X1 - X0)) * drawW,
+      margin + (1 - (lat - Y0) / (Y1 - Y0)) * drawH,
+    ];
+  }
+
+  const pts = normStops.map(s => proj(s.longitude, s.latitude));
 
   // ── Catmull-Rom smooth path ───────────────────────────────────────────────
   const routePathD = (() => {
@@ -237,7 +290,7 @@ export function buildRouteMapLayout(stops, canvasW, canvasH, {
   }
 
   // Pre-register all marker boxes so labels don't overlap any marker
-  stops.forEach((stop, idx) => {
+  normStops.forEach((stop, idx) => {
     const tierNum = resolveStopTier(stop, idx, n);
     placedBoxes.push(markerBox(pts[idx][0], pts[idx][1], TIER[tierNum].r));
   });
@@ -245,14 +298,14 @@ export function buildRouteMapLayout(stops, canvasW, canvasH, {
   let labeledStops;
   if (prioritizeMajor) {
     // Two-pass: major stops first so they get best placement
-    const majorIndices = stops.map((s, i) => ({ s, i })).filter(({ s, i }) => resolveStopTier(s, i, n) === 1);
-    const minorIndices = stops.map((s, i) => ({ s, i })).filter(({ s, i }) => resolveStopTier(s, i, n) !== 1);
+    const majorIndices = normStops.map((s, i) => ({ s, i })).filter(({ s, i }) => resolveStopTier(s, i, n) === 1);
+    const minorIndices = normStops.map((s, i) => ({ s, i })).filter(({ s, i }) => resolveStopTier(s, i, n) !== 1);
     const results = new Array(n);
     for (const { s, i } of majorIndices) results[i] = placeLabel(s, i);
     for (const { s, i } of minorIndices) results[i] = placeLabel(s, i);
     labeledStops = results;
   } else {
-    labeledStops = stops.map((stop, i) => placeLabel(stop, i));
+    labeledStops = normStops.map((stop, i) => placeLabel(stop, i));
   }
 
   return { proj, pts, fractions, routePathD, labeledStops };

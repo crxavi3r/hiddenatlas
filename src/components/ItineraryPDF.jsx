@@ -6,7 +6,7 @@ import {
   Document, Page, Text, View, Image, StyleSheet,
   Svg, Polygon, Path, Rect, Circle, G,
 } from '@react-pdf/renderer';
-import { buildRouteMapLayout, detectOutlierStops } from '../utils/routeMapLayout';
+import { buildRouteMapLayout, detectOutlierStops, parseCoordValue } from '../utils/routeMapLayout';
 
 // ── Colour tokens ─────────────────────────────────────────────────────────────
 const C = {
@@ -1087,6 +1087,7 @@ function DynamicRouteSvgMap({ stops = [] }) {
 
   const layout = buildRouteMapLayout(numberedMain, SW, SH, {
     pad: 0.12, margin: 20, tiers: PDF_TIER_NUM, prioritizeMajor: true,
+    preserveAspect: true,  // real geographic proportions in PDF
   });
   if (!layout) return null;
   const { routePathD, labeledStops } = layout;
@@ -1825,15 +1826,30 @@ function RouteOverviewPage({ itinerary }) {
   const { title, country, duration, days = [], routeMapImageUrl, routeMapAlt, routeMapCaption } = itinerary;
   const entry = PDF_ROUTE_MAPS[itinerary.id];
 
-  // Prefer structured ItineraryDayStop records over old CMS route map stops
+  // Prefer structured ItineraryDayStop records over old CMS route map stops.
+  // parseCoordValue handles both numeric and comma-decimal string coordinates.
   const rawDayStops = (itinerary.dayStops || [])
-    .filter(s => s.showOnMap !== false && s.latitude != null && s.longitude != null)
-    .sort((a, b) => (a.dayNumber - b.dayNumber) || (a.sortOrder - b.sortOrder))
-    .map(s => ({ name: s.title, latitude: s.latitude, longitude: s.longitude, type: s.isMajorStop ? 'major' : 'stop', dayNumber: s.dayNumber, order: s.sortOrder, metadata: s.metadata || {} }));
+    .filter(s => s.showOnMap !== false)
+    .map(s => ({
+      name: s.title,
+      latitude:  parseCoordValue(s.latitude),
+      longitude: parseCoordValue(s.longitude),
+      type: s.isMajorStop ? 'major' : 'stop',
+      dayNumber: s.dayNumber, order: s.sortOrder, metadata: s.metadata || {},
+    }))
+    .filter(s => s.latitude != null && s.longitude != null)
+    .sort((a, b) => (a.dayNumber - b.dayNumber) || (a.order - b.order));
   const hasDayStops = rawDayStops.length >= 2;
-  const routeStops  = hasDayStops ? rawDayStops : (itinerary.routeMapStops || []);
+
+  // CMS route map stops — filter out hidden stops (visible === false) and normalise coords
+  const cmsRouteStops = (itinerary.routeMapStops || [])
+    .filter(s => s.visible !== false)
+    .map(s => ({ ...s, latitude: parseCoordValue(s.latitude), longitude: parseCoordValue(s.longitude) }))
+    .filter(s => s.latitude != null && s.longitude != null);
+
+  const routeStops = hasDayStops ? rawDayStops : cmsRouteStops;
   // CMS stops take priority over any hardcoded SVG component.
-  const hasValidStops = routeStops.filter(s => s.latitude != null && s.longitude != null).length >= 2;
+  const hasValidStops = routeStops.length >= 2;
 
   // Stops strip: prefer structured routeMapStops, fall back to parsing day titles
   let displayStops;
@@ -2008,10 +2024,16 @@ export default function ItineraryPDF({ itinerary }) {
   const routeMapImageUrl = itinerary.routeMapImageUrl || null;
 
   // CMS stops — evaluated first so all conditions below can reference hasValidStops.
-  // Prefer structured ItineraryDayStop records; fall back to CMS route map stops.
-  const routeMapStops  = itinerary.routeMapStops || [];
-  const validDayStops  = (itinerary.dayStops || []).filter(s => s.showOnMap !== false && s.latitude != null && s.longitude != null);
-  const hasValidStops  = validDayStops.length >= 2 || routeMapStops.filter(s => s.latitude != null && s.longitude != null).length >= 2;
+  // parseCoordValue handles comma-decimal strings ("41,7401") and coerces to float.
+  const routeMapStops  = (itinerary.routeMapStops || []).filter(s => s.visible !== false);
+  const validDayStops  = (itinerary.dayStops || [])
+    .filter(s => s.showOnMap !== false)
+    .map(s => ({ lat: parseCoordValue(s.latitude), lng: parseCoordValue(s.longitude) }))
+    .filter(s => s.lat != null && s.lng != null);
+  const validCmsStops  = routeMapStops
+    .map(s => ({ lat: parseCoordValue(s.latitude), lng: parseCoordValue(s.longitude) }))
+    .filter(s => s.lat != null && s.lng != null);
+  const hasValidStops  = validDayStops.length >= 2 || validCmsStops.length >= 2;
 
   // Conditions mirror each optional component's own early-return guard so we
   // never invoke a component that would return null.
