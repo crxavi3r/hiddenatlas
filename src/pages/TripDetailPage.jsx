@@ -2160,11 +2160,11 @@ export default function TripDetailPage() {
             return {
               ...b,
               ...form,
-              // Prefer API response, then form's explicit value, then keep old
-              dayNumber:  data.dayNumber  ?? form.dayNumber  ?? b.dayNumber,
-              tripDayId:  data.tripDayId  ?? form.tripDayId  ?? b.tripDayId,
-              // Ensure metadata is the merged version (metadata key from form)
-              metadata:   form.metadata   ?? b.metadata,
+              // Use confirmed DB values from RETURNING clause — not just optimistic form state
+              dayNumber: data.dayNumber  ?? form.dayNumber  ?? b.dayNumber,
+              tripDayId: data.tripDayId  ?? form.tripDayId  ?? b.tripDayId,
+              // Prefer the DB-returned metadata (what was actually persisted)
+              metadata:  data.metadata   ?? form.metadata   ?? b.metadata,
             };
           }),
         }));

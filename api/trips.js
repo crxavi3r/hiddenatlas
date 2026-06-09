@@ -283,7 +283,7 @@ export default async function handler(req, res) {
         `SELECT id, "tripId", "tripDayId", "tripItemId", "dayNumber", type, title,
                 date, time, "locationName", address, latitude, longitude,
                 provider, "confirmationReference", notes, url,
-                "attachmentUrl", status, "createdAt", "updatedAt"
+                "attachmentUrl", status, metadata, "createdAt", "updatedAt"
          FROM "TripBooking"
          WHERE "tripId" = $1
          ORDER BY date ASC NULLS LAST, "createdAt" ASC`,
@@ -577,7 +577,7 @@ export default async function handler(req, res) {
         ({ dayNumber, tripDayId } = resolveBookingDay(date, startDate, tripDayRows));
       }
 
-      await pool.query(
+      const { rows: updated } = await pool.query(
         `UPDATE "TripBooking"
          SET type = COALESCE($1, type), title = COALESCE($2, title),
              date = $3, time = $4, "locationName" = $5, provider = $6,
@@ -586,14 +586,16 @@ export default async function handler(req, res) {
              latitude = COALESCE($14::float8, latitude),
              longitude = COALESCE($15::float8, longitude),
              "updatedAt" = NOW()
-         WHERE id = $13`,
+         WHERE id = $13
+         RETURNING id, "dayNumber", "tripDayId", metadata, latitude, longitude`,
         [type || null, title || null, date || null, time || null,
          locationName || null, provider || null, confirmationReference || null,
          notes || null, url || null, JSON.stringify(meta), dayNumber, tripDayId, bookingId,
          latitude != null ? Number(latitude) : null,
          longitude != null ? Number(longitude) : null]
       );
-      return res.status(200).json({ ok: true, dayNumber, tripDayId });
+      const saved = updated[0] || {};
+      return res.status(200).json({ ok: true, dayNumber: saved.dayNumber, tripDayId: saved.tripDayId, metadata: saved.metadata });
     }
 
     // Remap all bookings for a trip when startDate changes
