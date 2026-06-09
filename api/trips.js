@@ -552,22 +552,30 @@ export default async function handler(req, res) {
       if (!bookingRows.length) return res.status(404).json({ error: 'Booking not found' });
 
       const tripId = bookingRows[0].tripId;
-      const { type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata, latitude, longitude } = req.body || {};
+      const { type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata, latitude, longitude, dayNumber: explicitDayNumber, tripDayId: explicitTripDayId } = req.body || {};
 
       const meta = (metadata && typeof metadata === 'object') ? metadata : {};
       const bookingType = type || bookingRows[0].currentType || 'other';
       const valErrs = validateBooking(bookingType, { date, time }, meta);
       if (valErrs.length) return res.status(400).json({ error: 'Validation failed', errors: valErrs });
 
-      // Resolve dayNumber from trip dates
-      const { rows: tripInfo } = await pool.query(
-        `SELECT "startDate" FROM "Trip" WHERE id = $1`, [tripId]
-      );
       const { rows: tripDayRows } = await pool.query(
         `SELECT id, "dayNumber" FROM "TripDay" WHERE "tripId" = $1`, [tripId]
       );
-      const startDate = tripInfo[0]?.startDate?.toISOString().slice(0, 10) || null;
-      const { dayNumber, tripDayId } = resolveBookingDay(date, startDate, tripDayRows);
+
+      let dayNumber, tripDayId;
+      if (explicitDayNumber != null) {
+        // Manual day link takes precedence over date-derived calculation
+        dayNumber = Number(explicitDayNumber);
+        tripDayId = explicitTripDayId || tripDayRows.find(d => d.dayNumber === dayNumber)?.id || null;
+      } else {
+        // Fall back to deriving from booking date
+        const { rows: tripInfo } = await pool.query(
+          `SELECT "startDate" FROM "Trip" WHERE id = $1`, [tripId]
+        );
+        const startDate = tripInfo[0]?.startDate?.toISOString().slice(0, 10) || null;
+        ({ dayNumber, tripDayId } = resolveBookingDay(date, startDate, tripDayRows));
+      }
 
       await pool.query(
         `UPDATE "TripBooking"

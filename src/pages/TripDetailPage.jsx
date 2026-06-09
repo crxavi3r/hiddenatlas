@@ -559,7 +559,12 @@ function BookingModal({ open, dayNumber, editBooking, stopCtx, availableDays, it
   const hintDayNumber = calcDayNumber(primaryDate, tripStartDate);
   const isBeforeTrip = primaryDate && tripStartDate && primaryDate < tripStartDate.slice(0, 10);
   const isAfterTrip  = primaryDate && tripEndDate   && primaryDate > tripEndDate.slice(0, 10);
-  const dayHint = !primaryDate ? null
+  // When user has manually linked to a specific day, adjust hint messaging
+  const dayHint = linkedDayNum != null
+    ? (isBeforeTrip || isAfterTrip
+        ? `Date is outside trip range, but linked to Day ${linkedDayNum}.`
+        : `Linked to Day ${linkedDayNum}.`)
+    : !primaryDate ? null
     : !tripStartDate ? null
     : isBeforeTrip  ? 'This booking is before your trip.'
     : isAfterTrip   ? 'This booking is after your trip.'
@@ -574,7 +579,7 @@ function BookingModal({ open, dayNumber, editBooking, stopCtx, availableDays, it
       : form.type === 'flight'
       ? (form.meta.departureTime || form.time)
       : form.time;
-    // Persist linked stop in metadata
+    // Persist linked stop in metadata (merge safely, don't wipe existing keys)
     const finalMeta = { ...form.meta };
     if (linkedStopId) {
       finalMeta.itineraryDayStopId = linkedStopId;
@@ -583,7 +588,19 @@ function BookingModal({ open, dayNumber, editBooking, stopCtx, availableDays, it
       delete finalMeta.itineraryDayStopId;
       delete finalMeta.source;
     }
-    onSave({ ...form, date: finalDate, time: finalTime, metadata: finalMeta });
+    // Resolve tripDayId for the manually selected day
+    const selectedTripDay = linkedDayNum != null
+      ? (availableDays || []).find(d => d.dayNumber === linkedDayNum)
+      : null;
+    onSave({
+      ...form,
+      date: finalDate,
+      time: finalTime,
+      metadata: finalMeta,
+      // Pass explicit day link so API uses it instead of recalculating from date
+      dayNumber:  linkedDayNum  ?? null,
+      tripDayId:  selectedTripDay?.id ?? null,
+    });
   }
 
   const isEdit = !!editBooking;
@@ -828,13 +845,13 @@ function BookingModal({ open, dayNumber, editBooking, stopCtx, availableDays, it
         </div>
       )}
 
-      {/* Day placement hint */}
+      {/* Day placement hint — warning only when NO explicit day link is set */}
       {dayHint && (
         <p style={{
           fontSize: '12.5px', fontWeight: '500',
-          color: isBeforeTrip || isAfterTrip ? '#B5600A' : TEAL,
-          background: isBeforeTrip || isAfterTrip ? '#FFF8F0' : '#EFF6F5',
-          border: `1px solid ${isBeforeTrip || isAfterTrip ? '#F5D9B8' : '#C6E4E0'}`,
+          color: (isBeforeTrip || isAfterTrip) && linkedDayNum == null ? '#B5600A' : TEAL,
+          background: (isBeforeTrip || isAfterTrip) && linkedDayNum == null ? '#FFF8F0' : '#EFF6F5',
+          border: `1px solid ${(isBeforeTrip || isAfterTrip) && linkedDayNum == null ? '#F5D9B8' : '#C6E4E0'}`,
           borderRadius: '6px', padding: '8px 12px', marginBottom: '8px',
         }}>
           {dayHint}
@@ -2143,11 +2160,18 @@ export default function TripDetailPage() {
         const data = await res.json();
         setWorkspace(w => ({
           ...w,
-          tripBookings: w.tripBookings.map(b =>
-            b.id === editingBooking.id
-              ? { ...b, ...form, dayNumber: data.dayNumber ?? b.dayNumber, tripDayId: data.tripDayId ?? b.tripDayId }
-              : b
-          ),
+          tripBookings: w.tripBookings.map(b => {
+            if (b.id !== editingBooking.id) return b;
+            return {
+              ...b,
+              ...form,
+              // Prefer API response, then form's explicit value, then keep old
+              dayNumber:  data.dayNumber  ?? form.dayNumber  ?? b.dayNumber,
+              tripDayId:  data.tripDayId  ?? form.tripDayId  ?? b.tripDayId,
+              // Ensure metadata is the merged version (metadata key from form)
+              metadata:   form.metadata   ?? b.metadata,
+            };
+          }),
         }));
       } else {
         // Create new booking
