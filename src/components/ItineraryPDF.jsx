@@ -1091,12 +1091,10 @@ function DynamicRouteSvgMap({ stops = [] }) {
   if (!layout) return null;
   const { routePathD, labeledStops } = layout;
 
-  // Two-column stop list
-  const colL = numberedMain.filter((_, i) => i % 2 === 0);
-  const colR = numberedMain.filter((_, i) => i % 2 === 1);
 
+  // Explicit width prevents react-pdf from collapsing flex children in the stop list
   return (
-    <View>
+    <View style={{ width: SW }}>
       {/* ── Main SVG map ── */}
       <Svg width={SW} height={SH} viewBox={`0 0 ${SW} ${SH}`}>
         <Rect x="0" y="0" width={SW} height={SH} fill="#F4F1E8" />
@@ -1161,44 +1159,36 @@ function DynamicRouteSvgMap({ stops = [] }) {
         }, [])}
       </Svg>
 
-      {/* ── Two-column stop list ── */}
-      <View style={{ flexDirection: 'row', marginTop: 8, gap: 8 }}>
-        <View style={{ flex: 1 }}>
-          {colL.map(s => (
-            <View key={s.num} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 3 }}>
-              <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: '#1B6B65', width: 16 }}>
-                {String(s.num).padStart(2, '0')}
-              </Text>
-              <Text style={{ fontSize: 7, color: '#1C1A16', flex: 1 }}>{s.name}</Text>
+      {/* ── Route stop list (single column, full width) ── */}
+      <View style={{ marginTop: 8 }}>
+        {numberedMain.map(s => (
+          <View key={s.num} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 3.5 }}>
+            <Text style={{ fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: '#1B6B65', width: 26, flexShrink: 0 }}>
+              {String(s.num).padStart(2, '0')}
+            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 7.5, color: '#1C1A16' }}>{s.name}</Text>
             </View>
-          ))}
-        </View>
-        <View style={{ flex: 1 }}>
-          {colR.map(s => (
-            <View key={s.num} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 3 }}>
-              <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: '#1B6B65', width: 16 }}>
-                {String(s.num).padStart(2, '0')}
-              </Text>
-              <Text style={{ fontSize: 7, color: '#1C1A16', flex: 1 }}>{s.name}</Text>
-            </View>
-          ))}
-        </View>
+          </View>
+        ))}
       </View>
 
       {/* ── Remote stop callout ── */}
       {numberedRemote.length > 0 && (
-        <View style={{ marginTop: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: '#F4EDD8', borderRadius: 4 }}>
-          <Text style={{ fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#8C7050', letterSpacing: 1.5, marginBottom: 5 }}>
+        <View style={{ marginTop: 10, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#F4EDD8', borderRadius: 4 }}>
+          <Text style={{ fontSize: 6.5, fontFamily: 'Helvetica-Bold', color: '#8C7050', letterSpacing: 1.5, marginBottom: 6 }}>
             DAY TRIPS / REMOTE STOPS
           </Text>
           {numberedRemote.map(s => (
-            <View key={s.num} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 3 }}>
-              <Text style={{ fontSize: 7, fontFamily: 'Helvetica-Bold', color: '#C9A96E', width: 16 }}>
+            <View key={s.num} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 3.5 }}>
+              <Text style={{ fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: '#C9A96E', width: 26, flexShrink: 0 }}>
                 {String(s.num).padStart(2, '0')}
               </Text>
-              <Text style={{ fontSize: 7, color: '#4A433A', flex: 1 }}>
-                {s.name}{s.dayNumber ? `  ·  Day ${s.dayNumber}` : ''}
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 7.5, color: '#4A433A' }}>
+                  {s.name}{s.dayNumber ? `  ·  Day ${s.dayNumber}` : ''}
+                </Text>
+              </View>
             </View>
           ))}
         </View>
