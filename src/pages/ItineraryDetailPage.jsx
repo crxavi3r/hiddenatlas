@@ -1416,7 +1416,7 @@ export default function ItineraryDetailPage() {
               const hasValidStops = validStops.length >= 2;
               const hasContent = hasValidStops || DbRouteMapComponent || itinerary.routeMapImageUrl;
               if (!hasContent) return null;
-              if (!itinerary.showRouteMapOnSite && !isAdmin) return null;
+              if (!itinerary.showRouteMapOnSite) return null;
 
               const scrollToDay = dayNum => {
                 const el = document.getElementById(`day-${dayNum}`);
