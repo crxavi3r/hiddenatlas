@@ -4,7 +4,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Calendar, Clock, Users, MapPin, Download, Pencil, Trash2,
   Plus, X, Map, FileText, Bookmark, BookOpen, Check, Star, ChevronRight,
-  ChevronDown,
+  ChevronDown, RotateCcw,
 } from 'lucide-react';
 import { useAuth } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
@@ -1098,21 +1098,53 @@ function DayBookingItem({ booking, onEdit }) {
 // DaySection — one full day in the timeline
 // ─────────────────────────────────────────────
 
-function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditBooking, onAddBookingFromStop }) {
-  const [expanded, setExpanded] = useState(true);
+function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, hiddenStopIds = [] }) {
+  const [expanded,     setExpanded]     = useState(true);
+  const [confirmHide,  setConfirmHide]  = useState(null);  // stop object pending confirmation
+  const [lastHidden,   setLastHidden]   = useState(null);  // { stopId, stopTitle } for undo
 
   const title   = tripDay.titleOverride || itinDay?.title || tripDay.title || `Day ${tripDay.dayNumber}`;
   const desc    = tripDay.descriptionOverride || itinDay?.description || tripDay.description || '';
-  const bullets = itinDayStops.length > 0 ? [] : (itinDay?.bullets || []); // suppress bullets if structured stops exist
+  const bullets = itinDayStops.length > 0 ? [] : (itinDay?.bullets || []);
   const tip     = itinDay?.tip || '';
   const img     = getDayImage(tripDay.dayNumber, assets) || itinDay?.img || null;
 
-  // Split bookings: linked to a specific itinerary stop vs day-level only
-  const stopBookings = {};   // { [stopId]: TripBooking[] }
+  // Stops hidden by user for this day
+  const hiddenThisDay = itinDayStops.filter(s => hiddenStopIds.includes(s.id));
+  // Visible stops = all stops minus hidden ones
+  const visibleStops = itinDayStops.filter(s => !hiddenStopIds.includes(s.id));
+
+  // Undo timeout ref
+  const undoTimerRef = useRef(null);
+
+  function triggerHide(stop) {
+    const hasBookings = dayBookings.some(b => b.metadata?.itineraryDayStopId === stop.id);
+    setConfirmHide({ stop, hasBookings });
+  }
+
+  function confirmHideStop() {
+    const { stop } = confirmHide;
+    setConfirmHide(null);
+    onHideStop?.(stop, tripDay);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setLastHidden({ stopId: stop.id, stopTitle: stop.title });
+    undoTimerRef.current = setTimeout(() => setLastHidden(null), 6000);
+  }
+
+  function handleUndo() {
+    if (!lastHidden) return;
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    onRestoreStop?.(lastHidden.stopId);
+    setLastHidden(null);
+  }
+
+  // Split bookings: linked to a visible stop vs day-level only (or stop is hidden)
+  const stopBookings = {};
   const dayOnlyBookings = [];
   dayBookings.forEach(b => {
     const sid = b.metadata?.itineraryDayStopId;
-    if (sid && itinDayStops.some(s => s.id === sid)) {
+    // Only group under stop if stop is visible (not hidden)
+    if (sid && visibleStops.some(s => s.id === sid)) {
       (stopBookings[sid] = stopBookings[sid] || []).push(b);
     } else {
       dayOnlyBookings.push(b);
@@ -1154,12 +1186,21 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
           <>
             {desc && <p style={{ fontSize: '15px', color: MUTED, lineHeight: '1.75', marginBottom: (itinDayStops.length || bullets.length) ? '14px' : '0' }}>{desc}</p>}
 
-            {/* Structured itinerary stops — with linked bookings + "Add booking" action */}
+            {/* Structured itinerary stops — with linked bookings, "Add booking", and "Remove" actions */}
             {itinDayStops.length > 0 && (
               <div style={{ marginBottom: '14px' }}>
-                <p style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: MUTED, marginBottom: '8px' }}>Places today</p>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <p style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: MUTED }}>Places today</p>
+                  {/* Undo toast */}
+                  {lastHidden && (
+                    <span style={{ fontSize: '12px', color: MUTED }}>
+                      Removed.{' '}
+                      <button type="button" onClick={handleUndo} style={{ background: 'none', border: 'none', cursor: 'pointer', color: TEAL, fontWeight: '600', fontSize: '12px', padding: 0 }}>Undo</button>
+                    </span>
+                  )}
+                </div>
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {itinDayStops.map((stop, i) => {
+                  {visibleStops.map((stop, i) => {
                     const linked = stopBookings[stop.id] || [];
                     return (
                       <li key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
@@ -1191,20 +1232,67 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
                               ))}
                             </div>
                           )}
-                          {/* Add booking from this stop */}
-                          {onAddBookingFromStop && (
-                            <button type="button"
-                              onClick={() => onAddBookingFromStop(stop, tripDay.id, tripDay.dayNumber)}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: TEAL, fontSize: '11.5px', fontWeight: '600', padding: '3px 0', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                              + Add booking
-                            </button>
-                          )}
+                          {/* Stop actions */}
+                          <div style={{ display: 'flex', gap: '12px', marginTop: '4px', flexWrap: 'wrap' }}>
+                            {onAddBookingFromStop && (
+                              <button type="button"
+                                onClick={() => onAddBookingFromStop(stop, tripDay.id, tripDay.dayNumber)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: TEAL, fontSize: '11.5px', fontWeight: '600', padding: 0 }}>
+                                + Add booking
+                              </button>
+                            )}
+                            {onHideStop && (
+                              <button type="button"
+                                onClick={() => triggerHide(stop)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#B5AA99', fontSize: '11.5px', padding: 0 }}>
+                                Remove from my trip
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </li>
                     );
                   })}
                 </ul>
               </div>
+            )}
+
+                {/* Restore hidden places */}
+                {hiddenThisDay.length > 0 && !lastHidden && (
+                  <li style={{ listStyle: 'none' }}>
+                    <button type="button"
+                      onClick={() => onRestoreDayStops?.(tripDay.dayNumber)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#B5AA99', fontSize: '11.5px', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <RotateCcw size={11} /> Restore {hiddenThisDay.length} hidden place{hiddenThisDay.length > 1 ? 's' : ''}
+                    </button>
+                  </li>
+                )}
+              </ul>
+              </div>
+
+              {/* ── Confirmation modal: Remove from my trip ── */}
+              {confirmHide && (
+                <Modal open onRequestClose={() => setConfirmHide(null)} title="Remove this place?">
+                  <p style={{ fontSize: '15px', color: '#4A433A', lineHeight: '1.65', marginBottom: '16px' }}>
+                    This will only remove <strong>{confirmHide.stop.title}</strong> from your personal trip plan.
+                    The original itinerary will not change.
+                  </p>
+                  {confirmHide.hasBookings && (
+                    <div style={{ padding: '10px 14px', background: '#FFF8F0', border: '1px solid #F5D9B8', borderRadius: '6px', marginBottom: '16px' }}>
+                      <p style={{ fontSize: '13px', color: '#8C5B1A' }}>
+                        This place has bookings linked to it. The bookings will remain in your day plan.
+                      </p>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                    <button type="button" onClick={() => setConfirmHide(null)} style={btnSecondary}>Cancel</button>
+                    <button type="button" onClick={confirmHideStop}
+                      style={{ ...btnPrimary, background: '#C0392B', borderColor: '#C0392B' }}>
+                      Remove from my trip
+                    </button>
+                  </div>
+                </Modal>
+              )}
             )}
 
             {bullets.length > 0 && (
@@ -1463,8 +1551,8 @@ function OverviewTab({ workspace, onEditDetails }) {
 // ─────────────────────────────────────────────
 // DaysTab
 // ─────────────────────────────────────────────
-function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFromStop, onDeleteItem, onEditBooking }) {
-  const { itinerary, tripDays, tripItems, tripNotes, tripBookings, assets, itineraryDayStops = [] } = workspace;
+function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, onDeleteItem, onEditBooking }) {
+  const { itinerary, tripDays, tripItems, tripNotes, tripBookings, assets, itineraryDayStops = [], hiddenStopIds = [] } = workspace;
   const content = parseContent(itinerary?.content);
   const itinDays = (content?.days || []).map(normalizeDay);
 
@@ -1508,6 +1596,10 @@ function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFr
               onAddNote={onAddNote}
               onAddBooking={onAddBooking}
               onAddBookingFromStop={onAddBookingFromStop}
+              onHideStop={onHideStop}
+              onRestoreStop={onRestoreStop}
+              onRestoreDayStops={onRestoreDayStops}
+              hiddenStopIds={hiddenStopIds}
               onDeleteItem={onDeleteItem}
               onEditBooking={onEditBooking}
             />
@@ -1522,13 +1614,13 @@ function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFr
 // MapTab
 // ─────────────────────────────────────────────
 function MapTab({ workspace, onRefresh }) {
-  const { itinerary, trip, tripItems = [], tripBookings = [], itineraryDayStops = [] } = workspace;
+  const { itinerary, trip, tripItems = [], tripBookings = [], itineraryDayStops = [], hiddenStopIds = [] } = workspace;
   const slug    = itinerary?.slug;
   const content = parseContent(itinerary?.content);
 
   // Priority 1: structured ItineraryDayStop records (include lat/lng from API)
   const itinStops = itineraryDayStops
-    .filter(s => s.showOnMap !== false)
+    .filter(s => s.showOnMap !== false && !hiddenStopIds.includes(s.id))
     .sort((a, b) => (a.dayNumber - b.dayNumber) || (a.sortOrder - b.sortOrder))
     .map((s, i) => ({
       id: s.id, name: s.title, dayNumber: s.dayNumber,
@@ -1906,7 +1998,7 @@ export default function TripDetailPage() {
   async function handleDownloadPersonalised() {
     if (!workspace || downloadPersonalisedState === 'downloading') return;
     setDownloadPersonalisedState('downloading');
-    const { trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, itineraryDayStops = [] } = workspace;
+    const { trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, itineraryDayStops = [], hiddenStopIds = [] } = workspace;
     const content = parseContent(itinerary?.content);
     const filename = `${(trip.destination || 'trip').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-my-trip.pdf`;
     try {
@@ -1915,7 +2007,7 @@ export default function TripDetailPage() {
         import('../components/WorkspacePDF'),
       ]);
       const { createElement } = await import('react');
-      const blob = await pdf(createElement(WorkspacePDF, { trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, content, itineraryDayStops })).toBlob();
+      const blob = await pdf(createElement(WorkspacePDF, { trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, content, itineraryDayStops, hiddenStopIds })).toBlob();
       triggerBlobDownload(blob, filename);
       setDownloadPersonalisedState('done');
     } catch (err) {
@@ -2091,6 +2183,37 @@ export default function TripDetailPage() {
     } catch {
       alert('Could not delete booking.');
     }
+  }
+
+  // ── Hide/restore original itinerary stops ────────────────────
+  async function handleHideStop(stop, tripDay) {
+    try {
+      await api.post(`/api/trips?id=${id}&action=hide-itinerary-stop`, {
+        stopId:    stop.id,
+        dayNumber: stop.dayNumber,
+        tripDayId: tripDay.id,
+        title:     stop.title,
+        type:      stop.type,
+      });
+      setWorkspace(w => ({ ...w, hiddenStopIds: [...(w.hiddenStopIds || []), stop.id] }));
+    } catch { /* fail silently */ }
+  }
+
+  async function handleRestoreStop(stopId) {
+    try {
+      await api.post(`/api/trips?id=${id}&action=unhide-itinerary-stop`, { stopId });
+      setWorkspace(w => ({ ...w, hiddenStopIds: (w.hiddenStopIds || []).filter(sid => sid !== stopId) }));
+    } catch { /* fail silently */ }
+  }
+
+  async function handleRestoreDayStops(dayNumber) {
+    try {
+      await api.post(`/api/trips?id=${id}&action=unhide-day-stops`, { dayNumber });
+      const dayStopIds = new Set(
+        (workspace.itineraryDayStops || []).filter(s => s.dayNumber === dayNumber).map(s => s.id)
+      );
+      setWorkspace(w => ({ ...w, hiddenStopIds: (w.hiddenStopIds || []).filter(sid => !dayStopIds.has(sid)) }));
+    } catch { /* fail silently */ }
   }
 
   // ── Loading / error states ────────────────────────────────────
@@ -2280,6 +2403,9 @@ export default function TripDetailPage() {
                 },
               });
             }}
+            onHideStop={handleHideStop}
+            onRestoreStop={handleRestoreStop}
+            onRestoreDayStops={handleRestoreDayStops}
             onDeleteItem={handleDeleteItem}
             onEditBooking={b => { setEditingBooking(b); setBookingCtx({}); }}
           />

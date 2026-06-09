@@ -325,7 +325,7 @@ function WorkspaceDynamicSvgMap({ stops = [] }) {
   );
 }
 
-export function WorkspacePDF({ trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, content, itineraryDayStops = [] }) {
+export function WorkspacePDF({ trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, content, itineraryDayStops = [], hiddenStopIds = [] }) {
   const safeContent = content || {};
   const itinDays  = (safeContent?.days || []).map(normalizeDay);
   const highlights = safeContent?.summary?.highlights || Array.isArray(trip.highlights) ? (trip.highlights || []) : [];
@@ -335,7 +335,7 @@ export function WorkspacePDF({ trip, itinerary, tripDays, tripItems, tripNotes, 
 
   // Route map: use structured day stops with coordinates
   const mapStops = itineraryDayStops
-    .filter(s => s.showOnMap !== false && s.latitude != null && s.longitude != null)
+    .filter(s => s.showOnMap !== false && s.latitude != null && s.longitude != null && !hiddenStopIds.includes(s.id))
     .sort((a, b) => (a.dayNumber - b.dayNumber) || (a.sortOrder - b.sortOrder))
     .map(s => ({ name: s.title, latitude: s.latitude, longitude: s.longitude, type: s.isMajorStop ? 'major' : 'stop', dayNumber: s.dayNumber, order: s.sortOrder, metadata: s.metadata || {} }));
   const hasRouteMap = mapStops.length >= 2;
@@ -450,7 +450,7 @@ export function WorkspacePDF({ trip, itinerary, tripDays, tripItems, tripNotes, 
         const dayTitle = tripDay.titleOverride || itinDay?.title || tripDay.title || `Day ${tripDay.dayNumber}`;
         const dayDesc  = tripDay.descriptionOverride || itinDay?.description || tripDay.description || '';
         // Prefer structured day stops; fall back to bullets
-        const dayStops = itineraryDayStops.filter(s => s.dayNumber === tripDay.dayNumber)
+        const dayStops = itineraryDayStops.filter(s => s.dayNumber === tripDay.dayNumber && !hiddenStopIds.includes(s.id))
           .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
         const bullets  = dayStops.length > 0 ? [] : (itinDay?.bullets || []);
         const tip      = itinDay?.tip || '';

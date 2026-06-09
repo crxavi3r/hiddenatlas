@@ -319,7 +319,21 @@ export default async function handler(req, res) {
         } catch { /* table not yet migrated */ }
       }
 
-      return res.status(200).json({ trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, assets, itineraryDayStops });
+      // Hidden itinerary stop overrides — stored as isHidden TripItems with overrideType metadata
+      let hiddenStopIds = [];
+      try {
+        const { rows: hiddenRows } = await pool.query(
+          `SELECT metadata->>'itineraryDayStopId' AS "stopId"
+           FROM "TripItem"
+           WHERE "tripId" = $1
+             AND "isHidden" = true
+             AND metadata->>'overrideType' = 'hidden_original_stop'`,
+          [id]
+        );
+        hiddenStopIds = hiddenRows.map(r => r.stopId).filter(Boolean);
+      } catch { /* graceful fallback */ }
+
+      return res.status(200).json({ trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, assets, itineraryDayStops, hiddenStopIds });
     }
 
     // ── GET /api/trips?id= — single trip (basic) ───────────────────────────
@@ -618,6 +632,63 @@ export default async function handler(req, res) {
         [bookingId, userId]
       );
       if (!rows.length) return res.status(404).json({ error: 'Booking not found' });
+      return res.status(200).json({ ok: true });
+    }
+
+    // Hide an original ItineraryDayStop from this trip (creates a hidden override TripItem)
+    if (req.method === 'POST' && action === 'hide-itinerary-stop' && id) {
+      const owned = await getOwnedTrip(id);
+      if (!owned) return res.status(404).json({ error: 'Trip not found' });
+      const { stopId, dayNumber, tripDayId, title, type } = req.body || {};
+      if (!stopId) return res.status(400).json({ error: 'stopId required' });
+      // Avoid duplicates
+      const { rows: existing } = await pool.query(
+        `SELECT id FROM "TripItem"
+         WHERE "tripId" = $1 AND "isHidden" = true
+           AND metadata->>'itineraryDayStopId' = $2
+           AND metadata->>'overrideType' = 'hidden_original_stop'`,
+        [id, stopId]
+      );
+      if (!existing.length) {
+        const metadata = JSON.stringify({ itineraryDayStopId: stopId, overrideType: 'hidden_original_stop' });
+        await pool.query(
+          `INSERT INTO "TripItem" (id, "tripId", "tripDayId", "dayNumber", title, type, "isHidden", metadata, "sortOrder", "createdAt", "updatedAt")
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, true, $6::jsonb, 0, NOW(), NOW())`,
+          [id, tripDayId || null, dayNumber ? Number(dayNumber) : null, title || '', type || 'other', metadata]
+        );
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    // Unhide a specific ItineraryDayStop for this trip (removes the override)
+    if (req.method === 'POST' && action === 'unhide-itinerary-stop' && id) {
+      const owned = await getOwnedTrip(id);
+      if (!owned) return res.status(404).json({ error: 'Trip not found' });
+      const { stopId } = req.body || {};
+      if (!stopId) return res.status(400).json({ error: 'stopId required' });
+      await pool.query(
+        `DELETE FROM "TripItem"
+         WHERE "tripId" = $1 AND "isHidden" = true
+           AND metadata->>'itineraryDayStopId' = $2
+           AND metadata->>'overrideType' = 'hidden_original_stop'`,
+        [id, stopId]
+      );
+      return res.status(200).json({ ok: true });
+    }
+
+    // Unhide all hidden stops for a day (reset day to original itinerary stops)
+    if (req.method === 'POST' && action === 'unhide-day-stops' && id) {
+      const owned = await getOwnedTrip(id);
+      if (!owned) return res.status(404).json({ error: 'Trip not found' });
+      const { dayNumber } = req.body || {};
+      if (!dayNumber) return res.status(400).json({ error: 'dayNumber required' });
+      await pool.query(
+        `DELETE FROM "TripItem"
+         WHERE "tripId" = $1 AND "isHidden" = true
+           AND "dayNumber" = $2
+           AND metadata->>'overrideType' = 'hidden_original_stop'`,
+        [id, Number(dayNumber)]
+      );
       return res.status(200).json({ ok: true });
     }
 
