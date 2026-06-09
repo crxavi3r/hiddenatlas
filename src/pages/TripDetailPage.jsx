@@ -1274,42 +1274,37 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
               </div>
             )}
 
-                {/* Restore hidden places */}
-                {hiddenThisDay.length > 0 && !lastHidden && (
-                  <li style={{ listStyle: 'none' }}>
-                    <button type="button"
-                      onClick={() => onRestoreDayStops?.(tripDay.dayNumber)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#B5AA99', fontSize: '11.5px', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <RotateCcw size={11} /> Restore {hiddenThisDay.length} hidden place{hiddenThisDay.length > 1 ? 's' : ''}
-                    </button>
-                  </li>
-                )}
-              </ul>
-              </div>
+            {/* Restore hidden places */}
+            {hiddenThisDay.length > 0 && !lastHidden && (
+              <button type="button"
+                onClick={() => onRestoreDayStops?.(tripDay.dayNumber)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#B5AA99', fontSize: '11.5px', padding: '4px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <RotateCcw size={11} /> Restore {hiddenThisDay.length} hidden place{hiddenThisDay.length > 1 ? 's' : ''}
+              </button>
+            )}
 
-              {/* ── Confirmation modal: Remove from my trip ── */}
-              {confirmHide && (
-                <Modal open onRequestClose={() => setConfirmHide(null)} title="Remove this place?">
-                  <p style={{ fontSize: '15px', color: '#4A433A', lineHeight: '1.65', marginBottom: '16px' }}>
-                    This will only remove <strong>{confirmHide.stop.title}</strong> from your personal trip plan.
-                    The original itinerary will not change.
-                  </p>
-                  {confirmHide.hasBookings && (
-                    <div style={{ padding: '10px 14px', background: '#FFF8F0', border: '1px solid #F5D9B8', borderRadius: '6px', marginBottom: '16px' }}>
-                      <p style={{ fontSize: '13px', color: '#8C5B1A' }}>
-                        This place has bookings linked to it. The bookings will remain in your day plan.
-                      </p>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                    <button type="button" onClick={() => setConfirmHide(null)} style={btnSecondary}>Cancel</button>
-                    <button type="button" onClick={confirmHideStop}
-                      style={{ ...btnPrimary, background: '#C0392B', borderColor: '#C0392B' }}>
-                      Remove from my trip
-                    </button>
+            {/* ── Confirmation modal: Remove from my trip ── */}
+            {confirmHide && (
+              <Modal open onRequestClose={() => setConfirmHide(null)} title="Remove this place?">
+                <p style={{ fontSize: '15px', color: '#4A433A', lineHeight: '1.65', marginBottom: '16px' }}>
+                  This will only remove <strong>{confirmHide.stop.title}</strong> from your personal trip plan.
+                  The original itinerary will not change.
+                </p>
+                {confirmHide.hasBookings && (
+                  <div style={{ padding: '10px 14px', background: '#FFF8F0', border: '1px solid #F5D9B8', borderRadius: '6px', marginBottom: '16px' }}>
+                    <p style={{ fontSize: '13px', color: '#8C5B1A' }}>
+                      This place has bookings linked to it. The bookings will remain in your day plan.
+                    </p>
                   </div>
-                </Modal>
-              )}
+                )}
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                  <button type="button" onClick={() => setConfirmHide(null)} style={btnSecondary}>Cancel</button>
+                  <button type="button" onClick={confirmHideStop}
+                    style={{ ...btnPrimary, background: '#C0392B', borderColor: '#C0392B' }}>
+                    Remove from my trip
+                  </button>
+                </div>
+              </Modal>
             )}
 
             {bullets.length > 0 && (
