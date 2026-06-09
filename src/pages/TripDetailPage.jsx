@@ -1374,7 +1374,7 @@ function MapTab({ workspace, onRefresh }) {
   const slug    = itinerary?.slug;
   const content = parseContent(itinerary?.content);
 
-  // Prefer structured ItineraryDayStop records (now include lat/lng from API)
+  // Priority 1: structured ItineraryDayStop records (include lat/lng from API)
   const itinStops = itineraryDayStops
     .filter(s => s.showOnMap !== false)
     .sort((a, b) => (a.dayNumber - b.dayNumber) || (a.sortOrder - b.sortOrder))
@@ -1385,22 +1385,34 @@ function MapTab({ workspace, onRefresh }) {
       description: s.description, order: i + 1, metadata: s.metadata || {},
     }));
 
-  // Legacy fallback: if no structured stops, show a static visual only
-  const RouteMapComponent = itinStops.length === 0 ? (ROUTE_MAP_COMPONENTS[slug] || null) : null;
-  const mapImageUrl = itinStops.length === 0 ? (content?.routeMap?.imageUrl || null) : null;
+  // Priority 2: CMS route map stops (content.routeMap.stops) — used when no structured
+  // ItineraryDayStop records exist. This is what the backoffice Leaflet editor shows,
+  // so My Trips should display the same route.
+  const cmsStops = (content?.routeMap?.stops || [])
+    .filter(s => s.visible !== false && s.latitude != null && s.longitude != null)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map(s => ({
+      id: s.id, name: s.name, dayNumber: s.dayNumber ?? null,
+      latitude: s.latitude, longitude: s.longitude,
+      isMajorStop: s.type === 'major', type: s.type || 'stop',
+      description: s.description || null, order: s.order || 0, metadata: {},
+    }));
 
-  const hasLeafletData = itinStops.some(s => s.latitude != null) ||
-    tripItems.some(i => i.latitude != null) ||
-    tripBookings.some(b => b.latitude != null);
+  // Effective itinerary stops for the Leaflet map
+  const effectiveItinStops = itinStops.length > 0 ? itinStops : cmsStops;
+
+  // Further fallbacks (only when no coordinate-based stops exist at all)
+  const RouteMapComponent = effectiveItinStops.length === 0 ? (ROUTE_MAP_COMPONENTS[slug] || null) : null;
+  const mapImageUrl = effectiveItinStops.length === 0 ? (content?.routeMap?.imageUrl || null) : null;
 
   return (
     <div style={{ maxWidth: '960px', margin: '0 auto', padding: 'clamp(24px, 4vw, 48px) 24px', paddingBottom: '80px' }}>
 
-      {/* Primary: Leaflet map with all data layers */}
-      {(itinStops.length > 0 || tripItems.length > 0 || tripBookings.length > 0) && (
+      {/* Primary: Leaflet map — uses ItineraryDayStop or CMS route map stops as itinerary layer */}
+      {(effectiveItinStops.length > 0 || tripItems.length > 0 || tripBookings.length > 0) && (
         <section style={{ marginBottom: '40px' }}>
           <TripRouteMap
-            itineraryStops={itinStops}
+            itineraryStops={effectiveItinStops}
             tripItems={tripItems}
             tripBookings={tripBookings}
             trip={trip}
@@ -1409,15 +1421,15 @@ function MapTab({ workspace, onRefresh }) {
         </section>
       )}
 
-      {/* Legacy fallback: hardcoded SVG map for old itineraries without structured stops */}
-      {itinStops.length === 0 && RouteMapComponent && (
+      {/* Legacy fallback: hardcoded SVG map (only when no coordinate data exists at all) */}
+      {effectiveItinStops.length === 0 && RouteMapComponent && (
         <section style={{ marginBottom: '40px' }}>
           <RouteMapComponent />
         </section>
       )}
 
-      {/* Legacy fallback: CMS static map image */}
-      {itinStops.length === 0 && !RouteMapComponent && mapImageUrl && (
+      {/* Legacy fallback: CMS static map image (only when no coordinate data exists) */}
+      {effectiveItinStops.length === 0 && !RouteMapComponent && mapImageUrl && (
         <section style={{ marginBottom: '40px' }}>
           <img src={mapImageUrl} alt={content?.routeMap?.alt || `${itinerary?.title || 'Route'} map`}
             style={{ width: '100%', borderRadius: '12px', maxHeight: '520px', objectFit: 'cover' }} />
@@ -1428,7 +1440,7 @@ function MapTab({ workspace, onRefresh }) {
       )}
 
       {/* Empty state */}
-      {itinStops.length === 0 && !RouteMapComponent && !mapImageUrl && tripItems.length === 0 && tripBookings.length === 0 && (
+      {effectiveItinStops.length === 0 && !RouteMapComponent && !mapImageUrl && tripItems.length === 0 && tripBookings.length === 0 && (
         <div style={{ textAlign: 'center', padding: '60px 24px' }}>
           <Map size={40} color={BORDER} style={{ marginBottom: '16px' }} />
           <p style={{ fontSize: '15px', color: MUTED }}>No route map available for this itinerary yet.</p>
