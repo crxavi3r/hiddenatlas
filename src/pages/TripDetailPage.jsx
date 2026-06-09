@@ -425,20 +425,49 @@ function AddNoteModal({ open, dayNumber, onClose, onSave, saving, editNote }) {
 // ─────────────────────────────────────────────
 const BOOKING_DEFAULTS = { type: 'hotel', title: '', date: '', time: '', locationName: '', provider: '', confirmationReference: '', notes: '', url: '', meta: {} };
 
-function initBookingForm(booking) {
-  if (!booking) return BOOKING_DEFAULTS;
-  const meta = (booking.metadata && typeof booking.metadata === 'object') ? booking.metadata : {};
+// Map ItineraryDayStop.type → TripBooking.type
+const STOP_BOOKING_TYPE_MAP = {
+  restaurant: 'restaurant', hotel: 'hotel', transfer: 'transfer',
+  winery: 'experience', experience: 'experience', museum: 'experience',
+  attraction: 'experience', viewpoint: 'experience', beach: 'experience',
+  walk: 'experience', free_time: 'other',
+};
+function stopTypeToBookingType(t) { return STOP_BOOKING_TYPE_MAP[t] || 'other'; }
+
+// Calculate a YYYY-MM-DD date from tripStartDate + (dayNumber-1) days
+function dayNumberToDate(tripStartDate, dayNumber) {
+  if (!tripStartDate || !dayNumber) return '';
+  try {
+    const d = new Date(tripStartDate + 'T00:00:00');
+    d.setUTCDate(d.getUTCDate() + (dayNumber - 1));
+    return d.toISOString().slice(0, 10);
+  } catch { return ''; }
+}
+
+function initBookingForm(booking, stopCtx, dayNumber, tripStartDate) {
+  if (booking) {
+    const meta = (booking.metadata && typeof booking.metadata === 'object') ? booking.metadata : {};
+    return {
+      type: booking.type || 'hotel',
+      title: booking.title || '',
+      date: booking.date ? String(booking.date).slice(0, 10) : '',
+      time: booking.time || '',
+      locationName: booking.locationName || '',
+      provider: booking.provider || '',
+      confirmationReference: booking.confirmationReference || '',
+      notes: booking.notes || '',
+      url: booking.url || '',
+      meta,
+    };
+  }
+  // New booking — prefill from stop context if available
   return {
-    type: booking.type || 'hotel',
-    title: booking.title || '',
-    date: booking.date ? String(booking.date).slice(0, 10) : '',
-    time: booking.time || '',
-    locationName: booking.locationName || '',
-    provider: booking.provider || '',
-    confirmationReference: booking.confirmationReference || '',
-    notes: booking.notes || '',
-    url: booking.url || '',
-    meta,
+    ...BOOKING_DEFAULTS,
+    type:         stopCtx ? stopTypeToBookingType(stopCtx.type) : 'hotel',
+    title:        stopCtx?.title || '',
+    locationName: stopCtx?.locationName || stopCtx?.title || '',
+    date:         dayNumberToDate(tripStartDate, dayNumber),
+    meta:         {},
   };
 }
 
@@ -486,12 +515,25 @@ function FieldError({ msg }) {
 // ─────────────────────────────────────────────
 // BookingModal — type-adaptive, supports create + edit
 // ─────────────────────────────────────────────
-function BookingModal({ open, dayNumber, editBooking, onClose, onSave, saving, tripStartDate, tripEndDate }) {
-  const [form, setForm] = useState(BOOKING_DEFAULTS);
+function BookingModal({ open, dayNumber, editBooking, stopCtx, availableDays, itineraryDayStops, onClose, onSave, saving, tripStartDate, tripEndDate }) {
+  const [form,          setForm]          = useState(BOOKING_DEFAULTS);
+  const [linkedStopId,  setLinkedStopId]  = useState(null);
+  const [linkedDayNum,  setLinkedDayNum]  = useState(null);
 
   useEffect(() => {
-    if (open) setForm(initBookingForm(editBooking));
-  }, [open, editBooking]);
+    if (!open) return;
+    setForm(initBookingForm(editBooking, stopCtx, dayNumber, tripStartDate));
+    if (stopCtx?.stopId) {
+      setLinkedStopId(stopCtx.stopId);
+      setLinkedDayNum(dayNumber ?? stopCtx.dayNumber ?? null);
+    } else if (editBooking?.metadata?.itineraryDayStopId) {
+      setLinkedStopId(editBooking.metadata.itineraryDayStopId);
+      setLinkedDayNum(editBooking.dayNumber ?? null);
+    } else {
+      setLinkedStopId(null);
+      setLinkedDayNum(dayNumber ?? null);
+    }
+  }, [open, editBooking, stopCtx, dayNumber, tripStartDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
   function setMeta(k, v) { setForm(f => ({ ...f, meta: { ...f.meta, [k]: v } })); }
@@ -526,14 +568,22 @@ function BookingModal({ open, dayNumber, editBooking, onClose, onSave, saving, t
 
   function handleSave() {
     if (hasErrors || !form.title.trim()) return;
-    // Promote metadata dates/times to top-level date/time for sort order
     let finalDate = primaryDate || form.date;
     let finalTime = form.type === 'hotel'
       ? (form.meta.checkInTime || form.time)
       : form.type === 'flight'
       ? (form.meta.departureTime || form.time)
       : form.time;
-    onSave({ ...form, date: finalDate, time: finalTime, metadata: form.meta });
+    // Persist linked stop in metadata
+    const finalMeta = { ...form.meta };
+    if (linkedStopId) {
+      finalMeta.itineraryDayStopId = linkedStopId;
+      finalMeta.source = 'itineraryDayStop';
+    } else {
+      delete finalMeta.itineraryDayStopId;
+      delete finalMeta.source;
+    }
+    onSave({ ...form, date: finalDate, time: finalTime, metadata: finalMeta });
   }
 
   const isEdit = !!editBooking;
@@ -730,6 +780,54 @@ function BookingModal({ open, dayNumber, editBooking, onClose, onSave, saving, t
         <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Special requests, contact info, etc." rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
       </FormField>
 
+      {/* ── Link to itinerary ──────────────────────────────────── */}
+      {stopCtx ? (
+        /* Booking opened from a specific stop: show read-only linked-stop banner */
+        <div style={{ padding: '10px 14px', background: '#EFF6F5', border: '1px solid #C6E4E0', borderRadius: '6px', marginBottom: '12px' }}>
+          <p style={{ fontSize: '12.5px', fontWeight: '600', color: TEAL, marginBottom: '1px' }}>
+            Linked to: {stopCtx.title}
+          </p>
+          {dayNumber && <p style={{ fontSize: '12px', color: MUTED }}>Day {dayNumber}</p>}
+        </div>
+      ) : (availableDays?.length > 0) && (
+        /* No stop context: allow optional link to any day/stop */
+        <div style={{ marginBottom: '12px' }}>
+          <p style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.8px', textTransform: 'uppercase', color: MUTED, marginBottom: '8px' }}>
+            Link to itinerary (optional)
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div>
+              <p style={{ fontSize: '11px', color: MUTED, marginBottom: '4px' }}>Day</p>
+              <select value={linkedDayNum ?? ''} style={inputStyle}
+                onChange={e => { const v = e.target.value ? Number(e.target.value) : null; setLinkedDayNum(v); setLinkedStopId(null); if (v && tripStartDate) set('date', dayNumberToDate(tripStartDate, v)); }}>
+                <option value="">Not linked</option>
+                {(availableDays || []).map(d => <option key={d.dayNumber} value={d.dayNumber}>Day {d.dayNumber}</option>)}
+              </select>
+            </div>
+            <div>
+              <p style={{ fontSize: '11px', color: MUTED, marginBottom: '4px' }}>Place / stop</p>
+              <select value={linkedStopId ?? ''} style={inputStyle} disabled={!linkedDayNum}
+                onChange={e => {
+                  const sid = e.target.value || null;
+                  setLinkedStopId(sid);
+                  if (sid) {
+                    const s = (itineraryDayStops || []).find(s => s.id === sid);
+                    if (s) {
+                      if (!form.title)        set('title',        s.title);
+                      if (!form.locationName) set('locationName', s.locationName || s.title);
+                    }
+                  }
+                }}>
+                <option value="">No specific stop</option>
+                {(itineraryDayStops || []).filter(s => s.dayNumber === linkedDayNum).map(s =>
+                  <option key={s.id} value={s.id}>{s.title}</option>
+                )}
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Day placement hint */}
       {dayHint && (
         <p style={{
@@ -885,9 +983,12 @@ const CAT_COLORS = {
   flight: '#4A2D7D', transfer: '#7D5A2D', event: '#2D7D4A', other: MUTED,
 };
 
-function BookingCard({ booking, onDelete, onEdit }) {
+function BookingCard({ booking, onDelete, onEdit, itineraryDayStops }) {
   const color = CAT_COLORS[booking.type] || MUTED;
   const catLabel = BOOKING_CATEGORIES.find(c => c.value === booking.type)?.label || booking.type;
+  const linkedStop = booking.metadata?.itineraryDayStopId
+    ? (itineraryDayStops || []).find(s => s.id === booking.metadata.itineraryDayStopId)
+    : null;
 
   return (
     <div style={{
@@ -918,6 +1019,11 @@ function BookingCard({ booking, onDelete, onEdit }) {
             )}
           </div>
           <p style={{ fontSize: '15px', fontWeight: '600', color: CHAR, marginBottom: '4px' }}>{booking.title}</p>
+          {linkedStop && (
+            <p style={{ fontSize: '11.5px', color: TEAL, fontWeight: '500', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <MapPin size={10} /> {linkedStop.title}
+            </p>
+          )}
           {(booking.locationName || booking.provider) && (
             <p style={{ fontSize: '13px', color: MUTED, marginBottom: '4px' }}>
               {[booking.locationName, booking.provider].filter(Boolean).join(' · ')}
@@ -992,7 +1098,7 @@ function DayBookingItem({ booking, onEdit }) {
 // DaySection — one full day in the timeline
 // ─────────────────────────────────────────────
 
-function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditBooking }) {
+function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditBooking, onAddBookingFromStop }) {
   const [expanded, setExpanded] = useState(true);
 
   const title   = tripDay.titleOverride || itinDay?.title || tripDay.title || `Day ${tripDay.dayNumber}`;
@@ -1000,6 +1106,18 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
   const bullets = itinDayStops.length > 0 ? [] : (itinDay?.bullets || []); // suppress bullets if structured stops exist
   const tip     = itinDay?.tip || '';
   const img     = getDayImage(tripDay.dayNumber, assets) || itinDay?.img || null;
+
+  // Split bookings: linked to a specific itinerary stop vs day-level only
+  const stopBookings = {};   // { [stopId]: TripBooking[] }
+  const dayOnlyBookings = [];
+  dayBookings.forEach(b => {
+    const sid = b.metadata?.itineraryDayStopId;
+    if (sid && itinDayStops.some(s => s.id === sid)) {
+      (stopBookings[sid] = stopBookings[sid] || []).push(b);
+    } else {
+      dayOnlyBookings.push(b);
+    }
+  });
 
   if (tripDay.isHidden) return null;
 
@@ -1036,22 +1154,55 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
           <>
             {desc && <p style={{ fontSize: '15px', color: MUTED, lineHeight: '1.75', marginBottom: (itinDayStops.length || bullets.length) ? '14px' : '0' }}>{desc}</p>}
 
-            {/* Structured itinerary stops (original template content) */}
+            {/* Structured itinerary stops — with linked bookings + "Add booking" action */}
             {itinDayStops.length > 0 && (
               <div style={{ marginBottom: '14px' }}>
                 <p style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: MUTED, marginBottom: '8px' }}>Places today</p>
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                  {itinDayStops.map((stop, i) => (
-                    <li key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                      <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#C9A96E', flexShrink: 0, marginTop: '9px' }} />
-                      <span style={{ fontSize: '14px', color: '#4A433A', lineHeight: '1.6' }}>
-                        <strong style={{ color: CHAR, fontWeight: '600' }}>{stop.title}</strong>
-                        {stop.description && <span style={{ color: MUTED }}> — {stop.description}</span>}
-                        {stop.isOptional && <span style={{ fontSize: '11px', color: '#B5AA99', marginLeft: '8px', fontWeight: '500', letterSpacing: '0.3px' }}>Optional</span>}
-                        {stop.suggestedTime && <span style={{ fontSize: '12px', color: '#B5AA99', marginLeft: '6px' }}>{stop.suggestedTime}</span>}
-                      </span>
-                    </li>
-                  ))}
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {itinDayStops.map((stop, i) => {
+                    const linked = stopBookings[stop.id] || [];
+                    return (
+                      <li key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                        <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#C9A96E', flexShrink: 0, marginTop: '9px' }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {/* Stop title + description */}
+                          <div style={{ fontSize: '14px', color: '#4A433A', lineHeight: '1.6' }}>
+                            <strong style={{ color: CHAR, fontWeight: '600' }}>{stop.title}</strong>
+                            {stop.description && <span style={{ color: MUTED }}> — {stop.description}</span>}
+                            {stop.isOptional && <span style={{ fontSize: '11px', color: '#B5AA99', marginLeft: '8px', fontWeight: '500', letterSpacing: '0.3px' }}>Optional</span>}
+                            {stop.suggestedTime && <span style={{ fontSize: '12px', color: '#B5AA99', marginLeft: '6px' }}>{stop.suggestedTime}</span>}
+                          </div>
+                          {/* Bookings linked to this stop */}
+                          {linked.length > 0 && (
+                            <div style={{ marginTop: '5px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              {linked.map(b => (
+                                <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 10px', background: '#F4F0E8', borderRadius: '5px', fontSize: '12.5px' }}>
+                                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: CAT_COLORS[b.type] || MUTED, flexShrink: 0 }} />
+                                  <span style={{ color: CHAR, fontWeight: '500', flex: 1, minWidth: 0 }}>
+                                    {b.time && <span style={{ color: MUTED, marginRight: '5px' }}>{b.time}</span>}
+                                    {b.title}
+                                    {b.confirmationReference && <span style={{ color: '#8C7A60', marginLeft: '6px', fontFamily: 'monospace', fontSize: '11px' }}>#{b.confirmationReference}</span>}
+                                  </span>
+                                  <button type="button" onClick={() => onEditBooking(b)}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '1px', flexShrink: 0 }}>
+                                    <Pencil size={11} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {/* Add booking from this stop */}
+                          {onAddBookingFromStop && (
+                            <button type="button"
+                              onClick={() => onAddBookingFromStop(stop, tripDay.id, tripDay.dayNumber)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: TEAL, fontSize: '11.5px', fontWeight: '600', padding: '3px 0', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                              + Add booking
+                            </button>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
@@ -1083,10 +1234,10 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
               </div>
             )}
 
-            {/* Day bookings */}
-            {dayBookings.length > 0 && (
+            {/* Day-level bookings not linked to a specific stop */}
+            {dayOnlyBookings.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                {dayBookings.map(b => <DayBookingItem key={b.id} booking={b} onEdit={onEditBooking} />)}
+                {dayOnlyBookings.map(b => <DayBookingItem key={b.id} booking={b} onEdit={onEditBooking} />)}
               </div>
             )}
 
@@ -1312,7 +1463,7 @@ function OverviewTab({ workspace, onEditDetails }) {
 // ─────────────────────────────────────────────
 // DaysTab
 // ─────────────────────────────────────────────
-function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditBooking }) {
+function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFromStop, onDeleteItem, onEditBooking }) {
   const { itinerary, tripDays, tripItems, tripNotes, tripBookings, assets, itineraryDayStops = [] } = workspace;
   const content = parseContent(itinerary?.content);
   const itinDays = (content?.days || []).map(normalizeDay);
@@ -1356,6 +1507,7 @@ function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onDeleteItem, 
               onAddItem={onAddItem}
               onAddNote={onAddNote}
               onAddBooking={onAddBooking}
+              onAddBookingFromStop={onAddBookingFromStop}
               onDeleteItem={onDeleteItem}
               onEditBooking={onEditBooking}
             />
@@ -1514,7 +1666,7 @@ function NotesTab({ workspace, onAddNote, onDeleteNote, onEditNote }) {
 // BookingsTab
 // ─────────────────────────────────────────────
 function BookingsTab({ workspace, onAddBooking, onDeleteBooking, onEditBooking }) {
-  const { tripBookings, trip } = workspace;
+  const { tripBookings, trip, itineraryDayStops = [] } = workspace;
   const startDate = trip?.startDate ? trip.startDate.slice(0, 10) : null;
 
   // Sort by date ascending (nulls last), then createdAt
@@ -1556,7 +1708,7 @@ function BookingsTab({ workspace, onAddBooking, onDeleteBooking, onEditBooking }
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {sorted.map(b => (
-          <BookingCard key={b.id} booking={b} onDelete={onDeleteBooking} onEdit={onEditBooking} />
+          <BookingCard key={b.id} booking={b} onDelete={onDeleteBooking} onEdit={onEditBooking} itineraryDayStops={itineraryDayStops} />
         ))}
       </div>
     </div>
@@ -1907,7 +2059,14 @@ export default function TripDetailPage() {
         }));
       } else {
         // Create new booking
-        const body = { ...form, tripDayId: bookingCtx?.dayId || null };
+        // If coming from a stop, copy coordinates if the booking form didn't override them
+        const stopCtx = bookingCtx?.stopCtx;
+        const body = {
+          ...form,
+          tripDayId: bookingCtx?.dayId || null,
+          latitude:  form.latitude  || stopCtx?.latitude  || null,
+          longitude: form.longitude || stopCtx?.longitude || null,
+        };
         const res  = await api.post(`/api/trips?id=${id}&action=booking`, body);
         if (!res.ok) throw new Error('Save failed');
         const { id: newId, dayNumber, tripDayId } = await res.json();
@@ -2105,6 +2264,22 @@ export default function TripDetailPage() {
             onAddItem={(dayId, dayNumber) => setAddItemCtx({ dayId, dayNumber })}
             onAddNote={(dayId, dayNumber) => setAddNoteCtx({ dayId, dayNumber })}
             onAddBooking={(dayId, dayNumber) => { setEditingBooking(null); setBookingCtx({ dayId, dayNumber }); }}
+            onAddBookingFromStop={(stop, dayId, dayNumber) => {
+              setEditingBooking(null);
+              setBookingCtx({
+                dayId, dayNumber,
+                stopCtx: {
+                  stopId:       stop.id,
+                  title:        stop.title,
+                  locationName: stop.locationName || stop.title,
+                  address:      stop.address || null,
+                  latitude:     stop.latitude  || null,
+                  longitude:    stop.longitude || null,
+                  type:         stop.type,
+                  dayNumber:    stop.dayNumber || dayNumber,
+                },
+              });
+            }}
             onDeleteItem={handleDeleteItem}
             onEditBooking={b => { setEditingBooking(b); setBookingCtx({}); }}
           />
@@ -2180,6 +2355,9 @@ export default function TripDetailPage() {
           open={bookingCtx !== null}
           dayNumber={bookingCtx?.dayNumber || null}
           editBooking={editingBooking}
+          stopCtx={bookingCtx?.stopCtx || null}
+          availableDays={(workspace?.tripDays || []).sort((a, b) => a.dayNumber - b.dayNumber)}
+          itineraryDayStops={workspace?.itineraryDayStops || []}
           onClose={() => { setBookingCtx(null); setEditingBooking(null); }}
           onSave={handleSaveBooking}
           saving={savingBooking}
