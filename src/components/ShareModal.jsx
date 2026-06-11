@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
-import { X, Plus, Copy, Check, Link, Mail, Trash2, ChevronDown } from 'lucide-react';
+import { X, Copy, Check, Link, Mail, Trash2 } from 'lucide-react';
 import { useApi } from '../lib/api';
 
-const TEAL  = '#1B6B65';
-const GOLD  = '#C9A96E';
-const CHAR  = '#1C1A16';
-const MUTED = '#6B6156';
-const STONE = '#FAFAF8';
+const TEAL   = '#1B6B65';
+const GOLD   = '#C9A96E';
+const CHAR   = '#1C1A16';
+const MUTED  = '#6B6156';
+const STONE  = '#FAFAF8';
 const BORDER = '#E8E3DA';
-const LIGHT = '#F4F1EC';
-const SERIF = "'Playfair Display', Georgia, serif";
+const LIGHT  = '#F4F1EC';
+const SERIF  = "'Playfair Display', Georgia, serif";
+const RED    = '#B04040';
 
 const inputStyle = {
   width: '100%', padding: '10px 13px',
@@ -23,7 +24,13 @@ const btnPrimary = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
   padding: '10px 18px', background: TEAL, color: 'white',
   border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '600',
-  letterSpacing: '0.3px', cursor: 'pointer', transition: 'background 0.15s',
+  letterSpacing: '0.3px', cursor: 'pointer',
+};
+
+const sectionLabel = {
+  fontSize: '10.5px', fontWeight: '700', letterSpacing: '1.8px',
+  textTransform: 'uppercase', color: MUTED, marginBottom: '12px',
+  margin: '0 0 12px',
 };
 
 function RoleSelect({ value, onChange, disabled }) {
@@ -50,94 +57,97 @@ function RoleSelect({ value, onChange, disabled }) {
   );
 }
 
-function ShareRow({ share, onRevoke, onRoleChange }) {
-  const [copied, setCopied] = useState(false);
-  const [revoking, setRevoking] = useState(false);
-  const [changingRole, setChangingRole] = useState(false);
+function ShareRow({ share, onRevoke, onRoleChange, onCopied }) {
+  const [copied, setCopied]         = useState(false);
+  const [revoking, setRevoking]     = useState(false);
+  const [changingRole, setChanging] = useState(false);
+
+  const statusColor = share.status === 'accepted' ? TEAL : share.status === 'pending' ? '#B5600A' : MUTED;
+  const statusLabel = share.status === 'accepted' ? 'Accepted' : share.status === 'pending' ? 'Pending' : share.status;
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(share.shareLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(share.shareLink);
+      setCopied(true);
+      onCopied?.();
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* silent */ }
   }
 
   async function handleRevoke() {
-    if (!window.confirm(`Revoke access for ${share.displayName}?`)) return;
+    if (!window.confirm(`Remove access for ${share.displayName}?`)) return;
     setRevoking(true);
     try { await onRevoke(share.id); } finally { setRevoking(false); }
   }
 
   async function handleRoleChange(newRole) {
-    setChangingRole(true);
-    try { await onRoleChange(share.id, newRole); } finally { setChangingRole(false); }
+    setChanging(true);
+    try { await onRoleChange(share.id, newRole); } finally { setChanging(false); }
   }
-
-  const statusColor = {
-    pending: '#B5600A',
-    accepted: '#1B6B65',
-    revoked: '#B5A09A',
-  }[share.status] || MUTED;
-
-  const statusLabel = {
-    pending: 'Pending',
-    accepted: 'Accepted',
-    revoked: 'Revoked',
-  }[share.status] || share.status;
-
-  if (share.status === 'revoked') return null;
 
   return (
     <div style={{
       padding: '14px 16px', background: 'white',
       border: `1px solid ${BORDER}`, borderRadius: '8px',
-      display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
     }}>
-      {/* Name/email */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: '13.5px', fontWeight: '600', color: CHAR, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {share.displayName}
-        </p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '3px' }}>
-          <span style={{ fontSize: '11px', fontWeight: '700', color: statusColor, letterSpacing: '0.5px' }}>
-            {statusLabel}
-          </span>
-          {share.acceptedAt && (
-            <span style={{ fontSize: '11px', color: '#B5A09A' }}>
-              · Accepted {new Date(share.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+      {/* Top row: name/email + role selector */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: '13.5px', fontWeight: '600', color: CHAR, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {share.displayName}
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '11px', fontWeight: '700', color: statusColor, letterSpacing: '0.4px' }}>
+              {statusLabel}
             </span>
-          )}
-          {share.status === 'pending' && (
-            <span style={{ fontSize: '11px', color: '#B5A09A' }}>
-              · {new Date(share.invitedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-            </span>
-          )}
+            {share.acceptedAt && (
+              <span style={{ fontSize: '11px', color: '#B5A09A' }}>
+                · Accepted {new Date(share.acceptedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              </span>
+            )}
+            {share.status === 'pending' && share.invitedAt && (
+              <span style={{ fontSize: '11px', color: '#B5A09A' }}>
+                · Invited {new Date(share.invitedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              </span>
+            )}
+          </div>
         </div>
+
+        <RoleSelect value={share.role} onChange={handleRoleChange} disabled={changingRole} />
       </div>
 
-      {/* Role selector */}
-      <RoleSelect value={share.role} onChange={handleRoleChange} disabled={changingRole} />
-
-      {/* Copy link (pending only) */}
-      {share.status === 'pending' && (
+      {/* Bottom row: copy link + revoke */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
+        {share.status === 'pending' && share.shareLink && (
+          <button
+            onClick={handleCopy}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '4px',
+              background: 'none', border: `1px solid ${BORDER}`, borderRadius: '6px',
+              padding: '5px 10px', cursor: 'pointer',
+              fontSize: '12px', color: copied ? TEAL : MUTED, fontWeight: '500',
+            }}
+          >
+            {copied ? <Check size={11} /> : <Copy size={11} />}
+            {copied ? 'Copied!' : 'Copy link'}
+          </button>
+        )}
         <button
-          onClick={handleCopy}
-          title="Copy invite link"
-          style={{ background: 'none', border: `1px solid ${BORDER}`, borderRadius: '6px', padding: '7px 10px', cursor: 'pointer', color: copied ? TEAL : MUTED, display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
+          onClick={handleRevoke}
+          disabled={revoking}
+          title="Revoke access"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '4px',
+            background: 'none', border: `1px solid ${BORDER}`, borderRadius: '6px',
+            padding: '5px 10px', cursor: revoking ? 'default' : 'pointer',
+            fontSize: '12px', color: revoking ? '#C8BFB5' : '#C05050', fontWeight: '500',
+            opacity: revoking ? 0.6 : 1,
+          }}
         >
-          {copied ? <Check size={12} /> : <Copy size={12} />}
-          {copied ? 'Copied' : 'Copy link'}
+          <Trash2 size={11} />
+          {revoking ? 'Revoking...' : 'Revoke'}
         </button>
-      )}
-
-      {/* Revoke */}
-      <button
-        onClick={handleRevoke}
-        disabled={revoking}
-        title="Revoke access"
-        style={{ background: 'none', border: 'none', cursor: revoking ? 'default' : 'pointer', color: '#C8BFB5', padding: '4px', display: 'flex', alignItems: 'center' }}
-      >
-        <Trash2 size={14} />
-      </button>
+      </div>
     </div>
   );
 }
@@ -145,33 +155,51 @@ function ShareRow({ share, onRevoke, onRoleChange }) {
 export default function ShareModal({ tripId, tripTitle, open, onClose }) {
   const api = useApi();
 
-  const [shares, setShares] = useState([]);
-  const [loadingShares, setLoadingShares] = useState(false);
+  // Shares list
+  const [shares, setShares]             = useState([]);
+  const [loadingShares, setLoading]     = useState(false);
+  const [sharesError, setSharesError]   = useState('');
+  const [refreshKey, setRefreshKey]     = useState(0);
 
-  // Email invite state
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('view');
-  const [sendEmail, setSendEmail] = useState(true);
-  const [inviting, setInviting] = useState(false);
-  const [inviteError, setInviteError] = useState('');
-  const [inviteSuccess, setInviteSuccess] = useState('');
+  // Toast
+  const [toast, setToast] = useState('');
+  function showToast(msg) {
+    setToast(msg);
+    setTimeout(() => setToast(''), 3000);
+  }
 
-  // Link share state
-  const [linkRole, setLinkRole] = useState('view');
-  const [generatingLink, setGeneratingLink] = useState(false);
+  // Email invite
+  const [inviteEmail, setInviteEmail]   = useState('');
+  const [inviteRole, setInviteRole]     = useState('view');
+  const [sendEmail, setSendEmail]       = useState(true);
+  const [inviting, setInviting]         = useState(false);
+  const [inviteError, setInviteError]   = useState('');
+
+  // Link share
+  const [linkRole, setLinkRole]         = useState('view');
+  const [generating, setGenerating]     = useState(false);
   const [generatedLink, setGeneratedLink] = useState('');
-  const [linkCopied, setLinkCopied] = useState(false);
+  const [linkCopied, setLinkCopied]     = useState(false);
 
+  // Load shares whenever modal opens or an action refreshes
   useEffect(() => {
     if (!open) return;
-    setLoadingShares(true);
+    let cancelled = false;
+    setLoading(true);
+    setSharesError('');
     api.get(`/api/trips?action=shares-list&id=${tripId}`)
       .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setShares(data); })
-      .catch(() => {})
-      .finally(() => setLoadingShares(false));
-  }, [open, tripId]);
+      .then(data => {
+        if (cancelled) return;
+        if (Array.isArray(data)) setShares(data);
+        else setSharesError('Could not load sharing settings.');
+      })
+      .catch(() => { if (!cancelled) setSharesError('Could not load sharing settings.'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [open, tripId, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Keyboard / scroll lock
   useEffect(() => {
     if (!open) return;
     const esc = e => { if (e.key === 'Escape') onClose(); };
@@ -182,9 +210,11 @@ export default function ShareModal({ tripId, tripTitle, open, onClose }) {
 
   if (!open) return null;
 
+  function refresh() { setRefreshKey(k => k + 1); }
+
+  // ── Invite by email ──────────────────────────────────────────────────────
   async function handleInvite() {
     setInviteError('');
-    setInviteSuccess('');
     const email = inviteEmail.trim();
     if (!email) { setInviteError('Please enter an email address.'); return; }
     if (!/^[^@]+@[^@]+\.[^@]+$/.test(email)) { setInviteError('Enter a valid email address.'); return; }
@@ -195,22 +225,11 @@ export default function ShareModal({ tripId, tripTitle, open, onClose }) {
         email, role: inviteRole, sendEmail,
       });
       const data = await res.json();
-      if (!res.ok) { setInviteError(data.error || 'Failed to send invite.'); return; }
-
-      const newShare = {
-        id: data.id,
-        email,
-        displayName: email,
-        role: inviteRole,
-        status: 'pending',
-        inviteToken: data.inviteToken,
-        shareLink: data.shareLink,
-        invitedAt: new Date().toISOString(),
-      };
-      setShares(s => [...s, newShare]);
+      if (res.status === 409) { setInviteError(data.error || 'An invite already exists for this email.'); return; }
+      if (!res.ok) { setInviteError(data.error || 'Could not send invite.'); return; }
       setInviteEmail('');
-      setInviteSuccess(sendEmail ? `Invite sent to ${email}` : `Invite created for ${email}`);
-      setTimeout(() => setInviteSuccess(''), 4000);
+      showToast(sendEmail ? `Invite sent to ${email}` : 'Invite created.');
+      refresh();
     } catch {
       setInviteError('Something went wrong. Please try again.');
     } finally {
@@ -218,46 +237,46 @@ export default function ShareModal({ tripId, tripTitle, open, onClose }) {
     }
   }
 
+  // ── Generate share link ──────────────────────────────────────────────────
   async function handleGenerateLink() {
-    setGeneratingLink(true);
+    setGenerating(true);
     setGeneratedLink('');
     try {
       const res = await api.post(`/api/trips?action=shares-create&id=${tripId}`, {
         email: null, role: linkRole, sendEmail: false,
       });
       const data = await res.json();
-      if (!res.ok) return;
-      const newShare = {
-        id: data.id,
-        email: null,
-        displayName: 'Link invite',
-        role: linkRole,
-        status: 'pending',
-        inviteToken: data.inviteToken,
-        shareLink: data.shareLink,
-        invitedAt: new Date().toISOString(),
-      };
-      setShares(s => [...s, newShare]);
+      if (!res.ok) { showToast('Could not create share link.'); return; }
       setGeneratedLink(data.shareLink);
-    } catch { /* graceful */ } finally {
-      setGeneratingLink(false);
+      refresh();
+    } catch {
+      showToast('Could not create share link.');
+    } finally {
+      setGenerating(false);
     }
   }
 
-  async function handleCopyGeneratedLink() {
-    await navigator.clipboard.writeText(generatedLink);
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 2000);
+  async function handleCopyGenerated() {
+    try {
+      await navigator.clipboard.writeText(generatedLink);
+      setLinkCopied(true);
+      showToast('Share link copied.');
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch { /* silent */ }
   }
 
+  // ── Revoke ───────────────────────────────────────────────────────────────
   async function handleRevoke(shareId) {
     const res = await api.post(`/api/trips?action=shares-revoke&shareId=${shareId}`, {});
-    if (res.ok) setShares(s => s.filter(sh => sh.id !== shareId));
+    if (res.ok) { showToast('Access revoked.'); refresh(); }
+    else showToast('Could not revoke access.');
   }
 
+  // ── Change role ──────────────────────────────────────────────────────────
   async function handleRoleChange(shareId, newRole) {
     const res = await api.patch(`/api/trips?action=shares-update-role&shareId=${shareId}`, { role: newRole });
-    if (res.ok) setShares(s => s.map(sh => sh.id === shareId ? { ...sh, role: newRole } : sh));
+    if (res.ok) { showToast('Role updated.'); refresh(); }
+    else showToast('Could not update role.');
   }
 
   const activeShares = shares.filter(s => s.status !== 'revoked');
@@ -279,15 +298,31 @@ export default function ShareModal({ tripId, tripTitle, open, onClose }) {
           width: '100%', maxWidth: '560px',
           maxHeight: '90vh', overflowY: 'auto',
           boxShadow: '0 24px 80px rgba(28,26,22,0.2)',
+          position: 'relative',
         }}
       >
+        {/* Toast */}
+        {toast && (
+          <div style={{
+            position: 'sticky', top: 0, zIndex: 10,
+            background: TEAL, color: 'white',
+            padding: '10px 28px', fontSize: '13px', fontWeight: '600',
+            borderRadius: '16px 16px 0 0',
+            textAlign: 'center',
+          }}>
+            {toast}
+          </div>
+        )}
+
         {/* Header */}
         <div style={{ padding: '24px 28px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
           <div>
             <h3 style={{ fontFamily: SERIF, fontSize: '22px', fontWeight: '600', color: CHAR, margin: '0 0 4px' }}>
               Share trip
             </h3>
-            <p style={{ fontSize: '13px', color: MUTED, margin: 0 }}>{tripTitle}</p>
+            {tripTitle && (
+              <p style={{ fontSize: '13px', color: MUTED, margin: 0 }}>{tripTitle}</p>
+            )}
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: MUTED }}>
             <X size={20} />
@@ -296,11 +331,9 @@ export default function ShareModal({ tripId, tripTitle, open, onClose }) {
 
         <div style={{ padding: '0 28px 28px' }}>
 
-          {/* ── Invite by email ─────────────────────────────── */}
+          {/* ── Invite by email ──────────────────────────────── */}
           <section style={{ marginBottom: '28px' }}>
-            <p style={{ fontSize: '10.5px', fontWeight: '700', letterSpacing: '1.8px', textTransform: 'uppercase', color: TEAL, marginBottom: '12px' }}>
-              Invite by email
-            </p>
+            <p style={{ ...sectionLabel, color: TEAL }}>Invite by email</p>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
               <input
                 type="email"
@@ -312,7 +345,7 @@ export default function ShareModal({ tripId, tripTitle, open, onClose }) {
               />
               <RoleSelect value={inviteRole} onChange={setInviteRole} />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: MUTED, cursor: 'pointer' }}>
                 <input
                   type="checkbox"
@@ -323,8 +356,9 @@ export default function ShareModal({ tripId, tripTitle, open, onClose }) {
                 Send invitation email
               </label>
             </div>
-            {inviteError && <p style={{ fontSize: '12.5px', color: '#B04040', marginBottom: '8px' }}>{inviteError}</p>}
-            {inviteSuccess && <p style={{ fontSize: '12.5px', color: TEAL, marginBottom: '8px' }}>{inviteSuccess}</p>}
+            {inviteError && (
+              <p style={{ fontSize: '12.5px', color: RED, marginBottom: '8px' }}>{inviteError}</p>
+            )}
             <button
               onClick={handleInvite}
               disabled={inviting || !inviteEmail.trim()}
@@ -337,21 +371,19 @@ export default function ShareModal({ tripId, tripTitle, open, onClose }) {
 
           {/* ── Share via link ───────────────────────────────── */}
           <section style={{ padding: '20px', background: STONE, borderRadius: '10px', marginBottom: '28px' }}>
-            <p style={{ fontSize: '10.5px', fontWeight: '700', letterSpacing: '1.8px', textTransform: 'uppercase', color: MUTED, marginBottom: '12px' }}>
-              Share via link
-            </p>
+            <p style={{ ...sectionLabel }}>Share via link</p>
             <p style={{ fontSize: '13px', color: MUTED, marginBottom: '12px', lineHeight: '1.5' }}>
-              Create a link and share via WhatsApp or copy it manually. Single-use.
+              Create a link to share via WhatsApp or copy manually. Single-use per link.
             </p>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: generatedLink ? '12px' : '0' }}>
               <RoleSelect value={linkRole} onChange={setLinkRole} />
               <button
                 onClick={handleGenerateLink}
-                disabled={generatingLink}
-                style={{ ...btnPrimary, background: 'white', color: TEAL, border: `1px solid ${TEAL}`, opacity: generatingLink ? 0.6 : 1 }}
+                disabled={generating}
+                style={{ ...btnPrimary, background: 'white', color: TEAL, border: `1px solid ${TEAL}`, opacity: generating ? 0.6 : 1 }}
               >
                 <Link size={13} />
-                {generatingLink ? 'Generating...' : 'Generate link'}
+                {generating ? 'Generating...' : 'Generate link'}
               </button>
             </div>
             {generatedLink && (
@@ -360,7 +392,7 @@ export default function ShareModal({ tripId, tripTitle, open, onClose }) {
                   {generatedLink}
                 </span>
                 <button
-                  onClick={handleCopyGeneratedLink}
+                  onClick={handleCopyGenerated}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: linkCopied ? TEAL : MUTED, display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: '600', flexShrink: 0 }}
                 >
                   {linkCopied ? <Check size={12} /> : <Copy size={12} />}
@@ -370,28 +402,41 @@ export default function ShareModal({ tripId, tripTitle, open, onClose }) {
             )}
           </section>
 
-          {/* ── Existing shares ──────────────────────────────── */}
-          {activeShares.length > 0 && (
-            <section>
-              <p style={{ fontSize: '10.5px', fontWeight: '700', letterSpacing: '1.8px', textTransform: 'uppercase', color: MUTED, marginBottom: '12px' }}>
-                People with access ({activeShares.length})
+          {/* ── People with access ───────────────────────────── */}
+          <section>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <p style={{ ...sectionLabel, margin: 0 }}>
+                People with access{activeShares.length > 0 ? ` (${activeShares.length})` : ''}
               </p>
-              {loadingShares ? (
-                <p style={{ fontSize: '13px', color: MUTED }}>Loading...</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {activeShares.map(share => (
-                    <ShareRow
-                      key={share.id}
-                      share={share}
-                      onRevoke={handleRevoke}
-                      onRoleChange={handleRoleChange}
-                    />
-                  ))}
-                </div>
+              {loadingShares && (
+                <span style={{ fontSize: '11px', color: MUTED }}>Loading...</span>
               )}
-            </section>
-          )}
+            </div>
+
+            {sharesError && (
+              <p style={{ fontSize: '12.5px', color: RED, marginBottom: '8px' }}>{sharesError}</p>
+            )}
+
+            {!loadingShares && !sharesError && activeShares.length === 0 && (
+              <p style={{ fontSize: '13px', color: MUTED, fontStyle: 'italic' }}>
+                No one else has access yet.
+              </p>
+            )}
+
+            {activeShares.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {activeShares.map(share => (
+                  <ShareRow
+                    key={share.id}
+                    share={share}
+                    onRevoke={handleRevoke}
+                    onRoleChange={handleRoleChange}
+                    onCopied={() => showToast('Share link copied.')}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
 
         </div>
       </div>
