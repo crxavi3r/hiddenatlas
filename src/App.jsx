@@ -41,6 +41,7 @@ import BecomeDesignerPage from './pages/BecomeDesignerPage';
 import DesignerPricingPage from './pages/DesignerPricingPage';
 import DesignerApplicationsPage from './pages/admin/DesignerApplicationsPage';
 import PricingPlansPage from './pages/admin/PricingPlansPage';
+import ItineraryReviewsPage from './pages/admin/ItineraryReviewsPage';
 import { CustomRequestPaymentSuccessPage, CustomRequestPaymentCancelledPage } from './pages/CustomRequestPaymentPage';
 import ShareAcceptPage from './pages/ShareAcceptPage';
 
@@ -110,6 +111,7 @@ export default function App() {
           <Route path="creators/:id" element={<CreatorEditorPage />} />
           <Route path="designer-applications" element={<DesignerApplicationsPage />} />
           <Route path="pricing" element={<PricingPlansPage />} />
+          <Route path="itinerary-reviews" element={<ItineraryReviewsPage />} />
         </Route>
 
         {/* ── Public pages — shared Navbar + Footer ── */}

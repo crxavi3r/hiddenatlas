@@ -35,6 +35,7 @@
 
 import pg                         from 'pg';
 import { resolveUserCtx }         from './_lib/resolveUserCtx.js';
+import { handleSubmit as reviewSubmit } from './itinerary-review.js';
 import { existsSync }             from 'fs';
 import { readFile, stat }         from 'fs/promises';
 import path                       from 'path';
@@ -168,8 +169,15 @@ export default async function handler(req, res) {
       if (action === 'update')       { await assertOwnership(pool, id, ctx); return res.json(await handleUpdate(pool, id, body, ctx)); }
       if (action === 'duplicate')    { await assertOwnership(pool, id, ctx); return res.json(await handleDuplicate(pool, id)); }
       if (action === 'delete')       return res.json(await handleDelete(pool, id, ctx));
-      if (action === 'publish')      { await assertOwnership(pool, id, ctx); return res.json(await handleSetStatus(pool, id, 'published')); }
-      if (action === 'unpublish')    { await assertOwnership(pool, id, ctx); return res.json(await handleSetStatus(pool, id, 'draft')); }
+      // Designers cannot publish directly — route to review submission instead.
+      if (action === 'publish') {
+        await assertOwnership(pool, id, ctx);
+        if (!ctx.isAdmin) return res.json(await reviewSubmit(pool, id, ctx));
+        return res.json(await handleSetStatus(pool, id, 'published', ctx));
+      }
+      if (action === 'unpublish')    { await assertOwnership(pool, id, ctx); return res.json(await handleSetStatus(pool, id, 'draft', ctx)); }
+      // Explicit submit-for-review action (mirrors the publish route for designers)
+      if (action === 'submit-for-review') { await assertOwnership(pool, id, ctx); return res.json(await reviewSubmit(pool, id, ctx)); }
       if (action === 'seed')         { adminOnly(); return res.json(await handleSeed(pool, body)); }
       if (action === 'bulk-publish') { adminOnly(); return res.json(await handleBulkPublish(pool)); }
       if (action === 'save-asset')   return res.json(await handleSaveAsset(pool, body, ctx));
@@ -488,6 +496,12 @@ async function handleUpdate(pool, id, body, ctx) {
     );
   }
 
+  // Designers cannot set status = published via the save (update) action.
+  // They must use the "Submit for review" flow. If a designer sends status: 'published'
+  // (e.g. because the itinerary was already published and they saved), we treat it as
+  // null so COALESCE keeps the existing status value unchanged.
+  const effectiveStatus = (!ctx.isAdmin && status === 'published') ? null : (status ?? null);
+
   // Defensive parse: body parsers sometimes deliver JSONB fields as strings
   const rawContent = typeof content === 'string'
     ? (() => { try { return JSON.parse(content); } catch { return {}; } })()
@@ -496,10 +510,11 @@ async function handleUpdate(pool, id, body, ctx) {
 
   console.log(`[itinerary-cms/update] id=${id} days=${finalContent.days?.length ?? 0}`);
 
-  // Derive mirrored columns
+  // Derive mirrored columns (use effectiveStatus for derivedIsPublished so designers
+  // saving a published itinerary don't accidentally set isPublished to true)
   const derivedCoverImage  = finalContent.hero?.coverImage || coverImage || '';
   const derivedDescription = finalContent.summary?.shortDescription || '';
-  const derivedIsPublished = status === 'published';
+  const derivedIsPublished = effectiveStatus === 'published';
 
   // type/accessType/isPrivate — null means "leave unchanged"
   const typeParam       = typeof type === 'string' ? type : null;
@@ -551,7 +566,7 @@ async function handleUpdate(pool, id, body, ctx) {
       pricingKey ?? null,
       derivedCoverImage,
       derivedDescription,
-      status ?? null,
+      effectiveStatus,
       derivedIsPublished,
       JSON.stringify(finalContent),
       typeParam,
@@ -680,8 +695,15 @@ async function handleDelete(pool, id, ctx) {
 }
 
 // ── Publish / Unpublish ───────────────────────────────────────────────────────
-async function handleSetStatus(pool, id, status) {
+async function handleSetStatus(pool, id, status, ctx) {
   if (!id) throw Object.assign(new Error('id is required'), { status: 400 });
+  // Server-side guard: only admins can directly publish
+  if (status === 'published' && ctx && !ctx.isAdmin) {
+    throw Object.assign(
+      new Error('Designers cannot publish directly. Use "Submit for review".'),
+      { status: 403 }
+    );
+  }
 
   // Validate premium itineraries have a Stripe Price ID before publishing
   if (status === 'published') {

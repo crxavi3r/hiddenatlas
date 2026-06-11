@@ -12,8 +12,10 @@ import ImportItineraryModal from './ImportItineraryModal.jsx';
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
 
 const STATUS_META = {
-  published: { label: 'Published', color: '#1B6B65', bg: '#EFF6F5' },
-  draft:     { label: 'Draft',     color: '#8C8070', bg: '#F4F1EC' },
+  published:      { label: 'Published',      color: '#1B6B65', bg: '#EFF6F5' },
+  draft:          { label: 'Draft',          color: '#8C8070', bg: '#F4F1EC' },
+  pending_review: { label: 'Pending Review', color: '#C9A96E', bg: '#FBF8F1' },
+  rejected:       { label: 'Rejected',       color: '#C0392B', bg: '#FDECEA' },
 };
 
 const TYPE_META = {
@@ -903,7 +905,28 @@ export default function ItinerariesCMSPage() {
   }
 
   async function handleTogglePublish(item) {
-    const action = item.status === 'published' ? 'unpublish' : 'publish';
+    // Designers use submit-for-review instead of direct publish
+    let action;
+    if (item.status === 'published') {
+      action = 'unpublish';
+    } else if (!isAdmin) {
+      // Designer: submit for review
+      action = 'submit-for-review';
+    } else {
+      action = 'publish';
+    }
+
+    // Warn designer before submitting a published itinerary (which unpublishes it)
+    if (action === 'submit-for-review' && item.status === 'published') {
+      if (!window.confirm('Submitting for review will unpublish this itinerary until an admin approves it again. Continue?')) return;
+    }
+
+    // Designers can't unpublish published itineraries
+    if (action === 'unpublish' && !isAdmin) {
+      alert('Only admins can unpublish a published itinerary.');
+      return;
+    }
+
     try {
       const token = await getToken();
       const res   = await fetch(`/api/itinerary-cms?action=${action}&id=${item.id}`, {
@@ -912,8 +935,9 @@ export default function ItinerariesCMSPage() {
       });
       const json = await res.json();
       if (json.error) throw new Error(json.error);
+      const updated = json.itinerary;
       setItems(prev => prev.map(it => it.id === item.id
-        ? { ...it, status: json.itinerary.status, isPublished: json.itinerary.isPublished }
+        ? { ...it, status: updated.status, isPublished: updated.isPublished }
         : it
       ));
     } catch (e) { alert(e.message); }
@@ -1220,6 +1244,7 @@ export default function ItinerariesCMSPage() {
           onDelete={requestDelete}
           canDelete={canDelete}
           onInstagramPublish={it => setInstagramModal(it)}
+          isAdmin={isAdmin}
         />
       ) : (
         <DesktopTable
@@ -1231,6 +1256,7 @@ export default function ItinerariesCMSPage() {
           onDelete={requestDelete}
           canDelete={canDelete}
           onInstagramPublish={it => setInstagramModal(it)}
+          isAdmin={isAdmin}
         />
       )}
     </div>
@@ -1238,7 +1264,7 @@ export default function ItinerariesCMSPage() {
 }
 
 // ── Desktop table ─────────────────────────────────────────────────────────────
-function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, onDelete, canDelete, onInstagramPublish }) {
+function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, onDelete, canDelete, onInstagramPublish, isAdmin = false }) {
   const [sortKey, setSortKey] = useState(null);  // null | 'pdf_version' | 'updatedAt'
   const [sortDir, setSortDir] = useState('asc'); // 'asc' | 'desc'
 
@@ -1373,13 +1399,27 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
                     <button onClick={() => onDuplicate(it)} style={iconBtn} title="Duplicate">
                       <Copy size={13} />
                     </button>
-                    <button
-                      onClick={() => onTogglePublish(it)}
-                      style={{ ...iconBtn, color: it.status === 'published' ? '#C9A96E' : '#1B6B65' }}
-                      title={it.status === 'published' ? 'Unpublish' : 'Publish'}
-                    >
-                      {it.status === 'published' ? <EyeOff size={13} /> : <Globe size={13} />}
-                    </button>
+                    {it.status === 'pending_review' ? (
+                      <span style={{
+                        fontSize: '10px', fontWeight: '600', color: '#C9A96E',
+                        padding: '3px 6px', background: '#FBF8F1', borderRadius: '4px',
+                        whiteSpace: 'nowrap',
+                      }} title="Awaiting admin review">
+                        Awaiting review
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => onTogglePublish(it)}
+                        style={{ ...iconBtn, color: it.status === 'published' ? '#C9A96E' : '#1B6B65' }}
+                        title={
+                          it.status === 'published' ? (isAdmin ? 'Unpublish' : 'Admin only') :
+                          !isAdmin ? 'Submit for review' : 'Publish'
+                        }
+                        disabled={it.status === 'published' && !isAdmin}
+                      >
+                        {it.status === 'published' ? <EyeOff size={13} /> : <Globe size={13} />}
+                      </button>
+                    )}
                     {it.creator_instagram_account_id && (
                       <button
                         onClick={() => onInstagramPublish(it)}
@@ -1411,7 +1451,7 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
 }
 
 // ── Mobile list ───────────────────────────────────────────────────────────────
-function MobileList({ items, onEdit, onPreview, onTogglePublish, onDuplicate, onDelete, canDelete, onInstagramPublish }) {
+function MobileList({ items, onEdit, onPreview, onTogglePublish, onDuplicate, onDelete, canDelete, onInstagramPublish, isAdmin = false }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
       {items.map(it => (
@@ -1448,12 +1488,15 @@ function MobileList({ items, onEdit, onPreview, onTogglePublish, onDuplicate, on
               { icon: Edit2, label: 'Edit',      action: () => onEdit(it) },
               { icon: Eye, label: it.isPublished && !it.isPrivate && it.type !== 'custom' ? 'Preview' : 'Preview', action: () => onPreview(it) },
               { icon: Copy,  label: 'Duplicate', action: () => onDuplicate(it) },
-              {
-                icon: it.status === 'published' ? EyeOff : Globe,
-                label: it.status === 'published' ? 'Unpublish' : 'Publish',
-                action: () => onTogglePublish(it),
-                color: it.status === 'published' ? '#C9A96E' : '#1B6B65',
-              },
+              ...(it.status === 'pending_review' ? [] : [
+                {
+                  icon: it.status === 'published' ? EyeOff : Globe,
+                  label: it.status === 'published' ? 'Unpublish' :
+                         !isAdmin ? 'Submit' : 'Publish',
+                  action: () => (it.status === 'published' && !isAdmin) ? undefined : onTogglePublish(it),
+                  color: it.status === 'published' ? '#C9A96E' : '#1B6B65',
+                },
+              ]),
               ...(it.creator_instagram_account_id ? [{
                 icon: Instagram, label: 'Instagram', action: () => onInstagramPublish(it),
                 color: (it.instagramPermalink || it.instagramPostId) ? '#1B6B65' : '#E1306C',

@@ -102,9 +102,11 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store');
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     try {
-      // Primary query — unchanged from original; always safe.
+      // Explicit exclusion of pending_review and rejected ensures review-workflow
+      // itineraries never appear publicly even if isPublished is inconsistent.
       const WHERE = `
          WHERE  (status = 'published' OR "isPublished" = true)
+           AND  status NOT IN ('pending_review', 'rejected')
            AND  ("isPrivate" = false OR "isPrivate" IS NULL)
            AND  ("isCollection" = false OR "isCollection" IS NULL)
            AND  ("parentId" IS NULL OR "parentId" = '')

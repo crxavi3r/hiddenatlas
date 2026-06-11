@@ -1162,6 +1162,10 @@ export default function ItineraryCMSEditorPage() {
     structureType: 'standalone',
     relationshipType: 'standalone',
     content: { ...EMPTY_CONTENT },
+    // Review workflow fields
+    rejectionReason: null,
+    reviewedAt: null,
+    submittedForReviewAt: null,
   });
   const [allCreators, setAllCreators] = useState([]);  // for creator selector
 
@@ -1255,6 +1259,9 @@ export default function ItineraryCMSEditorPage() {
         parentTitle: '',
         parentIsCollection: false,
         content,
+        rejectionReason: it.rejectionReason || null,
+        reviewedAt: it.reviewedAt || null,
+        submittedForReviewAt: it.submittedForReviewAt || null,
       });
       savedId.current = it.id;
       slugRef.current = it.slug || '';
@@ -1655,15 +1662,32 @@ export default function ItineraryCMSEditorPage() {
     finally { setSaving(false); setTimeout(() => setSaveMsg(null), 5000); }
   }
 
-  // ── Toggle publish ────────────────────────────────────────────────────────────
+  // ── Toggle publish / submit for review ───────────────────────────────────────
   async function handleTogglePublish() {
     const targetId = savedId.current || (isNew ? null : id);
     if (!targetId) { alert('Save the itinerary first.'); return; }
-    const action = form.status === 'published' ? 'unpublish' : 'publish';
-    if (action === 'publish' && form.type === 'premium' && !form.stripePriceId && !form.pricingPlanId) {
-      alert('Cannot publish: select a pricing plan before publishing a premium itinerary.');
-      return;
+
+    // Determine the action based on role and current status
+    let action;
+    if (form.status === 'published') {
+      if (!isAdmin) { alert('Only admins can unpublish a published itinerary.'); return; }
+      action = 'unpublish';
+    } else if (!isAdmin) {
+      // Designer: submit for review
+      if (form.type === 'premium' && !form.stripePriceId && !form.pricingPlanId) {
+        alert('Cannot submit for review: select a pricing plan before submitting a premium itinerary.');
+        return;
+      }
+      action = 'submit-for-review';
+    } else {
+      // Admin: direct publish
+      if (form.type === 'premium' && !form.stripePriceId && !form.pricingPlanId) {
+        alert('Cannot publish: select a pricing plan before publishing a premium itinerary.');
+        return;
+      }
+      action = 'publish';
     }
+
     try {
       const token = await getToken();
       const res   = await fetch(`/api/itinerary-cms?action=${action}&id=${targetId}`, {
@@ -1672,7 +1696,16 @@ export default function ItineraryCMSEditorPage() {
       });
       const json = await res.json();
       if (json.error) throw new Error(json.error);
-      setForm(f => ({ ...f, status: json.itinerary.status }));
+      const updated = json.itinerary;
+      setForm(f => ({
+        ...f,
+        status: updated.status,
+        submittedForReviewAt: updated.submittedForReviewAt ?? f.submittedForReviewAt,
+      }));
+      if (action === 'submit-for-review') {
+        setSaveMsg({ ok: true, text: 'Submitted for admin review.' });
+        setTimeout(() => setSaveMsg(null), 5000);
+      }
     } catch (e) { alert(e.message); }
   }
 
@@ -2522,8 +2555,16 @@ export default function ItineraryCMSEditorPage() {
     );
   }
 
-  const isPublished  = form.status === 'published';
-  const sidebarWidth = isMobile ? '100%' : '260px';
+  const isPublished      = form.status === 'published';
+  const isPendingReview  = form.status === 'pending_review';
+  const isRejected       = form.status === 'rejected';
+  const sidebarWidth     = isMobile ? '100%' : '260px';
+
+  // Derive status display meta
+  const statusDisplay = isPublished ? { label: 'Published', color: '#1B6B65', bg: '#EFF6F5' }
+    : isPendingReview              ? { label: 'Pending Review', color: '#C9A96E', bg: '#FBF8F1' }
+    : isRejected                   ? { label: 'Rejected', color: '#C0392B', bg: '#FDECEA' }
+    : { label: 'Draft', color: '#8C8070', bg: '#F4F1EC' };
 
   // ── Shared day image map — single source of truth for DaysTab, ImagesTab, and PDF ──
   // Priority (highest → lowest): DB asset (has id) > day.img (inline DB state) > FS asset (resolver)
@@ -2571,10 +2612,9 @@ export default function ItineraryCMSEditorPage() {
           <span style={{
             fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase',
             padding: '4px 10px', borderRadius: '10px',
-            background: isPublished ? '#EFF6F5' : '#F4F1EC',
-            color: isPublished ? '#1B6B65' : '#8C8070',
+            background: statusDisplay.bg, color: statusDisplay.color,
           }}>
-            {isPublished ? 'Published' : 'Draft'}
+            {statusDisplay.label}
           </span>
 
           {/* Preview — opens custom itinerary page in new tab */}
@@ -2627,9 +2667,33 @@ export default function ItineraryCMSEditorPage() {
             </button>
           )}
 
-          <button onClick={saving ? undefined : handleTogglePublish} disabled={saving} style={{ ...btnSecondary, opacity: saving ? 0.5 : 1, cursor: saving ? 'default' : 'pointer' }}>
-            {isPublished ? <><EyeOff size={12} /> Unpublish</> : <><Globe size={12} /> Publish</>}
-          </button>
+          {isPendingReview ? (
+            <span style={{
+              fontSize: '11.5px', fontWeight: '500', color: '#C9A96E',
+              padding: '7px 14px', borderRadius: '5px', background: '#FBF8F1',
+              border: '1px solid #EDD8A0',
+            }}>
+              Awaiting admin review
+            </span>
+          ) : (
+            <button
+              onClick={saving ? undefined : handleTogglePublish}
+              disabled={saving || (isPublished && !isAdmin)}
+              style={{
+                ...btnSecondary,
+                opacity: saving || (isPublished && !isAdmin) ? 0.5 : 1,
+                cursor: saving || (isPublished && !isAdmin) ? 'default' : 'pointer',
+              }}
+              title={isPublished && !isAdmin ? 'Only admins can unpublish' : undefined}
+            >
+              {isPublished
+                ? <><EyeOff size={12} /> Unpublish</>
+                : isAdmin
+                  ? <><Globe size={12} /> Publish</>
+                  : <><Globe size={12} /> Submit for review</>
+              }
+            </button>
+          )}
 
           <button onClick={handleSave} disabled={saving} style={{ ...btnPrimary, opacity: saving ? 0.85 : 1 }}>
             {saving
@@ -2639,6 +2703,31 @@ export default function ItineraryCMSEditorPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Rejection banner — shown to designer when itinerary is rejected ── */}
+      {isRejected && form.rejectionReason && (
+        <div style={{
+          margin: isMobile ? '12px 0' : '0 32px 0',
+          padding: '14px 18px',
+          background: '#FDECEA', border: '1px solid #F5C6C0', borderRadius: '6px',
+          fontSize: '13px', color: '#C0392B',
+        }}>
+          <p style={{ fontWeight: '700', marginBottom: '4px' }}>This itinerary was rejected by an admin.</p>
+          <p style={{ fontStyle: 'italic', marginBottom: form.reviewedAt ? '6px' : '0' }}>
+            "{form.rejectionReason}"
+          </p>
+          {form.reviewedAt && (
+            <p style={{ fontSize: '11.5px', color: '#8C6060', marginTop: '4px' }}>
+              Reviewed on {new Date(form.reviewedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </p>
+          )}
+          {!isAdmin && (
+            <p style={{ fontSize: '12px', marginTop: '8px', fontWeight: '500' }}>
+              Edit the itinerary to address the feedback, then click "Submit for review" again.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* PDF silent-failure warning — shown when auto-PDF after save fails */}
       {pdfSilentFail && (

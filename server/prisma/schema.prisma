@@ -103,6 +103,17 @@ model Itinerary {
 
   pricingPlanId     String?                    // FK to DesignerPricingPlan.id — null for default pricing
 
+  // ── Publication review workflow ─────────────
+  // Columns added manually (migration 20260611000000).
+  // status flow: draft → pending_review → published | rejected
+  submittedForReviewAt  DateTime?   // when designer clicked "Submit for review"
+  submittedByUserId     String?     // FK to User.id — who submitted
+  reviewedAt            DateTime?   // when admin approved or rejected
+  reviewedByUserId      String?     // FK to User.id — which admin reviewed
+  rejectionReason       String?     // required when rejecting
+  reviewMessage         String?     // optional admin note
+  publishedAt           DateTime?   // set on approval
+
   creator           Creator?            @relation(fields: [creatorId], references: [id])
   pricingPlan       DesignerPricingPlan? @relation(fields: [pricingPlanId], references: [id])
   purchases         Purchase[]
@@ -117,6 +128,10 @@ model Itinerary {
   @@index([accessType])
   @@index([updatedAt])
   @@index([creatorId])
+  @@index([submittedForReviewAt])
+  @@index([reviewedAt])
+  @@index([reviewedByUserId])
+  @@index([status, submittedForReviewAt])
 }
 
 // ─────────────────────────────────────────────
