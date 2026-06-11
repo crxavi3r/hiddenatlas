@@ -313,7 +313,13 @@ export default async function handler(req, res) {
                 t.title AS "tripTitle", t.destination
          FROM "TripBooking" b
          JOIN "Trip" t ON t.id = b."tripId"
-         WHERE b.id = $1 AND t."userId" = $2`,
+         WHERE b.id = $1 AND (
+           t."userId" = $2 OR
+           EXISTS (
+             SELECT 1 FROM "TripShare" ts
+             WHERE ts."tripId" = t.id AND ts."userId" = $2 AND ts.status = 'accepted'
+           )
+         )`,
         [req.query.bookingId, icsUserId]
       );
       if (!bRows.length) return res.status(404).json({ error: 'Booking not found' });
@@ -368,30 +374,33 @@ export default async function handler(req, res) {
     if (!users.length) return res.status(404).json({ error: 'User not found' });
     const userId = users[0].id;
 
-    // ── Helper: verify trip ownership ──────────────────────────────────────
-    async function getOwnedTrip(tripId) {
-      const { rows } = await pool.query(
+    // ── Helper: resolve trip access for current user ────────────────────────
+    // Returns { canView, canEdit, canManageSharing, role: 'owner'|'edit'|'view'|null }
+    async function getTripAccess(tripId) {
+      const { rows: owned } = await pool.query(
         `SELECT id FROM "Trip" WHERE id = $1 AND "userId" = $2`,
         [tripId, userId]
       );
-      return rows[0] || null;
+      if (owned.length) {
+        return { canView: true, canEdit: true, canManageSharing: true, role: 'owner' };
+      }
+      const { rows: shares } = await pool.query(
+        `SELECT role FROM "TripShare" WHERE "tripId" = $1 AND "userId" = $2 AND status = 'accepted'`,
+        [tripId, userId]
+      );
+      if (shares.length) {
+        const shareRole = shares[0].role;
+        return { canView: true, canEdit: shareRole === 'edit', canManageSharing: false, role: shareRole };
+      }
+      return { canView: false, canEdit: false, canManageSharing: false, role: null };
     }
 
-    // ── GET /api/trips — list all trips ────────────────────────────────────
+    // ── GET /api/trips — list owned + accepted shared trips ────────────────
     if (req.method === 'GET' && !id) {
       const { rows } = await pool.query(
         `SELECT
-           t.id,
-           t.title,
-           t.destination,
-           t.country,
-           t.duration,
-           t.overview,
-           t.source,
-           t."coverImage",
-           t."heroImage",
-           t."itinerarySlug",
-           t."itineraryId",
+           t.id, t.title, t.destination, t.country, t.duration, t.overview,
+           t.source, t."coverImage", t."heroImage", t."itinerarySlug", t."itineraryId",
            t."createdAt",
            COUNT(d.id)::int AS "dayCount",
            COALESCE(
@@ -401,12 +410,37 @@ export default async function handler(req, res) {
               WHERE (t."itineraryId" IS NOT NULL AND i.id = t."itineraryId")
                  OR (t."itineraryId" IS NULL AND t."itinerarySlug" IS NOT NULL AND i.slug = t."itinerarySlug")
               LIMIT 1)
-           ) AS "resolvedCoverImage"
+           ) AS "resolvedCoverImage",
+           false AS "isShared",
+           'owner'::text AS "shareRole"
          FROM "Trip" t
          LEFT JOIN "TripDay" d ON d."tripId" = t.id
          WHERE t."userId" = $1
          GROUP BY t.id
-         ORDER BY t."createdAt" DESC`,
+
+         UNION ALL
+
+         SELECT
+           t.id, t.title, t.destination, t.country, t.duration, t.overview,
+           t.source, t."coverImage", t."heroImage", t."itinerarySlug", t."itineraryId",
+           t."createdAt",
+           COUNT(d.id)::int AS "dayCount",
+           COALESCE(
+             t."heroImage",
+             t."coverImage",
+             (SELECT i."coverImage" FROM "Itinerary" i
+              WHERE (t."itineraryId" IS NOT NULL AND i.id = t."itineraryId")
+                 OR (t."itineraryId" IS NULL AND t."itinerarySlug" IS NOT NULL AND i.slug = t."itinerarySlug")
+              LIMIT 1)
+           ) AS "resolvedCoverImage",
+           true AS "isShared",
+           ts.role AS "shareRole"
+         FROM "Trip" t
+         JOIN "TripShare" ts ON ts."tripId" = t.id AND ts."userId" = $1 AND ts.status = 'accepted'
+         LEFT JOIN "TripDay" d ON d."tripId" = t.id
+         GROUP BY t.id, ts.role
+
+         ORDER BY "createdAt" DESC`,
         [userId]
       );
       return res.status(200).json(rows);
@@ -414,6 +448,9 @@ export default async function handler(req, res) {
 
     // ── GET /api/trips?id=&action=workspace — full workspace data ─────────
     if (req.method === 'GET' && id && action === 'workspace') {
+      const tripAccess = await getTripAccess(id);
+      if (!tripAccess.canView) return res.status(404).json({ error: 'Trip not found' });
+
       const { rows: tripRows } = await pool.query(
         `SELECT
            id, "userId", "itinerarySlug", "itineraryId", title, destination, country,
@@ -423,10 +460,19 @@ export default async function handler(req, res) {
            "accommodationSummary", "arrivalInfo", "departureInfo", "generalNotes",
            "createdAt", "updatedAt"
          FROM "Trip"
-         WHERE id = $1 AND "userId" = $2`,
-        [id, userId]
+         WHERE id = $1`,
+        [id]
       );
       if (!tripRows.length) return res.status(404).json({ error: 'Trip not found' });
+
+      // Update lastAccessedAt for shared users (fire and forget)
+      if (tripAccess.role !== 'owner') {
+        pool.query(
+          `UPDATE "TripShare" SET "lastAccessedAt" = NOW(), "updatedAt" = NOW()
+           WHERE "tripId" = $1 AND "userId" = $2 AND status = 'accepted'`,
+          [id, userId]
+        ).catch(() => {});
+      }
       const trip = tripRows[0];
 
       // Resolve itinerary via itineraryId (FK) or itinerarySlug (legacy)
@@ -535,18 +581,20 @@ export default async function handler(req, res) {
         hiddenStopIds = hiddenRows.map(r => r.stopId).filter(Boolean);
       } catch { /* graceful fallback */ }
 
-      return res.status(200).json({ trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, assets, itineraryDayStops, hiddenStopIds });
+      return res.status(200).json({ trip, itinerary, tripDays, tripItems, tripNotes, tripBookings, assets, itineraryDayStops, hiddenStopIds, access: tripAccess });
     }
 
     // ── GET /api/trips?id= — single trip (basic) ───────────────────────────
     if (req.method === 'GET' && id) {
+      const singleAccess = await getTripAccess(id);
+      if (!singleAccess.canView) return res.status(404).json({ error: 'Trip not found' });
+
       const { rows: trips } = await pool.query(
         `SELECT id, title, destination, country, duration, overview,
                 highlights, hotels, experiences, source, "coverImage",
                 "itinerarySlug", "itineraryId", "createdAt"
-         FROM "Trip"
-         WHERE id = $1 AND "userId" = $2`,
-        [id, userId]
+         FROM "Trip" WHERE id = $1`,
+        [id]
       );
       if (!trips.length) return res.status(404).json({ error: 'Trip not found' });
 
@@ -565,8 +613,8 @@ export default async function handler(req, res) {
 
     // Update trip personal details
     if (req.method === 'POST' && action === 'details' && id) {
-      const owned = await getOwnedTrip(id);
-      if (!owned) return res.status(404).json({ error: 'Trip not found' });
+      const access = await getTripAccess(id);
+      if (!access.canEdit) return res.status(access.canView ? 403 : 404).json({ error: access.canView ? 'Permission denied' : 'Trip not found' });
 
       const {
         startDate, endDate, travellers, accommodationSummary,
@@ -591,8 +639,8 @@ export default async function handler(req, res) {
 
     // Create TripItem
     if (req.method === 'POST' && action === 'item' && id && !itemId) {
-      const owned = await getOwnedTrip(id);
-      if (!owned) return res.status(404).json({ error: 'Trip not found' });
+      const access = await getTripAccess(id);
+      if (!access.canEdit) return res.status(access.canView ? 403 : 404).json({ error: access.canView ? 'Permission denied' : 'Trip not found' });
 
       const { tripDayId, type, title, description, time, startTime, endTime, durationMinutes, locationName, notes, sortOrder } = req.body || {};
       if (!title) return res.status(400).json({ error: 'title is required' });
@@ -613,12 +661,11 @@ export default async function handler(req, res) {
     // Update TripItem
     if (req.method === 'POST' && action === 'item' && itemId) {
       const { rows: itemRows } = await pool.query(
-        `SELECT ti.id FROM "TripItem" ti
-         JOIN "Trip" t ON t.id = ti."tripId"
-         WHERE ti.id = $1 AND t."userId" = $2`,
-        [itemId, userId]
+        `SELECT "tripId" FROM "TripItem" WHERE id = $1`, [itemId]
       );
       if (!itemRows.length) return res.status(404).json({ error: 'Item not found' });
+      const itemAccess = await getTripAccess(itemRows[0].tripId);
+      if (!itemAccess.canEdit) return res.status(403).json({ error: 'Permission denied' });
 
       const { type, title, description, time, startTime, endTime, durationMinutes, locationName, notes, bookingReference, status, sortOrder, latitude, longitude } = req.body || {};
       await pool.query(
@@ -646,22 +693,20 @@ export default async function handler(req, res) {
 
     // Delete TripItem
     if (req.method === 'POST' && action === 'delete-item' && itemId) {
-      const { rows } = await pool.query(
-        `DELETE FROM "TripItem" USING "Trip"
-         WHERE "TripItem".id = $1
-           AND "TripItem"."tripId" = "Trip".id
-           AND "Trip"."userId" = $2
-         RETURNING "TripItem".id`,
-        [itemId, userId]
+      const { rows: itemForDel } = await pool.query(
+        `SELECT "tripId" FROM "TripItem" WHERE id = $1`, [itemId]
       );
-      if (!rows.length) return res.status(404).json({ error: 'Item not found' });
+      if (!itemForDel.length) return res.status(404).json({ error: 'Item not found' });
+      const delItemAccess = await getTripAccess(itemForDel[0].tripId);
+      if (!delItemAccess.canEdit) return res.status(403).json({ error: 'Permission denied' });
+      await pool.query(`DELETE FROM "TripItem" WHERE id = $1`, [itemId]);
       return res.status(200).json({ ok: true });
     }
 
     // Create TripNote
     if (req.method === 'POST' && action === 'note' && id && !noteId) {
-      const owned = await getOwnedTrip(id);
-      if (!owned) return res.status(404).json({ error: 'Trip not found' });
+      const access = await getTripAccess(id);
+      if (!access.canEdit) return res.status(access.canView ? 403 : 404).json({ error: access.canView ? 'Permission denied' : 'Trip not found' });
 
       const { tripDayId, tripItemId, noteType, title, content } = req.body || {};
       if (!content) return res.status(400).json({ error: 'content is required' });
@@ -678,12 +723,11 @@ export default async function handler(req, res) {
     // Update TripNote
     if (req.method === 'POST' && action === 'note' && noteId) {
       const { rows: noteRows } = await pool.query(
-        `SELECT tn.id FROM "TripNote" tn
-         JOIN "Trip" t ON t.id = tn."tripId"
-         WHERE tn.id = $1 AND t."userId" = $2`,
-        [noteId, userId]
+        `SELECT "tripId" FROM "TripNote" WHERE id = $1`, [noteId]
       );
       if (!noteRows.length) return res.status(404).json({ error: 'Note not found' });
+      const noteAccess = await getTripAccess(noteRows[0].tripId);
+      if (!noteAccess.canEdit) return res.status(403).json({ error: 'Permission denied' });
 
       const { title, content } = req.body || {};
       await pool.query(
@@ -697,22 +741,20 @@ export default async function handler(req, res) {
 
     // Delete TripNote
     if (req.method === 'POST' && action === 'delete-note' && noteId) {
-      const { rows } = await pool.query(
-        `DELETE FROM "TripNote" USING "Trip"
-         WHERE "TripNote".id = $1
-           AND "TripNote"."tripId" = "Trip".id
-           AND "Trip"."userId" = $2
-         RETURNING "TripNote".id`,
-        [noteId, userId]
+      const { rows: noteForDel } = await pool.query(
+        `SELECT "tripId" FROM "TripNote" WHERE id = $1`, [noteId]
       );
-      if (!rows.length) return res.status(404).json({ error: 'Note not found' });
+      if (!noteForDel.length) return res.status(404).json({ error: 'Note not found' });
+      const delNoteAccess = await getTripAccess(noteForDel[0].tripId);
+      if (!delNoteAccess.canEdit) return res.status(403).json({ error: 'Permission denied' });
+      await pool.query(`DELETE FROM "TripNote" WHERE id = $1`, [noteId]);
       return res.status(200).json({ ok: true });
     }
 
     // Create TripBooking
     if (req.method === 'POST' && action === 'booking' && id && !bookingId) {
-      const owned = await getOwnedTrip(id);
-      if (!owned) return res.status(404).json({ error: 'Trip not found' });
+      const access = await getTripAccess(id);
+      if (!access.canEdit) return res.status(access.canView ? 403 : 404).json({ error: access.canView ? 'Permission denied' : 'Trip not found' });
 
       const { tripItemId, type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata } = req.body || {};
       if (!title) return res.status(400).json({ error: 'title is required' });
@@ -746,12 +788,12 @@ export default async function handler(req, res) {
     // Update TripBooking
     if (req.method === 'POST' && action === 'booking' && bookingId) {
       const { rows: bookingRows } = await pool.query(
-        `SELECT tb.id, tb.type AS "currentType", tb."tripId" FROM "TripBooking" tb
-         JOIN "Trip" t ON t.id = tb."tripId"
-         WHERE tb.id = $1 AND t."userId" = $2`,
-        [bookingId, userId]
+        `SELECT id, type AS "currentType", "tripId" FROM "TripBooking" WHERE id = $1`,
+        [bookingId]
       );
       if (!bookingRows.length) return res.status(404).json({ error: 'Booking not found' });
+      const bookAccess = await getTripAccess(bookingRows[0].tripId);
+      if (!bookAccess.canEdit) return res.status(403).json({ error: 'Permission denied' });
 
       const tripId = bookingRows[0].tripId;
       const { type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata, latitude, longitude, dayNumber: explicitDayNumber, tripDayId: explicitTripDayId } = req.body || {};
@@ -802,8 +844,8 @@ export default async function handler(req, res) {
 
     // Remap all bookings for a trip when startDate changes
     if (req.method === 'POST' && action === 'remap-bookings' && id) {
-      const owned = await getOwnedTrip(id);
-      if (!owned) return res.status(404).json({ error: 'Trip not found' });
+      const access = await getTripAccess(id);
+      if (!access.canEdit) return res.status(access.canView ? 403 : 404).json({ error: access.canView ? 'Permission denied' : 'Trip not found' });
 
       const { rows: tripInfo } = await pool.query(
         `SELECT "startDate" FROM "Trip" WHERE id = $1`, [id]
@@ -835,22 +877,20 @@ export default async function handler(req, res) {
 
     // Delete TripBooking
     if (req.method === 'POST' && action === 'delete-booking' && bookingId) {
-      const { rows } = await pool.query(
-        `DELETE FROM "TripBooking" USING "Trip"
-         WHERE "TripBooking".id = $1
-           AND "TripBooking"."tripId" = "Trip".id
-           AND "Trip"."userId" = $2
-         RETURNING "TripBooking".id`,
-        [bookingId, userId]
+      const { rows: bookForDel } = await pool.query(
+        `SELECT "tripId" FROM "TripBooking" WHERE id = $1`, [bookingId]
       );
-      if (!rows.length) return res.status(404).json({ error: 'Booking not found' });
+      if (!bookForDel.length) return res.status(404).json({ error: 'Booking not found' });
+      const delBookAccess = await getTripAccess(bookForDel[0].tripId);
+      if (!delBookAccess.canEdit) return res.status(403).json({ error: 'Permission denied' });
+      await pool.query(`DELETE FROM "TripBooking" WHERE id = $1`, [bookingId]);
       return res.status(200).json({ ok: true });
     }
 
     // Hide an original ItineraryDayStop from this trip (creates a hidden override TripItem)
     if (req.method === 'POST' && action === 'hide-itinerary-stop' && id) {
-      const owned = await getOwnedTrip(id);
-      if (!owned) return res.status(404).json({ error: 'Trip not found' });
+      const access = await getTripAccess(id);
+      if (!access.canEdit) return res.status(access.canView ? 403 : 404).json({ error: access.canView ? 'Permission denied' : 'Trip not found' });
       const { stopId, dayNumber, tripDayId, title, type } = req.body || {};
       if (!stopId) return res.status(400).json({ error: 'stopId required' });
       // Avoid duplicates
@@ -874,8 +914,8 @@ export default async function handler(req, res) {
 
     // Unhide a specific ItineraryDayStop for this trip (removes the override)
     if (req.method === 'POST' && action === 'unhide-itinerary-stop' && id) {
-      const owned = await getOwnedTrip(id);
-      if (!owned) return res.status(404).json({ error: 'Trip not found' });
+      const access = await getTripAccess(id);
+      if (!access.canEdit) return res.status(access.canView ? 403 : 404).json({ error: access.canView ? 'Permission denied' : 'Trip not found' });
       const { stopId } = req.body || {};
       if (!stopId) return res.status(400).json({ error: 'stopId required' });
       await pool.query(
@@ -890,8 +930,8 @@ export default async function handler(req, res) {
 
     // Unhide all hidden stops for a day (reset day to original itinerary stops)
     if (req.method === 'POST' && action === 'unhide-day-stops' && id) {
-      const owned = await getOwnedTrip(id);
-      if (!owned) return res.status(404).json({ error: 'Trip not found' });
+      const access = await getTripAccess(id);
+      if (!access.canEdit) return res.status(access.canView ? 403 : 404).json({ error: access.canView ? 'Permission denied' : 'Trip not found' });
       const { dayNumber } = req.body || {};
       if (!dayNumber) return res.status(400).json({ error: 'dayNumber required' });
       await pool.query(
@@ -907,12 +947,11 @@ export default async function handler(req, res) {
     // Update TripDay overrides
     if (req.method === 'POST' && action === 'day' && dayId) {
       const { rows: dayRows } = await pool.query(
-        `SELECT td.id FROM "TripDay" td
-         JOIN "Trip" t ON t.id = td."tripId"
-         WHERE td.id = $1 AND t."userId" = $2`,
-        [dayId, userId]
+        `SELECT "tripId" FROM "TripDay" WHERE id = $1`, [dayId]
       );
       if (!dayRows.length) return res.status(404).json({ error: 'Day not found' });
+      const dayAccess = await getTripAccess(dayRows[0].tripId);
+      if (!dayAccess.canEdit) return res.status(403).json({ error: 'Permission denied' });
 
       const { titleOverride, descriptionOverride, notes, isHidden } = req.body || {};
       await pool.query(
@@ -934,9 +973,10 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid eventType. Allowed via POST: DOWNLOADED' });
       }
 
+      const auditAccess = await getTripAccess(id);
+      if (!auditAccess.canView) return res.status(404).json({ error: 'Trip not found' });
       const { rows: trips } = await pool.query(
-        `SELECT id, destination FROM "Trip" WHERE id = $1 AND "userId" = $2`,
-        [id, userId]
+        `SELECT id, destination FROM "Trip" WHERE id = $1`, [id]
       );
       if (!trips.length) return res.status(404).json({ error: 'Trip not found' });
 
@@ -1073,13 +1113,17 @@ export default async function handler(req, res) {
       return res.status(200).json({ id: tripId });
     }
 
-    // ── DELETE /api/trips?id= — delete trip ────────────────────────────────
+    // ── DELETE /api/trips?id= — delete trip (owner only) ───────────────────
     if (req.method === 'DELETE') {
       if (!id) return res.status(400).json({ error: 'Missing trip id' });
 
+      const deleteAccess = await getTripAccess(id);
+      if (!deleteAccess.canManageSharing) {
+        return res.status(deleteAccess.canView ? 403 : 404).json({ error: deleteAccess.canView ? 'Only the trip owner can delete this trip' : 'Trip not found' });
+      }
+
       const { rows: trips } = await pool.query(
-        `SELECT id, title, destination, duration FROM "Trip" WHERE id = $1 AND "userId" = $2`,
-        [id, userId]
+        `SELECT id, title, destination, duration FROM "Trip" WHERE id = $1`, [id]
       );
       if (!trips.length) return res.status(404).json({ error: 'Trip not found' });
       const trip = trips[0];

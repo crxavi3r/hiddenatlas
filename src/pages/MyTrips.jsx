@@ -119,12 +119,16 @@ const SOURCE_GRADIENTS = {
   PREMIUM_JOURNEY: 'linear-gradient(135deg, #8A6332 0%, #C9A96E 100%)',
 };
 
+const ROLE_LABELS = { edit: 'Can edit', view: 'View only' };
+
 // ── AI Trip card ────────────────────────────────────────────────────────────
 function AiTripCard({ trip, onDelete }) {
   const [hovered, setHovered] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  const isShared = Boolean(trip.isShared);
+  const shareRole = trip.shareRole;
   const tag = getTripSource(trip.source);
 
   // Resolution order:
@@ -219,35 +223,48 @@ function AiTripCard({ trip, onDelete }) {
           position: 'absolute', inset: 0,
           background: 'linear-gradient(to top, rgba(28,26,22,0.45) 0%, transparent 55%)',
         }} />
-        {/* Source badge — top-left overlay */}
-        <div style={{
-          position: 'absolute', top: '12px', left: '14px',
-          padding: '4px 10px', borderRadius: '3px',
-          fontSize: '9.5px', fontWeight: '700', letterSpacing: '0.8px',
-          textTransform: 'uppercase', background: tag.bg, color: tag.color,
-        }}>
-          {tag.label}
-        </div>
-        {/* Delete — top-right overlay */}
-        <button
-          onClick={openConfirm}
-          disabled={deleting}
-          title="Remove from library"
-          style={{
-            position: 'absolute', top: '10px', right: '10px',
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: '30px', height: '30px',
-            background: 'rgba(28,26,22,0.4)',
-            border: 'none', borderRadius: '50%',
-            color: 'rgba(255,255,255,0.65)', cursor: deleting ? 'default' : 'pointer',
-            transition: 'all 0.15s',
-            backdropFilter: 'blur(4px)',
-          }}
-          onMouseEnter={e => { if (!deleting) { e.currentTarget.style.background = 'rgba(192,57,43,0.8)'; e.currentTarget.style.color = 'white'; }}}
-          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(28,26,22,0.4)'; e.currentTarget.style.color = 'rgba(255,255,255,0.65)'; }}
-        >
-          <Trash2 size={12} />
-        </button>
+        {/* Source / shared badge — top-left overlay */}
+        {isShared ? (
+          <div style={{
+            position: 'absolute', top: '12px', left: '14px',
+            padding: '4px 10px', borderRadius: '3px',
+            fontSize: '9.5px', fontWeight: '700', letterSpacing: '0.8px',
+            textTransform: 'uppercase', background: 'rgba(201,169,110,0.88)', color: '#3A2A0A',
+          }}>
+            Shared with you
+          </div>
+        ) : (
+          <div style={{
+            position: 'absolute', top: '12px', left: '14px',
+            padding: '4px 10px', borderRadius: '3px',
+            fontSize: '9.5px', fontWeight: '700', letterSpacing: '0.8px',
+            textTransform: 'uppercase', background: tag.bg, color: tag.color,
+          }}>
+            {tag.label}
+          </div>
+        )}
+        {/* Delete — top-right overlay (owner trips only) */}
+        {!isShared && (
+          <button
+            onClick={openConfirm}
+            disabled={deleting}
+            title="Remove from library"
+            style={{
+              position: 'absolute', top: '10px', right: '10px',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: '30px', height: '30px',
+              background: 'rgba(28,26,22,0.4)',
+              border: 'none', borderRadius: '50%',
+              color: 'rgba(255,255,255,0.65)', cursor: deleting ? 'default' : 'pointer',
+              transition: 'all 0.15s',
+              backdropFilter: 'blur(4px)',
+            }}
+            onMouseEnter={e => { if (!deleting) { e.currentTarget.style.background = 'rgba(192,57,43,0.8)'; e.currentTarget.style.color = 'white'; }}}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(28,26,22,0.4)'; e.currentTarget.style.color = 'rgba(255,255,255,0.65)'; }}
+          >
+            <Trash2 size={12} />
+          </button>
+        )}
       </div>
 
       {/* Content */}
@@ -277,6 +294,20 @@ function AiTripCard({ trip, onDelete }) {
           <p style={{ fontSize: '13px', color: '#6B6156', lineHeight: '1.6', marginBottom: '12px', flex: 1 }}>
             {trip.overview.length > 100 ? trip.overview.slice(0, 100) + '…' : trip.overview}
           </p>
+        )}
+        {isShared && shareRole && (
+          <div style={{ marginBottom: '8px' }}>
+            <span style={{
+              display: 'inline-block',
+              padding: '2px 8px', borderRadius: '3px',
+              fontSize: '10px', fontWeight: '700', letterSpacing: '0.8px', textTransform: 'uppercase',
+              background: shareRole === 'edit' ? '#EFF6F5' : '#F4F1EC',
+              color: shareRole === 'edit' ? '#1B6B65' : '#6B6156',
+              border: `1px solid ${shareRole === 'edit' ? '#C6E4E0' : '#D4CCBF'}`,
+            }}>
+              {ROLE_LABELS[shareRole] || shareRole}
+            </span>
+          </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: '#B5AA99', marginBottom: '14px' }}>
           <Calendar size={11} strokeWidth={2} />
@@ -674,8 +705,10 @@ export default function MyTrips() {
   }, [isLoaded, isSignedIn, refreshKey]);
 
   const purchasedSlugs = new Set(purchases.map(p => p.slug).filter(Boolean));
-  const savedTrips = aiTrips.filter(t => !t.itinerarySlug || !purchasedSlugs.has(t.itinerarySlug));
-  const totalCount = savedTrips.length + purchases.length + customRequests.length;
+  const allSavedTrips = aiTrips.filter(t => !t.itinerarySlug || !purchasedSlugs.has(t.itinerarySlug));
+  const ownedSavedTrips = allSavedTrips.filter(t => !t.isShared);
+  const sharedTrips = allSavedTrips.filter(t => t.isShared);
+  const totalCount = allSavedTrips.length + purchases.length + customRequests.length;
 
   return (
     <div style={{ background: '#FAFAF8', paddingTop: '72px', minHeight: '100vh' }}>
@@ -783,17 +816,32 @@ export default function MyTrips() {
                 </div>
               )}
 
-              {/* AI Trips section */}
-              {savedTrips.length > 0 && (
+              {/* Owned trips section */}
+              {ownedSavedTrips.length > 0 && (
                 <div style={{ marginBottom: '60px' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '24px' }}>
                     <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600', color: '#1C1A16' }}>
                       Saved Trips
                     </h2>
-                    <span style={{ fontSize: '13px', color: '#9C9488' }}>{savedTrips.length}</span>
+                    <span style={{ fontSize: '13px', color: '#9C9488' }}>{ownedSavedTrips.length}</span>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '28px' }}>
-                    {savedTrips.map(trip => <AiTripCard key={trip.id} trip={trip} onDelete={handleDeleteTrip} />)}
+                    {ownedSavedTrips.map(trip => <AiTripCard key={trip.id} trip={trip} onDelete={handleDeleteTrip} />)}
+                  </div>
+                </div>
+              )}
+
+              {/* Shared trips section */}
+              {sharedTrips.length > 0 && (
+                <div style={{ marginBottom: '60px' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '24px' }}>
+                    <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600', color: '#1C1A16' }}>
+                      Shared with me
+                    </h2>
+                    <span style={{ fontSize: '13px', color: '#9C9488' }}>{sharedTrips.length}</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '28px' }}>
+                    {sharedTrips.map(trip => <AiTripCard key={trip.id} trip={trip} onDelete={handleDeleteTrip} />)}
                   </div>
                 </div>
               )}

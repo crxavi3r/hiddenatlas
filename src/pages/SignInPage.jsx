@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useSignIn } from '@clerk/clerk-react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useSEO } from '../hooks/useSEO';
 
 export default function SignInPage() {
   useSEO({ title: 'Sign In', noindex: true });
   const { isLoaded, signIn, setActive } = useSignIn();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || '/my-trips';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -36,7 +38,7 @@ export default function SignInPage() {
 
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        navigate('/my-trips', { replace: true });
+        navigate(redirectTo, { replace: true });
       } else if (result.status === 'needs_client_trust') {
         // Device verification: find emailAddressId from supported factors and send email code
         const emailFactor = result.supportedFirstFactors?.find(f => f.strategy === 'email_code')
@@ -66,7 +68,7 @@ export default function SignInPage() {
 
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        navigate('/my-trips', { replace: true });
+        navigate(redirectTo, { replace: true });
       } else {
         setError(`Unexpected status: ${result.status}`);
       }
@@ -199,7 +201,7 @@ export default function SignInPage() {
 
         <p style={{ fontSize: '13px', color: '#6B6156', textAlign: 'center', marginTop: '20px' }}>
           Don't have an account?{' '}
-          <Link to="/sign-up" style={{ color: '#1B6B65', fontWeight: '500', textDecoration: 'none' }}>
+          <Link to={redirectTo !== '/my-trips' ? `/sign-up?redirect=${encodeURIComponent(redirectTo)}` : '/sign-up'} style={{ color: '#1B6B65', fontWeight: '500', textDecoration: 'none' }}>
             Sign up
           </Link>
         </p>

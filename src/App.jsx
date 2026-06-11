@@ -42,6 +42,7 @@ import DesignerPricingPage from './pages/DesignerPricingPage';
 import DesignerApplicationsPage from './pages/admin/DesignerApplicationsPage';
 import PricingPlansPage from './pages/admin/PricingPlansPage';
 import { CustomRequestPaymentSuccessPage, CustomRequestPaymentCancelledPage } from './pages/CustomRequestPaymentPage';
+import ShareAcceptPage from './pages/ShareAcceptPage';
 
 // ── Scroll to top on route change ────────────────────────────────────────────
 function LegacyCustomRedirect() {
@@ -91,6 +92,9 @@ export default function App() {
       <ScrollToTop />
       <PageViewTracker />
       <Routes>
+
+        {/* ── Share accept — standalone full-page, no Navbar/Footer ── */}
+        <Route path="/share/trip/:token" element={<ShareAcceptPage />} />
 
         {/* ── Admin area — own layout, no public navbar/footer ── */}
         <Route path="/admin" element={<AdminPage />}>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSignUp } from '@clerk/clerk-react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useSEO } from '../hooks/useSEO';
 
 const inputStyle = {
@@ -41,6 +41,8 @@ export default function SignUpPage() {
   useSEO({ title: 'Create Account', noindex: true });
   const { isLoaded, signUp, setActive } = useSignUp();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || '/';
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -77,7 +79,7 @@ export default function SignUpPage() {
       const result = await signUp.attemptEmailAddressVerification({ code });
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
-        navigate('/', { replace: true });
+        navigate(redirectTo, { replace: true });
       } else {
         setError('Verification incomplete. Please try again.');
       }
@@ -257,7 +259,7 @@ export default function SignUpPage() {
 
             <p style={{ fontSize: '13px', color: '#6B6156', textAlign: 'center', marginTop: '24px' }}>
               Already have an account?{' '}
-              <Link to="/sign-in" style={{ color: '#1B6B65', fontWeight: '500', textDecoration: 'none' }}>
+              <Link to={redirectTo !== '/' ? `/sign-in?redirect=${encodeURIComponent(redirectTo)}` : '/sign-in'} style={{ color: '#1B6B65', fontWeight: '500', textDecoration: 'none' }}>
                 Sign in
               </Link>
             </p>

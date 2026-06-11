@@ -50,6 +50,8 @@ model User {
   events           TripEvent[]
   pricingPlans     DesignerPricingPlan[]
   assignedRequests CustomRequest[]       @relation("AssignedDesigner")
+  sharedTrips      TripShare[]           @relation("TripShareUser")
+  sentInvites      TripShare[]           @relation("TripShareInvitedBy")
 }
 
 // ─────────────────────────────────────────────
@@ -272,6 +274,7 @@ model Trip {
   items     TripItem[]
   notes     TripNote[]
   bookings  TripBooking[]
+  shares    TripShare[]
 
   @@index([userId])
   @@index([itineraryId])
@@ -551,4 +554,39 @@ model InstagramPublishLog {
   @@index([itineraryId])
   @@index([creatorId])
   @@index([status])
+}
+
+// ─────────────────────────────────────────────
+// TripShare  (collaborative trip sharing)
+// role:   view | edit
+// status: pending | accepted | revoked
+// email is null for link-only invites
+// userId is null until invite is accepted
+// ─────────────────────────────────────────────
+model TripShare {
+  id              String    @id @default(dbgenerated("gen_random_uuid()"))
+  tripId          String
+  email           String?
+  userId          String?
+  role            String    @default("view")
+  status          String    @default("pending")
+  inviteToken     String    @unique
+  invitedByUserId String
+  invitedAt       DateTime  @default(now())
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  lastAccessedAt  DateTime?
+  metadata        Json      @default("{}")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now())
+
+  trip      Trip  @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user      User? @relation("TripShareUser", fields: [userId], references: [id], onDelete: SetNull)
+  invitedBy User  @relation("TripShareInvitedBy", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+  @@index([userId])
+  @@index([invitedByUserId])
+  @@index([status])
+  @@index([role])
 }

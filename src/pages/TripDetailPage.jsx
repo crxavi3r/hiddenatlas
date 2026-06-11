@@ -4,7 +4,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Calendar, Clock, Users, MapPin, Download, Pencil, Trash2,
   Plus, X, Map, FileText, Bookmark, BookOpen, Check, Star, ChevronRight,
-  ChevronDown, RotateCcw, CalendarPlus, ExternalLink, Copy,
+  ChevronDown, RotateCcw, CalendarPlus, ExternalLink, Copy, Share2,
 } from 'lucide-react';
 import { useAuth } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
@@ -25,6 +25,7 @@ import TuscanyRouteMap from '../components/TuscanyRouteMap';
 import CroatiaRouteMap from '../components/CroatiaRouteMap';
 import NorthernEnglandRouteMap from '../components/NorthernEnglandRouteMap';
 import TripRouteMap from '../components/TripRouteMap';
+import ShareModal from '../components/ShareModal';
 
 const ROUTE_MAP_COMPONENTS = {
   'japan-grand-cultural-journey':             JapanRouteMap,
@@ -914,7 +915,7 @@ function formatDuration(minutes) {
   return `${h}h ${m}m`;
 }
 
-function ItemCard({ item, onDelete }) {
+function ItemCard({ item, onDelete, canEdit = true }) {
   const color = TYPE_COLORS[item.type] || MUTED;
   const typeLabel = ITEM_TYPES.find(t => t.value === item.type)?.label || item.type;
   const timeDisplay = formatItemTime(item);
@@ -954,13 +955,15 @@ function ItemCard({ item, onDelete }) {
           <p style={{ fontSize: '13px', color: MUTED, marginTop: '5px', lineHeight: '1.5' }}>{item.notes}</p>
         )}
       </div>
-      <button
-        onClick={() => onDelete(item.id)}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C8BFB5', padding: '2px', flexShrink: 0 }}
-        title="Remove item"
-      >
-        <X size={14} />
-      </button>
+      {canEdit && (
+        <button
+          onClick={() => onDelete(item.id)}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C8BFB5', padding: '2px', flexShrink: 0 }}
+          title="Remove item"
+        >
+          <X size={14} />
+        </button>
+      )}
     </div>
   );
 }
@@ -968,7 +971,7 @@ function ItemCard({ item, onDelete }) {
 // ─────────────────────────────────────────────
 // NoteCard
 // ─────────────────────────────────────────────
-function NoteCard({ note, onDelete, onEdit }) {
+function NoteCard({ note, onDelete, onEdit, canEdit = true }) {
   return (
     <div style={{
       padding: '18px 20px', background: 'white',
@@ -983,14 +986,16 @@ function NoteCard({ note, onDelete, onEdit }) {
       <p style={{ fontSize: '14px', color: CHAR, lineHeight: '1.65', whiteSpace: 'pre-wrap' }}>{note.content}</p>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px' }}>
         <span style={{ fontSize: '11px', color: '#B5A09A' }}>{formatDate(note.createdAt)}</span>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={() => onEdit(note)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Pencil size={12} /> Edit
-          </button>
-          <button onClick={() => onDelete(note.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C8BFB5', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Trash2 size={12} /> Delete
-          </button>
-        </div>
+        {canEdit && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={() => onEdit(note)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Pencil size={12} /> Edit
+            </button>
+            <button onClick={() => onDelete(note.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C8BFB5', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Trash2 size={12} /> Delete
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1126,7 +1131,7 @@ const CAT_COLORS = {
   flight: '#4A2D7D', transfer: '#7D5A2D', event: '#2D7D4A', other: MUTED,
 };
 
-function BookingCard({ booking, onDelete, onEdit, itineraryDayStops, tripName }) {
+function BookingCard({ booking, onDelete, onEdit, itineraryDayStops, tripName, canEdit = true }) {
   const color = CAT_COLORS[booking.type] || MUTED;
   const catLabel = BOOKING_CATEGORIES.find(c => c.value === booking.type)?.label || booking.type;
   const linkedStop = booking.metadata?.itineraryDayStopId
@@ -1188,12 +1193,16 @@ function BookingCard({ booking, onDelete, onEdit, itineraryDayStops, tripName })
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, marginLeft: '8px' }}>
           <CalendarDropdown booking={booking} tripName={tripName} itineraryDayStops={itineraryDayStops} />
-          <button onClick={() => onEdit(booking)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '2px', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '11px' }} title="Edit booking">
-            <Pencil size={12} />
-          </button>
-          <button onClick={() => onDelete(booking.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C8BFB5', padding: '2px' }} title="Delete booking">
-            <Trash2 size={12} />
-          </button>
+          {canEdit && (
+            <button onClick={() => onEdit(booking)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '2px', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '11px' }} title="Edit booking">
+              <Pencil size={12} />
+            </button>
+          )}
+          {canEdit && (
+            <button onClick={() => onDelete(booking.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C8BFB5', padding: '2px' }} title="Delete booking">
+              <Trash2 size={12} />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -1203,7 +1212,7 @@ function BookingCard({ booking, onDelete, onEdit, itineraryDayStops, tripName })
 // ─────────────────────────────────────────────
 // DayBookingItem — booking displayed inside a day
 // ─────────────────────────────────────────────
-function DayBookingItem({ booking, onEdit, tripName, itineraryDayStops = [] }) {
+function DayBookingItem({ booking, onEdit, tripName, itineraryDayStops = [], canEdit = true }) {
   const color = CAT_COLORS[booking.type] || MUTED;
   const catLabel = BOOKING_CATEGORIES.find(c => c.value === booking.type)?.label || booking.type;
   const meta = booking.metadata || {};
@@ -1233,9 +1242,11 @@ function DayBookingItem({ booking, onEdit, tripName, itineraryDayStops = [] }) {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
         <CalendarDropdown booking={booking} tripName={tripName} itineraryDayStops={itineraryDayStops} />
-        <button onClick={() => onEdit(booking)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '2px' }} title="Edit booking">
-          <Pencil size={12} />
-        </button>
+        {canEdit && (
+          <button onClick={() => onEdit(booking)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '2px' }} title="Edit booking">
+            <Pencil size={12} />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1245,7 +1256,7 @@ function DayBookingItem({ booking, onEdit, tripName, itineraryDayStops = [] }) {
 // DaySection — one full day in the timeline
 // ─────────────────────────────────────────────
 
-function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, hiddenStopIds = [], tripName = '' }) {
+function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, hiddenStopIds = [], tripName = '', canEdit = true }) {
   const [expanded,     setExpanded]     = useState(true);
   const [confirmHide,  setConfirmHide]  = useState(null);  // stop object pending confirmation
   const [lastHidden,   setLastHidden]   = useState(null);  // { stopId, stopTitle } for undo
@@ -1372,31 +1383,35 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
                                     {b.confirmationReference && <span style={{ color: '#8C7A60', marginLeft: '6px', fontFamily: 'monospace', fontSize: '11px' }}>#{b.confirmationReference}</span>}
                                   </span>
                                   <CalendarDropdown booking={b} tripName={tripName} itineraryDayStops={itinDayStops} />
-                                  <button type="button" onClick={() => onEditBooking(b)}
-                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '1px', flexShrink: 0 }}>
-                                    <Pencil size={11} />
-                                  </button>
+                                  {canEdit && (
+                                    <button type="button" onClick={() => onEditBooking(b)}
+                                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '1px', flexShrink: 0 }}>
+                                      <Pencil size={11} />
+                                    </button>
+                                  )}
                                 </div>
                               ))}
                             </div>
                           )}
                           {/* Stop actions */}
-                          <div style={{ display: 'flex', gap: '12px', marginTop: '4px', flexWrap: 'wrap' }}>
-                            {onAddBookingFromStop && (
-                              <button type="button"
-                                onClick={() => onAddBookingFromStop(stop, tripDay.id, tripDay.dayNumber)}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: TEAL, fontSize: '11.5px', fontWeight: '600', padding: 0 }}>
-                                + Add booking
-                              </button>
-                            )}
-                            {onHideStop && (
-                              <button type="button"
-                                onClick={() => triggerHide(stop)}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#B5AA99', fontSize: '11.5px', padding: 0 }}>
-                                Remove from my trip
-                              </button>
-                            )}
-                          </div>
+                          {canEdit && (
+                            <div style={{ display: 'flex', gap: '12px', marginTop: '4px', flexWrap: 'wrap' }}>
+                              {onAddBookingFromStop && (
+                                <button type="button"
+                                  onClick={() => onAddBookingFromStop(stop, tripDay.id, tripDay.dayNumber)}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: TEAL, fontSize: '11.5px', fontWeight: '600', padding: 0 }}>
+                                  + Add booking
+                                </button>
+                              )}
+                              {onHideStop && (
+                                <button type="button"
+                                  onClick={() => triggerHide(stop)}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#B5AA99', fontSize: '11.5px', padding: 0 }}>
+                                  Remove from my trip
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </li>
                     );
@@ -1461,14 +1476,14 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
             {/* User items */}
             {dayItems.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                {dayItems.map(item => <ItemCard key={item.id} item={item} onDelete={onDeleteItem} />)}
+                {dayItems.map(item => <ItemCard key={item.id} item={item} onDelete={onDeleteItem} canEdit={canEdit} />)}
               </div>
             )}
 
             {/* Day-level bookings not linked to a specific stop */}
             {dayOnlyBookings.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                {dayOnlyBookings.map(b => <DayBookingItem key={b.id} booking={b} onEdit={onEditBooking} tripName={tripName} itineraryDayStops={itinDayStops} />)}
+                {dayOnlyBookings.map(b => <DayBookingItem key={b.id} booking={b} onEdit={onEditBooking} tripName={tripName} itineraryDayStops={itinDayStops} canEdit={canEdit} />)}
               </div>
             )}
 
@@ -1485,23 +1500,25 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
             )}
 
             {/* Add actions */}
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
-              <button style={pillStyle} onClick={() => onAddItem(tripDay.id, tripDay.dayNumber)}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = TEAL; e.currentTarget.style.color = TEAL; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}>
-                <Plus size={12} /> Add place
-              </button>
-              <button style={pillStyle} onClick={() => onAddBooking(tripDay.id, tripDay.dayNumber)}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = CAT_COLORS.hotel; e.currentTarget.style.color = CAT_COLORS.hotel; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}>
-                <Bookmark size={12} /> Add booking
-              </button>
-              <button style={pillStyle} onClick={() => onAddNote(tripDay.id, tripDay.dayNumber)}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD; e.currentTarget.style.color = GOLD; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}>
-                <FileText size={12} /> Add note
-              </button>
-            </div>
+            {canEdit && (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                <button style={pillStyle} onClick={() => onAddItem(tripDay.id, tripDay.dayNumber)}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = TEAL; e.currentTarget.style.color = TEAL; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}>
+                  <Plus size={12} /> Add place
+                </button>
+                <button style={pillStyle} onClick={() => onAddBooking(tripDay.id, tripDay.dayNumber)}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = CAT_COLORS.hotel; e.currentTarget.style.color = CAT_COLORS.hotel; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}>
+                  <Bookmark size={12} /> Add booking
+                </button>
+                <button style={pillStyle} onClick={() => onAddNote(tripDay.id, tripDay.dayNumber)}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD; e.currentTarget.style.color = GOLD; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}>
+                  <FileText size={12} /> Add note
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -1694,7 +1711,7 @@ function OverviewTab({ workspace, onEditDetails }) {
 // ─────────────────────────────────────────────
 // DaysTab
 // ─────────────────────────────────────────────
-function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, onDeleteItem, onEditBooking }) {
+function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, onDeleteItem, onEditBooking, canEdit = true }) {
   const { itinerary, tripDays, tripItems, tripNotes, tripBookings, assets, itineraryDayStops = [], hiddenStopIds = [], trip } = workspace;
   const tripName = trip?.title || trip?.destination || '';
   const content = parseContent(itinerary?.content);
@@ -1747,6 +1764,7 @@ function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFr
               onDeleteItem={onDeleteItem}
               onEditBooking={onEditBooking}
               tripName={tripName}
+              canEdit={canEdit}
             />
           );
         })}
@@ -1845,7 +1863,7 @@ function MapTab({ workspace, onRefresh }) {
 // ─────────────────────────────────────────────
 // NotesTab
 // ─────────────────────────────────────────────
-function NotesTab({ workspace, onAddNote, onDeleteNote, onEditNote }) {
+function NotesTab({ workspace, onAddNote, onDeleteNote, onEditNote, canEdit = true }) {
   const { tripNotes } = workspace;
   const general = tripNotes.filter(n => !n.tripDayId && !n.tripItemId);
   const day     = tripNotes.filter(n => n.tripDayId);
@@ -1854,12 +1872,14 @@ function NotesTab({ workspace, onAddNote, onDeleteNote, onEditNote }) {
     <div style={{ maxWidth: '720px', margin: '0 auto', padding: 'clamp(32px, 5vw, 56px) 24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px' }}>
         <h2 style={{ fontFamily: SERIF, fontSize: '26px', fontWeight: '600', color: CHAR }}>Notes</h2>
-        <button
-          onClick={() => onAddNote(null, null)}
-          style={{ ...btnPrimary, fontSize: '13px' }}
-        >
-          <Plus size={14} /> New note
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => onAddNote(null, null)}
+            style={{ ...btnPrimary, fontSize: '13px' }}
+          >
+            <Plus size={14} /> New note
+          </button>
+        )}
       </div>
 
       {general.length === 0 && day.length === 0 && (
@@ -1877,7 +1897,7 @@ function NotesTab({ workspace, onAddNote, onDeleteNote, onEditNote }) {
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {general.map(n => (
-              <NoteCard key={n.id} note={n} onDelete={onDeleteNote} onEdit={onEditNote} />
+              <NoteCard key={n.id} note={n} onDelete={onDeleteNote} onEdit={onEditNote} canEdit={canEdit} />
             ))}
           </div>
         </section>
@@ -1890,7 +1910,7 @@ function NotesTab({ workspace, onAddNote, onDeleteNote, onEditNote }) {
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {day.map(n => (
-              <NoteCard key={n.id} note={n} onDelete={onDeleteNote} onEdit={onEditNote} />
+              <NoteCard key={n.id} note={n} onDelete={onDeleteNote} onEdit={onEditNote} canEdit={canEdit} />
             ))}
           </div>
         </section>
@@ -1902,7 +1922,7 @@ function NotesTab({ workspace, onAddNote, onDeleteNote, onEditNote }) {
 // ─────────────────────────────────────────────
 // BookingsTab
 // ─────────────────────────────────────────────
-function BookingsTab({ workspace, onAddBooking, onDeleteBooking, onEditBooking }) {
+function BookingsTab({ workspace, onAddBooking, onDeleteBooking, onEditBooking, canEdit = true }) {
   const { tripBookings, trip, itineraryDayStops = [] } = workspace;
   const tripName = trip?.title || trip?.destination || '';
   const startDate = trip?.startDate ? trip.startDate.slice(0, 10) : null;
@@ -1925,9 +1945,11 @@ function BookingsTab({ workspace, onAddBooking, onDeleteBooking, onEditBooking }
         <h2 style={{ fontFamily: SERIF, fontSize: '26px', fontWeight: '600', color: CHAR }}>
           Bookings {total > 0 && <span style={{ fontSize: '16px', color: MUTED }}>({total})</span>}
         </h2>
-        <button onClick={() => onAddBooking(null, null)} style={{ ...btnPrimary, fontSize: '13px' }}>
-          <Plus size={14} /> Add booking
-        </button>
+        {canEdit && (
+          <button onClick={() => onAddBooking(null, null)} style={{ ...btnPrimary, fontSize: '13px' }}>
+            <Plus size={14} /> Add booking
+          </button>
+        )}
       </div>
 
       {!startDate && total > 0 && (
@@ -1946,7 +1968,7 @@ function BookingsTab({ workspace, onAddBooking, onDeleteBooking, onEditBooking }
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {sorted.map(b => (
-          <BookingCard key={b.id} booking={b} onDelete={onDeleteBooking} onEdit={onEditBooking} itineraryDayStops={itineraryDayStops} tripName={tripName} />
+          <BookingCard key={b.id} booking={b} onDelete={onDeleteBooking} onEdit={onEditBooking} itineraryDayStops={itineraryDayStops} tripName={tripName} canEdit={canEdit} />
         ))}
       </div>
     </div>
@@ -2034,6 +2056,8 @@ export default function TripDetailPage() {
   const [activeTab, setActiveTab]     = useState('overview');
   const [downloadState, setDownloadState] = useState('idle');
   const [deleting, setDeleting]       = useState(false);
+
+  const [showShare, setShowShare] = useState(false);
 
   // Modal states
   const [showDetails, setShowDetails]           = useState(false);
@@ -2384,6 +2408,7 @@ export default function TripDetailPage() {
   }
 
   const { trip, itinerary, assets } = workspace;
+  const access = workspace.access || { canView: true, canEdit: true, canManageSharing: true, role: 'owner' };
   const heroImage = getHeroImage(trip, itinerary, assets);
   const title     = itinerary?.title || trip.title || trip.destination;
   const subtitle  = trip.subtitle || itinerary?.subtitle || '';
@@ -2412,7 +2437,7 @@ export default function TripDetailPage() {
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, #0D3834 0%, #1B6B65 60%, #2D7D77 100%)' }} />
         )}
 
-        {/* Back + delete row */}
+        {/* Back + actions row */}
         <div style={{ position: 'absolute', top: '20px', left: 0, right: 0, display: 'flex', justifyContent: 'space-between', padding: '0 24px', zIndex: 10 }}>
           <Link
             to="/my-trips"
@@ -2425,18 +2450,35 @@ export default function TripDetailPage() {
           >
             <ArrowLeft size={13} /> My Trips
           </Link>
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '5px',
-              padding: '7px 14px', background: 'rgba(255,255,255,0.1)',
-              border: '1px solid rgba(255,255,255,0.2)', borderRadius: '20px',
-              fontSize: '12px', color: 'rgba(255,255,255,0.65)', cursor: 'pointer',
-            }}
-          >
-            <Trash2 size={12} /> {deleting ? 'Deleting...' : 'Delete'}
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {access.canManageSharing && (
+              <button
+                onClick={() => setShowShare(true)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '5px',
+                  padding: '7px 14px', background: 'rgba(255,255,255,0.15)',
+                  border: '1px solid rgba(255,255,255,0.3)', borderRadius: '20px',
+                  fontSize: '12px', color: 'white', fontWeight: '600', cursor: 'pointer',
+                }}
+              >
+                <Share2 size={12} /> Share
+              </button>
+            )}
+            {access.canManageSharing && (
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '5px',
+                  padding: '7px 14px', background: 'rgba(255,255,255,0.1)',
+                  border: '1px solid rgba(255,255,255,0.2)', borderRadius: '20px',
+                  fontSize: '12px', color: 'rgba(255,255,255,0.65)', cursor: 'pointer',
+                }}
+              >
+                <Trash2 size={12} /> {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Hero content */}
@@ -2449,7 +2491,7 @@ export default function TripDetailPage() {
             borderRadius: '3px',
           }}>
             <span style={{ fontSize: '9.5px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: GOLD }}>
-              Personal trip copy
+              {access.role === 'owner' ? 'Personal trip copy' : access.role === 'edit' ? 'Shared with you · Can edit' : 'Shared with you · View only'}
             </span>
           </div>
 
@@ -2500,18 +2542,20 @@ export default function TripDetailPage() {
               {downloadState === 'downloading' ? 'Preparing...' : 'Download PDF'}
             </button>
 
-            <button
-              onClick={() => setShowDetails(true)}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '6px',
-                padding: '7px 16px', background: GOLD,
-                border: 'none', borderRadius: '20px',
-                fontSize: '12.5px', color: 'white', fontWeight: '600', cursor: 'pointer',
-              }}
-            >
-              <Pencil size={12} />
-              {(trip.startDate || trip.travellers) ? 'Edit details' : 'Add trip details'}
-            </button>
+            {access.canEdit && (
+              <button
+                onClick={() => setShowDetails(true)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  padding: '7px 16px', background: GOLD,
+                  border: 'none', borderRadius: '20px',
+                  fontSize: '12.5px', color: 'white', fontWeight: '600', cursor: 'pointer',
+                }}
+              >
+                <Pencil size={12} />
+                {(trip.startDate || trip.travellers) ? 'Edit details' : 'Add trip details'}
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -2529,10 +2573,10 @@ export default function TripDetailPage() {
         {activeTab === 'days' && (
           <DaysTab
             workspace={workspace}
-            onAddItem={(dayId, dayNumber) => setAddItemCtx({ dayId, dayNumber })}
-            onAddNote={(dayId, dayNumber) => setAddNoteCtx({ dayId, dayNumber })}
-            onAddBooking={(dayId, dayNumber) => { setEditingBooking(null); setBookingCtx({ dayId, dayNumber }); }}
-            onAddBookingFromStop={(stop, dayId, dayNumber) => {
+            onAddItem={access.canEdit ? (dayId, dayNumber) => setAddItemCtx({ dayId, dayNumber }) : undefined}
+            onAddNote={access.canEdit ? (dayId, dayNumber) => setAddNoteCtx({ dayId, dayNumber }) : undefined}
+            onAddBooking={access.canEdit ? (dayId, dayNumber) => { setEditingBooking(null); setBookingCtx({ dayId, dayNumber }); } : undefined}
+            onAddBookingFromStop={access.canEdit ? (stop, dayId, dayNumber) => {
               setEditingBooking(null);
               setBookingCtx({
                 dayId, dayNumber,
@@ -2547,12 +2591,13 @@ export default function TripDetailPage() {
                   dayNumber:    stop.dayNumber || dayNumber,
                 },
               });
-            }}
-            onHideStop={handleHideStop}
-            onRestoreStop={handleRestoreStop}
-            onRestoreDayStops={handleRestoreDayStops}
-            onDeleteItem={handleDeleteItem}
-            onEditBooking={b => { setEditingBooking(b); setBookingCtx({}); }}
+            } : undefined}
+            onHideStop={access.canEdit ? handleHideStop : undefined}
+            onRestoreStop={access.canEdit ? handleRestoreStop : undefined}
+            onRestoreDayStops={access.canEdit ? handleRestoreDayStops : undefined}
+            onDeleteItem={access.canEdit ? handleDeleteItem : undefined}
+            onEditBooking={access.canEdit ? (b => { setEditingBooking(b); setBookingCtx({}); }) : undefined}
+            canEdit={access.canEdit}
           />
         )}
 
@@ -2566,6 +2611,7 @@ export default function TripDetailPage() {
             onAddNote={(dayId, dayNumber) => setAddNoteCtx({ dayId, dayNumber })}
             onDeleteNote={handleDeleteNote}
             onEditNote={note => { setEditNote(note); setAddNoteCtx({}); }}
+            canEdit={access.canEdit}
           />
         )}
 
@@ -2575,6 +2621,7 @@ export default function TripDetailPage() {
             onAddBooking={() => { setEditingBooking(null); setBookingCtx({}); }}
             onDeleteBooking={handleDeleteBooking}
             onEditBooking={b => { setEditingBooking(b); setBookingCtx({}); }}
+            canEdit={access.canEdit}
           />
         )}
 
@@ -2590,7 +2637,14 @@ export default function TripDetailPage() {
       </div>
 
       {/* ── Modals ─────────────────────────────────────────── */}
-      {showDetails && (
+      {showShare && (
+        <ShareModal
+          tripId={id}
+          onClose={() => setShowShare(false)}
+        />
+      )}
+
+      {showDetails && access.canEdit && (
         <TripDetailsModal
           workspace={workspace}
           open={showDetails}
@@ -2600,7 +2654,7 @@ export default function TripDetailPage() {
         />
       )}
 
-      {addItemCtx && (
+      {addItemCtx && access.canEdit && (
         <AddItemModal
           open={!!addItemCtx}
           dayNumber={addItemCtx.dayNumber}
@@ -2610,7 +2664,7 @@ export default function TripDetailPage() {
         />
       )}
 
-      {(addNoteCtx !== null) && (
+      {(addNoteCtx !== null) && access.canEdit && (
         <AddNoteModal
           open={addNoteCtx !== null}
           dayNumber={addNoteCtx?.dayNumber || null}
@@ -2621,7 +2675,7 @@ export default function TripDetailPage() {
         />
       )}
 
-      {(bookingCtx !== null) && (
+      {(bookingCtx !== null) && access.canEdit && (
         <BookingModal
           open={bookingCtx !== null}
           dayNumber={bookingCtx?.dayNumber || null}
