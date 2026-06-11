@@ -742,9 +742,9 @@ export default function CreatorDiscoveryPage() {
       </div>
 
       {/* 2-column layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '16px', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '20px', alignItems: 'start' }}>
         {/* Left: run list */}
-        <div style={S.card}>
+        <div style={{ ...S.card, minHeight: '320px', boxSizing: 'border-box' }}>
           <p style={{ fontSize: '11px', fontWeight: '700', color: '#8C8070', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 10px' }}>
             Discovery Runs
           </p>
@@ -798,7 +798,7 @@ export default function CreatorDiscoveryPage() {
         </div>
 
         {/* Right: mode content or run detail */}
-        <div>
+        <div style={{ minWidth: 0 }}>
           {!activeRunId ? (
             <>
               {mode === 'ai_search' && (

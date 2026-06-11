@@ -43,7 +43,7 @@ const NAV_GROUPS_ADMIN = [
     label: 'Creator Acquisition',
     adminOnly: true,
     items: [
-      { label: 'Dashboard',   path: '/admin/creator-acquisition',            icon: Radar },
+      { label: 'Dashboard',   path: '/admin/creator-acquisition',            icon: Radar, end: true },
       { label: 'Discovery',   path: '/admin/creator-acquisition/discovery',  icon: Search },
       { label: 'CRM',         path: '/admin/creator-acquisition/crm',        icon: Users },
       { label: 'Templates',   path: '/admin/creator-acquisition/templates',  icon: MessageSquare },
