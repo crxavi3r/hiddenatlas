@@ -136,7 +136,26 @@
       "Bash(awk '{print $2, $11, $12, $13}')",
       "Bash(ps -p 16675 -o command)",
       "WebFetch(domain:developers.facebook.com)",
-      "WebFetch(domain:stackoverflow.com)"
+      "WebFetch(domain:stackoverflow.com)",
+      "Bash(npm run *)",
+      "Bash(echo \"PID: $!\")",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__new_page",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__emulate",
+      "Bash(awk '/ItineraryCMSEditorPage/,/^$/')",
+      "Bash(awk '/TripDetailPage/,/^\\\\//')",
+      "Bash(awk '/ItineraryDetailPage/,/^\\\\//')",
+      "Bash(awk '/RouteMapEditorMap.jsx/,/^$/')",
+      "Bash(awk '/InteractiveRouteMap.jsx/,/^$/')",
+      "Bash(awk '/ItineraryCMSEditorPage.jsx/,/^$/')",
+      "Bash(awk '/itinerary-cms.js/,/^$/')",
+      "Bash(awk '/TripRouteMap.jsx/,/^\\\\//')",
+      "Bash(awk '/TripDetailPage.jsx/,/^\\\\//')",
+      "Bash(awk '/TripDetailPage.jsx|WorkspacePDF.jsx|trips.js/,/^\\\\//')",
+      "Bash(awk '/TripDetailPage.jsx|trips.js/,/^\\\\//')",
+      "Bash(echo \"Started PID: $!\")",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__evaluate_script",
+      "Bash(DATABASE_URL='postgresql://neondb_owner:npg_a2iV6SXDknBP@ep-cool-sky-adch5pxa-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require' node -e ' *)",
+      "Bash(DATABASE_URL=\"postgresql://neondb_owner:npg_a2iV6SXDknBP@ep-cool-sky-adch5pxa-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require\" npx prisma db pull)"
     ]
   }
 }

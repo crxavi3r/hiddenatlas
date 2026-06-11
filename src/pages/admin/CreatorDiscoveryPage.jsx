@@ -280,7 +280,7 @@ function AiSearchPanel({ onSearchDone, getToken }) {
   }
 
   return (
-    <form onSubmit={handleSearch}>
+    <form onSubmit={handleSearch} style={{ maxWidth: '960px' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
         <div style={{ gridColumn: '1 / -1' }}>
           <label style={S.label}>
@@ -327,8 +327,8 @@ function AiSearchPanel({ onSearchDone, getToken }) {
         <button type="submit" style={{ ...S.btnPrimary, gap: '8px' }} disabled={!form.destinationTheme.trim()}>
           <Sparkles size={14} /> Find creators with AI
         </button>
-        <p style={{ fontSize: '11.5px', color: '#B5AA99', marginTop: '8px' }}>
-          Uses AI to suggest potential Travel Designers matching your criteria. Results are based on AI knowledge — always verify before contacting.
+        <p style={{ fontSize: '11px', color: '#C8C0B8', marginTop: '8px', lineHeight: '1.5' }}>
+          Results are AI suggestions based on training knowledge. Always verify profiles before reaching out.
         </p>
       </div>
     </form>
@@ -742,9 +742,13 @@ export default function CreatorDiscoveryPage() {
       </div>
 
       {/* 2-column layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '20px', alignItems: 'start' }}>
+      <style>{`
+        .discovery-grid { display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: start; }
+        @media (max-width: 900px) { .discovery-grid { grid-template-columns: 1fr; } }
+      `}</style>
+      <div className="discovery-grid">
         {/* Left: run list */}
-        <div style={{ ...S.card, minHeight: '320px', boxSizing: 'border-box' }}>
+        <div style={{ ...S.card, minHeight: '480px', boxSizing: 'border-box', overflowY: 'auto', maxHeight: 'calc(100vh - 180px)', display: 'flex', flexDirection: 'column' }}>
           <p style={{ fontSize: '11px', fontWeight: '700', color: '#8C8070', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 10px' }}>
             Discovery Runs
           </p>
@@ -758,7 +762,18 @@ export default function CreatorDiscoveryPage() {
             </div>
           )}
           {!runsLoading && !runsError && runs.length === 0 && (
-            <p style={{ fontSize: '12px', color: '#B5AA99', textAlign: 'center', padding: '16px 0' }}>No runs yet</p>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '40px 16px', gap: '8px' }}>
+              <Search size={22} color="#D4C8BB" style={{ marginBottom: '4px' }} />
+              <p style={{ fontSize: '13px', fontWeight: '500', color: '#B5AA99', margin: 0 }}>No runs yet</p>
+              <p style={{ fontSize: '11.5px', color: '#C8C0B8', margin: 0, lineHeight: '1.5' }}>
+                Create an AI search or import profiles to start.
+              </p>
+              {mode === 'manual' && (
+                <button onClick={() => setShowNewRun(true)} style={{ ...S.btnSecondary, marginTop: '8px', fontSize: '12px' }}>
+                  <PlusCircle size={12} /> New Run
+                </button>
+              )}
+            </div>
           )}
           {activeRunId && (
             <button onClick={() => { setActiveRunId(null); setRunData(null); }}
@@ -802,18 +817,18 @@ export default function CreatorDiscoveryPage() {
           {!activeRunId ? (
             <>
               {mode === 'ai_search' && (
-                <div style={S.card}>
+                <div style={{ ...S.card, minHeight: '480px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                     <Sparkles size={15} color="#C9A96E" />
                     <h2 style={{ fontSize: '14px', fontWeight: '700', color: '#1C1A16', margin: 0 }}>AI Search</h2>
-                    <span style={{ fontSize: '11.5px', color: '#8C8070' }}>— Claude-powered creator discovery</span>
+                    <span style={{ fontSize: '11.5px', color: '#8C8070' }}>AI-powered creator discovery</span>
                   </div>
                   <AiSearchPanel getToken={getToken} onSearchDone={handleAiSearchDone} />
                 </div>
               )}
 
               {mode === 'provider' && (
-                <div style={{ ...S.card, textAlign: 'center', padding: '48px 32px' }}>
+                <div style={{ ...S.card, minHeight: '480px', textAlign: 'center', padding: '48px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                   <Globe size={28} color="#D4C8BB" style={{ marginBottom: '12px' }} />
                   <h3 style={{ fontSize: '15px', fontWeight: '600', color: '#4A433A', marginBottom: '8px' }}>External Provider Search</h3>
                   <p style={{ fontSize: '13px', color: '#8C8070', maxWidth: '360px', margin: '0 auto 16px', lineHeight: '1.6' }}>
@@ -824,7 +839,7 @@ export default function CreatorDiscoveryPage() {
               )}
 
               {mode === 'manual' && (
-                <div style={{ ...S.card, textAlign: 'center', padding: '48px 32px' }}>
+                <div style={{ ...S.card, minHeight: '480px', textAlign: 'center', padding: '48px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                   <FileUp size={28} color="#D4C8BB" style={{ marginBottom: '12px' }} />
                   <h3 style={{ fontSize: '15px', fontWeight: '600', color: '#4A433A', marginBottom: '8px' }}>Manual Import</h3>
                   <p style={{ fontSize: '13px', color: '#8C8070', maxWidth: '360px', margin: '0 auto 16px', lineHeight: '1.6' }}>
