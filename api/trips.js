@@ -1076,7 +1076,7 @@ export default async function handler(req, res) {
     }
 
     // ── POST /api/trips — save new trip ────────────────────────────────────
-    if (req.method === 'POST' && !id) {
+    if (req.method === 'POST' && !id && !action) {
       const { trip, source = 'AI_GENERATED' } = req.body || {};
       if (!trip?.destination) {
         return res.status(400).json({ error: 'Missing trip data — expected { trip: { destination, ... } }' });
