@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Outlet, NavLink, Navigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import ErrorBoundary from '../components/ErrorBoundary';
-import { LayoutDashboard, Users, CreditCard, Download, Inbox, Menu, X, Map, UserCheck, User, ArrowUpRight, ClipboardList, Tag, GitPullRequest } from 'lucide-react';
+import { LayoutDashboard, Users, CreditCard, Download, Inbox, Menu, X, Map, UserCheck, User, ArrowUpRight, ClipboardList, Tag, GitPullRequest, Radar, Search, MessageSquare } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useUserCtx } from '../lib/useUserCtx.jsx';
 import UserAccountMenu from '../components/UserAccountMenu';
@@ -37,6 +37,16 @@ const NAV_GROUPS_ADMIN = [
       { label: 'Custom Requests',       path: '/admin/custom-requests',        icon: Inbox },
       { label: 'Designer Applications', path: '/admin/designer-applications',  icon: ClipboardList },
       { label: 'Itinerary Reviews',     path: '/admin/itinerary-reviews',      icon: GitPullRequest },
+    ],
+  },
+  {
+    label: 'Creator Acquisition',
+    adminOnly: true,
+    items: [
+      { label: 'Dashboard',   path: '/admin/creator-acquisition',            icon: Radar },
+      { label: 'Discovery',   path: '/admin/creator-acquisition/discovery',  icon: Search },
+      { label: 'CRM',         path: '/admin/creator-acquisition/crm',        icon: Users },
+      { label: 'Templates',   path: '/admin/creator-acquisition/templates',  icon: MessageSquare },
     ],
   },
 ];

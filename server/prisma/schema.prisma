@@ -605,3 +605,205 @@ model TripShare {
   @@index([status])
   @@index([role])
 }
+
+// ─────────────────────────────────────────────
+// Creator Acquisition CRM
+// ─────────────────────────────────────────────
+
+model CreatorDiscoveryRun {
+  id            String    @id @default(uuid())
+  name          String
+  platform      String    @default("instagram")
+  searchType    String    @default("manual")
+  destination   String?
+  country       String?
+  language      String?
+  hashtags      Json      @default("[]")
+  bioKeywords   String?
+  minFollowers  Int?
+  maxFollowers  Int?
+  minEngagement Float?
+  category      String?
+  assignedTo    String?
+  status        String    @default("active")
+  notes         String?
+  resultCount   Int       @default(0)
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now())
+
+  results       CreatorDiscoveryResult[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([platform])
+}
+
+model CreatorDiscoveryResult {
+  id              String    @id @default(uuid())
+  runId           String
+  leadId          String?
+  platform        String    @default("instagram")
+  username        String
+  profileUrl      String?
+  displayName     String?
+  avatarUrl       String?
+  isVerified      Boolean   @default(false)
+  followerCount   Int?
+  postCount       Int?
+  engagementRate  Float?
+  bio             String?
+  country         String?
+  language        String?
+  category        String?
+  niches          Json      @default("[]")
+  destinations    Json      @default("[]")
+  hashtags        Json      @default("[]")
+  mentions        Json      @default("[]")
+  score           Float?
+  routeIdeas      Json      @default("[]")
+  fitSummary      String?
+  status          String    @default("new")
+  metadata        Json      @default("{}")
+  createdAt       DateTime  @default(now())
+
+  run             CreatorDiscoveryRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  lead            CreatorLead?           @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([runId])
+  @@index([leadId])
+  @@index([status])
+  @@index([platform, username])
+}
+
+model CreatorLead {
+  id              String    @id @default(uuid())
+  platform        String    @default("instagram")
+  username        String
+  profileUrl      String?
+  displayName     String?
+  firstName       String?
+  avatarUrl       String?
+  isVerified      Boolean   @default(false)
+  email           String?
+  website         String?
+  bio             String?
+  country         String?
+  language        String?
+  category        String?
+  niches          Json      @default("[]")
+  destinations    Json      @default("[]")
+  hashtags        Json      @default("[]")
+  mentions        Json      @default("[]")
+  followerCount   Int?
+  postCount       Int?
+  engagementRate  Float?
+  score           Float?
+  priority        String    @default("medium")
+  status          String    @default("identified")
+  assignedTo      String?
+  lastContactedAt DateTime?
+  nextFollowUpAt  DateTime?
+  fitSummary      String?
+  routeIdeas      Json      @default("[]")
+  positiveSignals Json      @default("[]")
+  risks           Json      @default("[]")
+  nextBestAction  String?
+  sourceRunId     String?
+  sourceResultId  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now())
+
+  discoveryResults CreatorDiscoveryResult[]
+  messages         CreatorLeadMessage[]
+  activities       CreatorLeadActivity[]
+  tasks            CreatorLeadTask[]
+
+  @@unique([platform, username])
+  @@index([status])
+  @@index([priority])
+  @@index([assignedTo])
+  @@index([nextFollowUpAt])
+  @@index([country])
+  @@index([language])
+  @@index([createdAt])
+}
+
+model CreatorMessageTemplate {
+  id          String    @id @default(uuid())
+  name        String
+  platform    String    @default("instagram")
+  language    String    @default("pt")
+  subject     String?
+  body        String
+  variables   Json      @default("[]")
+  isActive    Boolean   @default(true)
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now())
+
+  messages    CreatorLeadMessage[]
+
+  @@index([platform])
+  @@index([language])
+  @@index([isActive])
+}
+
+model CreatorLeadMessage {
+  id                String    @id @default(uuid())
+  leadId            String
+  templateId        String?
+  platform          String    @default("instagram")
+  subject           String?
+  body              String
+  personalizedBody  String?
+  status            String    @default("draft")
+  copiedAt          DateTime?
+  sentAt            DateTime?
+  sentBy            String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now())
+
+  lead              CreatorLead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  template          CreatorMessageTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([templateId])
+  @@index([status])
+}
+
+model CreatorLeadActivity {
+  id          String    @id @default(uuid())
+  leadId      String
+  type        String
+  content     String?
+  metadata    Json      @default("{}")
+  createdBy   String?
+  createdAt   DateTime  @default(now())
+
+  lead        CreatorLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model CreatorLeadTask {
+  id            String    @id @default(uuid())
+  leadId        String
+  title         String
+  description   String?
+  dueAt         DateTime?
+  completedAt   DateTime?
+  snoozedUntil  DateTime?
+  status        String    @default("pending")
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now())
+
+  lead          CreatorLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([status])
+  @@index([dueAt])
+}

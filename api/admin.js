@@ -571,6 +571,24 @@ async function _handler(req, res) {
         return res.status(200).json({ itineraryId: newItinId, isNew: true, title });
       }
 
+      // ── Creator Acquisition CRM — POST ───────────────────────────────────
+      if (action === 'crm-create-run')      return res.json(await crmCreateRun(pool, req.body ?? {}, adminCtx));
+      if (action === 'crm-import-results')  return res.json(await crmImportResults(pool, req.body ?? {}, adminCtx));
+      if (action === 'crm-add-to-crm')      return res.json(await crmAddToCrm(pool, req.body ?? {}, adminCtx));
+      if (action === 'crm-ignore-result')   return res.json(await crmSetResultStatus(pool, id, 'ignored'));
+      if (action === 'crm-block-result')    return res.json(await crmSetResultStatus(pool, id, 'blocked'));
+      if (action === 'crm-update-lead')     return res.json(await crmUpdateLead(pool, id, req.body ?? {}, adminCtx));
+      if (action === 'crm-change-status')   return res.json(await crmChangeStatus(pool, id, req.body ?? {}, adminCtx));
+      if (action === 'crm-add-note')        return res.json(await crmAddNote(pool, id, req.body ?? {}, adminCtx));
+      if (action === 'crm-create-task')     return res.json(await crmCreateTask(pool, id, req.body ?? {}, adminCtx));
+      if (action === 'crm-update-task')     return res.json(await crmUpdateTask(pool, req.query.taskId || req.body?.taskId, req.body ?? {}, adminCtx));
+      if (action === 'crm-create-template') return res.json(await crmCreateTemplate(pool, req.body ?? {}, adminCtx));
+      if (action === 'crm-update-template') return res.json(await crmUpdateTemplate(pool, id, req.body ?? {}));
+      if (action === 'crm-generate-message') return res.json(await crmGenerateMessage(pool, id, req.body ?? {}));
+      if (action === 'crm-save-message')    return res.json(await crmSaveMessage(pool, id, req.body ?? {}, adminCtx));
+      if (action === 'crm-mark-copied')     return res.json(await crmMarkCopied(pool, req.query.msgId || req.body?.msgId));
+      if (action === 'crm-mark-sent')       return res.json(await crmMarkSent(pool, req.query.msgId || req.body?.msgId, adminCtx));
+
       return res.status(400).json({ error: 'Unknown action' });
     }
 
@@ -722,6 +740,14 @@ async function _handler(req, res) {
       );
       return res.status(200).json(rows);
     }
+
+    // ── Creator Acquisition CRM — GET ────────────────────────────────────────
+    if (action === 'crm-dashboard')    return res.json(await crmDashboard(pool));
+    if (action === 'crm-list-runs')    return res.json(await crmListRuns(pool));
+    if (action === 'crm-get-run')      return res.json(await crmGetRun(pool, id));
+    if (action === 'crm-list-leads')   return res.json(await crmListLeads(pool, req.query));
+    if (action === 'crm-get-lead')     return res.json(await crmGetLead(pool, id));
+    if (action === 'crm-list-templates') return res.json(await crmListTemplates(pool, req.query.platform, req.query.language));
 
     // ── One-time backfill: populate null new columns from legacy `amount` ─────
     if (action === 'backfill-purchases') {
@@ -1706,4 +1732,683 @@ function esc(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// ── Creator Acquisition CRM ───────────────────────────────────────────────────
+
+const PIPELINE_STATUSES = [
+  'identified','qualified','message_prepared','contacted','replied',
+  'interested','proposal_sent','demo_scheduled','accepted','onboarding',
+  'itinerary_in_creation','active','rejected','follow_up_later','blocked','not_fit',
+];
+
+async function crmDashboard(pool) {
+  const [statsRows, overdueRows, avgRows, recentTasks] = await Promise.all([
+    pool.query(`
+      SELECT status, COUNT(*) AS count
+      FROM "CreatorLead"
+      GROUP BY status
+    `),
+    pool.query(`
+      SELECT COUNT(*) AS count FROM "CreatorLead"
+      WHERE "nextFollowUpAt" < NOW()
+        AND status NOT IN ('rejected','blocked','not_fit','active')
+    `),
+    pool.query(`SELECT ROUND(AVG(score)::numeric, 1) AS avg_score FROM "CreatorLead" WHERE score IS NOT NULL`),
+    pool.query(`
+      SELECT t.*, l."displayName", l.username, l.platform
+      FROM "CreatorLeadTask" t
+      JOIN "CreatorLead" l ON l.id = t."leadId"
+      WHERE t.status = 'pending'
+      ORDER BY t."dueAt" ASC NULLS LAST
+      LIMIT 10
+    `),
+  ]);
+
+  const byStatus = {};
+  let totalLeads = 0;
+  for (const row of statsRows.rows) {
+    byStatus[row.status] = parseInt(row.count, 10);
+    totalLeads += parseInt(row.count, 10);
+  }
+
+  return {
+    totalLeads,
+    byStatus,
+    overdueFollowUps: parseInt(overdueRows.rows[0]?.count ?? 0, 10),
+    avgScore: parseFloat(avgRows.rows[0]?.avg_score ?? 0) || 0,
+    upcomingTasks: recentTasks.rows,
+  };
+}
+
+async function crmListRuns(pool) {
+  const { rows } = await pool.query(`
+    SELECT r.*,
+      COUNT(res.id)                                         AS "resultCount",
+      COUNT(CASE WHEN res.status = 'added_to_crm' THEN 1 END) AS "addedCount"
+    FROM "CreatorDiscoveryRun" r
+    LEFT JOIN "CreatorDiscoveryResult" res ON res."runId" = r.id
+    GROUP BY r.id
+    ORDER BY r."createdAt" DESC
+  `);
+  return { runs: rows };
+}
+
+async function crmGetRun(pool, id) {
+  if (!id) throw Object.assign(new Error('id required'), { status: 400 });
+  const { rows: runRows } = await pool.query(
+    `SELECT * FROM "CreatorDiscoveryRun" WHERE id = $1 LIMIT 1`, [id]
+  );
+  if (!runRows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+
+  const { rows: results } = await pool.query(`
+    SELECT res.*,
+      l.status AS lead_status,
+      l.id AS lead_id
+    FROM "CreatorDiscoveryResult" res
+    LEFT JOIN "CreatorLead" l ON l.id = res."leadId"
+    WHERE res."runId" = $1
+    ORDER BY COALESCE(res.score, 0) DESC, res."createdAt" DESC
+  `, [id]);
+
+  return { run: runRows[0], results };
+}
+
+async function crmListLeads(pool, query) {
+  const {
+    status, country, language, platform, minScore, minFollowers,
+    assignedTo, overdueOnly, hasBeenContacted, destination, niche,
+    page = '1', q = '',
+  } = query;
+
+  const conditions = [];
+  const params = [];
+  let p = 1;
+
+  if (status)          { conditions.push(`l.status = $${p++}`); params.push(status); }
+  if (country)         { conditions.push(`l.country ILIKE $${p++}`); params.push(`%${country}%`); }
+  if (language)        { conditions.push(`l.language = $${p++}`); params.push(language); }
+  if (platform)        { conditions.push(`l.platform = $${p++}`); params.push(platform); }
+  if (minScore)        { conditions.push(`l.score >= $${p++}`); params.push(parseFloat(minScore)); }
+  if (minFollowers)    { conditions.push(`l."followerCount" >= $${p++}`); params.push(parseInt(minFollowers, 10)); }
+  if (assignedTo)      { conditions.push(`l."assignedTo" = $${p++}`); params.push(assignedTo); }
+  if (overdueOnly === 'true') {
+    conditions.push(`l."nextFollowUpAt" < NOW() AND l.status NOT IN ('rejected','blocked','not_fit','active')`);
+  }
+  if (hasBeenContacted === 'true') {
+    conditions.push(`l."lastContactedAt" IS NOT NULL`);
+  } else if (hasBeenContacted === 'false') {
+    conditions.push(`l."lastContactedAt" IS NULL`);
+  }
+  if (destination) { conditions.push(`l.destinations::text ILIKE $${p++}`); params.push(`%${destination}%`); }
+  if (niche)       { conditions.push(`l.niches::text ILIKE $${p++}`); params.push(`%${niche}%`); }
+  if (q)           {
+    conditions.push(`(l.username ILIKE $${p} OR l."displayName" ILIKE $${p} OR l.email ILIKE $${p})`);
+    params.push(`%${q}%`); p++;
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limit = 50;
+  const offsetVal = (pageNum - 1) * limit;
+
+  const { rows } = await pool.query(`
+    SELECT l.*,
+      (SELECT COUNT(*) FROM "CreatorLeadMessage" m WHERE m."leadId" = l.id) AS message_count,
+      (SELECT COUNT(*) FROM "CreatorLeadTask" t WHERE t."leadId" = l.id AND t.status = 'pending') AS pending_tasks
+    FROM "CreatorLead" l
+    ${where}
+    ORDER BY
+      CASE l.status
+        WHEN 'pending_review' THEN 0
+        WHEN 'identified'     THEN 1
+        WHEN 'qualified'      THEN 2
+        ELSE 10
+      END,
+      COALESCE(l.score, 0) DESC,
+      l."createdAt" DESC
+    LIMIT ${limit} OFFSET ${offsetVal}
+  `, params);
+
+  const { rows: countRows } = await pool.query(
+    `SELECT COUNT(*) AS total FROM "CreatorLead" l ${where}`, params
+  );
+
+  return { leads: rows, total: parseInt(countRows[0]?.total ?? 0, 10) };
+}
+
+async function crmGetLead(pool, id) {
+  if (!id) throw Object.assign(new Error('id required'), { status: 400 });
+
+  const { rows: leadRows } = await pool.query(
+    `SELECT * FROM "CreatorLead" WHERE id = $1 LIMIT 1`, [id]
+  );
+  if (!leadRows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+
+  const [messages, activities, tasks] = await Promise.all([
+    pool.query(`
+      SELECT m.*, t.name AS template_name
+      FROM "CreatorLeadMessage" m
+      LEFT JOIN "CreatorMessageTemplate" t ON t.id = m."templateId"
+      WHERE m."leadId" = $1
+      ORDER BY m."createdAt" DESC
+    `, [id]),
+    pool.query(`
+      SELECT * FROM "CreatorLeadActivity"
+      WHERE "leadId" = $1
+      ORDER BY "createdAt" DESC
+      LIMIT 50
+    `, [id]),
+    pool.query(`
+      SELECT * FROM "CreatorLeadTask"
+      WHERE "leadId" = $1
+      ORDER BY "dueAt" ASC NULLS LAST, "createdAt" DESC
+    `, [id]),
+  ]);
+
+  return {
+    lead: leadRows[0],
+    messages: messages.rows,
+    activities: activities.rows,
+    tasks: tasks.rows,
+  };
+}
+
+async function crmListTemplates(pool, platform, language) {
+  const conditions = ['t."isActive" = true'];
+  const params = [];
+  let p = 1;
+  if (platform) { conditions.push(`t.platform = $${p++}`); params.push(platform); }
+  if (language) { conditions.push(`t.language = $${p++}`); params.push(language); }
+  const where = `WHERE ${conditions.join(' AND ')}`;
+  const { rows } = await pool.query(`SELECT * FROM "CreatorMessageTemplate" ${where} ORDER BY t.name`, params);
+  return { templates: rows };
+}
+
+async function crmCreateRun(pool, body, ctx) {
+  const {
+    name, platform = 'instagram', searchType = 'manual',
+    destination, country, language, hashtags = [], bioKeywords,
+    minFollowers, maxFollowers, minEngagement, category, assignedTo, notes,
+  } = body;
+  if (!name?.trim()) throw Object.assign(new Error('name is required'), { status: 400 });
+
+  const { rows } = await pool.query(`
+    INSERT INTO "CreatorDiscoveryRun"
+      (id, name, platform, "searchType", destination, country, language, hashtags,
+       "bioKeywords", "minFollowers", "maxFollowers", "minEngagement", category,
+       "assignedTo", notes, "createdBy", "createdAt", "updatedAt")
+    VALUES
+      (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::jsonb,
+       $8, $9, $10, $11, $12,
+       $13, $14, $15, NOW(), NOW())
+    RETURNING *
+  `, [
+    name.trim(), platform, searchType,
+    destination || null, country || null, language || null,
+    JSON.stringify(Array.isArray(hashtags) ? hashtags : []),
+    bioKeywords || null, minFollowers ? parseInt(minFollowers, 10) : null,
+    maxFollowers ? parseInt(maxFollowers, 10) : null,
+    minEngagement ? parseFloat(minEngagement) : null,
+    category || null, assignedTo || null, notes || null,
+    ctx.email || null,
+  ]);
+  return { run: rows[0] };
+}
+
+async function crmImportResults(pool, body, ctx) {
+  const { runId, results } = body;
+  if (!runId) throw Object.assign(new Error('runId is required'), { status: 400 });
+  if (!Array.isArray(results) || !results.length) {
+    throw Object.assign(new Error('results must be a non-empty array'), { status: 400 });
+  }
+
+  const { rows: runCheck } = await pool.query(
+    `SELECT id FROM "CreatorDiscoveryRun" WHERE id = $1 LIMIT 1`, [runId]
+  );
+  if (!runCheck.length) throw Object.assign(new Error('Run not found'), { status: 404 });
+
+  let inserted = 0;
+  for (const r of results) {
+    const { username, platform = 'instagram' } = r;
+    if (!username) continue;
+    await pool.query(`
+      INSERT INTO "CreatorDiscoveryResult"
+        (id, "runId", platform, username, "profileUrl", "displayName", "avatarUrl",
+         "isVerified", "followerCount", "postCount", "engagementRate",
+         bio, country, language, category, niches, destinations, hashtags, mentions,
+         score, "routeIdeas", "fitSummary", status, metadata, "createdAt")
+      VALUES
+        (gen_random_uuid(), $1, $2, $3, $4, $5, $6,
+         $7, $8, $9, $10,
+         $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb,
+         $19, $20::jsonb, $21, 'new', $22::jsonb, NOW())
+      ON CONFLICT DO NOTHING
+    `, [
+      runId, platform, username,
+      r.profileUrl || `https://instagram.com/${username}`,
+      r.displayName || null, r.avatarUrl || null,
+      r.isVerified ?? false, r.followerCount ?? null, r.postCount ?? null, r.engagementRate ?? null,
+      r.bio || null, r.country || null, r.language || null, r.category || null,
+      JSON.stringify(Array.isArray(r.niches) ? r.niches : []),
+      JSON.stringify(Array.isArray(r.destinations) ? r.destinations : []),
+      JSON.stringify(Array.isArray(r.hashtags) ? r.hashtags : []),
+      JSON.stringify(Array.isArray(r.mentions) ? r.mentions : []),
+      r.score ?? null,
+      JSON.stringify(Array.isArray(r.routeIdeas) ? r.routeIdeas : []),
+      r.fitSummary || null,
+      JSON.stringify(r.metadata || {}),
+    ]);
+    inserted++;
+  }
+
+  await pool.query(
+    `UPDATE "CreatorDiscoveryRun" SET "resultCount" = (SELECT COUNT(*) FROM "CreatorDiscoveryResult" WHERE "runId" = $1), "updatedAt" = NOW() WHERE id = $1`,
+    [runId]
+  );
+
+  return { inserted };
+}
+
+async function crmAddToCrm(pool, body, ctx) {
+  const { resultId } = body;
+  if (!resultId) throw Object.assign(new Error('resultId is required'), { status: 400 });
+
+  const { rows: rRows } = await pool.query(
+    `SELECT * FROM "CreatorDiscoveryResult" WHERE id = $1 LIMIT 1`, [resultId]
+  );
+  if (!rRows.length) throw Object.assign(new Error('Result not found'), { status: 404 });
+  const result = rRows[0];
+
+  // Upsert CreatorLead by platform + username
+  const { rows: leadRows } = await pool.query(`
+    INSERT INTO "CreatorLead"
+      (id, platform, username, "profileUrl", "displayName", "firstName", "avatarUrl",
+       "isVerified", bio, country, language, category, niches, destinations, hashtags, mentions,
+       "followerCount", "postCount", "engagementRate",
+       score, "fitSummary", "routeIdeas", status, "sourceRunId", "sourceResultId",
+       "createdAt", "updatedAt")
+    VALUES
+      (gen_random_uuid(), $1, $2, $3, $4, $5, $6,
+       $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14::jsonb, $15::jsonb,
+       $16, $17, $18,
+       $19, $20, $21::jsonb, 'identified', $22, $23,
+       NOW(), NOW())
+    ON CONFLICT (platform, username) DO UPDATE SET
+      "avatarUrl"       = EXCLUDED."avatarUrl",
+      "followerCount"   = EXCLUDED."followerCount",
+      "engagementRate"  = EXCLUDED."engagementRate",
+      "updatedAt"       = NOW()
+    RETURNING *
+  `, [
+    result.platform, result.username,
+    result.profileUrl, result.displayName,
+    result.displayName?.split(' ')[0] || null,
+    result.avatarUrl, result.isVerified,
+    result.bio, result.country, result.language, result.category,
+    JSON.stringify(result.niches ?? []),
+    JSON.stringify(result.destinations ?? []),
+    JSON.stringify(result.hashtags ?? []),
+    JSON.stringify(result.mentions ?? []),
+    result.followerCount, result.postCount, result.engagementRate,
+    result.score, result.fitSummary,
+    JSON.stringify(result.routeIdeas ?? []),
+    result.runId, resultId,
+  ]);
+
+  const lead = leadRows[0];
+
+  // Update result status + link
+  await pool.query(
+    `UPDATE "CreatorDiscoveryResult" SET status = 'added_to_crm', "leadId" = $1 WHERE id = $2`,
+    [lead.id, resultId]
+  );
+
+  // Log activity
+  await pool.query(`
+    INSERT INTO "CreatorLeadActivity" (id, "leadId", type, content, metadata, "createdBy", "createdAt")
+    VALUES (gen_random_uuid(), $1, 'system', $2, '{}'::jsonb, $3, NOW())
+  `, [lead.id, `Added from discovery run`, ctx.email || null]);
+
+  return { lead, isNew: !rRows[0].leadId };
+}
+
+async function crmSetResultStatus(pool, id, status) {
+  if (!id) throw Object.assign(new Error('id required'), { status: 400 });
+  const { rows } = await pool.query(
+    `UPDATE "CreatorDiscoveryResult" SET status = $1 WHERE id = $2 RETURNING id, status`,
+    [status, id]
+  );
+  if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+  return { result: rows[0] };
+}
+
+async function crmUpdateLead(pool, id, body, ctx) {
+  if (!id) throw Object.assign(new Error('id required'), { status: 400 });
+
+  const allowed = [
+    'displayName','firstName','email','website','bio','country','language','category',
+    'niches','destinations','hashtags','mentions','followerCount','postCount',
+    'engagementRate','score','priority','assignedTo','nextFollowUpAt',
+    'fitSummary','routeIdeas','positiveSignals','risks','nextBestAction',
+    'avatarUrl','profileUrl',
+  ];
+
+  const sets = [];
+  const params = [];
+  let p = 1;
+
+  for (const key of allowed) {
+    if (key in body) {
+      const val = body[key];
+      if (['niches','destinations','hashtags','mentions','routeIdeas','positiveSignals','risks'].includes(key)) {
+        sets.push(`"${key}" = $${p++}::jsonb`);
+        params.push(JSON.stringify(Array.isArray(val) ? val : []));
+      } else {
+        sets.push(`"${key}" = $${p++}`);
+        params.push(val === '' ? null : val);
+      }
+    }
+  }
+
+  if (!sets.length) throw Object.assign(new Error('Nothing to update'), { status: 400 });
+  sets.push(`"updatedAt" = NOW()`);
+  params.push(id);
+
+  const { rows } = await pool.query(
+    `UPDATE "CreatorLead" SET ${sets.join(', ')} WHERE id = $${p} RETURNING *`,
+    params
+  );
+  if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+  return { lead: rows[0] };
+}
+
+async function crmChangeStatus(pool, id, body, ctx) {
+  if (!id) throw Object.assign(new Error('id required'), { status: 400 });
+  const { status, note } = body;
+  if (!PIPELINE_STATUSES.includes(status)) {
+    throw Object.assign(new Error(`Invalid status. Valid values: ${PIPELINE_STATUSES.join(', ')}`), { status: 400 });
+  }
+
+  const { rows: prev } = await pool.query(
+    `SELECT status FROM "CreatorLead" WHERE id = $1 LIMIT 1`, [id]
+  );
+  if (!prev.length) throw Object.assign(new Error('Not found'), { status: 404 });
+  const prevStatus = prev[0].status;
+
+  const { rows } = await pool.query(
+    `UPDATE "CreatorLead" SET status = $1, "updatedAt" = NOW() WHERE id = $2 RETURNING *`,
+    [status, id]
+  );
+
+  await pool.query(`
+    INSERT INTO "CreatorLeadActivity"
+      (id, "leadId", type, content, metadata, "createdBy", "createdAt")
+    VALUES
+      (gen_random_uuid(), $1, 'status_change', $2, $3::jsonb, $4, NOW())
+  `, [
+    id,
+    note || `Status changed from ${prevStatus} to ${status}`,
+    JSON.stringify({ from: prevStatus, to: status }),
+    ctx.email || null,
+  ]);
+
+  return { lead: rows[0] };
+}
+
+async function crmAddNote(pool, id, body, ctx) {
+  if (!id) throw Object.assign(new Error('id required'), { status: 400 });
+  const { content } = body;
+  if (!content?.trim()) throw Object.assign(new Error('content is required'), { status: 400 });
+
+  const { rows } = await pool.query(`
+    INSERT INTO "CreatorLeadActivity"
+      (id, "leadId", type, content, metadata, "createdBy", "createdAt")
+    VALUES (gen_random_uuid(), $1, 'note', $2, '{}'::jsonb, $3, NOW())
+    RETURNING *
+  `, [id, content.trim(), ctx.email || null]);
+
+  return { activity: rows[0] };
+}
+
+async function crmCreateTask(pool, id, body, ctx) {
+  if (!id) throw Object.assign(new Error('id required'), { status: 400 });
+  const { title, description, dueAt } = body;
+  if (!title?.trim()) throw Object.assign(new Error('title is required'), { status: 400 });
+
+  const { rows } = await pool.query(`
+    INSERT INTO "CreatorLeadTask"
+      (id, "leadId", title, description, "dueAt", status, "createdBy", "createdAt", "updatedAt")
+    VALUES
+      (gen_random_uuid(), $1, $2, $3, $4, 'pending', $5, NOW(), NOW())
+    RETURNING *
+  `, [id, title.trim(), description || null, dueAt || null, ctx.email || null]);
+
+  await pool.query(`
+    INSERT INTO "CreatorLeadActivity"
+      (id, "leadId", type, content, metadata, "createdBy", "createdAt")
+    VALUES (gen_random_uuid(), $1, 'task_created', $2, '{}'::jsonb, $3, NOW())
+  `, [id, `Task created: ${title.trim()}`, ctx.email || null]);
+
+  return { task: rows[0] };
+}
+
+async function crmUpdateTask(pool, taskId, body, ctx) {
+  if (!taskId) throw Object.assign(new Error('taskId required'), { status: 400 });
+  const { status, completedAt, snoozedUntil, title, description, dueAt } = body;
+
+  const sets = [];
+  const params = [];
+  let p = 1;
+
+  if (title !== undefined)       { sets.push(`title = $${p++}`); params.push(title); }
+  if (description !== undefined) { sets.push(`description = $${p++}`); params.push(description); }
+  if (dueAt !== undefined)       { sets.push(`"dueAt" = $${p++}`); params.push(dueAt); }
+  if (status !== undefined)      { sets.push(`status = $${p++}`); params.push(status); }
+  if (completedAt !== undefined) { sets.push(`"completedAt" = $${p++}`); params.push(completedAt); }
+  if (snoozedUntil !== undefined){ sets.push(`"snoozedUntil" = $${p++}`); params.push(snoozedUntil); }
+
+  if (!sets.length) throw Object.assign(new Error('Nothing to update'), { status: 400 });
+  sets.push(`"updatedAt" = NOW()`);
+  params.push(taskId);
+
+  const { rows } = await pool.query(
+    `UPDATE "CreatorLeadTask" SET ${sets.join(', ')} WHERE id = $${p} RETURNING *`,
+    params
+  );
+  if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+
+  if (status === 'done') {
+    await pool.query(`
+      INSERT INTO "CreatorLeadActivity"
+        (id, "leadId", type, content, metadata, "createdBy", "createdAt")
+      VALUES (gen_random_uuid(), $1, 'task_completed', $2, '{}'::jsonb, $3, NOW())
+    `, [rows[0].leadId, `Task completed: ${rows[0].title}`, ctx.email || null]);
+  }
+
+  return { task: rows[0] };
+}
+
+async function crmCreateTemplate(pool, body, ctx) {
+  const { name, platform = 'instagram', language = 'pt', subject, bodyText, variables = [] } = body;
+  if (!name?.trim() || !bodyText?.trim()) {
+    throw Object.assign(new Error('name and bodyText are required'), { status: 400 });
+  }
+
+  const { rows } = await pool.query(`
+    INSERT INTO "CreatorMessageTemplate"
+      (id, name, platform, language, subject, body, variables, "isActive", "createdBy", "createdAt", "updatedAt")
+    VALUES
+      (gen_random_uuid(), $1, $2, $3, $4, $5, $6::jsonb, true, $7, NOW(), NOW())
+    RETURNING *
+  `, [
+    name.trim(), platform, language,
+    subject || null, bodyText.trim(),
+    JSON.stringify(Array.isArray(variables) ? variables : []),
+    ctx.email || null,
+  ]);
+  return { template: rows[0] };
+}
+
+async function crmUpdateTemplate(pool, id, body) {
+  if (!id) throw Object.assign(new Error('id required'), { status: 400 });
+  const { name, subject, bodyText, variables, isActive, platform, language } = body;
+
+  const sets = [];
+  const params = [];
+  let p = 1;
+
+  if (name !== undefined)      { sets.push(`name = $${p++}`); params.push(name); }
+  if (platform !== undefined)  { sets.push(`platform = $${p++}`); params.push(platform); }
+  if (language !== undefined)  { sets.push(`language = $${p++}`); params.push(language); }
+  if (subject !== undefined)   { sets.push(`subject = $${p++}`); params.push(subject); }
+  if (bodyText !== undefined)  { sets.push(`body = $${p++}`); params.push(bodyText); }
+  if (variables !== undefined) { sets.push(`variables = $${p++}::jsonb`); params.push(JSON.stringify(variables)); }
+  if (isActive !== undefined)  { sets.push(`"isActive" = $${p++}`); params.push(isActive); }
+
+  if (!sets.length) throw Object.assign(new Error('Nothing to update'), { status: 400 });
+  sets.push(`"updatedAt" = NOW()`);
+  params.push(id);
+
+  const { rows } = await pool.query(
+    `UPDATE "CreatorMessageTemplate" SET ${sets.join(', ')} WHERE id = $${p} RETURNING *`,
+    params
+  );
+  if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+  return { template: rows[0] };
+}
+
+function crmPersonalizeTemplate(templateBody, lead) {
+  const firstName = lead.firstName || lead.displayName?.split(' ')[0] || lead.username;
+  const destinationOrTheme = (
+    (Array.isArray(lead.destinations) ? lead.destinations : [])[0] ||
+    (Array.isArray(lead.niches) ? lead.niches : [])[0] ||
+    lead.category || 'travel'
+  );
+  return templateBody
+    .replace(/\{\{firstName\}\}/g, firstName || '')
+    .replace(/\{\{destinationOrTheme\}\}/g, destinationOrTheme || '')
+    .replace(/\{\{username\}\}/g, lead.username || '')
+    .replace(/\{\{language\}\}/g, lead.language || '');
+}
+
+async function crmGenerateMessage(pool, leadId, body) {
+  if (!leadId) throw Object.assign(new Error('id (leadId) required'), { status: 400 });
+  const { templateId } = body;
+
+  const { rows: leadRows } = await pool.query(
+    `SELECT * FROM "CreatorLead" WHERE id = $1 LIMIT 1`, [leadId]
+  );
+  if (!leadRows.length) throw Object.assign(new Error('Lead not found'), { status: 404 });
+  const lead = leadRows[0];
+
+  let template = null;
+  if (templateId) {
+    const { rows: tmplRows } = await pool.query(
+      `SELECT * FROM "CreatorMessageTemplate" WHERE id = $1 LIMIT 1`, [templateId]
+    );
+    template = tmplRows[0] || null;
+  } else {
+    const { rows: tmplRows } = await pool.query(
+      `SELECT * FROM "CreatorMessageTemplate" WHERE "isActive" = true AND platform = $1 ORDER BY "createdAt" LIMIT 1`,
+      [lead.platform || 'instagram']
+    );
+    template = tmplRows[0] || null;
+  }
+
+  if (!template) {
+    const fallback = `Hi ${lead.firstName || lead.username}, I came across your content and love what you create. I'd love to chat about collaborating with HiddenAtlas on a premium travel itinerary.`;
+    return { personalizedBody: fallback, templateId: null, templateName: null };
+  }
+
+  const personalizedBody = crmPersonalizeTemplate(template.body, lead);
+  return {
+    personalizedBody,
+    templateId: template.id,
+    templateName: template.name,
+    subject: template.subject,
+  };
+}
+
+async function crmSaveMessage(pool, leadId, body, ctx) {
+  if (!leadId) throw Object.assign(new Error('id (leadId) required'), { status: 400 });
+  const { templateId, personalizedBody, platform = 'instagram', subject } = body;
+  if (!personalizedBody?.trim()) throw Object.assign(new Error('personalizedBody is required'), { status: 400 });
+
+  const { rows } = await pool.query(`
+    INSERT INTO "CreatorLeadMessage"
+      (id, "leadId", "templateId", platform, subject, body, "personalizedBody", status, "createdAt", "updatedAt")
+    VALUES
+      (gen_random_uuid(), $1, $2, $3, $4, $5, $5, 'draft', NOW(), NOW())
+    RETURNING *
+  `, [leadId, templateId || null, platform, subject || null, personalizedBody.trim()]);
+
+  await pool.query(`
+    INSERT INTO "CreatorLeadActivity"
+      (id, "leadId", type, content, metadata, "createdBy", "createdAt")
+    VALUES (gen_random_uuid(), $1, 'message_prepared', 'Message prepared', '{}'::jsonb, $2, NOW())
+  `, [leadId, ctx.email || null]);
+
+  return { message: rows[0] };
+}
+
+async function crmMarkCopied(pool, msgId) {
+  if (!msgId) throw Object.assign(new Error('msgId required'), { status: 400 });
+  const { rows } = await pool.query(`
+    UPDATE "CreatorLeadMessage"
+    SET status = 'copied', "copiedAt" = NOW(), "updatedAt" = NOW()
+    WHERE id = $1
+    RETURNING *
+  `, [msgId]);
+  if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+  return { message: rows[0] };
+}
+
+async function crmMarkSent(pool, msgId, ctx) {
+  if (!msgId) throw Object.assign(new Error('msgId required'), { status: 400 });
+  const { rows: msgRows } = await pool.query(
+    `SELECT * FROM "CreatorLeadMessage" WHERE id = $1 LIMIT 1`, [msgId]
+  );
+  if (!msgRows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+  const msg = msgRows[0];
+
+  await pool.query(`
+    UPDATE "CreatorLeadMessage"
+    SET status = 'sent_manual', "sentAt" = NOW(), "sentBy" = $2, "updatedAt" = NOW()
+    WHERE id = $1
+  `, [msgId, ctx.email || null]);
+
+  await pool.query(`
+    UPDATE "CreatorLead"
+    SET "lastContactedAt" = NOW(), "updatedAt" = NOW(),
+        status = CASE
+          WHEN status IN ('identified','qualified','message_prepared') THEN 'contacted'
+          ELSE status
+        END
+    WHERE id = $1
+  `, [msg.leadId]);
+
+  await pool.query(`
+    INSERT INTO "CreatorLeadActivity"
+      (id, "leadId", type, content, metadata, "createdBy", "createdAt")
+    VALUES (gen_random_uuid(), $1, 'message_sent', 'Message marked as sent manually', '{}'::jsonb, $2, NOW())
+  `, [msg.leadId, ctx.email || null]);
+
+  // Auto-create follow-up task if none exists within 7 days
+  const dueAt = new Date(Date.now() + 6 * 24 * 60 * 60 * 1000);
+  const { rows: existingTasks } = await pool.query(`
+    SELECT id FROM "CreatorLeadTask"
+    WHERE "leadId" = $1 AND status = 'pending' AND "dueAt" > NOW()
+    LIMIT 1
+  `, [msg.leadId]);
+
+  if (!existingTasks.length) {
+    await pool.query(`
+      INSERT INTO "CreatorLeadTask"
+        (id, "leadId", title, "dueAt", status, "createdBy", "createdAt", "updatedAt")
+      VALUES (gen_random_uuid(), $1, 'Follow up on message', $2, 'pending', $3, NOW(), NOW())
+    `, [msg.leadId, dueAt.toISOString(), ctx.email || null]);
+  }
+
+  return { ok: true };
 }

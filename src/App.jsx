@@ -42,6 +42,11 @@ import DesignerPricingPage from './pages/DesignerPricingPage';
 import DesignerApplicationsPage from './pages/admin/DesignerApplicationsPage';
 import PricingPlansPage from './pages/admin/PricingPlansPage';
 import ItineraryReviewsPage from './pages/admin/ItineraryReviewsPage';
+import CreatorAcquisitionDashboardPage from './pages/admin/CreatorAcquisitionDashboardPage';
+import CreatorDiscoveryPage from './pages/admin/CreatorDiscoveryPage';
+import CreatorCRMPage from './pages/admin/CreatorCRMPage';
+import CreatorLeadDetailPage from './pages/admin/CreatorLeadDetailPage';
+import CreatorTemplatesPage from './pages/admin/CreatorTemplatesPage';
 import { CustomRequestPaymentSuccessPage, CustomRequestPaymentCancelledPage } from './pages/CustomRequestPaymentPage';
 import ShareAcceptPage from './pages/ShareAcceptPage';
 
@@ -112,6 +117,11 @@ export default function App() {
           <Route path="designer-applications" element={<DesignerApplicationsPage />} />
           <Route path="pricing" element={<PricingPlansPage />} />
           <Route path="itinerary-reviews" element={<ItineraryReviewsPage />} />
+          <Route path="creator-acquisition" element={<CreatorAcquisitionDashboardPage />} />
+          <Route path="creator-acquisition/discovery" element={<CreatorDiscoveryPage />} />
+          <Route path="creator-acquisition/crm" element={<CreatorCRMPage />} />
+          <Route path="creator-acquisition/leads/:id" element={<CreatorLeadDetailPage />} />
+          <Route path="creator-acquisition/templates" element={<CreatorTemplatesPage />} />
         </Route>
 
         {/* ── Public pages — shared Navbar + Footer ── */}
