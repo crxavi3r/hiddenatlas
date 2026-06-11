@@ -10,11 +10,11 @@
  * Never hardcode keys here.
  */
 
-const MODEL          = 'claude-sonnet-4-6';
-const ANTHROPIC_URL  = 'https://api.anthropic.com/v1/messages';
-const TAVILY_URL     = 'https://api.tavily.com/search';
-const PERPLEXITY_URL = 'https://api.perplexity.ai/chat/completions';
-const FETCH_TIMEOUT  = 50_000; // 50s — leave headroom before Vercel 60s limit
+const MODEL                  = 'claude-sonnet-4-6';
+const ANTHROPIC_URL          = 'https://api.anthropic.com/v1/messages';
+const TAVILY_URL             = 'https://api.tavily.com/search';
+const PERPLEXITY_URL         = 'https://api.perplexity.ai/chat/completions';
+const AI_DISCOVERY_TIMEOUT_MS = Number(process.env.AI_DISCOVERY_TIMEOUT_MS || 270_000); // 270s — Vercel Pro limit is 5min
 
 // ── Provider detection ────────────────────────────────────────────────────────
 
@@ -58,7 +58,7 @@ export async function runAiDiscovery(criteria) {
 
 async function callAnthropic(systemPrompt, userPrompt) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT);
+  const timer = setTimeout(() => ctrl.abort(), AI_DISCOVERY_TIMEOUT_MS);
 
   let res;
   try {
@@ -72,7 +72,7 @@ async function callAnthropic(systemPrompt, userPrompt) {
       },
       body: JSON.stringify({
         model:      MODEL,
-        max_tokens: 8000,
+        max_tokens: 4096,
         system:     systemPrompt,
         messages:   [{ role: 'user', content: userPrompt }],
       }),
@@ -108,64 +108,21 @@ function buildCreatorPrompt(criteria, webContext = '') {
     notes            && `\nAdditional notes:\n${notes}`,
   ].filter(Boolean).join('\n');
 
-  return `You are a talent scout for HiddenAtlas, a premium travel itinerary platform.
-HiddenAtlas partners with Travel Designers and Travel Creators who design and sell curated digital itineraries.
+  return `You are a talent scout for HiddenAtlas, a premium travel itinerary platform that partners with Travel Designers and Travel Creators.
 
 SEARCH REQUEST:
 ${lines}
-${webContext ? `\nWEB CONTEXT (use to identify real Instagram profiles):\n${webContext.slice(0, 6000)}` : ''}
+${webContext ? `\nWEB CONTEXT:\n${webContext.slice(0, 4000)}` : ''}
 
-PRIORITIZE creators with:
-- Personal authority and strong visual taste
-- Useful, specific travel recommendations and destination knowledge
-- Potential to create or sell curated itineraries on HiddenAtlas
-- Authentic human voice and credibility with their audience
+INCLUDE: travel creators, itinerary planners, destination experts, travel bloggers with guides or hotel recommendations.
+EXCLUDE: agencies, tour operators, hotels, airlines, meme pages, discount influencers.
 
-INCLUDE creators such as:
-- Travel creators and travel designers
-- Itinerary planners and boutique travel planners
-- Local experts with deep destination knowledge
-- Travel bloggers who publish guides, maps, road trips, hotel recommendations or destination reels
-- Creators with strong storytelling and audience interested in curated travel
+SCORING (0-100): 80+ perfect itinerary potential, 60-79 strong, 40-59 possible, below 40 weak.
 
-EXCLUDE:
-- Agencies, mass-market tour operators, generic repost pages
-- Hotels, airlines, meme pages, discount-only influencers
-- Accounts without a clear human creator behind them
+Return ONLY a valid JSON array of exactly ${limit} objects. No markdown, no explanation. Start with [ end with ].
 
-SCORING (0–100):
-- 80–100: Perfect — strong personal authority, premium taste, clear itinerary potential
-- 60–79: Strong — relevant niche, good content quality and engagement
-- 40–59: Potential — some relevance, needs vetting
-- 0–39: Weak
-
-Return ONLY a valid JSON array of ${limit} Instagram travel creator profiles.
-No markdown, no explanation, no code block. Start with [ and end with ].
-
-[
-  {
-    "username": "exact_instagram_handle_no_@",
-    "displayName": "Display Name or null",
-    "profileUrl": "https://www.instagram.com/username/",
-    "avatarUrl": null,
-    "followerCount": estimated_number_or_null,
-    "postCount": null,
-    "engagementRate": null,
-    "bio": "known bio or short content description",
-    "country": "creator country",
-    "language": "language code e.g. pt en es fr",
-    "category": "travel niche e.g. luxury food hiking",
-    "score": 0-100,
-    "fitSummary": "1-2 sentences: why this creator fits HiddenAtlas based on the requested profile",
-    "destinations": ["destination1", "destination2"],
-    "routeIdeas": ["route idea 1", "route idea 2"],
-    "rawData": {
-      "sources": [],
-      "reasoning": "brief confidence note for this profile",
-      "confidenceLevel": "high|medium|low"
-    }
-  }
-]`;
+Each object:
+{"username":"handle_no_@","displayName":"Name or null","followerCount":number_or_null,"bio":"bio or null","country":"country or null","language":"pt|en|es|fr|etc","category":"travel niche","score":0-100,"fitSummary":"1 sentence why this creator fits","confidence":"high|medium|low"}`;
 }
 
 // ── JSON parser ───────────────────────────────────────────────────────────────
@@ -261,7 +218,7 @@ async function runTavilyClaudeDiscovery(criteria) {
 
 async function runPerplexityDiscovery(criteria) {
   const ctrl  = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT);
+  const timer = setTimeout(() => ctrl.abort(), AI_DISCOVERY_TIMEOUT_MS);
 
   let res;
   try {

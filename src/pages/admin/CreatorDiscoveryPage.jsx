@@ -184,9 +184,9 @@ function AiSearchPanel({ onSearchDone, getToken }) {
   function startStepAnimation() {
     stepTimersRef.current.forEach(clearTimeout);
     stepTimersRef.current = [
-      setTimeout(() => setCurrentStep(1), 6_000),
-      setTimeout(() => setCurrentStep(2), 14_000),
-      setTimeout(() => setCurrentStep(3), 22_000),
+      setTimeout(() => setCurrentStep(1), 8_000),
+      setTimeout(() => setCurrentStep(2), 30_000),
+      setTimeout(() => setCurrentStep(3), 90_000),
     ];
   }
   function clearStepTimers() { stepTimersRef.current.forEach(clearTimeout); }
@@ -237,6 +237,9 @@ function AiSearchPanel({ onSearchDone, getToken }) {
   const isProviderError = error && (
     error.includes('not configured') || error.includes('ANTHROPIC_API_KEY') || error.includes('PROVIDER_NOT_CONFIGURED')
   );
+  const isTimeoutError = error && (
+    error.includes('aborted') || error.includes('abort') || error.includes('timeout') || error.includes('timed out')
+  );
 
   if (searching || done || error) {
     return (
@@ -266,6 +269,16 @@ function AiSearchPanel({ onSearchDone, getToken }) {
                 <p style={{ fontSize: '12px', color: '#8C8070', margin: 0 }}>
                   Until then, use <strong>Manual Import</strong> to add creator profiles manually.
                 </p>
+              </div>
+            ) : isTimeoutError ? (
+              <div style={{ padding: '14px 16px', background: '#FBF8F1', borderRadius: '8px', border: '1px solid #E8C97A' }}>
+                <p style={{ fontSize: '13px', fontWeight: '600', color: '#C9A96E', marginBottom: '6px' }}>AI provider timed out</p>
+                <p style={{ fontSize: '12.5px', color: '#4A433A', lineHeight: '1.6', margin: '0 0 10px' }}>
+                  The AI is taking longer than expected. Try reducing the <strong>Target Count</strong> to 5 or 10, or retry in a few minutes.
+                </p>
+                <button onClick={handleReset} style={{ ...S.btnSecondary, fontSize: '12px', padding: '5px 10px' }}>
+                  <RefreshCw size={11} /> Try again
+                </button>
               </div>
             ) : (
               <div style={{ padding: '12px 14px', background: '#FDECEA', borderRadius: '8px', border: '1px solid #F5C6C0' }}>
