@@ -1750,6 +1750,7 @@ async function dispatchCrmAction(pool, action, payload, ctx) {
     case 'discovery.ignoreResult':    return crmSetResultStatus(pool, payload.id, 'ignored');
     case 'discovery.blockResult':     return crmSetResultStatus(pool, payload.id, 'blocked');
     case 'discovery.markCompleted':   return crmMarkRunCompleted(pool, payload.id);
+    case 'discovery.aiSearchProfiles':return crmAiSearchProfiles(pool, payload, ctx);
     case 'leads.list':                 return crmListLeads(pool, payload);
     case 'leads.get':                  return crmGetLead(pool, payload.id);
     case 'leads.update':               return crmUpdateLead(pool, payload.id, payload, ctx);
@@ -2113,6 +2114,179 @@ async function crmSetResultStatus(pool, id, status) {
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
   return { result: rows[0] };
+}
+
+async function crmAiSearchProfiles(pool, payload, ctx) {
+  const {
+    runId: existingRunId,
+    platform        = 'instagram',
+    destinationTheme,
+    creatorCountry,
+    language,
+    niche,
+    minFollowers,
+    maxFollowers,
+    targetCount     = 20,
+    notes,
+  } = payload;
+
+  if (!destinationTheme?.trim()) {
+    throw Object.assign(new Error('destinationTheme is required'), { status: 400 });
+  }
+
+  const limit = Math.min(parseInt(targetCount, 10) || 20, 50);
+
+  // Fail fast if no provider is configured (saves a DB write)
+  const { detectProvider, runAiDiscovery } = await import('./_lib/creatorDiscoveryProviders.js');
+  const providerName = detectProvider();
+  if (!providerName) {
+    throw Object.assign(
+      new Error(
+        'AI Search provider is not configured. ' +
+        'Add ANTHROPIC_API_KEY to enable AI Search, or TAVILY_API_KEY + ANTHROPIC_API_KEY for web-augmented search.'
+      ),
+      { status: 503, code: 'PROVIDER_NOT_CONFIGURED' }
+    );
+  }
+
+  const createdById = ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null;
+
+  // Create or load existing run
+  let run;
+  if (!existingRunId) {
+    const autoName = [
+      'AI · ' + platform.charAt(0).toUpperCase() + platform.slice(1),
+      destinationTheme.trim(),
+      new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+    ].join(' · ');
+
+    const { rows } = await pool.query(`
+      INSERT INTO "CreatorDiscoveryRun"
+        (id, name, platform, "searchType", destination, country, language, category,
+         "minFollowers", "maxFollowers", notes, status,
+         "createdById", "createdAt", "updatedAt")
+      VALUES
+        (gen_random_uuid(), $1, $2, 'ai_search', $3, $4, $5, $6,
+         $7, $8, $9, 'running',
+         $10, NOW(), NOW())
+      RETURNING *
+    `, [
+      autoName, platform, destinationTheme.trim(),
+      creatorCountry || null, language || null, niche || null,
+      minFollowers ? parseInt(minFollowers, 10) : null,
+      maxFollowers ? parseInt(maxFollowers, 10) : null,
+      ['provider:' + providerName, notes].filter(Boolean).join(' | ') || null,
+      createdById,
+    ]);
+    run = rows[0];
+  } else {
+    const { rows } = await pool.query(`SELECT * FROM "CreatorDiscoveryRun" WHERE id = $1 LIMIT 1`, [existingRunId]);
+    if (!rows.length) throw Object.assign(new Error('Run not found'), { status: 404 });
+    run = rows[0];
+    await pool.query(`UPDATE "CreatorDiscoveryRun" SET status = 'running', "updatedAt" = NOW() WHERE id = $1`, [existingRunId]);
+  }
+
+  const runId = run.id;
+
+  // Call AI provider
+  let discoveryResult;
+  try {
+    discoveryResult = await runAiDiscovery({
+      destinationTheme: destinationTheme.trim(),
+      creatorCountry,
+      language,
+      niche,
+      minFollowers: minFollowers ? parseInt(minFollowers, 10) : undefined,
+      maxFollowers: maxFollowers ? parseInt(maxFollowers, 10) : undefined,
+      targetCount: limit,
+      notes,
+    });
+  } catch (err) {
+    await pool.query(
+      `UPDATE "CreatorDiscoveryRun" SET status = 'failed', notes = $2, "updatedAt" = NOW() WHERE id = $1`,
+      [runId, `Error: ${err.message}`]
+    );
+    throw err;
+  }
+
+  const { creators, provider, providerMeta } = discoveryResult;
+
+  // Insert results — skip duplicates per (runId, username)
+  const { rows: existing } = await pool.query(
+    `SELECT username FROM "CreatorDiscoveryResult" WHERE "runId" = $1`, [runId]
+  );
+  const existingUsernames = new Set(existing.map(r => r.username.toLowerCase()));
+
+  let inserted = 0;
+  let skipped  = 0;
+  const insertedResults = [];
+
+  for (const c of creators.slice(0, limit)) {
+    if (!c?.username) { skipped++; continue; }
+    const username = c.username.trim().replace(/^@/, '').toLowerCase();
+    if (existingUsernames.has(username)) { skipped++; continue; }
+    existingUsernames.add(username);
+
+    try {
+      // Check if already a CRM lead
+      const { rows: leadRows } = await pool.query(
+        `SELECT id, status FROM "CreatorLead" WHERE platform = $1 AND username = $2 LIMIT 1`,
+        [platform, username]
+      );
+      const existingLead = leadRows[0] || null;
+
+      const profileUrl = c.profileUrl || `https://www.instagram.com/${username}/`;
+      const resultStatus = existingLead ? 'added_to_crm' : 'new';
+
+      const { rows: resRows } = await pool.query(`
+        INSERT INTO "CreatorDiscoveryResult"
+          (id, "runId", platform, username, "profileUrl", "displayName", "avatarUrl",
+           "isVerified", "followerCount", "postCount", "engagementRate",
+           bio, country, language, category, niches, destinations, hashtags, mentions,
+           score, "routeIdeas", "fitSummary", status, metadata, "createdAt")
+        VALUES
+          (gen_random_uuid(), $1, $2, $3, $4, $5, $6,
+           false, $7, $8, $9,
+           $10, $11, $12, $13, '[]'::jsonb, $14::jsonb, '[]'::jsonb, '[]'::jsonb,
+           $15, $16::jsonb, $17, $18, $19::jsonb, NOW())
+        RETURNING *
+      `, [
+        runId, platform, username, profileUrl,
+        c.displayName || null, c.avatarUrl || null,
+        c.followerCount ?? null, c.postCount ?? null, c.engagementRate ?? null,
+        c.bio || null, c.country || null, c.language || null, c.category || null,
+        JSON.stringify(Array.isArray(c.destinations) ? c.destinations : []),
+        c.score ?? null,
+        JSON.stringify(Array.isArray(c.routeIdeas) ? c.routeIdeas : []),
+        c.fitSummary || null,
+        resultStatus,
+        JSON.stringify({
+          source: 'ai_search', provider, providerMeta,
+          rawData: c.rawData || {},
+          existingLeadId: existingLead?.id || null,
+          existingLeadStatus: existingLead?.status || null,
+        }),
+      ]);
+
+      if (resRows.length) {
+        if (existingLead) resRows[0].lead_id = existingLead.id;
+        insertedResults.push(resRows[0]);
+        inserted++;
+      }
+    } catch (e) {
+      console.warn(`[ai_search] insert failed for @${username}:`, e.message);
+      skipped++;
+    }
+  }
+
+  // Finalize run
+  await pool.query(
+    `UPDATE "CreatorDiscoveryRun" SET status = 'completed', "resultCount" = $2, "updatedAt" = NOW() WHERE id = $1`,
+    [runId, inserted]
+  );
+
+  const { rows: finalRun } = await pool.query(`SELECT * FROM "CreatorDiscoveryRun" WHERE id = $1`, [runId]);
+  return { run: finalRun[0], results: insertedResults, inserted, skipped, providerStatus: { provider, ...providerMeta } };
 }
 
 async function crmMarkRunCompleted(pool, id) {
