@@ -129,6 +129,26 @@ async function _handler(req, res) {
   const filterCreatorId = adminCtx.isAdmin ? (qCreatorId || null) : (adminCtx.creatorId || null);
 
   try {
+    // ── Creator Acquisition CRM — unified POST body router ───────────────
+    // All CRM actions: POST /api/admin with body { action: "namespace.verb", payload: {...} }
+    if (req.method === 'POST' && typeof (req.body ?? {}).action === 'string' && req.body.action.includes('.')) {
+      const { action: crmAction, payload = {} } = req.body;
+      try {
+        const data = await dispatchCrmAction(pool, crmAction, payload, adminCtx);
+        return res.json({ success: true, data });
+      } catch (err) {
+        console.error(`[api/admin] CRM action=${crmAction}:`, err.message, err.stack);
+        const isClient = err.status != null && err.status < 500;
+        const userMsg = isClient
+          ? err.message
+          : (err.message?.includes('does not exist') ? `DB schema error: ${err.message}` : 'Internal error — see server logs');
+        return res.status(err.status ?? 500).json({
+          success: false,
+          error: { message: userMsg, code: err.code ?? 'INTERNAL_ERROR' },
+        });
+      }
+    }
+
     // ── POST: designer application review ────────────────────────────────
     if (req.method === 'POST') {
       if (action === 'approve-designer-application') {
@@ -571,24 +591,6 @@ async function _handler(req, res) {
         return res.status(200).json({ itineraryId: newItinId, isNew: true, title });
       }
 
-      // ── Creator Acquisition CRM — POST ───────────────────────────────────
-      if (action === 'crm-create-run')      return res.json(await crmCreateRun(pool, req.body ?? {}, adminCtx));
-      if (action === 'crm-import-results')  return res.json(await crmImportResults(pool, req.body ?? {}, adminCtx));
-      if (action === 'crm-add-to-crm')      return res.json(await crmAddToCrm(pool, req.body ?? {}, adminCtx));
-      if (action === 'crm-ignore-result')   return res.json(await crmSetResultStatus(pool, id, 'ignored'));
-      if (action === 'crm-block-result')    return res.json(await crmSetResultStatus(pool, id, 'blocked'));
-      if (action === 'crm-update-lead')     return res.json(await crmUpdateLead(pool, id, req.body ?? {}, adminCtx));
-      if (action === 'crm-change-status')   return res.json(await crmChangeStatus(pool, id, req.body ?? {}, adminCtx));
-      if (action === 'crm-add-note')        return res.json(await crmAddNote(pool, id, req.body ?? {}, adminCtx));
-      if (action === 'crm-create-task')     return res.json(await crmCreateTask(pool, id, req.body ?? {}, adminCtx));
-      if (action === 'crm-update-task')     return res.json(await crmUpdateTask(pool, req.query.taskId || req.body?.taskId, req.body ?? {}, adminCtx));
-      if (action === 'crm-create-template') return res.json(await crmCreateTemplate(pool, req.body ?? {}, adminCtx));
-      if (action === 'crm-update-template') return res.json(await crmUpdateTemplate(pool, id, req.body ?? {}));
-      if (action === 'crm-generate-message') return res.json(await crmGenerateMessage(pool, id, req.body ?? {}));
-      if (action === 'crm-save-message')    return res.json(await crmSaveMessage(pool, id, req.body ?? {}, adminCtx));
-      if (action === 'crm-mark-copied')     return res.json(await crmMarkCopied(pool, req.query.msgId || req.body?.msgId));
-      if (action === 'crm-mark-sent')       return res.json(await crmMarkSent(pool, req.query.msgId || req.body?.msgId, adminCtx));
-
       return res.status(400).json({ error: 'Unknown action' });
     }
 
@@ -740,14 +742,6 @@ async function _handler(req, res) {
       );
       return res.status(200).json(rows);
     }
-
-    // ── Creator Acquisition CRM — GET ────────────────────────────────────────
-    if (action === 'crm-dashboard')    return res.json(await crmDashboard(pool));
-    if (action === 'crm-list-runs')    return res.json(await crmListRuns(pool));
-    if (action === 'crm-get-run')      return res.json(await crmGetRun(pool, id));
-    if (action === 'crm-list-leads')   return res.json(await crmListLeads(pool, req.query));
-    if (action === 'crm-get-lead')     return res.json(await crmGetLead(pool, id));
-    if (action === 'crm-list-templates') return res.json(await crmListTemplates(pool, req.query.platform, req.query.language));
 
     // ── One-time backfill: populate null new columns from legacy `amount` ─────
     if (action === 'backfill-purchases') {
@@ -1742,6 +1736,35 @@ const PIPELINE_STATUSES = [
   'itinerary_in_creation','active','rejected','follow_up_later','blocked','not_fit',
 ];
 
+// ── CRM action dispatcher ─────────────────────────────────────────────────────
+async function dispatchCrmAction(pool, action, payload, ctx) {
+  switch (action) {
+    case 'dashboard.stats':            return crmDashboard(pool);
+    case 'discovery.listRuns':         return crmListRuns(pool);
+    case 'discovery.getRun':           return crmGetRun(pool, payload.id);
+    case 'discovery.createRun':        return crmCreateRun(pool, payload, ctx);
+    case 'discovery.importResults':    return crmImportResults(pool, payload, ctx);
+    case 'discovery.addToCrm':         return crmAddToCrm(pool, payload, ctx);
+    case 'discovery.setResultStatus':  return crmSetResultStatus(pool, payload.id, payload.status);
+    case 'leads.list':                 return crmListLeads(pool, payload);
+    case 'leads.get':                  return crmGetLead(pool, payload.id);
+    case 'leads.update':               return crmUpdateLead(pool, payload.id, payload, ctx);
+    case 'leads.changeStatus':         return crmChangeStatus(pool, payload.id, payload, ctx);
+    case 'leads.addNote':              return crmAddNote(pool, payload.id, payload, ctx);
+    case 'leads.createTask':           return crmCreateTask(pool, payload.id, payload, ctx);
+    case 'leads.updateTask':           return crmUpdateTask(pool, payload.taskId, payload, ctx);
+    case 'messages.listTemplates':     return crmListTemplates(pool, payload.platform, payload.language);
+    case 'messages.createTemplate':    return crmCreateTemplate(pool, payload, ctx);
+    case 'messages.updateTemplate':    return crmUpdateTemplate(pool, payload.id, payload);
+    case 'messages.generateForLead':   return crmGenerateMessage(pool, payload.id, payload);
+    case 'messages.saveForLead':       return crmSaveMessage(pool, payload.id, payload, ctx);
+    case 'messages.markCopied':        return crmMarkCopied(pool, payload.msgId);
+    case 'messages.markSent':          return crmMarkSent(pool, payload.msgId, ctx);
+    default:
+      throw Object.assign(new Error(`Unknown CRM action: ${action}`), { status: 400 });
+  }
+}
+
 async function crmDashboard(pool) {
   const [statsRows, overdueRows, avgRows, recentTasks] = await Promise.all([
     pool.query(`
@@ -1915,13 +1938,13 @@ async function crmGetLead(pool, id) {
 }
 
 async function crmListTemplates(pool, platform, language) {
-  const conditions = ['t."isActive" = true'];
+  const conditions = ['"isActive" = true'];
   const params = [];
   let p = 1;
-  if (platform) { conditions.push(`t.platform = $${p++}`); params.push(platform); }
-  if (language) { conditions.push(`t.language = $${p++}`); params.push(language); }
+  if (platform) { conditions.push(`platform = $${p++}`); params.push(platform); }
+  if (language) { conditions.push(`language = $${p++}`); params.push(language); }
   const where = `WHERE ${conditions.join(' AND ')}`;
-  const { rows } = await pool.query(`SELECT * FROM "CreatorMessageTemplate" ${where} ORDER BY t.name`, params);
+  const { rows } = await pool.query(`SELECT * FROM "CreatorMessageTemplate" ${where} ORDER BY name`, params);
   return { templates: rows };
 }
 
@@ -1937,7 +1960,7 @@ async function crmCreateRun(pool, body, ctx) {
     INSERT INTO "CreatorDiscoveryRun"
       (id, name, platform, "searchType", destination, country, language, hashtags,
        "bioKeywords", "minFollowers", "maxFollowers", "minEngagement", category,
-       "assignedTo", notes, "createdBy", "createdAt", "updatedAt")
+       "assignedTo", notes, "createdById", "createdAt", "updatedAt")
     VALUES
       (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::jsonb,
        $8, $9, $10, $11, $12,
@@ -1951,7 +1974,7 @@ async function crmCreateRun(pool, body, ctx) {
     maxFollowers ? parseInt(maxFollowers, 10) : null,
     minEngagement ? parseFloat(minEngagement) : null,
     category || null, assignedTo || null, notes || null,
-    ctx.email || null,
+    (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null),
   ]);
   return { run: rows[0] };
 }
@@ -2066,9 +2089,9 @@ async function crmAddToCrm(pool, body, ctx) {
 
   // Log activity
   await pool.query(`
-    INSERT INTO "CreatorLeadActivity" (id, "leadId", type, content, metadata, "createdBy", "createdAt")
+    INSERT INTO "CreatorLeadActivity" (id, "leadId", type, content, metadata, "createdById", "createdAt")
     VALUES (gen_random_uuid(), $1, 'system', $2, '{}'::jsonb, $3, NOW())
-  `, [lead.id, `Added from discovery run`, ctx.email || null]);
+  `, [lead.id, `Added from discovery run`, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
 
   return { lead, isNew: !rRows[0].leadId };
 }
@@ -2143,14 +2166,14 @@ async function crmChangeStatus(pool, id, body, ctx) {
 
   await pool.query(`
     INSERT INTO "CreatorLeadActivity"
-      (id, "leadId", type, content, metadata, "createdBy", "createdAt")
+      (id, "leadId", type, content, metadata, "createdById", "createdAt")
     VALUES
       (gen_random_uuid(), $1, 'status_change', $2, $3::jsonb, $4, NOW())
   `, [
     id,
     note || `Status changed from ${prevStatus} to ${status}`,
     JSON.stringify({ from: prevStatus, to: status }),
-    ctx.email || null,
+    (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null),
   ]);
 
   return { lead: rows[0] };
@@ -2163,10 +2186,10 @@ async function crmAddNote(pool, id, body, ctx) {
 
   const { rows } = await pool.query(`
     INSERT INTO "CreatorLeadActivity"
-      (id, "leadId", type, content, metadata, "createdBy", "createdAt")
+      (id, "leadId", type, content, metadata, "createdById", "createdAt")
     VALUES (gen_random_uuid(), $1, 'note', $2, '{}'::jsonb, $3, NOW())
     RETURNING *
-  `, [id, content.trim(), ctx.email || null]);
+  `, [id, content.trim(), (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
 
   return { activity: rows[0] };
 }
@@ -2178,17 +2201,17 @@ async function crmCreateTask(pool, id, body, ctx) {
 
   const { rows } = await pool.query(`
     INSERT INTO "CreatorLeadTask"
-      (id, "leadId", title, description, "dueAt", status, "createdBy", "createdAt", "updatedAt")
+      (id, "leadId", title, description, "dueAt", status, "createdById", "createdAt", "updatedAt")
     VALUES
       (gen_random_uuid(), $1, $2, $3, $4, 'pending', $5, NOW(), NOW())
     RETURNING *
-  `, [id, title.trim(), description || null, dueAt || null, ctx.email || null]);
+  `, [id, title.trim(), description || null, dueAt || null, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
 
   await pool.query(`
     INSERT INTO "CreatorLeadActivity"
-      (id, "leadId", type, content, metadata, "createdBy", "createdAt")
+      (id, "leadId", type, content, metadata, "createdById", "createdAt")
     VALUES (gen_random_uuid(), $1, 'task_created', $2, '{}'::jsonb, $3, NOW())
-  `, [id, `Task created: ${title.trim()}`, ctx.email || null]);
+  `, [id, `Task created: ${title.trim()}`, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
 
   return { task: rows[0] };
 }
@@ -2221,9 +2244,9 @@ async function crmUpdateTask(pool, taskId, body, ctx) {
   if (status === 'done') {
     await pool.query(`
       INSERT INTO "CreatorLeadActivity"
-        (id, "leadId", type, content, metadata, "createdBy", "createdAt")
+        (id, "leadId", type, content, metadata, "createdById", "createdAt")
       VALUES (gen_random_uuid(), $1, 'task_completed', $2, '{}'::jsonb, $3, NOW())
-    `, [rows[0].leadId, `Task completed: ${rows[0].title}`, ctx.email || null]);
+    `, [rows[0].leadId, `Task completed: ${rows[0].title}`, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
   }
 
   return { task: rows[0] };
@@ -2237,7 +2260,7 @@ async function crmCreateTemplate(pool, body, ctx) {
 
   const { rows } = await pool.query(`
     INSERT INTO "CreatorMessageTemplate"
-      (id, name, platform, language, subject, body, variables, "isActive", "createdBy", "createdAt", "updatedAt")
+      (id, name, platform, language, subject, body, variables, "isActive", "createdById", "createdAt", "updatedAt")
     VALUES
       (gen_random_uuid(), $1, $2, $3, $4, $5, $6::jsonb, true, $7, NOW(), NOW())
     RETURNING *
@@ -2245,7 +2268,7 @@ async function crmCreateTemplate(pool, body, ctx) {
     name.trim(), platform, language,
     subject || null, bodyText.trim(),
     JSON.stringify(Array.isArray(variables) ? variables : []),
-    ctx.email || null,
+    (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null),
   ]);
   return { template: rows[0] };
 }
@@ -2345,9 +2368,9 @@ async function crmSaveMessage(pool, leadId, body, ctx) {
 
   await pool.query(`
     INSERT INTO "CreatorLeadActivity"
-      (id, "leadId", type, content, metadata, "createdBy", "createdAt")
+      (id, "leadId", type, content, metadata, "createdById", "createdAt")
     VALUES (gen_random_uuid(), $1, 'message_prepared', 'Message prepared', '{}'::jsonb, $2, NOW())
-  `, [leadId, ctx.email || null]);
+  `, [leadId, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
 
   return { message: rows[0] };
 }
@@ -2374,9 +2397,9 @@ async function crmMarkSent(pool, msgId, ctx) {
 
   await pool.query(`
     UPDATE "CreatorLeadMessage"
-    SET status = 'sent_manual', "sentAt" = NOW(), "sentBy" = $2, "updatedAt" = NOW()
+    SET status = 'sent_manual', "sentAt" = NOW(), "sentById" = $2, "updatedAt" = NOW()
     WHERE id = $1
-  `, [msgId, ctx.email || null]);
+  `, [msgId, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
 
   await pool.query(`
     UPDATE "CreatorLead"
@@ -2390,9 +2413,9 @@ async function crmMarkSent(pool, msgId, ctx) {
 
   await pool.query(`
     INSERT INTO "CreatorLeadActivity"
-      (id, "leadId", type, content, metadata, "createdBy", "createdAt")
+      (id, "leadId", type, content, metadata, "createdById", "createdAt")
     VALUES (gen_random_uuid(), $1, 'message_sent', 'Message marked as sent manually', '{}'::jsonb, $2, NOW())
-  `, [msg.leadId, ctx.email || null]);
+  `, [msg.leadId, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
 
   // Auto-create follow-up task if none exists within 7 days
   const dueAt = new Date(Date.now() + 6 * 24 * 60 * 60 * 1000);
@@ -2405,9 +2428,9 @@ async function crmMarkSent(pool, msgId, ctx) {
   if (!existingTasks.length) {
     await pool.query(`
       INSERT INTO "CreatorLeadTask"
-        (id, "leadId", title, "dueAt", status, "createdBy", "createdAt", "updatedAt")
+        (id, "leadId", title, "dueAt", status, "createdById", "createdAt", "updatedAt")
       VALUES (gen_random_uuid(), $1, 'Follow up on message', $2, 'pending', $3, NOW(), NOW())
-    `, [msg.leadId, dueAt.toISOString(), ctx.email || null]);
+    `, [msg.leadId, dueAt.toISOString(), (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
   }
 
   return { ok: true };

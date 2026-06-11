@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { ArrowLeft, Instagram, Copy, CheckCircle, Send, Clock, MessageSquare, Activity, CheckSquare, Edit2, X, PlusCircle, Users } from 'lucide-react';
+import { ArrowLeft, Instagram, Copy, CheckCircle, Send, Clock, MessageSquare, Activity, CheckSquare, Edit2, X, PlusCircle, Users, RefreshCw } from 'lucide-react';
 
 const S = {
   page:    { padding: '28px 32px', background: '#FAFAF8', minHeight: '100vh' },
@@ -13,8 +13,7 @@ const S = {
   textarea:{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #D4C8BB', fontSize: '13px', color: '#1C1A16', boxSizing: 'border-box', outline: 'none', background: 'white', resize: 'vertical', fontFamily: 'inherit' },
   btnPrimary:   { padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: '600', background: '#1B6B65', color: 'white', display: 'inline-flex', alignItems: 'center', gap: '6px' },
   btnSecondary: { padding: '7px 13px', borderRadius: '6px', border: '1px solid #E8E3DA', cursor: 'pointer', fontSize: '12.5px', fontWeight: '500', background: 'white', color: '#4A433A', display: 'inline-flex', alignItems: 'center', gap: '6px' },
-  btnDanger:    { padding: '7px 13px', borderRadius: '6px', border: '1px solid #F5C6C0', cursor: 'pointer', fontSize: '12.5px', fontWeight: '500', background: 'white', color: '#C0392B', display: 'inline-flex', alignItems: 'center', gap: '6px' },
-  tab:     (active) => ({ padding: '8px 16px', borderRadius: '6px 6px 0 0', border: '1px solid ' + (active ? '#E8E3DA' : 'transparent'), borderBottom: active ? '1px solid white' : '1px solid #E8E3DA', cursor: 'pointer', fontSize: '13px', fontWeight: active ? '600' : '400', color: active ? '#1C1A16' : '#8C8070', background: active ? 'white' : 'transparent', position: 'relative', bottom: '-1px', display: 'inline-flex', alignItems: 'center', gap: '6px' }),
+  tab: (active) => ({ padding: '8px 16px', borderRadius: '6px 6px 0 0', border: '1px solid ' + (active ? '#E8E3DA' : 'transparent'), borderBottom: active ? '1px solid white' : '1px solid #E8E3DA', cursor: 'pointer', fontSize: '13px', fontWeight: active ? '600' : '400', color: active ? '#1C1A16' : '#8C8070', background: active ? 'white' : 'transparent', position: 'relative', bottom: '-1px', display: 'inline-flex', alignItems: 'center', gap: '6px' }),
 };
 
 const PIPELINE_STATUSES = [
@@ -56,7 +55,18 @@ function fmtFollowers(n) {
   return String(n);
 }
 
-// ── Task Item ─────────────────────────────────────────────────────────────────
+async function crmCall(getToken, action, payload = {}) {
+  const token = await getToken();
+  const res = await fetch('/api/admin', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, payload }),
+  });
+  const json = await res.json();
+  if (!json.success) throw new Error(json.error?.message || 'Request failed');
+  return json.data;
+}
+
 function TaskItem({ task, onUpdate }) {
   const isOverdue = task.dueAt && new Date(task.dueAt) < new Date() && task.status === 'pending';
   return (
@@ -74,14 +84,12 @@ function TaskItem({ task, onUpdate }) {
         )}
         <p style={{ fontSize: '11px', color: isOverdue ? '#C0392B' : '#B5AA99', margin: '3px 0 0', fontWeight: isOverdue ? '600' : '400' }}>
           {isOverdue ? 'OVERDUE — ' : ''}{task.dueAt ? fmtDate(task.dueAt) : 'No due date'}
-          {task.createdBy && ` · ${task.createdBy}`}
         </p>
       </div>
     </div>
   );
 }
 
-// ── Activity Item ─────────────────────────────────────────────────────────────
 function ActivityItem({ item }) {
   const icons = { status_change: Activity, note: MessageSquare, message_prepared: MessageSquare, message_sent: Send, task_created: CheckSquare, task_completed: CheckCircle, system: Activity };
   const Icon = icons[item.type] || Activity;
@@ -99,7 +107,7 @@ function ActivityItem({ item }) {
           </p>
         )}
         <p style={{ fontSize: '11px', color: '#B5AA99', margin: '2px 0 0' }}>
-          {fmtDate(item.createdAt, true)}{item.createdBy ? ` · ${item.createdBy}` : ''}
+          {fmtDate(item.createdAt, true)}
         </p>
       </div>
     </div>
@@ -117,42 +125,36 @@ export default function CreatorLeadDetailPage() {
   const [activeTab, setActiveTab] = useState('overview');
   const [saving, setSaving]     = useState(false);
 
-  // Status change
-  const [newStatus, setNewStatus] = useState('');
-  const [statusNote, setStatusNote] = useState('');
+  const [newStatus, setNewStatus]         = useState('');
+  const [statusNote, setStatusNote]       = useState('');
   const [showStatusChange, setShowStatusChange] = useState(false);
 
-  // Note
-  const [noteText, setNoteText] = useState('');
+  const [noteText, setNoteText]   = useState('');
   const [addingNote, setAddingNote] = useState(false);
 
-  // Task
-  const [taskTitle, setTaskTitle] = useState('');
-  const [taskDueAt, setTaskDueAt] = useState('');
+  const [taskTitle, setTaskTitle]   = useState('');
+  const [taskDueAt, setTaskDueAt]   = useState('');
   const [addingTask, setAddingTask] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
 
-  // Message
-  const [templates, setTemplates]         = useState([]);
+  const [templates, setTemplates]               = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState('');
-  const [messageBody, setMessageBody]     = useState('');
-  const [generatingMsg, setGeneratingMsg] = useState(false);
-  const [savingMsg, setSavingMsg]         = useState(false);
-  const [copiedMsgId, setCopiedMsgId]     = useState(null);
+  const [messageBody, setMessageBody]           = useState('');
+  const [generatingMsg, setGeneratingMsg]       = useState(false);
+  const [savingMsg, setSavingMsg]               = useState(false);
+  const [copiedMsgId, setCopiedMsgId]           = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      const token = await getToken();
-      const [leadRes, tmplRes] = await Promise.all([
-        fetch(`/api/admin?action=crm-get-lead&id=${id}`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('/api/admin?action=crm-list-templates', { headers: { Authorization: `Bearer ${token}` } }),
+      const [leadData, tmplData] = await Promise.all([
+        crmCall(getToken, 'leads.get', { id }),
+        crmCall(getToken, 'messages.listTemplates'),
       ]);
-      const [leadJson, tmplJson] = await Promise.all([leadRes.json(), tmplRes.json()]);
-      if (leadJson.error) throw new Error(leadJson.error);
-      setData(leadJson);
-      setTemplates(tmplJson.templates || []);
-      setNewStatus(leadJson.lead?.status || '');
+      setData(leadData);
+      setTemplates(tmplData.templates ?? []);
+      setNewStatus(leadData.lead?.status || '');
     } catch (e) {
       setError(e.message);
     } finally {
@@ -162,26 +164,11 @@ export default function CreatorLeadDetailPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  async function apiFetch(action, body) {
-    const token = await getToken();
-    const url   = action.startsWith('crm-update-task')
-      ? `/api/admin?action=crm-update-task&id=${id}`
-      : `/api/admin?action=${action}&id=${id}`;
-    const res   = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const json = await res.json();
-    if (json.error) throw new Error(json.error);
-    return json;
-  }
-
   async function handleChangeStatus() {
     if (!newStatus) return;
     setSaving(true);
     try {
-      await apiFetch('crm-change-status', { status: newStatus, note: statusNote });
+      await crmCall(getToken, 'leads.changeStatus', { id, status: newStatus, note: statusNote });
       setShowStatusChange(false);
       setStatusNote('');
       load();
@@ -194,7 +181,7 @@ export default function CreatorLeadDetailPage() {
     if (!noteText.trim()) return;
     setAddingNote(true);
     try {
-      await apiFetch('crm-add-note', { content: noteText.trim() });
+      await crmCall(getToken, 'leads.addNote', { id, content: noteText.trim() });
       setNoteText('');
       load();
     } catch (e) { alert(e.message); }
@@ -206,7 +193,7 @@ export default function CreatorLeadDetailPage() {
     if (!taskTitle.trim()) return;
     setAddingTask(true);
     try {
-      await apiFetch('crm-create-task', { title: taskTitle.trim(), dueAt: taskDueAt || null });
+      await crmCall(getToken, 'leads.createTask', { id, title: taskTitle.trim(), dueAt: taskDueAt || null });
       setTaskTitle(''); setTaskDueAt(''); setShowAddTask(false);
       load();
     } catch (e) { alert(e.message); }
@@ -215,14 +202,7 @@ export default function CreatorLeadDetailPage() {
 
   async function handleUpdateTask(taskId, updates) {
     try {
-      const token = await getToken();
-      const res   = await fetch(`/api/admin?action=crm-update-task&taskId=${taskId}&id=${id}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
+      await crmCall(getToken, 'leads.updateTask', { id, taskId, ...updates });
       load();
     } catch (e) { alert(e.message); }
   }
@@ -230,15 +210,8 @@ export default function CreatorLeadDetailPage() {
   async function handleGenerateMessage() {
     setGeneratingMsg(true);
     try {
-      const token = await getToken();
-      const res   = await fetch(`/api/admin?action=crm-generate-message&id=${id}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateId: selectedTemplate || undefined }),
-      });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      setMessageBody(json.personalizedBody || '');
+      const data = await crmCall(getToken, 'messages.generateForLead', { id, templateId: selectedTemplate || undefined });
+      setMessageBody(data.personalizedBody || '');
     } catch (e) { alert(e.message); }
     finally { setGeneratingMsg(false); }
   }
@@ -247,7 +220,7 @@ export default function CreatorLeadDetailPage() {
     if (!messageBody.trim()) return;
     setSavingMsg(true);
     try {
-      await apiFetch('crm-save-message', { templateId: selectedTemplate || null, personalizedBody: messageBody.trim(), platform: data.lead?.platform || 'instagram' });
+      await crmCall(getToken, 'messages.saveForLead', { id, templateId: selectedTemplate || null, personalizedBody: messageBody.trim(), platform: data?.lead?.platform || 'instagram' });
       setMessageBody('');
       load();
     } catch (e) { alert(e.message); }
@@ -259,45 +232,52 @@ export default function CreatorLeadDetailPage() {
     setCopiedMsgId(msg.id);
     setTimeout(() => setCopiedMsgId(null), 2500);
     try {
-      const token = await getToken();
-      await fetch(`/api/admin?action=crm-mark-copied&msgId=${msg.id}&id=${id}`, {
-        method: 'POST', headers: { Authorization: `Bearer ${token}` },
-      });
+      await crmCall(getToken, 'messages.markCopied', { msgId: msg.id });
       load();
     } catch {}
   }
 
   async function handleMarkSent(msg) {
     try {
-      const token = await getToken();
-      const res   = await fetch(`/api/admin?action=crm-mark-sent&msgId=${msg.id}&id=${id}`, {
-        method: 'POST', headers: { Authorization: `Bearer ${token}` },
-      });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
+      await crmCall(getToken, 'messages.markSent', { msgId: msg.id });
       load();
     } catch (e) { alert(e.message); }
   }
 
   if (loading) return <div style={{ ...S.page, color: '#8C8070' }}>Loading lead…</div>;
-  if (error)   return <div style={{ ...S.page, color: '#C0392B' }}>Error: {error}</div>;
-  if (!data?.lead) return <div style={{ ...S.page, color: '#8C8070' }}>Lead not found.</div>;
+  if (error) return (
+    <div style={S.page}>
+      <button onClick={() => navigate('/admin/creator-acquisition/crm')} style={{ ...S.btnSecondary, marginBottom: '16px', fontSize: '12px' }}>
+        <ArrowLeft size={12} /> Back
+      </button>
+      <p style={{ color: '#C0392B', marginBottom: '12px' }}>Error: {error}</p>
+      <button onClick={load} style={{ ...S.btnSecondary, fontSize: '12.5px' }}>
+        <RefreshCw size={13} /> Retry
+      </button>
+    </div>
+  );
+  if (!data?.lead) return (
+    <div style={S.page}>
+      <button onClick={() => navigate('/admin/creator-acquisition/crm')} style={{ ...S.btnSecondary, marginBottom: '16px', fontSize: '12px' }}>
+        <ArrowLeft size={12} /> Back
+      </button>
+      <p style={{ color: '#8C8070' }}>Lead not found.</p>
+    </div>
+  );
 
-  const { lead, messages, activities, tasks } = data;
+  const { lead, messages = [], activities = [], tasks = [] } = data;
   const instagramUrl = lead.profileUrl || (lead.platform === 'instagram' ? `https://instagram.com/${lead.username}` : null);
   const pendingTasks = tasks.filter(t => t.status === 'pending');
   const doneTasks    = tasks.filter(t => t.status === 'done');
 
   return (
     <div style={S.page}>
-      {/* Back */}
       <button onClick={() => navigate('/admin/creator-acquisition/crm')}
         style={{ ...S.btnSecondary, marginBottom: '18px', fontSize: '12px' }}>
         <ArrowLeft size={12} /> Back to CRM
       </button>
 
-      {/* Header */}
-      <div style={{ ...S.card }}>
+      <div style={S.card}>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div style={{ width: '64px', height: '64px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#F4F1EC' }}>
             {lead.avatarUrl
@@ -324,7 +304,7 @@ export default function CreatorLeadDetailPage() {
             </p>
             <div style={{ display: 'flex', gap: '16px', marginTop: '6px', flexWrap: 'wrap' }}>
               {lead.followerCount != null && (
-                <span style={{ fontSize: '12px', color: '#4A433A' }}><strong>{Number(lead.followerCount).toLocaleString()}</strong> followers</span>
+                <span style={{ fontSize: '12px', color: '#4A433A' }}><strong>{fmtFollowers(lead.followerCount)}</strong> followers</span>
               )}
               {lead.engagementRate != null && (
                 <span style={{ fontSize: '12px', color: '#4A433A' }}><strong>{Number(lead.engagementRate).toFixed(1)}%</strong> engagement</span>
@@ -337,7 +317,7 @@ export default function CreatorLeadDetailPage() {
                 <Instagram size={13} /> Open
               </a>
             )}
-            <button onClick={() => { setShowStatusChange(v => !v); }} style={S.btnSecondary}>
+            <button onClick={() => setShowStatusChange(v => !v)} style={S.btnSecondary}>
               <Edit2 size={13} /> Change Status
             </button>
             <button onClick={() => { setActiveTab('tasks'); setShowAddTask(true); }} style={S.btnSecondary}>
@@ -346,7 +326,6 @@ export default function CreatorLeadDetailPage() {
           </div>
         </div>
 
-        {/* Status change inline form */}
         {showStatusChange && (
           <div style={{ marginTop: '16px', padding: '14px', background: '#F8F6F2', borderRadius: '8px', border: '1px solid #E8E3DA' }}>
             <p style={{ fontSize: '12.5px', fontWeight: '600', color: '#4A433A', marginBottom: '8px' }}>Change Status</p>
@@ -368,13 +347,12 @@ export default function CreatorLeadDetailPage() {
         )}
       </div>
 
-      {/* Tabs */}
       <div style={{ borderBottom: '1px solid #E8E3DA', marginBottom: '-1px', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
         {[
-          { key: 'overview',   label: 'Overview',   icon: Users },
-          { key: 'messages',   label: `Messages (${messages.length})`, icon: MessageSquare },
-          { key: 'tasks',      label: `Tasks (${pendingTasks.length})`, icon: CheckSquare },
-          { key: 'activity',   label: 'Activity',   icon: Activity },
+          { key: 'overview',  label: 'Overview',               icon: Users },
+          { key: 'messages',  label: `Messages (${messages.length})`, icon: MessageSquare },
+          { key: 'tasks',     label: `Tasks (${pendingTasks.length})`, icon: CheckSquare },
+          { key: 'activity',  label: 'Activity',               icon: Activity },
         ].map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setActiveTab(key)} style={S.tab(activeTab === key)}>
             <Icon size={12} /> {label}
@@ -383,7 +361,6 @@ export default function CreatorLeadDetailPage() {
       </div>
 
       <div style={{ ...S.card, borderRadius: '0 10px 10px 10px' }}>
-        {/* ── Overview ── */}
         {activeTab === 'overview' && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
             <div>
@@ -393,7 +370,7 @@ export default function CreatorLeadDetailPage() {
                   ['First Name', lead.firstName], ['Email', lead.email],
                   ['Website', lead.website], ['Category', lead.category],
                   ['Country', lead.country], ['Language', lead.language],
-                  ['Followers', lead.followerCount != null ? Number(lead.followerCount).toLocaleString() : null],
+                  ['Followers', lead.followerCount != null ? fmtFollowers(lead.followerCount) : null],
                   ['Engagement', lead.engagementRate != null ? `${Number(lead.engagementRate).toFixed(1)}%` : null],
                   ['Priority', lead.priority], ['Assigned To', lead.assignedTo],
                   ['Last Contacted', fmtDate(lead.lastContactedAt)],
@@ -412,7 +389,6 @@ export default function CreatorLeadDetailPage() {
                 </div>
               )}
             </div>
-
             <div>
               {lead.fitSummary && (
                 <div style={{ marginBottom: '16px' }}>
@@ -464,10 +440,8 @@ export default function CreatorLeadDetailPage() {
           </div>
         )}
 
-        {/* ── Messages ── */}
         {activeTab === 'messages' && (
           <div>
-            {/* Compose */}
             <div style={{ marginBottom: '20px', padding: '16px', background: '#F8F6F2', borderRadius: '8px', border: '1px solid #E8E3DA' }}>
               <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '12px' }}>Prepare Message</h4>
               <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
@@ -498,7 +472,6 @@ export default function CreatorLeadDetailPage() {
               </div>
             </div>
 
-            {/* Saved messages */}
             {messages.length === 0 && (
               <p style={{ textAlign: 'center', color: '#B5AA99', padding: '24px' }}>No messages yet</p>
             )}
@@ -510,14 +483,13 @@ export default function CreatorLeadDetailPage() {
                       <span style={{ fontSize: '11px', color: '#8C8070', display: 'block', marginBottom: '2px' }}>Template: {msg.template_name}</span>
                     )}
                     <span style={{ fontSize: '10.5px', fontWeight: '700', letterSpacing: '0.4px', textTransform: 'uppercase', color: msg.status === 'sent_manual' ? '#1B6B65' : msg.status === 'copied' ? '#C9A96E' : '#8C8070', background: msg.status === 'sent_manual' ? '#EFF6F5' : msg.status === 'copied' ? '#FBF8F1' : '#F4F1EC', padding: '2px 7px', borderRadius: '9px' }}>
-                      {msg.status.replace(/_/g, ' ')}
+                      {(msg.status ?? '').replace(/_/g, ' ')}
                     </span>
                     {msg.copiedAt && <span style={{ fontSize: '11px', color: '#B5AA99', marginLeft: '8px' }}>Copied {fmtDate(msg.copiedAt)}</span>}
                     {msg.sentAt && <span style={{ fontSize: '11px', color: '#B5AA99', marginLeft: '8px' }}>Sent {fmtDate(msg.sentAt)}</span>}
                   </div>
                   <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                    <button
-                      onClick={() => handleCopyMessage(msg)}
+                    <button onClick={() => handleCopyMessage(msg)}
                       style={{ ...S.btnPrimary, padding: '5px 12px', fontSize: '12px', background: copiedMsgId === msg.id ? '#2E8B57' : '#1B6B65' }}>
                       {copiedMsgId === msg.id ? <CheckCircle size={12} /> : <Copy size={12} />}
                       {copiedMsgId === msg.id ? 'Copied!' : 'Copy'}
@@ -543,7 +515,6 @@ export default function CreatorLeadDetailPage() {
           </div>
         )}
 
-        {/* ── Tasks ── */}
         {activeTab === 'tasks' && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
@@ -552,7 +523,6 @@ export default function CreatorLeadDetailPage() {
                 <PlusCircle size={13} /> Add Task
               </button>
             </div>
-
             {showAddTask && (
               <form onSubmit={handleAddTask} style={{ padding: '14px', background: '#F8F6F2', borderRadius: '8px', border: '1px solid #E8E3DA', marginBottom: '14px' }}>
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -565,7 +535,6 @@ export default function CreatorLeadDetailPage() {
                 </div>
               </form>
             )}
-
             {pendingTasks.length === 0 && doneTasks.length === 0 && (
               <p style={{ textAlign: 'center', color: '#B5AA99', padding: '24px' }}>No tasks yet</p>
             )}
@@ -579,11 +548,9 @@ export default function CreatorLeadDetailPage() {
           </div>
         )}
 
-        {/* ── Activity ── */}
         {activeTab === 'activity' && (
           <div>
             <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '14px' }}>Activity & Notes</h3>
-
             <form onSubmit={handleAddNote} style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
               <input
                 value={noteText}
@@ -595,7 +562,6 @@ export default function CreatorLeadDetailPage() {
                 {addingNote ? 'Adding…' : 'Add Note'}
               </button>
             </form>
-
             {activities.length === 0 && (
               <p style={{ textAlign: 'center', color: '#B5AA99', padding: '24px' }}>No activity yet</p>
             )}

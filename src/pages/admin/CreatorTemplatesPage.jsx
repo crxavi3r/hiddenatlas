@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { PlusCircle, Edit2, X, CheckCircle } from 'lucide-react';
+import { PlusCircle, Edit2, X, CheckCircle, RefreshCw } from 'lucide-react';
 
 const S = {
   page:    { padding: '28px 32px', background: '#FAFAF8', minHeight: '100vh' },
@@ -17,6 +17,18 @@ const S = {
 
 const EMPTY_FORM = { name: '', platform: 'instagram', language: 'pt', subject: '', bodyText: '' };
 
+async function crmCall(getToken, action, payload = {}) {
+  const token = await getToken();
+  const res = await fetch('/api/admin', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, payload }),
+  });
+  const json = await res.json();
+  if (!json.success) throw new Error(json.error?.message || 'Request failed');
+  return json.data;
+}
+
 export default function CreatorTemplatesPage() {
   const { getToken } = useAuth();
   const [templates, setTemplates] = useState([]);
@@ -30,14 +42,10 @@ export default function CreatorTemplatesPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      const token = await getToken();
-      const params = new URLSearchParams({ action: 'crm-list-templates' });
-      if (filterLang) params.set('language', filterLang);
-      const res  = await fetch(`/api/admin?${params}`, { headers: { Authorization: `Bearer ${token}` } });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      setTemplates(json.templates || []);
+      const data = await crmCall(getToken, 'messages.listTemplates', filterLang ? { language: filterLang } : {});
+      setTemplates(data.templates ?? []);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -54,16 +62,11 @@ export default function CreatorTemplatesPage() {
     if (!form.name.trim() || !form.bodyText.trim()) return;
     setSaving(true);
     try {
-      const token  = await getToken();
-      const action = editingId ? 'crm-update-template' : 'crm-create-template';
-      const url    = editingId ? `/api/admin?action=${action}&id=${editingId}` : `/api/admin?action=${action}`;
-      const res    = await fetch(url, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
+      if (editingId) {
+        await crmCall(getToken, 'messages.updateTemplate', { id: editingId, ...form });
+      } else {
+        await crmCall(getToken, 'messages.createTemplate', form);
+      }
       setForm(EMPTY_FORM); setEditingId(null); setShowAdd(false);
       load();
     } catch (e) {
@@ -75,14 +78,7 @@ export default function CreatorTemplatesPage() {
 
   async function handleToggle(tmpl) {
     try {
-      const token = await getToken();
-      const res   = await fetch(`/api/admin?action=crm-update-template&id=${tmpl.id}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: !tmpl.isActive }),
-      });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
+      await crmCall(getToken, 'messages.updateTemplate', { id: tmpl.id, isActive: !tmpl.isActive });
       load();
     } catch (e) { alert(e.message); }
   }
@@ -156,7 +152,8 @@ export default function CreatorTemplatesPage() {
             <div style={{ marginBottom: '12px' }}>
               <label style={S.label}>Message Body *</label>
               <p style={{ fontSize: '11.5px', color: '#8C8070', marginBottom: '6px' }}>
-                Variables: <code style={{ background: '#F4F1EC', padding: '1px 4px', borderRadius: '3px' }}>{'{{firstName}}'}</code>{' '}
+                Variables:{' '}
+                <code style={{ background: '#F4F1EC', padding: '1px 4px', borderRadius: '3px' }}>{'{{firstName}}'}</code>{' '}
                 <code style={{ background: '#F4F1EC', padding: '1px 4px', borderRadius: '3px' }}>{'{{destinationOrTheme}}'}</code>{' '}
                 <code style={{ background: '#F4F1EC', padding: '1px 4px', borderRadius: '3px' }}>{'{{username}}'}</code>
               </p>
@@ -179,10 +176,17 @@ export default function CreatorTemplatesPage() {
         </div>
       )}
 
-      {error && <p style={{ color: '#C0392B', marginBottom: '12px' }}>Error: {error}</p>}
+      {error && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+          <p style={{ color: '#C0392B', margin: 0 }}>Error: {error}</p>
+          <button onClick={load} style={{ ...S.btnSecondary, fontSize: '12px', padding: '5px 10px' }}>
+            <RefreshCw size={12} /> Retry
+          </button>
+        </div>
+      )}
       {loading && <p style={{ color: '#8C8070' }}>Loading…</p>}
 
-      {!loading && templates.length === 0 && (
+      {!loading && !error && templates.length === 0 && (
         <div style={{ ...S.card, textAlign: 'center', padding: '48px', color: '#B5AA99' }}>
           <p>No templates yet. Create your first one above.</p>
         </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { Eye, Instagram, ChevronLeft, ChevronRight, Filter, X, Users } from 'lucide-react';
+import { Eye, Instagram, ChevronLeft, ChevronRight, Filter, X, Users, RefreshCw } from 'lucide-react';
 
 const S = {
   page:    { padding: '28px 32px', background: '#FAFAF8', minHeight: '100vh' },
@@ -58,10 +58,22 @@ function PriorityDot({ priority }) {
   return <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: colors[priority] || '#C8C0B8', display: 'inline-block' }} title={priority} />;
 }
 
+async function crmCall(getToken, action, payload = {}) {
+  const token = await getToken();
+  const res = await fetch('/api/admin', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, payload }),
+  });
+  const json = await res.json();
+  if (!json.success) throw new Error(json.error?.message || 'Request failed');
+  return json.data;
+}
+
 export default function CreatorCRMPage() {
   const { getToken }     = useAuth();
   const navigate         = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams]   = useSearchParams();
 
   const [leads, setLeads]       = useState([]);
   const [total, setTotal]       = useState(0);
@@ -70,7 +82,6 @@ export default function CreatorCRMPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage]         = useState(1);
 
-  // Filters (initialised from URL query params)
   const [filters, setFilters] = useState({
     status:           searchParams.get('status') || '',
     country:          searchParams.get('country') || '',
@@ -92,14 +103,11 @@ export default function CreatorCRMPage() {
     setLoading(true);
     setError(null);
     try {
-      const token = await getToken();
-      const params = new URLSearchParams({ action: 'crm-list-leads', page: String(page) });
-      Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v); });
-      const res  = await fetch(`/api/admin?${params}`, { headers: { Authorization: `Bearer ${token}` } });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      setLeads(json.leads || []);
-      setTotal(json.total || 0);
+      const payload = { page: String(page) };
+      Object.entries(filters).forEach(([k, v]) => { if (v) payload[k] = v; });
+      const data = await crmCall(getToken, 'leads.list', payload);
+      setLeads(data.leads ?? []);
+      setTotal(data.total ?? 0);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -120,7 +128,6 @@ export default function CreatorCRMPage() {
         </div>
       </div>
 
-      {/* Search + filter bar */}
       <div style={{ ...S.card, marginBottom: '16px', padding: '12px 16px' }}>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
           <input
@@ -187,11 +194,17 @@ export default function CreatorCRMPage() {
         )}
       </div>
 
-      {/* Table */}
       <div style={S.card}>
-        {error && <p style={{ color: '#C0392B', marginBottom: '12px' }}>Error: {error}</p>}
+        {error && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+            <p style={{ color: '#C0392B', margin: 0 }}>Error: {error}</p>
+            <button onClick={load} style={{ ...S.btnSecondary, fontSize: '12px', padding: '5px 10px' }}>
+              <RefreshCw size={12} /> Retry
+            </button>
+          </div>
+        )}
         {loading && <p style={{ textAlign: 'center', color: '#8C8070', padding: '30px' }}>Loading…</p>}
-        {!loading && leads.length === 0 && (
+        {!loading && leads.length === 0 && !error && (
           <p style={{ textAlign: 'center', color: '#B5AA99', padding: '40px' }}>No leads found</p>
         )}
         {!loading && leads.length > 0 && (
@@ -230,7 +243,7 @@ export default function CreatorCRMPage() {
                       {fmtFollowers(lead.followerCount)}
                     </td>
                     <td style={{ padding: '10px 14px', verticalAlign: 'middle', fontSize: '12px', color: '#4A433A' }}>
-                      {lead.engagementRate != null ? `${lead.engagementRate.toFixed(1)}%` : '—'}
+                      {lead.engagementRate != null ? `${Number(lead.engagementRate).toFixed(1)}%` : '—'}
                     </td>
                     <td style={{ padding: '10px 14px', verticalAlign: 'middle', fontSize: '12px', color: '#8C8070' }}>
                       {lead.country || '—'}
@@ -266,7 +279,7 @@ export default function CreatorCRMPage() {
                         </button>
                         {lead.profileUrl && (
                           <a href={lead.profileUrl} target="_blank" rel="noopener noreferrer"
-                            style={{ display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px', color: '#E1306C', background: 'none', border: 'none', cursor: 'pointer' }} title="Open Instagram">
+                            style={{ display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px', color: '#E1306C' }} title="Open Instagram">
                             <Instagram size={13} />
                           </a>
                         )}
@@ -279,7 +292,6 @@ export default function CreatorCRMPage() {
           </div>
         )}
 
-        {/* Pagination */}
         {total > 50 && (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', paddingTop: '16px', borderTop: '1px solid #F4F1EC', marginTop: '12px' }}>
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { Users, Search, MessageSquare, Clock, TrendingUp, PlusCircle, ChevronRight, AlertCircle } from 'lucide-react';
+import { Users, Search, MessageSquare, Clock, TrendingUp, PlusCircle, ChevronRight, AlertCircle, RefreshCw } from 'lucide-react';
 
 const S = {
   page:   { padding: '28px 32px', background: '#FAFAF8', minHeight: '100vh' },
@@ -42,6 +42,18 @@ function fmtDate(ts) {
   return new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
+async function crmCall(getToken, action, payload = {}) {
+  const token = await getToken();
+  const res = await fetch('/api/admin', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, payload }),
+  });
+  const json = await res.json();
+  if (!json.success) throw new Error(json.error?.message || 'Request failed');
+  return json.data;
+}
+
 export default function CreatorAcquisitionDashboardPage() {
   const { getToken } = useAuth();
   const navigate     = useNavigate();
@@ -51,14 +63,10 @@ export default function CreatorAcquisitionDashboardPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      const token = await getToken();
-      const res   = await fetch('/api/admin?action=crm-dashboard', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      setData(json);
+      const data = await crmCall(getToken, 'dashboard.stats');
+      setData(data);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -69,7 +77,14 @@ export default function CreatorAcquisitionDashboardPage() {
   useEffect(() => { load(); }, [load]);
 
   if (loading) return <div style={{ ...S.page, color: '#8C8070' }}>Loading dashboard…</div>;
-  if (error)   return <div style={{ ...S.page, color: '#C0392B' }}>Error: {error}</div>;
+  if (error) return (
+    <div style={{ ...S.page }}>
+      <p style={{ color: '#C0392B', marginBottom: '12px' }}>Error: {error}</p>
+      <button onClick={load} style={{ ...S.btn, background: 'white', border: '1px solid #E8E3DA', color: '#4A433A', fontSize: '12.5px' }}>
+        <RefreshCw size={13} /> Retry
+      </button>
+    </div>
+  );
 
   const byStatus = data?.byStatus || {};
   const pipelineTotal = STATUS_GROUPS.pipeline.reduce((s, k) => s + (byStatus[k] || 0), 0);
@@ -77,7 +92,6 @@ export default function CreatorAcquisitionDashboardPage() {
 
   return (
     <div style={S.page}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '28px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 style={S.title}>Creator Acquisition</h1>
@@ -99,14 +113,13 @@ export default function CreatorAcquisitionDashboardPage() {
         </div>
       </div>
 
-      {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '28px' }}>
         {[
-          { icon: Users,        val: data.totalLeads,       lbl: 'Total Leads',        color: '#1B6B65' },
-          { icon: TrendingUp,   val: pipelineTotal,         lbl: 'In Pipeline',        color: '#C9A96E' },
-          { icon: TrendingUp,   val: conversionTotal,       lbl: 'Proposal / Active',  color: '#2E8B57' },
-          { icon: AlertCircle,  val: data.overdueFollowUps, lbl: 'Overdue Follow-ups', color: '#C0392B' },
-          { icon: TrendingUp,   val: data.avgScore?.toFixed(1) ?? '—', lbl: 'Avg Score', color: '#1B6B65' },
+          { icon: Users,       val: data.totalLeads,       lbl: 'Total Leads',        color: '#1B6B65' },
+          { icon: TrendingUp,  val: pipelineTotal,         lbl: 'In Pipeline',        color: '#C9A96E' },
+          { icon: TrendingUp,  val: conversionTotal,       lbl: 'Proposal / Active',  color: '#2E8B57' },
+          { icon: AlertCircle, val: data.overdueFollowUps, lbl: 'Overdue Follow-ups', color: '#C0392B' },
+          { icon: TrendingUp,  val: data.avgScore?.toFixed(1) ?? '—', lbl: 'Avg Score', color: '#1B6B65' },
         ].map(({ icon: Icon, val, lbl, color }) => (
           <div key={lbl} style={S.card}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
@@ -119,7 +132,6 @@ export default function CreatorAcquisitionDashboardPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '18px', alignItems: 'start' }}>
-        {/* Pipeline breakdown */}
         <div style={S.card}>
           <h2 style={{ fontSize: '14px', fontWeight: '700', color: '#1C1A16', margin: '0 0 16px' }}>Pipeline Status Breakdown</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -140,7 +152,6 @@ export default function CreatorAcquisitionDashboardPage() {
           </div>
         </div>
 
-        {/* Upcoming tasks */}
         <div style={S.card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
             <h2 style={{ fontSize: '14px', fontWeight: '700', color: '#1C1A16', margin: 0 }}>
@@ -152,10 +163,10 @@ export default function CreatorAcquisitionDashboardPage() {
               View all
             </button>
           </div>
-          {data.upcomingTasks?.length === 0 && (
+          {(data.upcomingTasks ?? []).length === 0 && (
             <p style={{ fontSize: '13px', color: '#B5AA99', textAlign: 'center', padding: '20px 0' }}>No pending tasks</p>
           )}
-          {data.upcomingTasks?.map(task => (
+          {(data.upcomingTasks ?? []).map(task => (
             <div key={task.id} style={{ borderBottom: '1px solid #F4F1EC', padding: '10px 0', cursor: 'pointer' }}
               onClick={() => navigate(`/admin/creator-acquisition/leads/${task.leadId}`)}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -177,7 +188,7 @@ export default function CreatorAcquisitionDashboardPage() {
               </div>
             </div>
           ))}
-          {data.overdueFollowUps > 0 && (
+          {(data.overdueFollowUps ?? 0) > 0 && (
             <div style={{ marginTop: '12px', padding: '10px 12px', background: '#FEF3F2', borderRadius: '6px', border: '1px solid #F5C6C0' }}>
               <p style={{ fontSize: '12.5px', color: '#C0392B', fontWeight: '600', margin: 0 }}>
                 <AlertCircle size={12} style={{ verticalAlign: 'middle', marginRight: '5px' }} />

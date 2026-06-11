@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { PlusCircle, Instagram, Upload, Eye, UserPlus, EyeOff, Ban, X, ChevronDown, ChevronUp, ExternalLink, Users } from 'lucide-react';
+import { PlusCircle, Instagram, Upload, Eye, UserPlus, EyeOff, Ban, X, Search, ExternalLink, Users, RefreshCw } from 'lucide-react';
 
 const S = {
   page:    { padding: '28px 32px', background: '#FAFAF8', minHeight: '100vh' },
@@ -25,18 +25,28 @@ const STATUS_CHIP = {
   blocked:     { color: '#C0392B', bg: '#FDECEA' },
 };
 
+async function crmCall(getToken, action, payload = {}) {
+  const token = await getToken();
+  const res = await fetch('/api/admin', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, payload }),
+  });
+  const json = await res.json();
+  if (!json.success) throw new Error(json.error?.message || 'Request failed');
+  return json.data;
+}
+
 function ScoreBadge({ score }) {
   if (score == null) return <span style={{ color: '#C8C0B8', fontSize: '12px' }}>—</span>;
   const color = score >= 8 ? '#1B6B65' : score >= 5 ? '#C9A96E' : '#C0392B';
-  return (
-    <span style={{ fontWeight: '700', fontSize: '13px', color }}>{score.toFixed(1)}</span>
-  );
+  return <span style={{ fontWeight: '700', fontSize: '13px', color }}>{Number(score).toFixed(1)}</span>;
 }
 
 function ResultRow({ result, onAddToCrm, onIgnore, onBlock, acting }) {
   const navigate = useNavigate();
   const isActing = acting === result.id;
-  const status   = result.status;
+  const status   = result.status ?? 'new';
   const chip = STATUS_CHIP[status] || STATUS_CHIP.new;
 
   return (
@@ -59,10 +69,10 @@ function ResultRow({ result, onAddToCrm, onIgnore, onBlock, acting }) {
         </div>
       </td>
       <td style={{ padding: '10px 14px', verticalAlign: 'middle', fontSize: '12px', color: '#4A433A' }}>
-        {result.followerCount != null ? result.followerCount.toLocaleString() : '—'}
+        {result.followerCount != null ? Number(result.followerCount).toLocaleString() : '—'}
       </td>
       <td style={{ padding: '10px 14px', verticalAlign: 'middle', fontSize: '12px', color: '#4A433A' }}>
-        {result.engagementRate != null ? `${result.engagementRate.toFixed(1)}%` : '—'}
+        {result.engagementRate != null ? `${Number(result.engagementRate).toFixed(1)}%` : '—'}
       </td>
       <td style={{ padding: '10px 14px', verticalAlign: 'middle', fontSize: '12px', color: '#8C8070', maxWidth: '200px' }}>
         <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
@@ -114,11 +124,10 @@ function ResultRow({ result, onAddToCrm, onIgnore, onBlock, acting }) {
   );
 }
 
-// ── Manual import modal ───────────────────────────────────────────────────────
 function ImportModal({ runId, onClose, onImported, getToken }) {
-  const [raw, setRaw]       = useState('');
+  const [raw, setRaw]         = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError]   = useState(null);
+  const [error, setError]     = useState(null);
 
   async function handleImport() {
     setError(null);
@@ -132,15 +141,8 @@ function ImportModal({ runId, onClose, onImported, getToken }) {
     }
     setLoading(true);
     try {
-      const token = await getToken();
-      const res   = await fetch('/api/admin?action=crm-import-results', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runId, results }),
-      });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      onImported(json.inserted);
+      const data = await crmCall(getToken, 'discovery.importResults', { runId, results });
+      onImported(data.inserted ?? 0);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -157,7 +159,7 @@ function ImportModal({ runId, onClose, onImported, getToken }) {
         </div>
         <p style={{ fontSize: '12.5px', color: '#6B6156', marginBottom: '12px' }}>
           Paste a JSON array of creator profiles. Each object needs at least a <code>username</code> field.
-          Optional fields: <code>displayName, avatarUrl, followerCount, engagementRate, bio, country, language, category, score</code>.
+          Optional: <code>displayName, avatarUrl, followerCount, engagementRate, bio, country, language, category, score</code>.
         </p>
         <textarea
           value={raw}
@@ -178,7 +180,6 @@ function ImportModal({ runId, onClose, onImported, getToken }) {
   );
 }
 
-// ── Create run form ────────────────────────────────────────────────────────────
 function CreateRunForm({ onCreated, getToken }) {
   const [form, setForm]       = useState({ name: '', platform: 'instagram', searchType: 'manual', destination: '', country: '', language: '', minFollowers: '', maxFollowers: '', category: '' });
   const [loading, setLoading] = useState(false);
@@ -192,15 +193,8 @@ function CreateRunForm({ onCreated, getToken }) {
     if (!form.name.trim()) { setError('Name is required'); return; }
     setLoading(true);
     try {
-      const token = await getToken();
-      const res   = await fetch('/api/admin?action=crm-create-run', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      onCreated(json.run);
+      const data = await crmCall(getToken, 'discovery.createRun', form);
+      onCreated(data.run);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -212,13 +206,13 @@ function CreateRunForm({ onCreated, getToken }) {
     <form onSubmit={handleCreate}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
         {[
-          { k: 'name',        lbl: 'Run Name *',           type: 'text',   span: 2 },
-          { k: 'destination', lbl: 'Destination / Theme',  type: 'text' },
-          { k: 'country',     lbl: 'Creator Country',      type: 'text' },
-          { k: 'category',    lbl: 'Category / Niche',     type: 'text' },
-          { k: 'language',    lbl: 'Language',             type: 'text' },
-          { k: 'minFollowers',lbl: 'Min Followers',        type: 'number' },
-          { k: 'maxFollowers',lbl: 'Max Followers',        type: 'number' },
+          { k: 'name',        lbl: 'Run Name *',          type: 'text',   span: 2 },
+          { k: 'destination', lbl: 'Destination / Theme', type: 'text' },
+          { k: 'country',     lbl: 'Creator Country',     type: 'text' },
+          { k: 'category',    lbl: 'Category / Niche',    type: 'text' },
+          { k: 'language',    lbl: 'Language',            type: 'text' },
+          { k: 'minFollowers',lbl: 'Min Followers',       type: 'number' },
+          { k: 'maxFollowers',lbl: 'Max Followers',       type: 'number' },
         ].map(({ k, lbl, type, span }) => (
           <div key={k} style={{ gridColumn: span === 2 ? '1 / -1' : undefined }}>
             <label style={S.label}>{lbl}</label>
@@ -251,30 +245,27 @@ function CreateRunForm({ onCreated, getToken }) {
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
 export default function CreatorDiscoveryPage() {
   const { getToken } = useAuth();
-  const [runs, setRuns]             = useState([]);
+  const [runs, setRuns]               = useState([]);
   const [activeRunId, setActiveRunId] = useState(null);
-  const [runData, setRunData]       = useState(null);
-  const [loading, setLoading]       = useState(false);
+  const [runData, setRunData]         = useState(null);
+  const [loading, setLoading]         = useState(false);
   const [runsLoading, setRunsLoading] = useState(true);
-  const [error, setError]           = useState(null);
-  const [acting, setActing]         = useState(null);
+  const [runsError, setRunsError]     = useState(null);
+  const [runError, setRunError]       = useState(null);
+  const [acting, setActing]           = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showImport, setShowImport]   = useState(false);
-  const [expandedRunId, setExpandedRunId] = useState(null);
 
   const loadRuns = useCallback(async () => {
     setRunsLoading(true);
+    setRunsError(null);
     try {
-      const token = await getToken();
-      const res   = await fetch('/api/admin?action=crm-list-runs', { headers: { Authorization: `Bearer ${token}` } });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      setRuns(json.runs || []);
+      const data = await crmCall(getToken, 'discovery.listRuns');
+      setRuns(data.runs ?? []);
     } catch (e) {
-      setError(e.message);
+      setRunsError(e.message);
     } finally {
       setRunsLoading(false);
     }
@@ -282,15 +273,13 @@ export default function CreatorDiscoveryPage() {
 
   const loadRun = useCallback(async (runId) => {
     setLoading(true);
+    setRunError(null);
     setActiveRunId(runId);
     try {
-      const token = await getToken();
-      const res   = await fetch(`/api/admin?action=crm-get-run&id=${runId}`, { headers: { Authorization: `Bearer ${token}` } });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      setRunData(json);
+      const data = await crmCall(getToken, 'discovery.getRun', { id: runId });
+      setRunData({ run: data.run, results: data.results ?? [] });
     } catch (e) {
-      setError(e.message);
+      setRunError(e.message);
     } finally {
       setLoading(false);
     }
@@ -301,14 +290,7 @@ export default function CreatorDiscoveryPage() {
   async function handleAddToCrm(result) {
     setActing(result.id);
     try {
-      const token = await getToken();
-      const res   = await fetch('/api/admin?action=crm-add-to-crm', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resultId: result.id }),
-      });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
+      await crmCall(getToken, 'discovery.addToCrm', { resultId: result.id });
       loadRun(activeRunId);
     } catch (e) {
       alert(e.message);
@@ -317,16 +299,10 @@ export default function CreatorDiscoveryPage() {
     }
   }
 
-  async function handleResultAction(result, action) {
+  async function handleResultAction(result, status) {
     setActing(result.id);
     try {
-      const token = await getToken();
-      const res   = await fetch(`/api/admin?action=${action}&id=${result.id}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
+      await crmCall(getToken, 'discovery.setResultStatus', { id: result.id, status });
       loadRun(activeRunId);
     } catch (e) {
       alert(e.message);
@@ -360,19 +336,26 @@ export default function CreatorDiscoveryPage() {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '18px', alignItems: 'start' }}>
-        {/* Runs sidebar */}
         <div style={S.card}>
           <h2 style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             Discovery Runs
           </h2>
           {runsLoading && <p style={{ fontSize: '13px', color: '#8C8070' }}>Loading…</p>}
-          {!runsLoading && runs.length === 0 && (
+          {runsError && (
+            <div>
+              <p style={{ fontSize: '12px', color: '#C0392B', marginBottom: '8px' }}>{runsError}</p>
+              <button onClick={loadRuns} style={{ ...S.btnSecondary, fontSize: '12px', padding: '5px 10px' }}>
+                <RefreshCw size={12} /> Retry
+              </button>
+            </div>
+          )}
+          {!runsLoading && !runsError && runs.length === 0 && (
             <p style={{ fontSize: '13px', color: '#B5AA99', textAlign: 'center', padding: '16px 0' }}>No runs yet</p>
           )}
           {runs.map(run => (
             <div key={run.id}
-              onClick={() => { setExpandedRunId(run.id === expandedRunId ? null : run.id); loadRun(run.id); }}
-              style={{ borderBottom: '1px solid #F4F1EC', padding: '10px 0', cursor: 'pointer', background: activeRunId === run.id ? '#F8F6F2' : 'transparent' }}>
+              onClick={() => loadRun(run.id)}
+              style={{ borderBottom: '1px solid #F4F1EC', padding: '10px 0', cursor: 'pointer', background: activeRunId === run.id ? '#F8F6F2' : 'transparent', borderRadius: activeRunId === run.id ? '4px' : 0, paddingLeft: activeRunId === run.id ? '6px' : 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: '12.5px', fontWeight: '600', color: '#1C1A16', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -383,14 +366,13 @@ export default function CreatorDiscoveryPage() {
                   </p>
                 </div>
                 <span style={{ fontSize: '11px', fontWeight: '600', color: '#1B6B65', flexShrink: 0, marginLeft: '6px' }}>
-                  {Number(run.resultCount || 0)}
+                  {Number(run.resultCount ?? 0)}
                 </span>
               </div>
             </div>
           ))}
         </div>
 
-        {/* Results panel */}
         <div>
           {!activeRunId && (
             <div style={{ ...S.card, textAlign: 'center', padding: '48px 24px', color: '#B5AA99' }}>
@@ -405,8 +387,8 @@ export default function CreatorDiscoveryPage() {
                   <div>
                     <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#1C1A16', margin: 0 }}>{activeRun.name}</h2>
                     <p style={{ fontSize: '11.5px', color: '#8C8070', margin: '2px 0 0' }}>
-                      {activeRun.platform} · {activeRun.searchType} · {Number(activeRun.resultCount || 0)} results
-                      {activeRun.addedCount > 0 && ` · ${activeRun.addedCount} added to CRM`}
+                      {activeRun.platform} · {activeRun.searchType} · {Number(activeRun.resultCount ?? 0)} results
+                      {Number(activeRun.addedCount ?? 0) > 0 && ` · ${activeRun.addedCount} added to CRM`}
                     </p>
                   </div>
                   <button onClick={() => setShowImport(true)} style={S.btnSecondary}>
@@ -415,9 +397,17 @@ export default function CreatorDiscoveryPage() {
                 </div>
               )}
               {loading && <p style={{ textAlign: 'center', color: '#8C8070', padding: '30px' }}>Loading results…</p>}
-              {!loading && runData && (
+              {runError && (
+                <div style={{ textAlign: 'center', padding: '24px' }}>
+                  <p style={{ color: '#C0392B', marginBottom: '10px' }}>{runError}</p>
+                  <button onClick={() => loadRun(activeRunId)} style={S.btnSecondary}>
+                    <RefreshCw size={12} /> Retry
+                  </button>
+                </div>
+              )}
+              {!loading && !runError && runData && (
                 <>
-                  {runData.results.length === 0 && (
+                  {(runData.results ?? []).length === 0 && (
                     <div style={{ textAlign: 'center', padding: '40px', color: '#B5AA99' }}>
                       <p style={{ fontSize: '14px', marginBottom: '8px' }}>No results yet</p>
                       <button onClick={() => setShowImport(true)} style={S.btnPrimary}>
@@ -425,7 +415,7 @@ export default function CreatorDiscoveryPage() {
                       </button>
                     </div>
                   )}
-                  {runData.results.length > 0 && (
+                  {(runData.results ?? []).length > 0 && (
                     <div style={{ overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
                         <thead>
@@ -436,10 +426,11 @@ export default function CreatorDiscoveryPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {runData.results.map(r => (
-                            <ResultRow key={r.id} result={r} onAddToCrm={handleAddToCrm}
-                              onIgnore={r => handleResultAction(r, 'crm-ignore-result')}
-                              onBlock={r => handleResultAction(r, 'crm-block-result')}
+                          {(runData.results ?? []).map(r => (
+                            <ResultRow key={r.id} result={r}
+                              onAddToCrm={handleAddToCrm}
+                              onIgnore={r => handleResultAction(r, 'ignored')}
+                              onBlock={r => handleResultAction(r, 'blocked')}
                               acting={acting} />
                           ))}
                         </tbody>
