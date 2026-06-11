@@ -1834,12 +1834,14 @@ async function crmGetRun(pool, id) {
   const { rows: results } = await pool.query(`
     SELECT res.*,
       l.status AS lead_status,
-      l.id AS lead_id
+      l.id     AS lead_id
     FROM "CreatorDiscoveryResult" res
     LEFT JOIN "CreatorLead" l ON l.id = res."leadId"
     WHERE res."runId" = $1
     ORDER BY COALESCE(res.score, 0) DESC, res."createdAt" DESC
   `, [id]);
+
+  console.log('[Discovery] crmGetRun', { runId: id, resultsReturned: results.length, runStatus: runRows[0]?.status, runResultsCount: runRows[0]?.resultsCount });
 
   return { run: runRows[0], results };
 }

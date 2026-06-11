@@ -548,7 +548,10 @@ function ResultRow({ result, onAddToCrm, onIgnore, onBlock, acting }) {
   const status   = result.status ?? 'new';
   const chip     = STATUS_CHIP[status] || STATUS_CHIP.new;
   const profileUrl = result.profileUrl || (result.platform === 'instagram' ? `https://www.instagram.com/${result.username}/` : null);
-  const meta     = typeof result.metadata === 'object' ? result.metadata : {};
+  // rawData is the real column name; metadata is the legacy fallback
+  const meta = (result.rawData && typeof result.rawData === 'object') ? result.rawData
+             : (result.metadata && typeof result.metadata === 'object') ? result.metadata
+             : {};
 
   return (
     <tr style={{ borderBottom: '1px solid #F4F1EC', opacity: isActing ? 0.5 : 1 }}>
@@ -568,7 +571,7 @@ function ResultRow({ result, onAddToCrm, onIgnore, onBlock, acting }) {
           </div>
         </div>
       </td>
-      <td style={{ padding: '9px 10px', verticalAlign: 'middle', fontSize: '11px', color: '#4A433A' }}>{fmtK(result.followerCount)}</td>
+      <td style={{ padding: '9px 10px', verticalAlign: 'middle', fontSize: '11px', color: '#4A433A' }}>{fmtK(result.followersCount ?? result.followerCount)}</td>
       <td style={{ padding: '9px 10px', verticalAlign: 'middle', fontSize: '11px', color: '#8C8070' }}>{result.country || '—'}</td>
       <td style={{ padding: '9px 10px', verticalAlign: 'middle', fontSize: '11px', color: '#8C8070' }}>{result.language || '—'}</td>
       <td style={{ padding: '9px 10px', verticalAlign: 'middle', fontSize: '11px', color: '#8C8070', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{result.category || '—'}</td>
@@ -580,11 +583,14 @@ function ResultRow({ result, onAddToCrm, onIgnore, onBlock, acting }) {
             {result.fitSummary}
           </p>
         )}
-        {meta.rawData?.confidenceLevel && (
-          <span style={{ fontSize: '9.5px', color: meta.rawData.confidenceLevel === 'high' ? '#1B6B65' : meta.rawData.confidenceLevel === 'medium' ? '#C9A96E' : '#B5AA99', fontWeight: '600', textTransform: 'uppercase' }}>
-            {meta.rawData.confidenceLevel}
-          </span>
-        )}
+        {(meta.confidence || meta.rawData?.confidenceLevel) && (() => {
+          const conf = meta.confidence || meta.rawData?.confidenceLevel;
+          return (
+            <span style={{ fontSize: '9.5px', color: conf === 'high' ? '#1B6B65' : conf === 'medium' ? '#C9A96E' : '#B5AA99', fontWeight: '600', textTransform: 'uppercase' }}>
+              {conf}
+            </span>
+          );
+        })()}
       </td>
       <td style={{ padding: '9px 10px', verticalAlign: 'middle' }}>
         <span style={S.chip(chip.color, chip.bg)}>{status.replace(/_/g, ' ')}</span>
@@ -859,21 +865,33 @@ export default function CreatorDiscoveryPage() {
   }, [getToken]);
 
   const loadRun = useCallback(async (runId) => {
+    console.log('[Discovery] loadRun called', runId);
     setLoading(true);
     setRunError(null);
     setActiveRunId(runId);
     try {
       const data = await crmCall(getToken, 'discovery.getRun', { id: runId });
-      setRunData({ run: data.run, results: data.results ?? [] });
-    } catch (e) { setRunError(e.message); }
+      const fetchedResults = data.results ?? [];
+      console.log('[Discovery] loadRun response', { runId, resultsCount: fetchedResults.length, runResultsCount: data.run?.resultsCount });
+      setRunData({ run: data.run, results: fetchedResults });
+    } catch (e) {
+      console.error('[Discovery] loadRun error', e.message);
+      setRunError(e.message);
+    }
     finally { setLoading(false); }
   }, [getToken]);
 
   useEffect(() => { loadRuns(); }, [loadRuns]);
 
   function handleAiSearchDone(data) {
+    console.log('[Discovery] handleAiSearchDone', { inserted: data.inserted, runId: data.run?.id });
     showToast(`Found ${data.inserted} profile${data.inserted !== 1 ? 's' : ''} via ${data.providerStatus?.provider || 'AI'}`);
-    loadRuns().then(() => loadRun(data.run.id));
+    const newRunId = data.run?.id;
+    if (newRunId) {
+      loadRuns().then(() => loadRun(newRunId));
+    } else {
+      loadRuns();
+    }
   }
 
   async function handleAddToCrm(result) {
@@ -912,6 +930,16 @@ export default function CreatorDiscoveryPage() {
   const addedCt   = results.filter(r => r.status === 'added_to_crm').length;
   const ignoredCt = results.filter(r => r.status === 'ignored').length;
   const blockedCt = results.filter(r => r.status === 'blocked').length;
+
+  console.log('[Discovery] render state', { activeRunId, resultsInState: results.length, runResultsCount: activeRun?.resultsCount });
+
+  // Auto-reload if the run has results in DB but they haven't loaded yet
+  useEffect(() => {
+    if (activeRunId && !loading && results.length === 0 && (activeRun?.resultsCount > 0)) {
+      console.log('[Discovery] auto-reload: run has', activeRun.resultsCount, 'results but state has 0');
+      loadRun(activeRunId);
+    }
+  }, [activeRunId, activeRun?.resultsCount, results.length, loading, loadRun]);
 
   const MODES = [
     { key: 'ai_search', label: 'AI Search',       icon: Sparkles },
@@ -1015,7 +1043,7 @@ export default function CreatorDiscoveryPage() {
                   </p>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: '#B5AA99' }}>
-                  <span>{Number(run.resultCount ?? 0)} · {Number(run.addedCount ?? 0)} CRM</span>
+                  <span>{Number(run.resultsCount ?? run.resultCount ?? 0)} · {Number(run.addedCount ?? 0)} CRM</span>
                   <span>{fmtDate(run.createdAt)}</span>
                 </div>
               </div>
@@ -1125,6 +1153,12 @@ export default function CreatorDiscoveryPage() {
 
               {!loading && !runError && (
                 results.length === 0 ? (
+                  (activeRun?.resultsCount > 0) ? (
+                    // DB says there are results but they haven't loaded — show spinner, auto-reload handles it
+                    <div style={{ textAlign: 'center', padding: '40px 24px', color: '#8C8070' }}>
+                      <p style={{ fontSize: '13px' }}>Loading {activeRun.resultsCount} profiles…</p>
+                    </div>
+                  ) : (
                   <div style={{ textAlign: 'center', padding: '40px 24px', color: '#B5AA99' }}>
                     <Users size={26} style={{ marginBottom: '10px', opacity: 0.4 }} />
                     <p style={{ fontSize: '13.5px', marginBottom: '6px' }}>No profiles in this run yet</p>
@@ -1138,6 +1172,7 @@ export default function CreatorDiscoveryPage() {
                       <button onClick={() => setShowImport(true)} style={{ ...S.btnPrimary, marginTop: '10px' }}><Upload size={13} /> Import Profiles</button>
                     )}
                   </div>
+                  )
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
