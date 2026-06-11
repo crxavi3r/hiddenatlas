@@ -165,7 +165,7 @@ export default function ShareModal({ tripId, tripTitle, open, onClose }) {
   useEffect(() => {
     if (!open) return;
     setLoadingShares(true);
-    api.get(`/api/trip-shares?tripId=${tripId}`)
+    api.get(`/api/trips?action=shares-list&id=${tripId}`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setShares(data); })
       .catch(() => {})
@@ -191,7 +191,7 @@ export default function ShareModal({ tripId, tripTitle, open, onClose }) {
 
     setInviting(true);
     try {
-      const res = await api.post(`/api/trip-shares?tripId=${tripId}`, {
+      const res = await api.post(`/api/trips?action=shares-create&id=${tripId}`, {
         email, role: inviteRole, sendEmail,
       });
       const data = await res.json();
@@ -222,7 +222,7 @@ export default function ShareModal({ tripId, tripTitle, open, onClose }) {
     setGeneratingLink(true);
     setGeneratedLink('');
     try {
-      const res = await api.post(`/api/trip-shares?tripId=${tripId}`, {
+      const res = await api.post(`/api/trips?action=shares-create&id=${tripId}`, {
         email: null, role: linkRole, sendEmail: false,
       });
       const data = await res.json();
@@ -251,12 +251,12 @@ export default function ShareModal({ tripId, tripTitle, open, onClose }) {
   }
 
   async function handleRevoke(shareId) {
-    const res = await api.post(`/api/trip-shares?shareId=${shareId}&action=revoke`, {});
+    const res = await api.post(`/api/trips?action=shares-revoke&shareId=${shareId}`, {});
     if (res.ok) setShares(s => s.filter(sh => sh.id !== shareId));
   }
 
   async function handleRoleChange(shareId, newRole) {
-    const res = await api.patch(`/api/trip-shares?shareId=${shareId}`, { role: newRole });
+    const res = await api.patch(`/api/trips?action=shares-update-role&shareId=${shareId}`, { role: newRole });
     if (res.ok) setShares(s => s.map(sh => sh.id === shareId ? { ...sh, role: newRole } : sh));
   }
 

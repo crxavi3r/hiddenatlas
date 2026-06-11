@@ -28,7 +28,7 @@ export default function ShareAcceptPage() {
   // 1. Load preview (no auth required)
   useEffect(() => {
     if (!token) return;
-    fetch(`/api/trip-shares?token=${encodeURIComponent(token)}&action=preview`)
+    fetch(`/api/trips?action=shares-preview&token=${encodeURIComponent(token)}`)
       .then(async res => {
         if (res.status === 404) { setPreviewStatus('notfound'); return; }
         if (res.status === 410) { setPreviewStatus('revoked'); return; }
@@ -43,7 +43,7 @@ export default function ShareAcceptPage() {
   const acceptInvite = useCallback(async () => {
     setAcceptStatus('accepting');
     try {
-      const res = await api.post(`/api/trip-shares?token=${encodeURIComponent(token)}&action=accept`, {});
+      const res = await api.post(`/api/trips?action=shares-accept&token=${encodeURIComponent(token)}`, {});
       const data = await res.json();
 
       if (res.status === 403 && data.emailMismatch) {
