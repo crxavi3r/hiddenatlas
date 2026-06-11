@@ -93,46 +93,49 @@ async function callAnthropic(systemPrompt, userPrompt) {
 
 function buildCreatorPrompt(criteria, webContext = '') {
   const {
-    destinationTheme, creatorCountry, language, niche,
+    creatorProfile, destinationTheme, creatorCountry, language, niche,
     minFollowers, maxFollowers, targetCount = 20, notes,
   } = criteria;
   const limit = Math.min(Number(targetCount) || 20, 50);
 
   const lines = [
-    `Destination / Theme: ${destinationTheme}`,
-    creatorCountry  && `Creator from: ${creatorCountry}`,
-    language        && `Language: ${language}`,
-    niche           && `Niche: ${niche}`,
-    minFollowers    && `Min followers: ${Number(minFollowers).toLocaleString()}`,
-    maxFollowers    && `Max followers: ${Number(maxFollowers).toLocaleString()}`,
-    notes           && `Notes: ${notes}`,
+    `Find potential Travel Designers / Travel Creators matching this creator profile:\n${creatorProfile}`,
+    destinationTheme && `\nOptional destination or theme context:\n${destinationTheme}`,
+    creatorCountry   && `\nCreator country:\n${creatorCountry}`,
+    language         && `\nLanguage:\n${language}`,
+    niche            && `\nNiche / category:\n${niche}`,
+    (minFollowers || maxFollowers) && `\nFollower range:\n${minFollowers ? Number(minFollowers).toLocaleString() : 'any'} to ${maxFollowers ? Number(maxFollowers).toLocaleString() : 'any'}`,
+    notes            && `\nAdditional notes:\n${notes}`,
   ].filter(Boolean).join('\n');
 
   return `You are a talent scout for HiddenAtlas, a premium travel itinerary platform.
-HiddenAtlas partners with travel creators who design and sell digital itineraries.
+HiddenAtlas partners with Travel Designers and Travel Creators who design and sell curated digital itineraries.
 
-SEARCH CRITERIA:
+SEARCH REQUEST:
 ${lines}
 ${webContext ? `\nWEB CONTEXT (use to identify real Instagram profiles):\n${webContext.slice(0, 6000)}` : ''}
 
-IDEAL CREATOR PROFILE:
-- Travel bloggers / content creators with deep knowledge of the destination
-- Expats living in the destination with local authority
-- Travel photographers documenting the area
-- Niche creators: luxury, food, family, road trips, hiking, surf, ski, wine, slow travel
-- Micro / mid-tier creators (10k–500k) with strong engagement
-- Creators who already produce travel guides, recommendations or tips
-- Creators capable of writing a premium, paid digital itinerary
+PRIORITIZE creators with:
+- Personal authority and strong visual taste
+- Useful, specific travel recommendations and destination knowledge
+- Potential to create or sell curated itineraries on HiddenAtlas
+- Authentic human voice and credibility with their audience
+
+INCLUDE creators such as:
+- Travel creators and travel designers
+- Itinerary planners and boutique travel planners
+- Local experts with deep destination knowledge
+- Travel bloggers who publish guides, maps, road trips, hotel recommendations or destination reels
+- Creators with strong storytelling and audience interested in curated travel
 
 EXCLUDE:
-- Hotels, resorts, tour operators, travel agencies, aggregators
-- Generic repost accounts without a human author
-- Mass-market accounts without curation
-- Accounts unrelated to travel / the destination
+- Agencies, mass-market tour operators, generic repost pages
+- Hotels, airlines, meme pages, discount-only influencers
+- Accounts without a clear human creator behind them
 
 SCORING (0–100):
-- 80–100: Perfect — deep destination expertise, premium aesthetic, clear itinerary potential
-- 60–79: Strong — relevant destination, good content quality
+- 80–100: Perfect — strong personal authority, premium taste, clear itinerary potential
+- 60–79: Strong — relevant niche, good content quality and engagement
 - 40–59: Potential — some relevance, needs vetting
 - 0–39: Weak
 
@@ -153,7 +156,7 @@ No markdown, no explanation, no code block. Start with [ and end with ].
     "language": "language code e.g. pt en es fr",
     "category": "travel niche e.g. luxury food hiking",
     "score": 0-100,
-    "fitSummary": "1–2 sentences: why this creator fits HiddenAtlas and this destination",
+    "fitSummary": "1-2 sentences: why this creator fits HiddenAtlas based on the requested profile",
     "destinations": ["destination1", "destination2"],
     "routeIdeas": ["route idea 1", "route idea 2"],
     "rawData": {
@@ -195,10 +198,11 @@ async function runClaudeDiscovery(criteria) {
 // ── Provider: Tavily + Claude ─────────────────────────────────────────────────
 
 async function runTavilyClaudeDiscovery(criteria) {
-  const { destinationTheme, creatorCountry, niche, language } = criteria;
+  const { creatorProfile, destinationTheme, creatorCountry, niche, language } = criteria;
+  const searchContext = destinationTheme || creatorProfile?.slice(0, 60) || '';
   const queries = [
-    `Instagram travel creators ${destinationTheme} ${niche || ''} ${language ? language + ' language' : ''} micro influencer blog`,
-    `best Instagram travel accounts ${destinationTheme} ${creatorCountry ? `from ${creatorCountry}` : ''} curated guide`,
+    `Instagram travel creators ${searchContext} ${niche || ''} ${language ? language + ' language' : ''} micro influencer blog`,
+    `best Instagram travel designers ${searchContext} ${creatorCountry ? `from ${creatorCountry}` : ''} curated itinerary guide`,
   ];
 
   let webContext = '';

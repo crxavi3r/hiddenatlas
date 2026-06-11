@@ -166,7 +166,7 @@ function AiProgress({ currentStep, done, error }) {
 // ── AI Search Panel ───────────────────────────────────────────────────────────
 
 const EMPTY_AI = {
-  destinationTheme: '', creatorCountry: '', language: '', niche: '',
+  creatorProfile: '', destinationTheme: '', creatorCountry: '', language: '', niche: '',
   minFollowers: '', maxFollowers: '', targetCount: '20', notes: '',
 };
 
@@ -192,7 +192,7 @@ function AiSearchPanel({ onSearchDone, getToken }) {
 
   async function handleSearch(e) {
     e.preventDefault();
-    if (!form.destinationTheme.trim()) return;
+    if (!form.creatorProfile.trim()) return;
     setSearching(true);
     setError(null);
     setDone(false);
@@ -202,7 +202,8 @@ function AiSearchPanel({ onSearchDone, getToken }) {
     try {
       const data = await crmCall(getToken, 'discovery.aiSearchProfiles', {
         platform:         'instagram',
-        destinationTheme: form.destinationTheme.trim(),
+        creatorProfile:   form.creatorProfile.trim(),
+        destinationTheme: form.destinationTheme.trim() || undefined,
         creatorCountry:   form.creatorCountry  || undefined,
         language:         form.language        || undefined,
         niche:            form.niche           || undefined,
@@ -284,14 +285,23 @@ function AiSearchPanel({ onSearchDone, getToken }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
         <div style={{ gridColumn: '1 / -1' }}>
           <label style={S.label}>
-            Destination / Theme <span style={{ color: '#C9A96E' }}>required</span>
+            Creator Profile <span style={{ color: '#C9A96E' }}>required</span>
           </label>
+          <input
+            value={form.creatorProfile}
+            onChange={e => set('creatorProfile', e.target.value)}
+            placeholder="e.g. Portuguese travel creators with strong storytelling, premium taste, real itinerary knowledge and audience interested in curated travel guides"
+            style={S.input}
+            required
+          />
+        </div>
+        <div style={{ gridColumn: '1 / -1' }}>
+          <label style={S.label}>Destination / Theme <span style={{ color: '#B5AA99', fontWeight: '400' }}>optional</span></label>
           <input
             value={form.destinationTheme}
             onChange={e => set('destinationTheme', e.target.value)}
-            placeholder="e.g. Japan slow travel, Menorca hidden beaches, Morocco food"
+            placeholder="e.g. Japan, Philippines, Morocco, family travel, hidden beaches"
             style={S.input}
-            required
           />
         </div>
         <div>
@@ -324,11 +334,11 @@ function AiSearchPanel({ onSearchDone, getToken }) {
         </div>
       </div>
       <div style={{ marginTop: '16px' }}>
-        <button type="submit" style={{ ...S.btnPrimary, gap: '8px' }} disabled={!form.destinationTheme.trim()}>
-          <Sparkles size={14} /> Find creators with AI
+        <button type="submit" style={{ ...S.btnPrimary, gap: '8px' }} disabled={!form.creatorProfile.trim()}>
+          <Sparkles size={14} /> Find Travel Designers with AI
         </button>
         <p style={{ fontSize: '11px', color: '#C8C0B8', marginTop: '8px', lineHeight: '1.5' }}>
-          Results are AI suggestions based on training knowledge. Always verify profiles before reaching out.
+          Results are AI-assisted suggestions. Always verify Instagram profiles, audience quality and fit before reaching out.
         </p>
       </div>
     </form>
@@ -784,6 +794,9 @@ export default function CreatorDiscoveryPage() {
           {runs.map(run => {
             const isActive = activeRunId === run.id;
             const rsc = RUN_STATUS_CHIP[run.status] || RUN_STATUS_CHIP.active;
+            const runParams = typeof run.params === 'object' ? run.params : {};
+            const creatorProfileLabel = runParams.creatorProfile;
+            const destinationLabel = runParams.destinationTheme || run.destination;
             return (
               <div key={run.id} onClick={() => loadRun(run.id)}
                 style={{ borderRadius: '6px', padding: '8px 6px', cursor: 'pointer', marginBottom: '2px', background: isActive ? '#EFF6F5' : 'transparent', borderBottom: isActive ? 'none' : '1px solid #F4F1EC' }}>
@@ -796,7 +809,16 @@ export default function CreatorDiscoveryPage() {
                   </span>
                   <span style={S.chip(rsc.color, rsc.bg)}>{run.status || 'active'}</span>
                 </div>
-                {run.destination && <p style={{ fontSize: '10.5px', color: '#C9A96E', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{run.destination}</p>}
+                {creatorProfileLabel && (
+                  <p style={{ fontSize: '10.5px', color: '#4A433A', margin: '0 0 1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {creatorProfileLabel}
+                  </p>
+                )}
+                {destinationLabel && (
+                  <p style={{ fontSize: '10.5px', color: '#C9A96E', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {destinationLabel}
+                  </p>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: '#B5AA99' }}>
                   <span>{Number(run.resultCount ?? 0)} · {Number(run.addedCount ?? 0)} CRM</span>
                   <span>{fmtDate(run.createdAt)}</span>
@@ -821,7 +843,7 @@ export default function CreatorDiscoveryPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                     <Sparkles size={15} color="#C9A96E" />
                     <h2 style={{ fontSize: '14px', fontWeight: '700', color: '#1C1A16', margin: 0 }}>AI Search</h2>
-                    <span style={{ fontSize: '11.5px', color: '#8C8070' }}>AI-powered creator discovery</span>
+                    <span style={{ fontSize: '11.5px', color: '#8C8070' }}>AI-powered Travel Designer discovery</span>
                   </div>
                   <AiSearchPanel getToken={getToken} onSearchDone={handleAiSearchDone} />
                 </div>
@@ -863,7 +885,19 @@ export default function CreatorDiscoveryPage() {
                         {activeRun.searchType === 'ai_search' && <span style={S.chip('#C9A96E', '#FBF8F1')}>AI Search</span>}
                         {(() => { const rsc = RUN_STATUS_CHIP[activeRun.status] || RUN_STATUS_CHIP.active; return <span style={S.chip(rsc.color, rsc.bg)}>{activeRun.status || 'active'}</span>; })()}
                       </div>
-                      {activeRun.destination && <p style={{ fontSize: '12px', color: '#C9A96E', margin: 0 }}>{activeRun.destination}</p>}
+                      {(() => {
+                        const p = typeof activeRun.params === 'object' ? activeRun.params : {};
+                        return (
+                          <>
+                            {p.creatorProfile && <p style={{ fontSize: '12px', color: '#4A433A', margin: '2px 0 0' }}>{p.creatorProfile}</p>}
+                            {(p.destinationTheme || activeRun.destination) && (
+                              <p style={{ fontSize: '11.5px', color: '#C9A96E', margin: '2px 0 0' }}>
+                                {p.destinationTheme || activeRun.destination}
+                              </p>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                     <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
                       {mode === 'manual' && (

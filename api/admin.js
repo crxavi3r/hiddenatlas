@@ -2120,6 +2120,7 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
   const {
     runId: existingRunId,
     platform        = 'instagram',
+    creatorProfile,
     destinationTheme,
     creatorCountry,
     language,
@@ -2130,8 +2131,8 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
     notes,
   } = payload;
 
-  if (!destinationTheme?.trim()) {
-    throw Object.assign(new Error('destinationTheme is required'), { status: 400 });
+  if (!creatorProfile?.trim()) {
+    throw Object.assign(new Error('creatorProfile is required'), { status: 400 });
   }
 
   const limit = Math.min(parseInt(targetCount, 10) || 20, 50);
@@ -2154,29 +2155,36 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
   // Create or load existing run
   let run;
   if (!existingRunId) {
+    const profileLabel = creatorProfile.trim().slice(0, 45) + (creatorProfile.trim().length > 45 ? '…' : '');
     const autoName = [
       'AI · ' + platform.charAt(0).toUpperCase() + platform.slice(1),
-      destinationTheme.trim(),
+      destinationTheme?.trim() || profileLabel,
       new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
     ].join(' · ');
+
+    const runParams = JSON.stringify({
+      creatorProfile: creatorProfile.trim(),
+      destinationTheme: destinationTheme?.trim() || null,
+    });
 
     const { rows } = await pool.query(`
       INSERT INTO "CreatorDiscoveryRun"
         (id, name, platform, "searchType", destination, country, language, category,
-         "minFollowers", "maxFollowers", notes, status,
+         "minFollowers", "maxFollowers", notes, status, params,
          "createdById", "createdAt", "updatedAt")
       VALUES
         (gen_random_uuid(), $1, $2, 'ai_search', $3, $4, $5, $6,
-         $7, $8, $9, 'running',
+         $7, $8, $9, 'running', $11::jsonb,
          $10, NOW(), NOW())
       RETURNING *
     `, [
-      autoName, platform, destinationTheme.trim(),
+      autoName, platform, destinationTheme?.trim() || null,
       creatorCountry || null, language || null, niche || null,
       minFollowers ? parseInt(minFollowers, 10) : null,
       maxFollowers ? parseInt(maxFollowers, 10) : null,
       ['provider:' + providerName, notes].filter(Boolean).join(' | ') || null,
       createdById,
+      runParams,
     ]);
     run = rows[0];
   } else {
@@ -2192,7 +2200,8 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
   let discoveryResult;
   try {
     discoveryResult = await runAiDiscovery({
-      destinationTheme: destinationTheme.trim(),
+      creatorProfile: creatorProfile.trim(),
+      destinationTheme: destinationTheme?.trim() || undefined,
       creatorCountry,
       language,
       niche,
