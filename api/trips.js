@@ -5,6 +5,134 @@ import { verifyAuth } from './_lib/verifyAuth.js';
 const { Pool } = pg;
 
 // ─────────────────────────────────────────────
+// ICS generation helpers (server-side)
+// Mirrors src/lib/calendarExport.js — kept inline to avoid bundler coupling.
+// ─────────────────────────────────────────────
+function _pad(n) { return String(n).padStart(2, '0'); }
+function _parseDateStr(s) {
+  if (!s) return null;
+  const [y, m, d] = s.split('-').map(Number);
+  return (y && m && d) ? { year: y, month: m, day: d } : null;
+}
+function _fmtAllDay(s) {
+  const p = _parseDateStr(s);
+  return p ? `${p.year}${_pad(p.month)}${_pad(p.day)}` : null;
+}
+function _fmtDT(dateStr, timeStr) {
+  const p = _parseDateStr(dateStr);
+  if (!p) return null;
+  const [h = 0, m = 0] = (timeStr || '00:00').split(':').map(Number);
+  return `${p.year}${_pad(p.month)}${_pad(p.day)}T${_pad(h)}${_pad(m)}00`;
+}
+function _addMin(dt, mins) {
+  const yr = parseInt(dt.slice(0, 4)), mo = parseInt(dt.slice(4, 6)) - 1,
+        dy = parseInt(dt.slice(6, 8)), hr = parseInt(dt.slice(9, 11)),
+        mn = parseInt(dt.slice(11, 13));
+  const d = new Date(yr, mo, dy, hr, mn + mins);
+  return `${d.getFullYear()}${_pad(d.getMonth()+1)}${_pad(d.getDate())}T${_pad(d.getHours())}${_pad(d.getMinutes())}00`;
+}
+function _icsEsc(s) {
+  return (s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+}
+function _icsFold(line) {
+  const chars = [...line], chunks = [];
+  while (chars.length > 75) chunks.push(chars.splice(0, 75).join(''));
+  chunks.push(chars.join(''));
+  return chunks.join('\r\n ');
+}
+const _DUR = { hotel: 1440, restaurant: 90, experience: 90, flight: 120, transfer: 60, event: 60, other: 60 };
+
+function _icsRange(booking) {
+  const raw = booking.metadata;
+  const meta = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
+  const dateStr = booking.date ? String(booking.date).slice(0, 10) : null;
+  const timeStr = booking.time || null;
+
+  if (booking.type === 'hotel') {
+    const ci = meta.checkInDate || dateStr, co = meta.checkOutDate || null;
+    const inT = meta.checkInTime || null, outT = meta.checkOutTime || null;
+    if (inT && outT && ci && co) return { s: _fmtDT(ci, inT), e: _fmtDT(co, outT), allDay: false };
+    if (inT && ci) { const s = _fmtDT(ci, inT); return { s, e: _addMin(s, 60), allDay: false }; }
+    const s = _fmtAllDay(ci);
+    const endDate = co || ci, ep = _parseDateStr(endDate);
+    const nd = ep ? new Date(ep.year, ep.month - 1, ep.day + 1) : null;
+    const e = nd ? `${nd.getFullYear()}${_pad(nd.getMonth()+1)}${_pad(nd.getDate())}` : s;
+    return { s, e, allDay: true };
+  }
+  if (booking.type === 'flight') {
+    const dep = meta.departureDate || dateStr, depT = meta.departureTime || timeStr;
+    const arr = meta.arrivalDate || null, arrT = meta.arrivalTime || null;
+    const s = _fmtDT(dep, depT || '00:00');
+    const e = (arr || arrT) ? _fmtDT(arr || dep, arrT || '02:00') : _addMin(s, _DUR.flight);
+    return { s, e, allDay: false };
+  }
+  if (booking.type === 'transfer') {
+    const s = _fmtDT(dateStr, meta.pickupTime || timeStr || '00:00');
+    return { s, e: _addMin(s, _DUR.transfer), allDay: false };
+  }
+  if (booking.type === 'event') {
+    const s = _fmtDT(dateStr, timeStr || '00:00');
+    return { s, e: meta.endTime ? _fmtDT(dateStr, meta.endTime) : _addMin(s, _DUR.event), allDay: false };
+  }
+  if (booking.type === 'experience') {
+    const s = _fmtDT(dateStr, timeStr || '00:00');
+    return { s, e: _addMin(s, meta.durationMinutes ? Number(meta.durationMinutes) : _DUR.experience), allDay: false };
+  }
+  if (booking.type === 'restaurant') {
+    const s = _fmtDT(dateStr, timeStr || '00:00');
+    return { s, e: _addMin(s, _DUR.restaurant), allDay: false };
+  }
+  const s = _fmtDT(dateStr, timeStr || '00:00');
+  return { s, e: _addMin(s, _DUR.other), allDay: false };
+}
+
+function _icsDesc(booking, tripName) {
+  const meta = booking.metadata ? (typeof booking.metadata === 'string' ? JSON.parse(booking.metadata) : booking.metadata) : {};
+  const catLabel = { hotel:'Hotel', restaurant:'Restaurant', experience:'Experience', flight:'Flight', transfer:'Transfer', event:'Event', other:'Other' }[booking.type] || booking.type;
+  const lines = [];
+  if (tripName) lines.push(`HiddenAtlas trip: ${tripName}`);
+  if (booking.dayNumber) lines.push(`Day: ${booking.dayNumber}`);
+  lines.push(`Type: ${catLabel}`);
+  if (booking.provider)              lines.push(`Provider: ${booking.provider}`);
+  if (booking.confirmationReference) lines.push(`Reference: ${booking.confirmationReference}`);
+  if (booking.notes)                 lines.push(`Notes: ${booking.notes}`);
+  if (booking.url)                   lines.push(`View booking: ${booking.url}`);
+  if (booking.address)               lines.push(`Address: ${booking.address}`);
+  return lines.join('\n');
+}
+
+function generateBookingIcs(booking, tripName) {
+  const range = _icsRange(booking);
+  if (!range?.s) return null;
+  const { s, e, allDay } = range;
+  const loc  = [booking.address, booking.locationName].filter(Boolean).join(', ');
+  const uid  = `hiddenatlas-booking-${booking.id}@hiddenatlas.travel`;
+  const now  = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const desc = _icsDesc(booking, tripName);
+  const slug = (booking.title || booking.id).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//HiddenAtlas//My Trips//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    _icsFold(`UID:${uid}`),
+    _icsFold(`DTSTAMP:${now}`),
+    _icsFold(allDay ? `DTSTART;VALUE=DATE:${s}` : `DTSTART:${s}`),
+    _icsFold(allDay ? `DTEND;VALUE=DATE:${e}`   : `DTEND:${e}`),
+    _icsFold(`SUMMARY:${_icsEsc(booking.title)}`),
+    _icsFold(`DESCRIPTION:${_icsEsc(desc)}`),
+  ];
+  if (loc)         lines.push(_icsFold(`LOCATION:${_icsEsc(loc)}`));
+  if (booking.url) lines.push(_icsFold(`URL:${booking.url}`));
+  lines.push('END:VEVENT', 'END:VCALENDAR');
+
+  return { ics: lines.join('\r\n'), slug };
+}
+
+// ─────────────────────────────────────────────
 // Booking day-mapping helper
 // Returns { dayNumber, tripDayId } given a booking date and the trip's TripDays.
 // dayNumber = differenceInCalendarDays(bookingDate, startDate) + 1
@@ -85,6 +213,7 @@ function validateBooking(type, body, meta) {
 // GET    /api/trips                          — list all trips for user
 // GET    /api/trips?id=<uuid>                — get single trip with days (basic)
 // GET    /api/trips?id=<uuid>&action=workspace — full workspace data (trip + itinerary + items + notes + bookings + assets)
+// GET    /api/trips?action=booking-ics&bookingId=<id>&token=<jwt> — serve .ics calendar file
 // POST   /api/trips                          — save new trip (body: { trip, source })
 // POST   /api/trips?id=<uuid>                — log audit event (body: { eventType, metadata })
 // POST   /api/trips?action=track             — log client-side analytics event (optional auth)
@@ -141,6 +270,56 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Database error' });
     } finally {
       await pool.end();
+    }
+  }
+
+  // ── GET /api/trips?action=booking-ics&bookingId=<id> — serve ICS calendar file ──
+  // Accepts the Clerk JWT via Authorization header OR ?token= query param.
+  // The ?token= fallback is required so iOS Safari can navigate directly to the URL
+  // and trigger the system "Add to Calendar" sheet for text/calendar responses.
+  if (req.method === 'GET' && req.query.action === 'booking-ics' && req.query.bookingId) {
+    if (!process.env.CLERK_SECRET_KEY) return res.status(500).json({ error: 'Server misconfigured' });
+    const rawToken = req.query.token;
+    const authHeader = req.headers.authorization || (rawToken ? `Bearer ${rawToken}` : undefined);
+    let icsClerkId;
+    try { icsClerkId = await verifyAuth(authHeader); } catch {
+      return res.status(401).set('Content-Type', 'application/json').json({ error: 'Unauthorized' });
+    }
+    const icsPool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      const { rows: icsUsers } = await icsPool.query(
+        `SELECT id FROM "User" WHERE "clerkId" = $1`, [icsClerkId]
+      );
+      if (!icsUsers.length) return res.status(404).json({ error: 'User not found' });
+      const icsUserId = icsUsers[0].id;
+
+      const { rows: bRows } = await icsPool.query(
+        `SELECT b.id, b."tripId", b.type, b.title, b.date, b.time,
+                b."locationName", b.address, b.provider,
+                b."confirmationReference", b.notes, b.url,
+                b.metadata, b."dayNumber",
+                t.title AS "tripTitle", t.destination
+         FROM "TripBooking" b
+         JOIN "Trip" t ON t.id = b."tripId"
+         WHERE b.id = $1 AND t."userId" = $2`,
+        [req.query.bookingId, icsUserId]
+      );
+      if (!bRows.length) return res.status(404).json({ error: 'Booking not found' });
+      const bk = bRows[0];
+      const tripName = bk.tripTitle || bk.destination || '';
+      const result = generateBookingIcs(bk, tripName);
+      if (!result) return res.status(422).json({ error: 'Not enough date/time information to generate calendar event' });
+
+      const filename = `hiddenatlas-booking-${result.slug}.ics`;
+      res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).send(result.ics);
+    } catch (e) {
+      console.error('[trips/booking-ics]', e.message);
+      return res.status(500).json({ error: 'Internal server error' });
+    } finally {
+      await icsPool.end();
     }
   }
 

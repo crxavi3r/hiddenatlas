@@ -4,11 +4,15 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Calendar, Clock, Users, MapPin, Download, Pencil, Trash2,
   Plus, X, Map, FileText, Bookmark, BookOpen, Check, Star, ChevronRight,
-  ChevronDown, RotateCcw,
+  ChevronDown, RotateCcw, CalendarPlus, ExternalLink, Copy,
 } from 'lucide-react';
 import { useAuth } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
 import { itineraries as staticItineraries } from '../data/itineraries';
+import {
+  calendarReadiness, buildGoogleCalendarUrl, buildIcsApiUrl,
+  downloadIcsFallback, buildCopyText,
+} from '../lib/calendarExport';
 import { useSEO } from '../hooks/useSEO';
 import { useIsMobile } from '../hooks/useIsMobile';
 import JapanRouteMap from '../components/JapanRouteMap';
@@ -993,6 +997,128 @@ function NoteCard({ note, onDelete, onEdit }) {
 }
 
 // ─────────────────────────────────────────────
+// CalendarDropdown — "Add to calendar" action
+// ─────────────────────────────────────────────
+function CalendarDropdown({ booking, tripName, itineraryDayStops = [] }) {
+  const [open, setOpen]   = useState(false);
+  const [toast, setToast] = useState('');
+  const ref               = useRef(null);
+  const { getToken }      = useAuth();
+  const readiness         = calendarReadiness(booking);
+
+  useEffect(() => {
+    if (!open) return;
+    function close(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
+  const disabled = readiness === 'missing';
+
+  function showToast(msg) {
+    setToast(msg);
+    setTimeout(() => setToast(''), 2200);
+  }
+
+  function handleGoogle() {
+    const url = buildGoogleCalendarUrl(booking, tripName, itineraryDayStops);
+    if (url) window.open(url, '_blank', 'noopener,noreferrer');
+    setOpen(false);
+  }
+
+  async function handleIcs() {
+    setOpen(false);
+    try {
+      const token = await getToken();
+      const apiUrl = buildIcsApiUrl(booking.id, token);
+      // Navigate via anchor — iOS Safari intercepts text/calendar and shows "Add to Calendar";
+      // desktop browsers download the attachment per Content-Disposition header.
+      const a = document.createElement('a');
+      a.href = apiUrl;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => document.body.removeChild(a), 200);
+    } catch {
+      // Fallback to client-side blob (desktop only)
+      downloadIcsFallback(booking, tripName, itineraryDayStops);
+    }
+  }
+
+  function handleCopy() {
+    const text = buildCopyText(booking, itineraryDayStops);
+    navigator.clipboard.writeText(text).catch(() => {});
+    showToast('Event details copied.');
+    setOpen(false);
+  }
+
+  const menuBtn = {
+    display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
+    padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer',
+    fontSize: '13px', color: CHAR, textAlign: 'left',
+  };
+
+  return (
+    <>
+      <div ref={ref} style={{ position: 'relative' }}>
+        <button
+          onClick={() => !disabled && setOpen(o => !o)}
+          title={disabled ? 'Add a date and time before sending this booking to your calendar' : 'Add to calendar'}
+          style={{
+            background: 'none', border: 'none', cursor: disabled ? 'default' : 'pointer',
+            color: disabled ? '#C8BFB5' : MUTED, padding: '2px',
+            display: 'flex', alignItems: 'center',
+          }}
+        >
+          <CalendarPlus size={12} />
+        </button>
+
+        {open && (
+          <div style={{
+            position: 'absolute', right: 0, top: '100%', marginTop: '4px',
+            background: 'white', border: `1px solid ${BORDER}`, borderRadius: '8px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.12)', zIndex: 200,
+            minWidth: '196px', overflow: 'hidden',
+          }}>
+            <button onClick={handleGoogle} style={menuBtn}
+              onMouseEnter={e => e.currentTarget.style.background = STONE}
+              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+            >
+              <ExternalLink size={13} color={TEAL} /> Google Calendar
+            </button>
+            <button onClick={handleIcs} style={{ ...menuBtn, borderTop: `1px solid ${BORDER}` }}
+              onMouseEnter={e => e.currentTarget.style.background = STONE}
+              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+            >
+              <Download size={13} color={TEAL} /> Apple / Outlook (.ics)
+            </button>
+            <button onClick={handleCopy} style={{ ...menuBtn, borderTop: `1px solid ${BORDER}` }}
+              onMouseEnter={e => e.currentTarget.style.background = STONE}
+              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+            >
+              <Copy size={13} color={TEAL} /> Copy event details
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: '28px', left: '50%', transform: 'translateX(-50%)',
+          background: CHAR, color: 'white', padding: '9px 18px', borderRadius: '6px',
+          fontSize: '13px', zIndex: 9999, pointerEvents: 'none',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+          whiteSpace: 'nowrap',
+        }}>
+          {toast}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────
 // BookingCard
 // ─────────────────────────────────────────────
 const CAT_COLORS = {
@@ -1000,7 +1126,7 @@ const CAT_COLORS = {
   flight: '#4A2D7D', transfer: '#7D5A2D', event: '#2D7D4A', other: MUTED,
 };
 
-function BookingCard({ booking, onDelete, onEdit, itineraryDayStops }) {
+function BookingCard({ booking, onDelete, onEdit, itineraryDayStops, tripName }) {
   const color = CAT_COLORS[booking.type] || MUTED;
   const catLabel = BOOKING_CATEGORIES.find(c => c.value === booking.type)?.label || booking.type;
   const linkedStop = booking.metadata?.itineraryDayStopId
@@ -1060,7 +1186,8 @@ function BookingCard({ booking, onDelete, onEdit, itineraryDayStops }) {
             </a>
           )}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, marginLeft: '8px' }}>
+          <CalendarDropdown booking={booking} tripName={tripName} itineraryDayStops={itineraryDayStops} />
           <button onClick={() => onEdit(booking)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '2px', display: 'flex', alignItems: 'center', gap: '3px', fontSize: '11px' }} title="Edit booking">
             <Pencil size={12} />
           </button>
@@ -1076,7 +1203,7 @@ function BookingCard({ booking, onDelete, onEdit, itineraryDayStops }) {
 // ─────────────────────────────────────────────
 // DayBookingItem — booking displayed inside a day
 // ─────────────────────────────────────────────
-function DayBookingItem({ booking, onEdit }) {
+function DayBookingItem({ booking, onEdit, tripName, itineraryDayStops = [] }) {
   const color = CAT_COLORS[booking.type] || MUTED;
   const catLabel = BOOKING_CATEGORIES.find(c => c.value === booking.type)?.label || booking.type;
   const meta = booking.metadata || {};
@@ -1104,9 +1231,12 @@ function DayBookingItem({ booking, onEdit }) {
           <p style={{ fontSize: '11px', fontFamily: 'monospace', color: TEAL, marginTop: '2px' }}>{booking.confirmationReference}</p>
         )}
       </div>
-      <button onClick={() => onEdit(booking)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '2px', flexShrink: 0 }} title="Edit booking">
-        <Pencil size={12} />
-      </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+        <CalendarDropdown booking={booking} tripName={tripName} itineraryDayStops={itineraryDayStops} />
+        <button onClick={() => onEdit(booking)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '2px' }} title="Edit booking">
+          <Pencil size={12} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -1115,7 +1245,7 @@ function DayBookingItem({ booking, onEdit }) {
 // DaySection — one full day in the timeline
 // ─────────────────────────────────────────────
 
-function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, hiddenStopIds = [] }) {
+function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, hiddenStopIds = [], tripName = '' }) {
   const [expanded,     setExpanded]     = useState(true);
   const [confirmHide,  setConfirmHide]  = useState(null);  // stop object pending confirmation
   const [lastHidden,   setLastHidden]   = useState(null);  // { stopId, stopTitle } for undo
@@ -1241,6 +1371,7 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
                                     {b.title}
                                     {b.confirmationReference && <span style={{ color: '#8C7A60', marginLeft: '6px', fontFamily: 'monospace', fontSize: '11px' }}>#{b.confirmationReference}</span>}
                                   </span>
+                                  <CalendarDropdown booking={b} tripName={tripName} itineraryDayStops={itinDayStops} />
                                   <button type="button" onClick={() => onEditBooking(b)}
                                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '1px', flexShrink: 0 }}>
                                     <Pencil size={11} />
@@ -1337,7 +1468,7 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
             {/* Day-level bookings not linked to a specific stop */}
             {dayOnlyBookings.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                {dayOnlyBookings.map(b => <DayBookingItem key={b.id} booking={b} onEdit={onEditBooking} />)}
+                {dayOnlyBookings.map(b => <DayBookingItem key={b.id} booking={b} onEdit={onEditBooking} tripName={tripName} itineraryDayStops={itinDayStops} />)}
               </div>
             )}
 
@@ -1564,7 +1695,8 @@ function OverviewTab({ workspace, onEditDetails }) {
 // DaysTab
 // ─────────────────────────────────────────────
 function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, onDeleteItem, onEditBooking }) {
-  const { itinerary, tripDays, tripItems, tripNotes, tripBookings, assets, itineraryDayStops = [], hiddenStopIds = [] } = workspace;
+  const { itinerary, tripDays, tripItems, tripNotes, tripBookings, assets, itineraryDayStops = [], hiddenStopIds = [], trip } = workspace;
+  const tripName = trip?.title || trip?.destination || '';
   const content = parseContent(itinerary?.content);
   const itinDays = (content?.days || []).map(normalizeDay);
 
@@ -1614,6 +1746,7 @@ function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFr
               hiddenStopIds={hiddenStopIds}
               onDeleteItem={onDeleteItem}
               onEditBooking={onEditBooking}
+              tripName={tripName}
             />
           );
         })}
@@ -1771,6 +1904,7 @@ function NotesTab({ workspace, onAddNote, onDeleteNote, onEditNote }) {
 // ─────────────────────────────────────────────
 function BookingsTab({ workspace, onAddBooking, onDeleteBooking, onEditBooking }) {
   const { tripBookings, trip, itineraryDayStops = [] } = workspace;
+  const tripName = trip?.title || trip?.destination || '';
   const startDate = trip?.startDate ? trip.startDate.slice(0, 10) : null;
 
   // Sort by date ascending (nulls last), then createdAt
@@ -1812,7 +1946,7 @@ function BookingsTab({ workspace, onAddBooking, onDeleteBooking, onEditBooking }
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {sorted.map(b => (
-          <BookingCard key={b.id} booking={b} onDelete={onDeleteBooking} onEdit={onEditBooking} itineraryDayStops={itineraryDayStops} />
+          <BookingCard key={b.id} booking={b} onDelete={onDeleteBooking} onEdit={onEditBooking} itineraryDayStops={itineraryDayStops} tripName={tripName} />
         ))}
       </div>
     </div>
