@@ -9,6 +9,15 @@ const { Pool } = pg;
 // Mirrors src/lib/calendarExport.js — kept inline to avoid bundler coupling.
 // ─────────────────────────────────────────────
 function _pad(n) { return String(n).padStart(2, '0'); }
+
+// Normalise a value that may be a JS Date object (pg timestamptz) or a
+// "YYYY-MM-DD..." string into a "YYYY-MM-DD" string, or null.
+function _normDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return val.toISOString().slice(0, 10);
+  const s = String(val);
+  return s.match(/^\d{4}-\d{2}-\d{2}/) ? s.slice(0, 10) : null;
+}
 function _parseDateStr(s) {
   if (!s) return null;
   const [y, m, d] = s.split('-').map(Number);
@@ -22,9 +31,11 @@ function _fmtDT(dateStr, timeStr) {
   const p = _parseDateStr(dateStr);
   if (!p) return null;
   const [h = 0, m = 0] = (timeStr || '00:00').split(':').map(Number);
-  return `${p.year}${_pad(p.month)}${_pad(p.day)}T${_pad(h)}${_pad(m)}00`;
+  return `${p.year}${_pad(p.month)}${_pad(p.day)}T${_pad(h || 0)}${_pad(m || 0)}00`;
 }
+// Returns null when dt is null/undefined rather than crashing.
 function _addMin(dt, mins) {
+  if (!dt) return null;
   const yr = parseInt(dt.slice(0, 4)), mo = parseInt(dt.slice(4, 6)) - 1,
         dy = parseInt(dt.slice(6, 8)), hr = parseInt(dt.slice(9, 11)),
         mn = parseInt(dt.slice(11, 13));
@@ -45,7 +56,8 @@ const _DUR = { hotel: 1440, restaurant: 90, experience: 90, flight: 120, transfe
 function _icsRange(booking) {
   const raw = booking.metadata;
   const meta = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {};
-  const dateStr = booking.date ? String(booking.date).slice(0, 10) : null;
+  // booking.date is a JS Date object from pg (timestamptz column) — normalise it.
+  const dateStr = _normDate(booking.date);
   const timeStr = booking.time || null;
 
   if (booking.type === 'hotel') {
@@ -307,17 +319,28 @@ export default async function handler(req, res) {
       if (!bRows.length) return res.status(404).json({ error: 'Booking not found' });
       const bk = bRows[0];
       const tripName = bk.tripTitle || bk.destination || '';
-      const result = generateBookingIcs(bk, tripName);
-      if (!result) return res.status(422).json({ error: 'Not enough date/time information to generate calendar event' });
 
+      console.log('[trips/booking-ics] booking:', {
+        id: bk.id, type: bk.type, title: bk.title,
+        date: bk.date, dateNorm: _normDate(bk.date),
+        time: bk.time, metadata: bk.metadata, dayNumber: bk.dayNumber,
+      });
+
+      const result = generateBookingIcs(bk, tripName);
+      if (!result) {
+        console.warn('[trips/booking-ics] no date/time usable — returning 400');
+        return res.status(400).json({ error: 'Booking does not have enough date/time information for calendar export' });
+      }
+
+      console.log('[trips/booking-ics] ICS length:', result.ics.length, 'slug:', result.slug);
       const filename = `hiddenatlas-booking-${result.slug}.ics`;
       res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
       res.setHeader('Cache-Control', 'no-store');
       return res.status(200).send(result.ics);
     } catch (e) {
-      console.error('[trips/booking-ics]', e.message);
-      return res.status(500).json({ error: 'Internal server error' });
+      console.error('[trips/booking-ics] exception:', e.message, e.stack);
+      return res.status(500).json({ error: 'Internal server error', detail: e.message });
     } finally {
       await icsPool.end();
     }
