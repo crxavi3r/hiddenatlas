@@ -60,12 +60,16 @@ export async function downloadPersonalisedPDF(workspace) {
     })
   );
 
-  // Extract additional fields from parsed content for the journey overview page
+  // Extract additional fields from parsed content for journey overview + route map pages
   const highlights = content?.summary?.highlights
     || (Array.isArray(itinerary?.highlights) ? itinerary.highlights : [])
     || [];
-  const nights    = itinerary?.nights    || content?.summary?.nights    || null;
-  const groupSize = itinerary?.groupSize || content?.summary?.groupSize || null;
+  const nights        = itinerary?.nights    || content?.summary?.nights    || null;
+  const groupSize     = itinerary?.groupSize || content?.summary?.groupSize || null;
+  // CMS route map stops — used as fallback when ItineraryDayStop rows lack coordinates
+  const routeMapStops = content?.pdfConfig?.routeMapStops
+    || content?.routeMapStops
+    || [];
 
   const resolvedItinerary = {
     id:          itinerary?.id   || '',
@@ -80,6 +84,7 @@ export async function downloadPersonalisedPDF(workspace) {
     nights,
     groupSize,
     highlights,
+    routeMapStops,
     coverImage:  coverBase64 || null,
     dayStops:    itineraryDayStops,
     // itinerary.days = resolved days WITH base64 images — PersonalisedItineraryPDF prefers these

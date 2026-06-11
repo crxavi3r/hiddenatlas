@@ -190,9 +190,8 @@ function formatDate(iso) {
 }
 
 // Compute a booking's display date.
-// Priority: explicit booking.date > dayNumber + trip.startDate offset
+// Priority: dayNumber + trip.startDate (avoids UTC midnight timezone shift on stored dates) > booking.date
 function getBookingDateLabel(booking, trip) {
-  if (booking.date) return formatDate(booking.date);
   if (booking.dayNumber && trip?.startDate) {
     const base = parseDateLocal(trip.startDate);
     if (base && !isNaN(base)) {
@@ -200,6 +199,7 @@ function getBookingDateLabel(booking, trip) {
       return base.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
     }
   }
+  if (booking.date) return formatDate(booking.date);
   return null;
 }
 
@@ -480,13 +480,20 @@ function CarRentalCard({ booking }) {
   );
 }
 
-// Detect if a booking is a car rental (explicit type or metadata hints)
+// Detect if a booking is a car rental (explicit metadata or text patterns in title/notes)
 function isCarRental(b) {
-  if (b.type === 'transfer') return false; // transfers are not car rentals
-  const meta = b.metadata || {};
+  if (b.type === 'transfer') return false;
+  const meta  = b.metadata || {};
   const title = (b.title || '').toLowerCase();
-  return !!(meta.pickupDate || meta.returnDate || meta.carType ||
-    title.includes('car rental') || title.includes('rent a car') || title.includes('car hire'));
+  const notes = (b.notes || '').toLowerCase();
+  if (meta.pickupDate || meta.returnDate || meta.carType) return true;
+  if (title.includes('car rental') || title.includes('rent a car') || title.includes('car hire') ||
+      title.includes('rent-a-car') || title.includes('alquiler')) return true;
+  // Notes-based detection: pasted car rental confirmation (pickup + return mentioned)
+  const hasPickup = notes.includes('pickup') || notes.includes('pick up') || notes.includes('recogida') || notes.includes('pick-up');
+  const hasReturn = notes.includes('return') || notes.includes('devolucion') || notes.includes('dropoff') || notes.includes('drop off');
+  if (hasPickup && hasReturn) return true;
+  return false;
 }
 
 // User-added TripItem card
@@ -645,7 +652,8 @@ function JourneyOverviewPage({ itinerary, contentDays, trip }) {
 
 // Personalised route SVG map page
 function PersonalisedRouteMapPage({ itinerary, itineraryDayStops, hiddenStopIds, tripItems }) {
-  const baseStops = (itineraryDayStops || [])
+  // Primary source: ItineraryDayStop rows with coordinates (hidden stops excluded)
+  const dayStopBases = (itineraryDayStops || [])
     .map(s => ({ ...s, latitude: parseCoordValue(s.latitude), longitude: parseCoordValue(s.longitude) }))
     .filter(s => s.showOnMap !== false && s.latitude != null && s.longitude != null)
     .filter(s => !hiddenStopIds.includes(s.id))
@@ -654,6 +662,28 @@ function PersonalisedRouteMapPage({ itinerary, itineraryDayStops, hiddenStopIds,
       type: s.isMajorStop ? 'major' : 'stop',
       dayNumber: s.dayNumber, order: s.sortOrder, isUserAdded: false,
     }));
+
+  // Fallback: CMS routeMapStops stored in itinerary.routeMapStops (from content.pdfConfig)
+  const cmsRouteStops = dayStopBases.length < 2
+    ? (itinerary.routeMapStops || [])
+        .map(s => ({
+          ...s,
+          latitude:  parseCoordValue(s.latitude),
+          longitude: parseCoordValue(s.longitude),
+        }))
+        .filter(s => s.visible !== false && s.latitude != null && s.longitude != null)
+        .map((s, i) => ({
+          name:      s.name || s.title || `Stop ${i + 1}`,
+          latitude:  s.latitude,
+          longitude: s.longitude,
+          type:      s.tier === 1 ? 'major' : 'stop',
+          dayNumber: s.day || s.dayNumber || i,
+          order:     s.order || i,
+          isUserAdded: false,
+        }))
+    : [];
+
+  const baseStops = dayStopBases.length >= 2 ? dayStopBases : cmsRouteStops;
 
   const userStops = (tripItems || [])
     .filter(i => !i.isHidden)
@@ -925,22 +955,32 @@ function PersonalisedDayPage({ tripDay, contentDay, itinerary, dayStops, hiddenS
 
             {dayCardBookings.length > 0 ? (
               <View style={{ marginBottom: 10 }}>
-                <Text style={s.personalSectionLabel}>YOUR BOOKINGS TODAY</Text>
-                {dayCardBookings.map(b => <BookingCard key={b.id} booking={b} trip={trip} />)}
+                {/* Keep section label + first card together to prevent orphan headers */}
+                <View wrap={false}>
+                  <Text style={s.personalSectionLabel}>YOUR BOOKINGS TODAY</Text>
+                  <BookingCard booking={dayCardBookings[0]} trip={trip} />
+                </View>
+                {dayCardBookings.slice(1).map(b => <BookingCard key={b.id} booking={b} trip={trip} />)}
               </View>
             ) : null}
 
             {userItems.length > 0 ? (
               <View style={{ marginBottom: 10 }}>
-                <Text style={s.personalSectionLabel}>YOUR ADDITIONS</Text>
-                {userItems.map(item => <AddedItemCard key={item.id} item={item} />)}
+                <View wrap={false}>
+                  <Text style={s.personalSectionLabel}>YOUR ADDITIONS</Text>
+                  <AddedItemCard item={userItems[0]} />
+                </View>
+                {userItems.slice(1).map(item => <AddedItemCard key={item.id} item={item} />)}
               </View>
             ) : null}
 
             {dayNotes.length > 0 ? (
               <View>
-                <Text style={s.personalSectionLabel}>YOUR NOTES</Text>
-                {dayNotes.map(n => <NoteBox key={n.id} note={n} />)}
+                <View wrap={false}>
+                  <Text style={s.personalSectionLabel}>YOUR NOTES</Text>
+                  <NoteBox note={dayNotes[0]} />
+                </View>
+                {dayNotes.slice(1).map(n => <NoteBox key={n.id} note={n} />)}
               </View>
             ) : null}
           </View>
@@ -1049,16 +1089,20 @@ export default function PersonalisedItineraryPDF({ itinerary, personalisationCon
     (a.sortOrder ?? a.dayNumber) - (b.sortOrder ?? b.dayNumber)
   );
 
-  // Route map: show when ≥2 stops with parseable coordinates (after filtering hidden)
-  const validMapStops = itineraryDayStops
-    .map(s => ({ ...s, lat: parseCoordValue(s.latitude), lng: parseCoordValue(s.longitude) }))
+  // Route map: show when ≥2 stops with parseable coordinates (after filtering hidden).
+  // ItineraryDayStops take priority; CMS routeMapStops are the fallback (same as ItineraryPDF).
+  const validDayStops = itineraryDayStops
+    .map(s => ({ lat: parseCoordValue(s.latitude), lng: parseCoordValue(s.longitude), showOnMap: s.showOnMap, id: s.id }))
     .filter(s => s.showOnMap !== false && s.lat != null && s.lng != null)
     .filter(s => !hiddenStopIds.includes(s.id));
+  const validCmsStops = (itinerary.routeMapStops || [])
+    .map(s => ({ lat: parseCoordValue(s.latitude), lng: parseCoordValue(s.longitude), visible: s.visible }))
+    .filter(s => s.visible !== false && s.lat != null && s.lng != null);
   const userMapItems = tripItems
     .filter(i => !i.isHidden)
-    .map(i => ({ ...i, lat: parseCoordValue(i.latitude), lng: parseCoordValue(i.longitude) }))
+    .map(i => ({ lat: parseCoordValue(i.latitude), lng: parseCoordValue(i.longitude) }))
     .filter(i => i.lat != null && i.lng != null);
-  const hasRouteMap = (validMapStops.length + userMapItems.length) >= 2;
+  const hasRouteMap = (validDayStops.length + validCmsStops.length + userMapItems.length) >= 2;
 
   const pages = [
     <PersonalisedCoverPage key="cover" itinerary={itinerary} trip={trip} />,
