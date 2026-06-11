@@ -2637,12 +2637,12 @@ export default function TripDetailPage() {
       </div>
 
       {/* ── Modals ─────────────────────────────────────────── */}
-      {showShare && (
-        <ShareModal
-          tripId={id}
-          onClose={() => setShowShare(false)}
-        />
-      )}
+      <ShareModal
+        tripId={id}
+        tripTitle={title}
+        open={showShare}
+        onClose={() => setShowShare(false)}
+      />
 
       {showDetails && access.canEdit && (
         <TripDetailsModal
