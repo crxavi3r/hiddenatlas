@@ -28,10 +28,10 @@ const PAGE_H = 841.89;
 
 const s = StyleSheet.create({
   // ── Cover ──────────────────────────────────────────────────────────────────
-  coverWrapper: { position: 'relative', width: PAGE_W, height: PAGE_H, overflow: 'hidden', backgroundColor: C.darkBg },
+  coverWrapper:  { position: 'relative', width: PAGE_W, height: PAGE_H, overflow: 'hidden', backgroundColor: C.darkBg },
   coverBg:       { position: 'absolute', top: 0, left: 0, width: PAGE_W, height: PAGE_H, objectFit: 'cover' },
   coverOverlay:  { position: 'absolute', top: 0, left: 0, width: PAGE_W, height: PAGE_H, backgroundColor: 'rgba(10,18,14,0.60)' },
-  coverTopBar:   {
+  coverTopBar: {
     position: 'absolute', top: 0, left: 0, right: 0,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 52, paddingTop: 38,
@@ -42,7 +42,7 @@ const s = StyleSheet.create({
     position: 'absolute', top: 0, left: 0, width: PAGE_W, height: PAGE_H,
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 60,
   },
-  coverEyebrow: { fontFamily: 'Helvetica-Bold', fontSize: 8, letterSpacing: 3.5, color: C.gold, marginBottom: 20, textAlign: 'center' },
+  coverEyebrow:  { fontFamily: 'Helvetica-Bold', fontSize: 8, letterSpacing: 3.5, color: C.gold, marginBottom: 20, textAlign: 'center' },
   coverTitle:    { fontFamily: 'Times-Bold', fontSize: 64, color: C.white, lineHeight: 1.05, marginBottom: 14, textAlign: 'center' },
   coverSubtitle: { fontFamily: 'Helvetica', fontSize: 15, color: 'rgba(255,255,255,0.70)', textAlign: 'center', lineHeight: 1.55, marginBottom: 32 },
   coverGoldLine: { width: 52, height: 1.5, backgroundColor: C.gold },
@@ -56,12 +56,6 @@ const s = StyleSheet.create({
   coverMetaSep:   { width: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: 0 },
   coverMetaLabel: { fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: 1.5, color: C.gold, marginBottom: 4 },
   coverMetaValue: { fontFamily: 'Helvetica', fontSize: 11, color: 'rgba(255,255,255,0.82)', lineHeight: 1.35 },
-  coverPersonalBadge: {
-    position: 'absolute', top: 42, right: 52,
-    backgroundColor: 'rgba(201,169,110,0.18)', borderWidth: 0.75, borderColor: 'rgba(201,169,110,0.50)',
-    borderRadius: 2, paddingVertical: 4, paddingHorizontal: 8,
-  },
-  coverPersonalBadgeText: { fontFamily: 'Helvetica-Bold', fontSize: 6.5, letterSpacing: 1.5, color: C.gold },
 
   // ── Running header ─────────────────────────────────────────────────────────
   header: {
@@ -72,16 +66,36 @@ const s = StyleSheet.create({
   headerBrand:   { fontFamily: 'Times-Bold', fontSize: 10, color: C.teal, letterSpacing: 0.5 },
   headerSection: { fontFamily: 'Helvetica', fontSize: 7.5, letterSpacing: 1.5, color: C.muted },
 
+  // ── Journey overview / expedition route page ────────────────────────────────
+  mapPage:          { backgroundColor: C.stone },
+  mapBanner:        { backgroundColor: C.tealMid, paddingHorizontal: 48, paddingTop: 26, paddingBottom: 26 },
+  mapBannerEyebrow: { fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 2.5, color: 'rgba(255,255,255,0.45)', marginBottom: 6 },
+  mapBannerTitle:   { fontFamily: 'Times-Bold', fontSize: 26, color: C.white, marginBottom: 4 },
+  mapBannerSub:     { fontFamily: 'Helvetica', fontSize: 10, color: 'rgba(255,255,255,0.60)' },
+  mapHighlights:    { paddingHorizontal: 48, paddingTop: 16, paddingBottom: 24, breakInside: 'avoid' },
+  mapHlLabel:       { fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 2.5, color: C.teal, marginBottom: 10 },
+  mapHlGrid:        { flexDirection: 'row', flexWrap: 'wrap' },
+  mapHlItem:        { width: '50%', flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 7, paddingRight: 12, breakInside: 'avoid' },
+  mapHlDot:         { width: 5, height: 5, borderRadius: 3, backgroundColor: C.gold, marginTop: 3.5, flexShrink: 0 },
+  mapHlText:        { fontFamily: 'Helvetica', fontSize: 9.5, color: C.charcoal, lineHeight: 1.55, flex: 1 },
+  timelineWrap:     { paddingHorizontal: 48, paddingTop: 22, paddingBottom: 10 },
+  timelineRow:      { flexDirection: 'row', breakInside: 'avoid' },
+  timelineTrack:    { width: 22, alignItems: 'center', flexShrink: 0 },
+  timelineDot:      { width: 9, height: 9, borderRadius: 5, backgroundColor: C.teal, marginTop: 4, flexShrink: 0 },
+  timelineConnector:{ width: 1.5, flex: 1, backgroundColor: C.border, marginTop: 2 },
+  timelineContent:  { flex: 1, paddingLeft: 12, paddingBottom: 12 },
+  timelineDayLabel: { fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: 2, color: C.gold, marginBottom: 3 },
+  timelineRoute:    { fontFamily: 'Helvetica', fontSize: 10, color: C.charcoal, lineHeight: 1.4 },
+
   // ── Trip details page ──────────────────────────────────────────────────────
-  detailsBody: { paddingHorizontal: 48, paddingTop: 28, paddingBottom: 32 },
+  detailsBody:    { paddingHorizontal: 48, paddingTop: 28, paddingBottom: 32 },
   detailsEyebrow: { fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 2.5, color: C.teal, marginBottom: 14 },
   detailsTitle:   { fontFamily: 'Times-Bold', fontSize: 28, color: C.charcoal, lineHeight: 1.15, marginBottom: 4 },
   detailsRule:    { width: 32, height: 1.5, backgroundColor: C.gold, marginTop: 16, marginBottom: 22 },
-  detailBox: {
-    backgroundColor: C.cream, borderRadius: 4, padding: 16, marginBottom: 16,
-  },
+  detailBox:      { backgroundColor: C.cream, borderRadius: 4, padding: 16, marginBottom: 16 },
   detailRow:      { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
-  detailLabel:    { fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 1.5, color: C.teal, width: 120, flexShrink: 0, paddingTop: 1.5 },
+  // letterSpacing intentionally 0 — these are plain labels ("Dates", "Travellers"), not badges
+  detailLabel:    { fontFamily: 'Helvetica-Bold', fontSize: 9, color: C.teal, width: 124, flexShrink: 0, paddingTop: 0.5 },
   detailValue:    { fontFamily: 'Helvetica', fontSize: 10, color: C.charcoal, flex: 1, lineHeight: 1.55 },
   detailBoxLabel: { fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: 2, color: C.teal, marginBottom: 12 },
   accommodationTitle: { fontFamily: 'Times-Bold', fontSize: 11, color: C.charcoal, marginBottom: 2 },
@@ -89,7 +103,6 @@ const s = StyleSheet.create({
   accommodationRef:   { fontFamily: 'Helvetica-Bold', fontSize: 9, color: C.teal },
 
   // ── Route map page ─────────────────────────────────────────────────────────
-  mapPage: { backgroundColor: C.stone },
   mapHeader: {
     paddingHorizontal: 48, paddingTop: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between',
@@ -97,67 +110,55 @@ const s = StyleSheet.create({
   },
 
   // ── Day pages ──────────────────────────────────────────────────────────────
-  dayPage:   { backgroundColor: C.white },
-  dayImg:    { width: '100%', height: 205, objectFit: 'cover', objectPosition: 'center', breakInside: 'avoid' },
-  dayBody:   { paddingHorizontal: 48, paddingTop: 22, paddingBottom: 24, breakInside: 'avoid' },
-  dayChip:   { fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 2.5, color: C.gold, marginBottom: 7 },
-  dayTitle:  { fontFamily: 'Times-Bold', fontSize: 21, color: C.charcoal, lineHeight: 1.22, widows: 2, orphans: 2 },
-  dayRule:   { width: 26, height: 1.5, backgroundColor: C.gold, marginTop: 12, marginBottom: 14 },
-  dayDesc:   { fontFamily: 'Helvetica', fontSize: 10, color: C.muted, lineHeight: 1.78, marginBottom: 14 },
-  dayBulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, marginBottom: 5, breakInside: 'avoid' },
-  dayBulletDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: C.teal, marginTop: 3.5, flexShrink: 0 },
-  dayBulletText:{ fontFamily: 'Helvetica', fontSize: 9.5, color: C.charcoal, lineHeight: 1.58, flex: 1 },
+  dayPage:       { backgroundColor: C.white },
+  dayImg:        { width: '100%', height: 205, objectFit: 'cover', objectPosition: 'center', breakInside: 'avoid' },
+  dayBody:       { paddingHorizontal: 48, paddingTop: 22, paddingBottom: 24, breakInside: 'avoid' },
+  dayChip:       { fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 2.5, color: C.gold, marginBottom: 7 },
+  dayTitle:      { fontFamily: 'Times-Bold', fontSize: 21, color: C.charcoal, lineHeight: 1.22, widows: 2, orphans: 2 },
+  dayRule:       { width: 26, height: 1.5, backgroundColor: C.gold, marginTop: 12, marginBottom: 14 },
+  dayDesc:       { fontFamily: 'Helvetica', fontSize: 10, color: C.muted, lineHeight: 1.78, marginBottom: 14 },
+  dayBulletRow:  { flexDirection: 'row', alignItems: 'flex-start', gap: 9, marginBottom: 5, breakInside: 'avoid' },
+  dayBulletDot:  { width: 4, height: 4, borderRadius: 2, backgroundColor: C.teal, marginTop: 3.5, flexShrink: 0 },
+  dayBulletText: { fontFamily: 'Helvetica', fontSize: 9.5, color: C.charcoal, lineHeight: 1.58, flex: 1 },
   tipBox: {
     backgroundColor: C.mapBg, borderLeftWidth: 3, borderLeftColor: C.gold,
     borderRadius: 4, paddingHorizontal: 16, paddingVertical: 11, breakInside: 'avoid',
   },
-  tipLabel: { fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: 2, color: C.gold, marginBottom: 5 },
-  tipText:  { fontFamily: 'Helvetica', fontSize: 9.5, color: C.charcoal, lineHeight: 1.65 },
-  stayRow:  {
-    flexDirection: 'row', gap: 8, marginTop: 14, paddingTop: 12,
-    borderTopWidth: 1, borderTopColor: C.border, alignItems: 'center', breakInside: 'avoid',
-  },
+  tipLabel:  { fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: 2, color: C.gold, marginBottom: 5 },
+  tipText:   { fontFamily: 'Helvetica', fontSize: 9.5, color: C.charcoal, lineHeight: 1.65 },
+  stayRow:   { flexDirection: 'row', gap: 8, marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: C.border, alignItems: 'center', breakInside: 'avoid' },
   stayLabel: { fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 1.5, color: C.muted },
   stayValue: { fontFamily: 'Helvetica', fontSize: 10, color: C.charcoal },
 
-  // ── Personalisation sections (in day pages) ────────────────────────────────
-  personalDivider: { borderTopWidth: 0.75, borderTopColor: C.border, marginTop: 18, marginBottom: 14 },
-  personalSectionLabel: {
-    fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: 2, color: C.teal,
-    marginBottom: 8, textTransform: 'uppercase',
-  },
+  // ── Personalisation sections ───────────────────────────────────────────────
+  personalDivider:      { borderTopWidth: 0.75, borderTopColor: C.border, marginTop: 18, marginBottom: 14 },
+  personalSectionLabel: { fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: 2, color: C.teal, marginBottom: 8 },
 
   // Booking card
   bookingCard: {
     borderWidth: 0.75, borderColor: C.border, borderRadius: 3,
     paddingHorizontal: 12, paddingVertical: 9, marginBottom: 8, breakInside: 'avoid',
   },
-  bookingTypeBadge: {
-    fontFamily: 'Helvetica-Bold', fontSize: 6.5, letterSpacing: 1.5,
-    color: C.gold, marginBottom: 3,
+  bookingTypePill: {
+    backgroundColor: C.teal, paddingVertical: 2, paddingHorizontal: 5,
+    borderRadius: 2, alignSelf: 'flex-start', marginBottom: 5,
   },
-  bookingTitle: { fontFamily: 'Helvetica-Bold', fontSize: 10, color: C.charcoal, marginBottom: 2 },
-  bookingMeta:  { fontFamily: 'Helvetica', fontSize: 9, color: C.muted, lineHeight: 1.5 },
-  bookingRef:   { fontFamily: 'Helvetica-Bold', fontSize: 9, color: C.teal, marginTop: 2 },
+  bookingTypePillText: { fontFamily: 'Helvetica-Bold', fontSize: 6, letterSpacing: 0.8, color: C.white },
+  bookingTitle:    { fontFamily: 'Helvetica-Bold', fontSize: 10, color: C.charcoal, marginBottom: 2 },
+  bookingMeta:     { fontFamily: 'Helvetica', fontSize: 9, color: C.muted, lineHeight: 1.5 },
+  bookingRef:      { fontFamily: 'Helvetica-Bold', fontSize: 9, color: C.teal, marginTop: 2 },
 
   // Added item (user TripItem)
   addedCard: {
-    backgroundColor: '#F7F4EE',
-    borderLeftWidth: 2, borderLeftColor: C.teal,
+    backgroundColor: '#F7F4EE', borderLeftWidth: 2, borderLeftColor: C.teal,
     paddingHorizontal: 12, paddingVertical: 8, marginBottom: 6, breakInside: 'avoid',
   },
-  addedBadge: {
-    fontFamily: 'Helvetica-Bold', fontSize: 6.5, letterSpacing: 1.5,
-    color: C.teal, marginBottom: 3,
-  },
+  addedBadge: { fontFamily: 'Helvetica-Bold', fontSize: 6.5, letterSpacing: 1.5, color: C.teal, marginBottom: 3 },
   addedTitle: { fontFamily: 'Helvetica-Bold', fontSize: 10, color: C.charcoal, marginBottom: 2 },
   addedMeta:  { fontFamily: 'Helvetica', fontSize: 9, color: C.muted, lineHeight: 1.5 },
 
   // Note box
-  noteBox: {
-    backgroundColor: '#FFFBF2', borderLeftWidth: 2, borderLeftColor: C.gold,
-    paddingHorizontal: 12, paddingVertical: 8, marginBottom: 6, breakInside: 'avoid',
-  },
+  noteBox:     { backgroundColor: '#FFFBF2', borderLeftWidth: 2, borderLeftColor: C.gold, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 6, breakInside: 'avoid' },
   noteLabel:   { fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: 1.5, color: '#9B7B3A', marginBottom: 3 },
   noteContent: { fontFamily: 'Helvetica', fontSize: 9.5, color: C.charcoal, lineHeight: 1.6 },
 
@@ -172,127 +173,59 @@ function imgUrl(src) {
   return `${src.replace(/\?.*/, '')}?w=1000&q=85`;
 }
 
+// Parse a date string to a local Date, avoiding UTC midnight → previous-day shift.
+// "2026-06-04" or "2026-06-04T00:00:00.000Z" → Date(2026, 5, 4) in local time.
+function parseDateLocal(iso) {
+  if (!iso) return null;
+  const s = typeof iso === 'string' ? iso : (iso instanceof Date ? iso.toISOString() : String(iso));
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return new Date(s);
+}
+
 function formatDate(iso) {
-  if (!iso) return '';
-  try { return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return iso; }
+  const d = parseDateLocal(iso);
+  if (!d || isNaN(d)) return String(iso || '');
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+// Compute a booking's display date.
+// Priority: explicit booking.date > dayNumber + trip.startDate offset
+function getBookingDateLabel(booking, trip) {
+  if (booking.date) return formatDate(booking.date);
+  if (booking.dayNumber && trip?.startDate) {
+    const base = parseDateLocal(trip.startDate);
+    if (base && !isNaN(base)) {
+      base.setDate(base.getDate() + (booking.dayNumber - 1));
+      return base.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    }
+  }
+  return null;
 }
 
 function normalizeContentDay(d) {
   if (!d) return null;
   return {
-    dayNumber: d.dayNumber || d.day || 0,
+    dayNumber:   d.dayNumber || d.day || 0,
     title:       d.title || '',
     description: d.desc || d.description || '',
+    route:       d.route || d.title || '',
     bullets:     d.bullets || d.highlights || [],
     tip:         d.tip || d.insiderTip || '',
     stay:        d.stay || '',
+    // imgs are injected by downloadPersonalisedPDF after base64 resolution
     imgs:        d.imgs || [],
   };
 }
 
-// ── SVG helpers (Catmull-Rom spline) ─────────────────────────────────────────
-function _pdfProj(lon, lat, X0, X1, Y0, Y1, VW, VH) {
-  return [(lon - X0) / (X1 - X0) * VW, (1 - (lat - Y0) / (Y1 - Y0)) * VH];
-}
-
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function StarMark({ size = 12, color = C.gold }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 2 20 20">
-      <Polygon points="10,2 12,10 20,12 12,14 10,22 8,14 0,12 8,10" fill={color} />
-    </Svg>
-  );
-}
-
-function RunHeader({ country, title, badge }) {
-  const c = (country || '').toUpperCase();
-  const t = (title || '').toUpperCase();
-  const right = badge || (c && t ? `${c} — ${t}` : c || t);
-  return (
-    <View style={s.header}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <StarMark size={11} color={C.gold} />
-        <Text style={s.headerBrand}>HiddenAtlas</Text>
-      </View>
-      <Text style={s.headerSection}>{right}</Text>
-    </View>
-  );
-}
-
-// Compact booking card for day pages
-function BookingCard({ booking }) {
-  const meta = booking.metadata || {};
-  const timeParts = [booking.date ? formatDate(booking.date) : null, booking.time].filter(Boolean);
-  const adults = meta.adults || meta.guests || meta.pax;
-  const paid   = meta.totalAmount || meta.amount;
-  const currency = meta.currency || '';
-
-  return (
-    <View style={s.bookingCard} wrap={false}>
-      <Text style={s.bookingTypeBadge}>{(booking.type || 'BOOKING').toUpperCase()}</Text>
-      <Text style={s.bookingTitle}>{booking.title}</Text>
-      {timeParts.length > 0 && <Text style={s.bookingMeta}>{timeParts.join(' · ')}</Text>}
-      {meta.checkInDate && (
-        <Text style={s.bookingMeta}>
-          Check-in: {meta.checkInDate}{meta.checkInTime ? ` at ${meta.checkInTime}` : ''}
-          {meta.checkOutDate ? `  ·  Check-out: ${meta.checkOutDate}` : ''}
-        </Text>
-      )}
-      {booking.locationName && !meta.checkInDate && (
-        <Text style={s.bookingMeta}>{booking.locationName}</Text>
-      )}
-      {booking.confirmationReference && (
-        <Text style={s.bookingRef}>Ref: {booking.confirmationReference}</Text>
-      )}
-      {adults && paid ? (
-        <Text style={s.bookingMeta}>{adults} {Number(adults) === 1 ? 'person' : 'people'} · Paid: {paid} {currency}</Text>
-      ) : adults ? (
-        <Text style={s.bookingMeta}>{adults} {Number(adults) === 1 ? 'person' : 'people'}</Text>
-      ) : paid ? (
-        <Text style={s.bookingMeta}>Paid: {paid} {currency}</Text>
-      ) : null}
-      {booking.notes && <Text style={[s.bookingMeta, { marginTop: 2, fontStyle: 'italic' }]}>{booking.notes}</Text>}
-    </View>
-  );
-}
-
-// User-added TripItem card
-function AddedItemCard({ item }) {
-  const timePart = item.startTime && item.endTime
-    ? `${item.startTime} – ${item.endTime}`
-    : item.startTime || item.time || '';
-  return (
-    <View style={s.addedCard} wrap={false}>
-      <Text style={s.addedBadge}>ADDED BY YOU</Text>
-      <Text style={s.addedTitle}>{item.title}</Text>
-      {(timePart || item.locationName) ? (
-        <Text style={s.addedMeta}>{[timePart, item.locationName].filter(Boolean).join(' · ')}</Text>
-      ) : null}
-      {item.notes ? <Text style={[s.addedMeta, { marginTop: 2, fontStyle: 'italic' }]}>{item.notes}</Text> : null}
-    </View>
-  );
-}
-
-// TripNote box
-function NoteBox({ note }) {
-  return (
-    <View style={s.noteBox} wrap={false}>
-      {note.title ? <Text style={s.noteLabel}>{note.title.toUpperCase()}</Text> : null}
-      <Text style={s.noteContent}>{note.content}</Text>
-    </View>
-  );
-}
-
-// ── Dynamic route SVG map (personalised stops) ────────────────────────────────
-const MAP_W = 499; // PAGE_W - paddingHorizontal 48×2
-const MAP_H = Math.round(MAP_W * 0.58);
+// ── SVG route map ─────────────────────────────────────────────────────────────
+const MAP_W    = 499;
+const MAP_H    = Math.round(MAP_W * 0.58);
 const STOP_NUM_W = 22;
 const STOP_FS    = 9;
 const STOP_MB    = 5;
 const COL_GAP    = 16;
-
-const PDF_TIER_NUM = {
+const PDF_TIERS = {
   1: { r: 7,   sw: 1.8, fill: '#F2E4CB', edge: '#C9A96E', lFs: 8, dFs: 6 },
   2: { r: 5.5, sw: 1.4, fill: '#D5E8E6', edge: '#1B6B65', lFs: 7, dFs: 5 },
 };
@@ -309,7 +242,7 @@ function PersonalisedDynamicSvgMap({ stops = [] }) {
   const numberedRemote = remoteStops.map((s, i) => ({ ...s, num: mainStops.length + i + 1 }));
 
   const layout = buildRouteMapLayout(numberedMain, MAP_W, MAP_H, {
-    pad: 0.12, margin: 20, tiers: PDF_TIER_NUM, prioritizeMajor: true, preserveAspect: true,
+    pad: 0.12, margin: 20, tiers: PDF_TIERS, prioritizeMajor: true, preserveAspect: true,
   });
   if (!layout) return null;
   const { routePathD, labeledStops } = layout;
@@ -345,22 +278,13 @@ function PersonalisedDynamicSvgMap({ stops = [] }) {
           return (
             <Text key={`mn${i}`} x={cx.toFixed(1)} y={(cy + nFs * 0.38).toFixed(1)}
               textAnchor="middle" fontFamily="Helvetica-Bold" fontSize={nFs}
-              fill={numberedMain[i].tier === 1 ? '#7A5A20' : '#0D4440'}>
-              {numStr}
-            </Text>
+              fill={numberedMain[i].tier === 1 ? '#7A5A20' : '#0D4440'}>{numStr}</Text>
           );
         })}
         {labeledStops.reduce((acc, { stop, tier, labelAnchor, labelX, labelY, fs }, i) => {
           if (tier === 1) {
-            acc.push(
-              <Text key={`lh${i}`} x={labelX.toFixed(1)} y={labelY.toFixed(1)}
-                textAnchor={labelAnchor} fontFamily="Helvetica-Bold" fontSize={fs}
-                fill="#F4F1E8" stroke="#F4F1E8" strokeWidth="2.5">{stop.name}</Text>
-            );
-            acc.push(
-              <Text key={`lt${i}`} x={labelX.toFixed(1)} y={labelY.toFixed(1)}
-                textAnchor={labelAnchor} fontFamily="Helvetica-Bold" fontSize={fs} fill="#1C1A16">{stop.name}</Text>
-            );
+            acc.push(<Text key={`lh${i}`} x={labelX.toFixed(1)} y={labelY.toFixed(1)} textAnchor={labelAnchor} fontFamily="Helvetica-Bold" fontSize={fs} fill="#F4F1E8" stroke="#F4F1E8" strokeWidth="2.5">{stop.name}</Text>);
+            acc.push(<Text key={`lt${i}`} x={labelX.toFixed(1)} y={labelY.toFixed(1)} textAnchor={labelAnchor} fontFamily="Helvetica-Bold" fontSize={fs} fill="#1C1A16">{stop.name}</Text>);
           }
           return acc;
         }, [])}
@@ -379,7 +303,7 @@ function PersonalisedDynamicSvgMap({ stops = [] }) {
                   {String(stop.num).padStart(2, '0')}
                 </Text>
                 <Text style={{ fontSize: STOP_FS, color: C.charcoal, lineHeight: 1.45, width: colW - STOP_NUM_W }}>
-                  {stop.name}{stop.isUserAdded ? ' ·' : ''}
+                  {stop.name}
                 </Text>
               </View>
             ))}
@@ -417,19 +341,187 @@ function PersonalisedDynamicSvgMap({ stops = [] }) {
   );
 }
 
+// ── Shared sub-components ─────────────────────────────────────────────────────
+
+function StarMark({ size = 12, color = C.gold }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 2 20 20">
+      <Polygon points="10,2 12,10 20,12 12,14 10,22 8,14 0,12 8,10" fill={color} />
+    </Svg>
+  );
+}
+
+function RunHeader({ country, title, badge }) {
+  const c = (country || '').toUpperCase();
+  const t = (title || '').toUpperCase();
+  const right = badge || (c && t ? `${c} — ${t}` : c || t);
+  return (
+    <View style={s.header}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <StarMark size={11} color={C.gold} />
+        <Text style={s.headerBrand}>HiddenAtlas</Text>
+      </View>
+      <Text style={s.headerSection}>{right}</Text>
+    </View>
+  );
+}
+
+function TimelineColumn({ days }) {
+  return (
+    <View style={{ flex: 1 }}>
+      {days.map((day, i) => (
+        <View key={i} style={s.timelineRow}>
+          <View style={s.timelineTrack}>
+            <View style={s.timelineDot} />
+            {i < days.length - 1 ? <View style={s.timelineConnector} /> : null}
+          </View>
+          <View style={[s.timelineContent, i === days.length - 1 ? { paddingBottom: 0 } : {}]}>
+            <Text style={s.timelineDayLabel}>DAY {day.day}</Text>
+            <Text style={s.timelineRoute}>{day.route || day.title}</Text>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function RouteTimeline({ days }) {
+  if (days.length <= 10) {
+    return (
+      <View style={s.timelineWrap}>
+        {days.map((day, i) => (
+          <View key={i} style={s.timelineRow}>
+            <View style={s.timelineTrack}>
+              <View style={s.timelineDot} />
+              {i < days.length - 1 ? <View style={s.timelineConnector} /> : null}
+            </View>
+            <View style={[s.timelineContent, i === days.length - 1 ? { paddingBottom: 0 } : {}]}>
+              <Text style={s.timelineDayLabel}>DAY {day.day}</Text>
+              <Text style={s.timelineRoute}>{day.route || day.title}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    );
+  }
+  const half = Math.ceil(days.length / 2);
+  return (
+    <View style={[s.timelineWrap, { flexDirection: 'row' }]}>
+      <TimelineColumn days={days.slice(0, half)} />
+      <View style={{ width: 1, backgroundColor: C.border, marginVertical: 6, marginHorizontal: 16 }} />
+      <TimelineColumn days={days.slice(half)} />
+    </View>
+  );
+}
+
+// Compact booking card for day pages and logistics sections
+function BookingCard({ booking, trip }) {
+  const meta     = booking.metadata || {};
+  const dateLabel = getBookingDateLabel(booking, trip);
+  const timeLabel = booking.time;
+  const dateTimeLine = [dateLabel, timeLabel].filter(Boolean).join(' · ');
+  const adults   = meta.adults || meta.guests || meta.pax;
+  const paid     = meta.totalAmount || meta.amount;
+  const currency = meta.currency || '';
+
+  return (
+    <View style={s.bookingCard} wrap={false}>
+      <View style={s.bookingTypePill}>
+        <Text style={s.bookingTypePillText}>{(booking.type || 'BOOKING').toUpperCase()}</Text>
+      </View>
+      <Text style={s.bookingTitle}>{booking.title}</Text>
+      {dateTimeLine ? <Text style={s.bookingMeta}>{dateTimeLine}</Text> : null}
+      {meta.checkInDate && (
+        <Text style={s.bookingMeta}>
+          {'Check-in: ' + meta.checkInDate}{meta.checkInTime ? ' at ' + meta.checkInTime : ''}
+          {meta.checkOutDate ? '  ·  Check-out: ' + meta.checkOutDate : ''}
+        </Text>
+      )}
+      {booking.locationName ? <Text style={s.bookingMeta}>{booking.locationName}</Text> : null}
+      {booking.address && !booking.locationName ? <Text style={s.bookingMeta}>{booking.address}</Text> : null}
+      {booking.confirmationReference ? <Text style={s.bookingRef}>Ref: {booking.confirmationReference}</Text> : null}
+      {adults && paid ? (
+        <Text style={s.bookingMeta}>{adults} {Number(adults) === 1 ? 'person' : 'people'} · Paid: {paid} {currency}</Text>
+      ) : adults ? (
+        <Text style={s.bookingMeta}>{adults} {Number(adults) === 1 ? 'person' : 'people'}</Text>
+      ) : paid ? (
+        <Text style={s.bookingMeta}>Paid: {paid} {currency}</Text>
+      ) : null}
+      {booking.notes ? <Text style={[s.bookingMeta, { marginTop: 2, fontStyle: 'italic' }]}>{booking.notes}</Text> : null}
+    </View>
+  );
+}
+
+// Car rental / transport structured card
+function CarRentalCard({ booking }) {
+  const meta = booking.metadata || {};
+  return (
+    <View style={s.bookingCard} wrap={false}>
+      <View style={[s.bookingTypePill, { backgroundColor: '#4A3A7A' }]}>
+        <Text style={s.bookingTypePillText}>CAR RENTAL</Text>
+      </View>
+      <Text style={s.bookingTitle}>{booking.title}</Text>
+      {booking.confirmationReference ? <Text style={s.bookingRef}>Booking code: {booking.confirmationReference}</Text> : null}
+      {meta.pickupDate && (
+        <Text style={s.bookingMeta}>
+          Pickup: {meta.pickupDate}{meta.pickupTime ? ' at ' + meta.pickupTime : ''}{meta.pickupLocation ? ' · ' + meta.pickupLocation : ''}
+        </Text>
+      )}
+      {meta.returnDate && (
+        <Text style={s.bookingMeta}>
+          Return: {meta.returnDate}{meta.returnTime ? ' at ' + meta.returnTime : ''}{meta.returnLocation ? ' · ' + meta.returnLocation : ''}
+        </Text>
+      )}
+      {meta.carType && <Text style={s.bookingMeta}>Vehicle: {meta.carType}{meta.extras ? ' · ' + meta.extras : ''}</Text>}
+      {(meta.totalAmount || meta.amount) && (
+        <Text style={s.bookingMeta}>Paid: {meta.totalAmount || meta.amount} {meta.currency || ''}</Text>
+      )}
+    </View>
+  );
+}
+
+// Detect if a booking is a car rental (explicit type or metadata hints)
+function isCarRental(b) {
+  if (b.type === 'transfer') return false; // transfers are not car rentals
+  const meta = b.metadata || {};
+  const title = (b.title || '').toLowerCase();
+  return !!(meta.pickupDate || meta.returnDate || meta.carType ||
+    title.includes('car rental') || title.includes('rent a car') || title.includes('car hire'));
+}
+
+// User-added TripItem card
+function AddedItemCard({ item }) {
+  const timePart = item.startTime && item.endTime
+    ? `${item.startTime} – ${item.endTime}`
+    : item.startTime || item.time || '';
+  return (
+    <View style={s.addedCard} wrap={false}>
+      <Text style={s.addedBadge}>ADDED BY YOU</Text>
+      <Text style={s.addedTitle}>{item.title}</Text>
+      {(timePart || item.locationName) ? (
+        <Text style={s.addedMeta}>{[timePart, item.locationName].filter(Boolean).join(' · ')}</Text>
+      ) : null}
+      {item.notes ? <Text style={[s.addedMeta, { marginTop: 2, fontStyle: 'italic' }]}>{item.notes}</Text> : null}
+    </View>
+  );
+}
+
+function NoteBox({ note }) {
+  return (
+    <View style={s.noteBox} wrap={false}>
+      {note.title ? <Text style={s.noteLabel}>{note.title.toUpperCase()}</Text> : null}
+      <Text style={s.noteContent}>{note.content}</Text>
+    </View>
+  );
+}
+
 // ── Page components ───────────────────────────────────────────────────────────
 
 function PersonalisedCoverPage({ itinerary, trip }) {
-  const {
-    title = '', subtitle = '', country = '', region,
-    duration = '', nights, coverImage,
-  } = itinerary;
-  const durationLabel = nights
-    ? `${duration.replace(/\bdays?\b/i, 'Days')} • ${nights} Nights`
-    : duration;
+  const { title = '', subtitle = '', country = '', region, duration = '', nights, coverImage } = itinerary;
+  const durationLabel = nights ? `${duration.replace(/\bdays?\b/i, 'Days')} • ${nights} Nights` : duration;
   const hero = imgUrl(coverImage);
-
-  const hasDates = trip?.startDate || trip?.endDate;
+  const hasDates      = trip?.startDate || trip?.endDate;
   const hasTravellers = trip?.travellers;
 
   return (
@@ -494,140 +586,86 @@ function PersonalisedCoverPage({ itinerary, trip }) {
   );
 }
 
-function TripDetailsPage({ itinerary, trip, tripBookings }) {
-  const hasPersonalInfo = trip.startDate || trip.travellers || trip.accommodationSummary
-    || trip.arrivalInfo || trip.departureInfo || trip.generalNotes;
-  if (!hasPersonalInfo) return null;
+// Journey overview — same structure as ItineraryPDF's RouteMapPage
+function JourneyOverviewPage({ itinerary, contentDays, trip }) {
+  const { title = '', country = '', region, duration = '', nights } = itinerary;
+  const durationLabel = nights ? `${duration.replace(/\bdays?\b/i, 'Days')} • ${nights} Nights` : duration;
 
-  const hotelBookings = (tripBookings || [])
-    .filter(b => b.type === 'hotel')
-    .sort((a, b) => {
-      const ma = a.metadata || {}, mb = b.metadata || {};
-      const da = ma.checkInDate || a.date || '';
-      const db = mb.checkInDate || b.date || '';
-      return da < db ? -1 : da > db ? 1 : 0;
-    });
+  const timelineDays = contentDays.map(d => ({ day: d.dayNumber, title: d.title, route: d.route || d.title }));
+  const highlights   = itinerary.highlights || [];
 
   return (
-    <Page size="A4" style={{ backgroundColor: C.stone }}>
-      <RunHeader country={itinerary.country} title={itinerary.title} badge="YOUR TRIP" />
+    <Page size="A4" style={s.mapPage}>
+      <RunHeader country={country} title={title} badge="YOUR JOURNEY" />
 
-      <View style={s.detailsBody}>
-        <Text style={s.detailsEyebrow}>YOUR JOURNEY DETAILS</Text>
-        <Text style={s.detailsTitle}>{itinerary.title || trip.title || trip.destination}</Text>
-        {itinerary.description ? (
-          <Text style={{ fontFamily: 'Helvetica', fontSize: 10, color: C.muted, lineHeight: 1.7, marginTop: 8 }}>
-            {itinerary.description}
-          </Text>
-        ) : null}
-        <View style={s.detailsRule} />
-
-        {/* Trip logistics box */}
-        <View style={s.detailBox}>
-          <Text style={s.detailBoxLabel}>TRIP DETAILS</Text>
-          {trip.startDate && (
-            <View style={s.detailRow}>
-              <Text style={s.detailLabel}>Dates</Text>
-              <Text style={s.detailValue}>
-                {formatDate(trip.startDate)}{trip.endDate ? ` – ${formatDate(trip.endDate)}` : ''}
-              </Text>
-            </View>
-          )}
-          {trip.travellers && (
-            <View style={s.detailRow}>
-              <Text style={s.detailLabel}>Travellers</Text>
-              <Text style={s.detailValue}>{trip.travellers}</Text>
-            </View>
-          )}
-          {trip.accommodationSummary && (
-            <View style={s.detailRow}>
-              <Text style={s.detailLabel}>Accommodation</Text>
-              <Text style={s.detailValue}>{trip.accommodationSummary}</Text>
-            </View>
-          )}
-          {trip.arrivalInfo && (
-            <View style={s.detailRow}>
-              <Text style={s.detailLabel}>Arrival</Text>
-              <Text style={s.detailValue}>{trip.arrivalInfo}</Text>
-            </View>
-          )}
-          {trip.departureInfo && (
-            <View style={s.detailRow}>
-              <Text style={s.detailLabel}>Departure</Text>
-              <Text style={s.detailValue}>{trip.departureInfo}</Text>
-            </View>
-          )}
-          {trip.generalNotes && (
-            <View style={[s.detailRow, { marginBottom: 0 }]}>
-              <Text style={s.detailLabel}>Notes</Text>
-              <Text style={s.detailValue}>{trip.generalNotes}</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Hotel bookings summary */}
-        {hotelBookings.length > 0 && (
-          <View style={{ marginTop: 4 }}>
-            <Text style={[s.detailBoxLabel, { marginBottom: 10 }]}>ACCOMMODATION</Text>
-            {hotelBookings.map((b, i) => {
-              const meta = b.metadata || {};
-              return (
-                <View key={b.id} wrap={false} style={{
-                  marginBottom: i < hotelBookings.length - 1 ? 12 : 0,
-                  paddingBottom: i < hotelBookings.length - 1 ? 12 : 0,
-                  borderBottomWidth: i < hotelBookings.length - 1 ? 0.5 : 0,
-                  borderBottomColor: C.border,
-                }}>
-                  <Text style={s.accommodationTitle}>{b.title}</Text>
-                  {meta.checkInDate && (
-                    <Text style={s.accommodationMeta}>
-                      Check-in: {meta.checkInDate}{meta.checkInTime ? ` at ${meta.checkInTime}` : ''}
-                      {meta.checkOutDate ? `  ·  Check-out: ${meta.checkOutDate}` : ''}
-                    </Text>
-                  )}
-                  {b.locationName && <Text style={s.accommodationMeta}>{b.locationName}</Text>}
-                  {b.address && <Text style={s.accommodationMeta}>{b.address}</Text>}
-                  {b.confirmationReference && (
-                    <Text style={s.accommodationRef}>Ref: {b.confirmationReference}</Text>
-                  )}
-                  {b.notes && <Text style={[s.accommodationMeta, { marginTop: 2, fontStyle: 'italic' }]}>{b.notes}</Text>}
-                </View>
-              );
-            })}
-          </View>
-        )}
+      <View style={s.mapBanner}>
+        <Text style={s.mapBannerEyebrow}>YOUR JOURNEY</Text>
+        <Text style={s.mapBannerTitle}>Expedition Route</Text>
+        <Text style={s.mapBannerSub}>
+          {country}{region ? ` · ${region}` : ''}{duration ? `  ·  ${durationLabel}` : ''}
+        </Text>
       </View>
+
+      {/* Personal dates + travellers inline */}
+      {(trip?.startDate || trip?.travellers) ? (
+        <View style={{ paddingHorizontal: 48, paddingTop: 10, paddingBottom: 4, borderBottomWidth: 0.5, borderBottomColor: C.border, flexDirection: 'row', gap: 24 }}>
+          {trip.startDate ? (
+            <Text style={{ fontFamily: 'Helvetica', fontSize: 9, color: C.muted }}>
+              {formatDate(trip.startDate)}{trip.endDate ? ` – ${formatDate(trip.endDate)}` : ''}
+            </Text>
+          ) : null}
+          {trip.travellers ? (
+            <Text style={{ fontFamily: 'Helvetica', fontSize: 9, color: C.muted }}>
+              {trip.travellers} traveller{Number(trip.travellers) !== 1 ? 's' : ''}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+
+      {timelineDays.length > 0 ? <RouteTimeline days={timelineDays} /> : null}
+
+      {highlights.length > 0 ? (
+        <View style={s.mapHighlights}>
+          <Text style={s.mapHlLabel}>JOURNEY HIGHLIGHTS</Text>
+          <View style={s.mapHlGrid}>
+            {highlights.slice(0, 6).map((h, i) => (
+              <View key={i} style={s.mapHlItem}>
+                <View style={s.mapHlDot} />
+                <Text style={s.mapHlText}>{typeof h === 'string' ? h : String(h)}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
 
       <Text style={s.pageNum} render={({ pageNumber }) => String(pageNumber)} fixed />
     </Page>
   );
 }
 
+// Personalised route SVG map page
 function PersonalisedRouteMapPage({ itinerary, itineraryDayStops, hiddenStopIds, tripItems }) {
-  // Build personalised stops: base stops minus hidden ones, plus user-added items with coords
   const baseStops = (itineraryDayStops || [])
+    .map(s => ({ ...s, latitude: parseCoordValue(s.latitude), longitude: parseCoordValue(s.longitude) }))
     .filter(s => s.showOnMap !== false && s.latitude != null && s.longitude != null)
     .filter(s => !hiddenStopIds.includes(s.id))
     .map(s => ({
-      name: s.title,
-      latitude: parseCoordValue(s.latitude),
-      longitude: parseCoordValue(s.longitude),
+      name: s.title, latitude: s.latitude, longitude: s.longitude,
       type: s.isMajorStop ? 'major' : 'stop',
-      dayNumber: s.dayNumber,
-      order: s.sortOrder,
-      isUserAdded: false,
+      dayNumber: s.dayNumber, order: s.sortOrder, isUserAdded: false,
     }));
 
   const userStops = (tripItems || [])
-    .filter(i => i.latitude != null && i.longitude != null && !i.isHidden)
+    .filter(i => !i.isHidden)
     .map(i => ({
-      name: i.title,
-      latitude: parseCoordValue(i.latitude),
+      ...i,
+      latitude:  parseCoordValue(i.latitude),
       longitude: parseCoordValue(i.longitude),
-      type: 'stop',
-      dayNumber: i.dayNumber || 999,
-      order: i.sortOrder || 999,
-      isUserAdded: true,
+    }))
+    .filter(i => i.latitude != null && i.longitude != null)
+    .map(i => ({
+      name: i.title, latitude: i.latitude, longitude: i.longitude,
+      type: 'stop', dayNumber: i.dayNumber || 999, order: i.sortOrder || 999, isUserAdded: true,
     }));
 
   const allStops = [...baseStops, ...userStops]
@@ -646,9 +684,7 @@ function PersonalisedRouteMapPage({ itinerary, itineraryDayStops, hiddenStopIds,
           <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: 2.5, color: C.teal, marginBottom: 7 }}>
             YOUR PERSONALISED ROUTE
           </Text>
-          <Text style={{ fontFamily: 'Times-Bold', fontSize: 26, color: C.charcoal, lineHeight: 1.1 }}>
-            {title}
-          </Text>
+          <Text style={{ fontFamily: 'Times-Bold', fontSize: 26, color: C.charcoal, lineHeight: 1.1 }}>{title}</Text>
         </View>
         {duration ? (
           <View style={{ alignItems: 'flex-end', paddingBottom: 3 }}>
@@ -660,11 +696,11 @@ function PersonalisedRouteMapPage({ itinerary, itineraryDayStops, hiddenStopIds,
 
       <View style={{ paddingHorizontal: 48, paddingTop: 16, paddingBottom: 8 }}>
         <PersonalisedDynamicSvgMap stops={allStops} />
-        {userStops.length > 0 && (
+        {userStops.length > 0 ? (
           <Text style={{ fontSize: 7.5, color: C.muted, marginTop: 10 }}>
-            Numbered stops marked with · are your personal additions.
+            Your personal additions are included in this route.
           </Text>
-        )}
+        ) : null}
       </View>
 
       <Text style={s.pageNum} render={({ pageNumber }) => String(pageNumber)} fixed />
@@ -672,25 +708,144 @@ function PersonalisedRouteMapPage({ itinerary, itineraryDayStops, hiddenStopIds,
   );
 }
 
-function PersonalisedDayPage({ tripDay, contentDay, itinerary, dayStops, hiddenStopIds, dayItems, dayBookings, dayNotes }) {
-  const title = tripDay.titleOverride || contentDay?.title || tripDay.title || `Day ${tripDay.dayNumber}`;
-  const description = tripDay.descriptionOverride || contentDay?.description || tripDay.description || '';
-  const tip   = contentDay?.tip || '';
-  const stay  = contentDay?.stay || '';
+// Polished trip details + hotel bookings + car rental
+function TripDetailsPage({ itinerary, trip, tripBookings }) {
+  const hasPersonalInfo = trip.startDate || trip.travellers || trip.accommodationSummary
+    || trip.arrivalInfo || trip.departureInfo || trip.generalNotes;
+  if (!hasPersonalInfo) return null;
 
-  // Stops for "Places Today": original stops minus hidden
+  const hotelBookings = (tripBookings || [])
+    .filter(b => b.type === 'hotel')
+    .sort((a, b) => {
+      const ma = a.metadata || {}, mb = b.metadata || {};
+      const da = ma.checkInDate || a.date || '';
+      const db = mb.checkInDate || b.date || '';
+      return da < db ? -1 : da > db ? 1 : 0;
+    });
+
+  const carRentals = (tripBookings || []).filter(b => isCarRental(b));
+
+  return (
+    <Page size="A4" style={{ backgroundColor: C.stone }}>
+      <RunHeader country={itinerary.country} title={itinerary.title} badge="YOUR TRIP" />
+
+      <View style={s.detailsBody}>
+        <Text style={s.detailsEyebrow}>YOUR JOURNEY DETAILS</Text>
+        <Text style={s.detailsTitle}>{itinerary.title || trip.title || trip.destination}</Text>
+        {itinerary.description ? (
+          <Text style={{ fontFamily: 'Helvetica', fontSize: 10, color: C.muted, lineHeight: 1.7, marginTop: 8 }}>
+            {itinerary.description}
+          </Text>
+        ) : null}
+        <View style={s.detailsRule} />
+
+        {/* Trip logistics box */}
+        <View style={s.detailBox}>
+          <Text style={s.detailBoxLabel}>TRIP DETAILS</Text>
+          {trip.startDate ? (
+            <View style={s.detailRow}>
+              <Text style={s.detailLabel}>Dates</Text>
+              <Text style={s.detailValue}>
+                {formatDate(trip.startDate)}{trip.endDate ? ` – ${formatDate(trip.endDate)}` : ''}
+              </Text>
+            </View>
+          ) : null}
+          {trip.travellers ? (
+            <View style={s.detailRow}>
+              <Text style={s.detailLabel}>Travellers</Text>
+              <Text style={s.detailValue}>{trip.travellers}</Text>
+            </View>
+          ) : null}
+          {trip.accommodationSummary ? (
+            <View style={s.detailRow}>
+              <Text style={s.detailLabel}>Accommodation</Text>
+              <Text style={s.detailValue}>{trip.accommodationSummary}</Text>
+            </View>
+          ) : null}
+          {trip.arrivalInfo ? (
+            <View style={s.detailRow}>
+              <Text style={s.detailLabel}>Arrival</Text>
+              <Text style={s.detailValue}>{trip.arrivalInfo}</Text>
+            </View>
+          ) : null}
+          {trip.departureInfo ? (
+            <View style={s.detailRow}>
+              <Text style={s.detailLabel}>Departure</Text>
+              <Text style={s.detailValue}>{trip.departureInfo}</Text>
+            </View>
+          ) : null}
+          {trip.generalNotes ? (
+            <View style={[s.detailRow, { marginBottom: 0 }]}>
+              <Text style={s.detailLabel}>Notes</Text>
+              <Text style={s.detailValue}>{trip.generalNotes}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Hotel bookings summary */}
+        {hotelBookings.length > 0 ? (
+          <View style={{ marginTop: 4, marginBottom: carRentals.length > 0 ? 16 : 0 }}>
+            <Text style={[s.detailBoxLabel, { marginBottom: 10 }]}>ACCOMMODATION</Text>
+            {hotelBookings.map((b, i) => {
+              const meta = b.metadata || {};
+              return (
+                <View key={b.id} wrap={false} style={{
+                  marginBottom: i < hotelBookings.length - 1 ? 12 : 0,
+                  paddingBottom: i < hotelBookings.length - 1 ? 12 : 0,
+                  borderBottomWidth: i < hotelBookings.length - 1 ? 0.5 : 0,
+                  borderBottomColor: C.border,
+                }}>
+                  <Text style={s.accommodationTitle}>{b.title}</Text>
+                  {meta.checkInDate ? (
+                    <Text style={s.accommodationMeta}>
+                      Check-in: {meta.checkInDate}{meta.checkInTime ? ` at ${meta.checkInTime}` : ''}
+                      {meta.checkOutDate ? `  ·  Check-out: ${meta.checkOutDate}` : ''}
+                    </Text>
+                  ) : null}
+                  {b.locationName ? <Text style={s.accommodationMeta}>{b.locationName}</Text> : null}
+                  {b.address ? <Text style={s.accommodationMeta}>{b.address}</Text> : null}
+                  {b.confirmationReference ? (
+                    <Text style={s.accommodationRef}>Ref: {b.confirmationReference}</Text>
+                  ) : null}
+                  {b.notes ? <Text style={[s.accommodationMeta, { marginTop: 2, fontStyle: 'italic' }]}>{b.notes}</Text> : null}
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {/* Car rental / transport logistics */}
+        {carRentals.length > 0 ? (
+          <View style={{ marginTop: 4 }}>
+            <Text style={[s.detailBoxLabel, { marginBottom: 10 }]}>TRANSPORT & LOGISTICS</Text>
+            {carRentals.map(b => <CarRentalCard key={b.id} booking={b} />)}
+          </View>
+        ) : null}
+      </View>
+
+      <Text style={s.pageNum} render={({ pageNumber }) => String(pageNumber)} fixed />
+    </Page>
+  );
+}
+
+function PersonalisedDayPage({ tripDay, contentDay, itinerary, dayStops, hiddenStopIds, dayItems, dayBookings, dayNotes, trip }) {
+  const title       = tripDay.titleOverride || contentDay?.title || tripDay.title || `Day ${tripDay.dayNumber}`;
+  const description = tripDay.descriptionOverride || contentDay?.description || tripDay.description || '';
+  const tip         = contentDay?.tip || '';
+  const stay        = contentDay?.stay || '';
+
   const visibleStops = (dayStops || [])
     .filter(s => !hiddenStopIds.includes(s.id))
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-
-  // Legacy bullets fallback when no structured stops
   const bullets = visibleStops.length > 0 ? [] : (contentDay?.bullets || []);
 
-  // Filter out itinerary-type items from user items (those are template copies, not additions)
+  // Filter out itinerary_item type (template copies) from user additions
   const userItems = (dayItems || []).filter(i => i.type !== 'itinerary_item');
-  const nonHotelBookings = (dayBookings || []).filter(b => b.type !== 'hotel');
-  const hasPersonalContent = nonHotelBookings.length > 0 || userItems.length > 0 || dayNotes.length > 0;
+  // Don't show hotel or car rental bookings in day pages (they're in TripDetailsPage)
+  const dayCardBookings = (dayBookings || []).filter(b => b.type !== 'hotel' && !isCarRental(b));
+  const hasPersonalContent = dayCardBookings.length > 0 || userItems.length > 0 || dayNotes.length > 0;
 
+  // Day images — prefer imgs from resolved content day (base64 from download utility)
   const imgs = (contentDay?.imgs || []).map(imgUrl).filter(Boolean);
   const { country } = itinerary;
 
@@ -708,7 +863,6 @@ function PersonalisedDayPage({ tripDay, contentDay, itinerary, dayStops, hiddenS
       ) : null}
 
       <View style={s.dayBody}>
-        {/* Title block */}
         <View wrap={false}>
           <Text style={s.dayChip}>DAY {tripDay.dayNumber}</Text>
           <Text style={s.dayTitle}>{title}</Text>
@@ -716,7 +870,7 @@ function PersonalisedDayPage({ tripDay, contentDay, itinerary, dayStops, hiddenS
           {description ? <Text style={s.dayDesc}>{description}</Text> : null}
         </View>
 
-        {/* Structured stops — "Places Today" */}
+        {/* Places Today — original stops minus hidden */}
         {visibleStops.length > 0 ? (
           <View style={{ marginBottom: 14, breakInside: 'avoid' }}>
             <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: 2, color: C.teal, marginBottom: 8 }}>
@@ -738,7 +892,7 @@ function PersonalisedDayPage({ tripDay, contentDay, itinerary, dayStops, hiddenS
           </View>
         ) : null}
 
-        {/* Legacy bullets */}
+        {/* Legacy bullets fallback */}
         {bullets.length > 0 ? (
           <View style={{ marginBottom: 14 }}>
             {bullets.map((b, i) => (
@@ -750,7 +904,6 @@ function PersonalisedDayPage({ tripDay, contentDay, itinerary, dayStops, hiddenS
           </View>
         ) : null}
 
-        {/* Insider tip */}
         {tip ? (
           <View wrap={false} style={[s.tipBox, { marginBottom: 14 }]}>
             <Text style={s.tipLabel}>INSIDER TIP</Text>
@@ -758,7 +911,6 @@ function PersonalisedDayPage({ tripDay, contentDay, itinerary, dayStops, hiddenS
           </View>
         ) : null}
 
-        {/* Tonight's stay */}
         {stay ? (
           <View style={s.stayRow} wrap={false}>
             <Text style={s.stayLabel}>TONIGHT'S STAY:</Text>
@@ -767,35 +919,32 @@ function PersonalisedDayPage({ tripDay, contentDay, itinerary, dayStops, hiddenS
         ) : null}
 
         {/* ── Personalisation section ── */}
-        {hasPersonalContent && (
+        {hasPersonalContent ? (
           <View>
             <View style={s.personalDivider} />
 
-            {/* Your Bookings Today */}
-            {nonHotelBookings.length > 0 && (
+            {dayCardBookings.length > 0 ? (
               <View style={{ marginBottom: 10 }}>
                 <Text style={s.personalSectionLabel}>YOUR BOOKINGS TODAY</Text>
-                {nonHotelBookings.map(b => <BookingCard key={b.id} booking={b} />)}
+                {dayCardBookings.map(b => <BookingCard key={b.id} booking={b} trip={trip} />)}
               </View>
-            )}
+            ) : null}
 
-            {/* Your Additions */}
-            {userItems.length > 0 && (
+            {userItems.length > 0 ? (
               <View style={{ marginBottom: 10 }}>
                 <Text style={s.personalSectionLabel}>YOUR ADDITIONS</Text>
                 {userItems.map(item => <AddedItemCard key={item.id} item={item} />)}
               </View>
-            )}
+            ) : null}
 
-            {/* Your Notes */}
-            {dayNotes.length > 0 && (
+            {dayNotes.length > 0 ? (
               <View>
                 <Text style={s.personalSectionLabel}>YOUR NOTES</Text>
                 {dayNotes.map(n => <NoteBox key={n.id} note={n} />)}
               </View>
-            )}
+            ) : null}
           </View>
-        )}
+        ) : null}
       </View>
 
       <Text style={s.pageNum} render={({ pageNumber }) => String(pageNumber)} fixed />
@@ -803,11 +952,11 @@ function PersonalisedDayPage({ tripDay, contentDay, itinerary, dayStops, hiddenS
   );
 }
 
+// General notes + trip-level bookings (flights, transfers, non-car-rental others)
 function MyNotesPage({ itinerary, tripNotes, tripBookings }) {
-  // General notes: tripNotes with no dayId + non-day bookings (flight, transfer, car rental, other)
   const generalNotes = (tripNotes || []).filter(n => !n.tripDayId && n.content);
   const tripLevelBookings = (tripBookings || [])
-    .filter(b => !b.tripDayId && b.type !== 'hotel')
+    .filter(b => !b.tripDayId && b.type !== 'hotel' && !isCarRental(b))
     .sort((a, b) => {
       const da = a.date || '';
       const db = b.date || '';
@@ -821,7 +970,7 @@ function MyNotesPage({ itinerary, tripNotes, tripBookings }) {
       <RunHeader country={itinerary.country} title={itinerary.title} badge="MY NOTES" />
 
       <View style={{ paddingHorizontal: 48, paddingTop: 28, paddingBottom: 32 }}>
-        {tripLevelBookings.length > 0 && (
+        {tripLevelBookings.length > 0 ? (
           <View style={{ marginBottom: generalNotes.length > 0 ? 28 : 0 }}>
             <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 2.5, color: C.teal, marginBottom: 14 }}>
               TRIP BOOKINGS
@@ -829,9 +978,9 @@ function MyNotesPage({ itinerary, tripNotes, tripBookings }) {
             <View style={{ width: 32, height: 1.5, backgroundColor: C.gold, marginBottom: 18 }} />
             {tripLevelBookings.map(b => <BookingCard key={b.id} booking={b} />)}
           </View>
-        )}
+        ) : null}
 
-        {generalNotes.length > 0 && (
+        {generalNotes.length > 0 ? (
           <View>
             <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 7.5, letterSpacing: 2.5, color: C.teal, marginBottom: 14 }}>
               MY NOTES
@@ -839,7 +988,7 @@ function MyNotesPage({ itinerary, tripNotes, tripBookings }) {
             <View style={{ width: 32, height: 1.5, backgroundColor: C.gold, marginBottom: 18 }} />
             {generalNotes.map(n => <NoteBox key={n.id} note={n} />)}
           </View>
-        )}
+        ) : null}
       </View>
 
       <Text style={s.pageNum} render={({ pageNumber }) => String(pageNumber)} fixed />
@@ -847,43 +996,74 @@ function MyNotesPage({ itinerary, tripNotes, tripBookings }) {
   );
 }
 
+// Soft closing page — replaces the "Ready to make this trip yours?" CTA
+function PersonalisedClosingPage({ itinerary }) {
+  return (
+    <Page size="A4" style={{ backgroundColor: C.tealDark }}>
+      <View style={{ flex: 1, paddingHorizontal: 64, paddingTop: 80, paddingBottom: 60, justifyContent: 'center' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 52 }}>
+          <StarMark size={18} color={C.gold} />
+          <View style={{ width: 10 }} />
+          <Text style={{ fontFamily: 'Times-Bold', fontSize: 13, color: C.white, letterSpacing: 3 }}>HIDDEN</Text>
+          <Text style={{ fontFamily: 'Times-Bold', fontSize: 13, color: C.gold, letterSpacing: 3 }}>ATLAS</Text>
+        </View>
+
+        <Text style={{ fontFamily: 'Times-Bold', fontSize: 36, color: C.white, lineHeight: 1.22, marginBottom: 6 }}>
+          Your trip,{'\n'}ready to go.
+        </Text>
+        <View style={{ width: 44, height: 1.5, backgroundColor: C.gold, marginTop: 18, marginBottom: 24 }} />
+        <Text style={{ fontFamily: 'Helvetica', fontSize: 11.5, color: 'rgba(255,255,255,0.68)', lineHeight: 1.8, marginBottom: 40, maxWidth: 400 }}>
+          This is your personalised guide for {itinerary.title || 'this journey'}.{'\n'}
+          May every stop be worth the detour.
+        </Text>
+        <Text style={{ fontFamily: 'Helvetica', fontSize: 8.5, color: 'rgba(255,255,255,0.25)', lineHeight: 1.6 }}>
+          {[itinerary.title, itinerary.country].filter(Boolean).join(' · ')}{'  ·  '}Personalised guide{'  ·  '}hiddenatlas.travel
+        </Text>
+      </View>
+    </Page>
+  );
+}
+
 // ── Main document ─────────────────────────────────────────────────────────────
 export default function PersonalisedItineraryPDF({ itinerary, personalisationContext = {} }) {
   const {
-    trip = {},
-    tripDays = [],
-    tripItems = [],
-    tripNotes = [],
-    tripBookings = [],
+    trip          = {},
+    tripDays      = [],
+    tripItems     = [],
+    tripNotes     = [],
+    tripBookings  = [],
     hiddenStopIds = [],
   } = personalisationContext;
 
   const itineraryDayStops = itinerary.dayStops || [];
 
-  // Content days: parsed from itinerary.content or itinerary.days
-  const content = itinerary.content || {};
-  const contentDays = (content.days || itinerary.days || []).map(normalizeContentDay).filter(Boolean);
+  // Content days with images — itinerary.days is the resolved array (with base64 imgs),
+  // content.days is the raw JSON without images. Prefer itinerary.days.
+  const content     = itinerary.content || {};
+  const contentDays = (itinerary.days || content.days || []).map(normalizeContentDay).filter(Boolean);
   const contentDayMap = {};
-  for (const d of contentDays) {
-    contentDayMap[d.dayNumber] = d;
-  }
+  for (const d of contentDays) contentDayMap[d.dayNumber] = d;
 
-  // Sorted trip days (drive iteration)
+  // Sorted trip days
   const sortedDays = [...tripDays].sort((a, b) =>
     (a.sortOrder ?? a.dayNumber) - (b.sortOrder ?? b.dayNumber)
   );
 
-  // Has route map?
+  // Route map: show when ≥2 stops with parseable coordinates (after filtering hidden)
   const validMapStops = itineraryDayStops
-    .filter(s => s.showOnMap !== false && s.latitude != null && s.longitude != null)
+    .map(s => ({ ...s, lat: parseCoordValue(s.latitude), lng: parseCoordValue(s.longitude) }))
+    .filter(s => s.showOnMap !== false && s.lat != null && s.lng != null)
     .filter(s => !hiddenStopIds.includes(s.id));
-  const userMapItems = tripItems.filter(i => i.latitude != null && i.longitude != null && !i.isHidden);
+  const userMapItems = tripItems
+    .filter(i => !i.isHidden)
+    .map(i => ({ ...i, lat: parseCoordValue(i.latitude), lng: parseCoordValue(i.longitude) }))
+    .filter(i => i.lat != null && i.lng != null);
   const hasRouteMap = (validMapStops.length + userMapItems.length) >= 2;
-
-  const title = itinerary.title || trip.title || trip.destination || 'My Journey';
 
   const pages = [
     <PersonalisedCoverPage key="cover" itinerary={itinerary} trip={trip} />,
+
+    <JourneyOverviewPage key="overview" itinerary={itinerary} contentDays={contentDays} trip={trip} />,
 
     <TripDetailsPage
       key="trip-details"
@@ -903,11 +1083,11 @@ export default function PersonalisedItineraryPDF({ itinerary, personalisationCon
     ] : []),
 
     ...sortedDays.map(tripDay => {
-      const contentDay = contentDayMap[tripDay.dayNumber] || null;
-      const dayStops = itineraryDayStops.filter(s => s.dayNumber === tripDay.dayNumber);
-      const dayItems = tripItems.filter(i => i.tripDayId === tripDay.id);
+      const contentDay  = contentDayMap[tripDay.dayNumber] || null;
+      const dayStops    = itineraryDayStops.filter(s => s.dayNumber === tripDay.dayNumber);
+      const dayItems    = tripItems.filter(i => i.tripDayId === tripDay.id);
       const dayBookings = tripBookings.filter(b => b.tripDayId === tripDay.id);
-      const dayNotes = tripNotes.filter(n => n.tripDayId === tripDay.id);
+      const dayNotes    = tripNotes.filter(n => n.tripDayId === tripDay.id);
       return (
         <PersonalisedDayPage
           key={tripDay.id}
@@ -919,6 +1099,7 @@ export default function PersonalisedItineraryPDF({ itinerary, personalisationCon
           dayItems={dayItems}
           dayBookings={dayBookings}
           dayNotes={dayNotes}
+          trip={trip}
         />
       );
     }),
@@ -929,13 +1110,15 @@ export default function PersonalisedItineraryPDF({ itinerary, personalisationCon
       tripNotes={tripNotes}
       tripBookings={tripBookings}
     />,
+
+    <PersonalisedClosingPage key="closing" itinerary={itinerary} />,
   ].filter(Boolean);
 
   return (
     <Document
-      title={`${title} — My HiddenAtlas Guide`}
+      title={`${itinerary.title || 'My Journey'} — My HiddenAtlas Guide`}
       author="HiddenAtlas"
-      subject={`${title} — Personalised Travel Guide`}
+      subject={`${itinerary.title || 'My Journey'} — Personalised Travel Guide`}
       keywords="travel, itinerary, personalised, HiddenAtlas"
       hyphenationCallback={word => [word]}
     >

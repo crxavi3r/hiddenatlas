@@ -16,11 +16,11 @@ export async function downloadPersonalisedPDF(workspace) {
   const {
     trip,
     itinerary,
-    tripDays     = [],
-    tripItems    = [],
-    tripNotes    = [],
-    tripBookings = [],
-    assets       = [],
+    tripDays      = [],
+    tripItems     = [],
+    tripNotes     = [],
+    tripBookings  = [],
+    assets        = [],
     itineraryDayStops = [],
     hiddenStopIds     = [],
   } = workspace;
@@ -31,7 +31,7 @@ export async function downloadPersonalisedPDF(workspace) {
     import('../components/PersonalisedItineraryPDF'),
   ]);
 
-  // Parse itinerary content JSON
+  // Parse itinerary content JSON (may contain days, highlights, pdfConfig, etc.)
   let content = {};
   if (itinerary?.content) {
     try {
@@ -45,13 +45,13 @@ export async function downloadPersonalisedPDF(workspace) {
   // Resolve cover image: trip.heroImage > DB hero asset > itinerary.coverImage > filesystem
   const itineraryForResolution = {
     ...(itinerary || {}),
-    slug: itinerary?.slug || trip.itinerarySlug,
-    coverImage: trip.heroImage || itinerary?.coverImage || null,
+    slug:        itinerary?.slug || trip.itinerarySlug,
+    coverImage:  trip.heroImage || itinerary?.coverImage || null,
   };
-  const rawCoverUrl = resolveCoverImage(itineraryForResolution, assets);
-  const coverBase64 = await imgToBase64(rawCoverUrl);
+  const rawCoverUrl  = resolveCoverImage(itineraryForResolution, assets);
+  const coverBase64  = await imgToBase64(rawCoverUrl);
 
-  // Resolve + base64-encode day images
+  // Resolve + base64-encode day images using the same pipeline as downloadPDF.js
   const resolvedDays = resolveDayImages(itineraryForResolution, contentDays, assets);
   const daysWithBase64 = await Promise.all(
     resolvedDays.map(async day => {
@@ -60,21 +60,31 @@ export async function downloadPersonalisedPDF(workspace) {
     })
   );
 
+  // Extract additional fields from parsed content for the journey overview page
+  const highlights = content?.summary?.highlights
+    || (Array.isArray(itinerary?.highlights) ? itinerary.highlights : [])
+    || [];
+  const nights    = itinerary?.nights    || content?.summary?.nights    || null;
+  const groupSize = itinerary?.groupSize || content?.summary?.groupSize || null;
+
   const resolvedItinerary = {
-    id:          itinerary?.id || '',
+    id:          itinerary?.id   || '',
     slug:        itinerary?.slug || trip.itinerarySlug || '',
-    title:       itinerary?.title || trip.title || trip.destination || 'My Journey',
-    subtitle:    itinerary?.subtitle || '',
+    title:       itinerary?.title       || trip.title || trip.destination || 'My Journey',
+    subtitle:    itinerary?.subtitle    || '',
     description: content?.summary?.description || itinerary?.description || '',
-    country:     itinerary?.country || trip.country || trip.destination || '',
+    country:     itinerary?.country     || trip.country || trip.destination || '',
     destination: itinerary?.destination || trip.destination || '',
-    region:      itinerary?.region || '',
-    duration:    itinerary?.duration || (trip.durationDays ? `${trip.durationDays} days` : ''),
-    nights:      itinerary?.nights || null,
-    groupSize:   itinerary?.groupSize || null,
+    region:      itinerary?.region      || '',
+    duration:    itinerary?.duration    || (trip.durationDays ? `${trip.durationDays} days` : ''),
+    nights,
+    groupSize,
+    highlights,
     coverImage:  coverBase64 || null,
     dayStops:    itineraryDayStops,
+    // itinerary.days = resolved days WITH base64 images — PersonalisedItineraryPDF prefers these
     days:        daysWithBase64,
+    // content preserved for any remaining text lookups
     content,
   };
 
@@ -87,7 +97,7 @@ export async function downloadPersonalisedPDF(workspace) {
     hiddenStopIds,
   };
 
-  const slug = itinerary?.slug || trip.itinerarySlug || trip.destination || 'trip';
+  const slug     = itinerary?.slug || trip.itinerarySlug || trip.destination || 'trip';
   const filename = `${slug.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-my-hiddenatlas-guide.pdf`;
 
   const doc  = createElement(PersonalisedItineraryPDF, { itinerary: resolvedItinerary, personalisationContext });
