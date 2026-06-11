@@ -1746,6 +1746,10 @@ async function dispatchCrmAction(pool, action, payload, ctx) {
     case 'discovery.importResults':    return crmImportResults(pool, payload, ctx);
     case 'discovery.addToCrm':         return crmAddToCrm(pool, payload, ctx);
     case 'discovery.setResultStatus':  return crmSetResultStatus(pool, payload.id, payload.status);
+    case 'discovery.addResultToCrm':  return crmAddToCrm(pool, { resultId: payload.id ?? payload.resultId }, ctx);
+    case 'discovery.ignoreResult':    return crmSetResultStatus(pool, payload.id, 'ignored');
+    case 'discovery.blockResult':     return crmSetResultStatus(pool, payload.id, 'blocked');
+    case 'discovery.markCompleted':   return crmMarkRunCompleted(pool, payload.id);
     case 'leads.list':                 return crmListLeads(pool, payload);
     case 'leads.get':                  return crmGetLead(pool, payload.id);
     case 'leads.update':               return crmUpdateLead(pool, payload.id, payload, ctx);
@@ -1954,7 +1958,12 @@ async function crmCreateRun(pool, body, ctx) {
     destination, country, language, hashtags = [], bioKeywords,
     minFollowers, maxFollowers, minEngagement, category, assignedTo, notes,
   } = body;
-  if (!name?.trim()) throw Object.assign(new Error('name is required'), { status: 400 });
+  const autoName = [
+    (platform || 'instagram').charAt(0).toUpperCase() + (platform || 'instagram').slice(1),
+    destination?.trim() || null,
+    new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+  ].filter(Boolean).join(' · ');
+  const runName = name?.trim() || autoName;
 
   const { rows } = await pool.query(`
     INSERT INTO "CreatorDiscoveryRun"
@@ -1967,7 +1976,7 @@ async function crmCreateRun(pool, body, ctx) {
        $13, $14, $15, NOW(), NOW())
     RETURNING *
   `, [
-    name.trim(), platform, searchType,
+    runName, platform, searchType,
     destination || null, country || null, language || null,
     JSON.stringify(Array.isArray(hashtags) ? hashtags : []),
     bioKeywords || null, minFollowers ? parseInt(minFollowers, 10) : null,
@@ -2104,6 +2113,16 @@ async function crmSetResultStatus(pool, id, status) {
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
   return { result: rows[0] };
+}
+
+async function crmMarkRunCompleted(pool, id) {
+  if (!id) throw Object.assign(new Error('id required'), { status: 400 });
+  const { rows } = await pool.query(
+    `UPDATE "CreatorDiscoveryRun" SET status = 'completed', "updatedAt" = NOW() WHERE id = $1 RETURNING *`,
+    [id]
+  );
+  if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+  return { run: rows[0] };
 }
 
 async function crmUpdateLead(pool, id, body, ctx) {
