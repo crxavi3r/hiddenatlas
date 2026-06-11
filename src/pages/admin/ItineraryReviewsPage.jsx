@@ -294,7 +294,7 @@ export default function ItineraryReviewsPage() {
     setError(null);
     try {
       const token = await getToken();
-      const res   = await fetch(`/api/itinerary-review?action=queue&status=${statusFilter}`, {
+      const res   = await fetch(`/api/itinerary-cms?action=review-queue&status=${statusFilter}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
@@ -314,7 +314,7 @@ export default function ItineraryReviewsPage() {
     setApproving(item.id);
     try {
       const token = await getToken();
-      const res   = await fetch(`/api/itinerary-review?action=approve&id=${item.id}`, {
+      const res   = await fetch(`/api/itinerary-cms?action=approve-review&id=${item.id}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -334,7 +334,7 @@ export default function ItineraryReviewsPage() {
     setRejecting(rejectTarget.id);
     try {
       const token = await getToken();
-      const res   = await fetch(`/api/itinerary-review?action=reject&id=${rejectTarget.id}`, {
+      const res   = await fetch(`/api/itinerary-cms?action=reject-review&id=${rejectTarget.id}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ rejectionReason: reason }),
