@@ -1959,7 +1959,7 @@ async function crmCreateRun(pool, body, ctx) {
   const {
     name, platform = 'instagram', searchType = 'manual',
     destination, country, language, hashtags = [], bioKeywords,
-    minFollowers, maxFollowers, minEngagement, category, assignedTo, notes,
+    minFollowers, maxFollowers, minEngagementRate, category, assignedToId, notes,
   } = body;
   const autoName = [
     (platform || 'instagram').charAt(0).toUpperCase() + (platform || 'instagram').slice(1),
@@ -1968,24 +1968,30 @@ async function crmCreateRun(pool, body, ctx) {
   ].filter(Boolean).join(' · ');
   const runName = name?.trim() || autoName;
 
+  const targetDestinations = destination ? [destination.trim()] : [];
+  const targetCountries = country ? [country.trim()] : [];
+  const targetLanguages = language ? language.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const categories = category ? category.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const runParams = JSON.stringify({ notes: notes || null });
+
   const { rows } = await pool.query(`
     INSERT INTO "CreatorDiscoveryRun"
-      (id, name, platform, "searchType", destination, country, language, hashtags,
-       "bioKeywords", "minFollowers", "maxFollowers", "minEngagement", category,
-       "assignedTo", notes, "createdById", "createdAt", "updatedAt")
+      (id, name, platform, "searchType", "targetDestinations", "targetCountries", "targetLanguages", hashtags,
+       "bioKeywords", "minFollowers", "maxFollowers", "minEngagementRate", categories,
+       "assignedToId", params, "createdById", "createdAt", "updatedAt")
     VALUES
-      (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::jsonb,
-       $8, $9, $10, $11, $12,
-       $13, $14, $15, NOW(), NOW())
+      (gen_random_uuid(), $1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb,
+       $8, $9, $10, $11, $12::jsonb,
+       $13, $14::jsonb, $15, NOW(), NOW())
     RETURNING *
   `, [
     runName, platform, searchType,
-    destination || null, country || null, language || null,
+    JSON.stringify(targetDestinations), JSON.stringify(targetCountries), JSON.stringify(targetLanguages),
     JSON.stringify(Array.isArray(hashtags) ? hashtags : []),
     bioKeywords || null, minFollowers ? parseInt(minFollowers, 10) : null,
     maxFollowers ? parseInt(maxFollowers, 10) : null,
-    minEngagement ? parseFloat(minEngagement) : null,
-    category || null, assignedTo || null, notes || null,
+    minEngagementRate ? parseFloat(minEngagementRate) : null,
+    JSON.stringify(categories), assignedToId || null, runParams,
     (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null),
   ]);
   return { run: rows[0] };
@@ -2038,7 +2044,7 @@ async function crmImportResults(pool, body, ctx) {
   }
 
   await pool.query(
-    `UPDATE "CreatorDiscoveryRun" SET "resultCount" = (SELECT COUNT(*) FROM "CreatorDiscoveryResult" WHERE "runId" = $1), "updatedAt" = NOW() WHERE id = $1`,
+    `UPDATE "CreatorDiscoveryRun" SET "resultsCount" = (SELECT COUNT(*) FROM "CreatorDiscoveryResult" WHERE "runId" = $1), "updatedAt" = NOW() WHERE id = $1`,
     [runId]
   );
 
@@ -2167,26 +2173,34 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
     const runParams = JSON.stringify({
       creatorProfile: creatorProfile.trim(),
       destinationTheme: destinationTheme?.trim() || null,
+      notes: notes || null,
+      targetCount: limit,
     });
+
+    const targetDestinations = destinationTheme?.trim() ? [destinationTheme.trim()] : [];
+    const targetCountries = creatorCountry ? [creatorCountry.trim()] : [];
+    const targetLanguages = language ? language.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const categories = niche ? niche.split(',').map(s => s.trim()).filter(Boolean) : [];
 
     const { rows } = await pool.query(`
       INSERT INTO "CreatorDiscoveryRun"
-        (id, name, platform, "searchType", destination, country, language, category,
-         "minFollowers", "maxFollowers", notes, status, params,
+        (id, name, platform, "searchType", "targetDestinations", "targetCountries", "targetLanguages", categories,
+         "minFollowers", "maxFollowers", status, provider, params,
          "createdById", "createdAt", "updatedAt")
       VALUES
-        (gen_random_uuid(), $1, $2, 'ai_search', $3, $4, $5, $6,
-         $7, $8, $9, 'running', $11::jsonb,
-         $10, NOW(), NOW())
+        (gen_random_uuid(), $1, $2, 'ai_search', $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb,
+         $7, $8, 'running', $9, $10::jsonb,
+         $11, NOW(), NOW())
       RETURNING *
     `, [
-      autoName, platform, destinationTheme?.trim() || null,
-      creatorCountry || null, language || null, niche || null,
+      autoName, platform,
+      JSON.stringify(targetDestinations), JSON.stringify(targetCountries),
+      JSON.stringify(targetLanguages), JSON.stringify(categories),
       minFollowers ? parseInt(minFollowers, 10) : null,
       maxFollowers ? parseInt(maxFollowers, 10) : null,
-      ['provider:' + providerName, notes].filter(Boolean).join(' | ') || null,
-      createdById,
+      providerName,
       runParams,
+      createdById,
     ]);
     run = rows[0];
   } else {
@@ -2214,7 +2228,7 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
     });
   } catch (err) {
     await pool.query(
-      `UPDATE "CreatorDiscoveryRun" SET status = 'failed', notes = $2, "updatedAt" = NOW() WHERE id = $1`,
+      `UPDATE "CreatorDiscoveryRun" SET status = 'failed', "errorMessage" = $2, "updatedAt" = NOW() WHERE id = $1`,
       [runId, `Error: ${err.message}`]
     );
     throw err;
@@ -2292,7 +2306,7 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
 
   // Finalize run
   await pool.query(
-    `UPDATE "CreatorDiscoveryRun" SET status = 'completed', "resultCount" = $2, "updatedAt" = NOW() WHERE id = $1`,
+    `UPDATE "CreatorDiscoveryRun" SET status = 'completed', "resultsCount" = $2, "updatedAt" = NOW() WHERE id = $1`,
     [runId, inserted]
   );
 
@@ -2394,19 +2408,25 @@ async function crmMetaBusinessDiscovery(pool, payload, ctx) {
       minFollowers: minFollowers || null, maxFollowers: maxFollowers || null,
     });
 
+    const targetDestinations = destinationTheme ? [destinationTheme.trim()] : [];
+    const targetCountries = creatorCountry ? [creatorCountry.trim()] : [];
+    const targetLanguages = language ? language.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const metaCategories = niche ? niche.split(',').map(s => s.trim()).filter(Boolean) : [];
+
     const { rows } = await pool.query(`
       INSERT INTO "CreatorDiscoveryRun"
-        (id, name, platform, "searchType", destination, country, language, category,
-         "minFollowers", "maxFollowers", status, params,
+        (id, name, platform, "searchType", "targetDestinations", "targetCountries", "targetLanguages", categories,
+         "minFollowers", "maxFollowers", status, provider, params,
          "createdById", "createdAt", "updatedAt")
       VALUES
-        (gen_random_uuid(), $1, 'instagram', 'provider_import', $2, $3, $4, $5,
-         $6, $7, 'running', $8::jsonb,
+        (gen_random_uuid(), $1, 'instagram', 'provider_import', $2::jsonb, $3::jsonb, $4::jsonb, $5::jsonb,
+         $6, $7, 'running', 'meta_instagram_business_discovery', $8::jsonb,
          $9, NOW(), NOW())
       RETURNING *
     `, [
       autoName,
-      destinationTheme || null, creatorCountry || null, language || null, niche || null,
+      JSON.stringify(targetDestinations), JSON.stringify(targetCountries),
+      JSON.stringify(targetLanguages), JSON.stringify(metaCategories),
       minFollowers ? parseInt(minFollowers, 10) : null,
       maxFollowers ? parseInt(maxFollowers, 10) : null,
       runParams, createdById,
@@ -2427,7 +2447,7 @@ async function crmMetaBusinessDiscovery(pool, payload, ctx) {
     enrichResult = await enrichInstagramProfilesByUsername(normalized, criteria);
   } catch (err) {
     await pool.query(
-      `UPDATE "CreatorDiscoveryRun" SET status = 'failed', notes = $2, "updatedAt" = NOW() WHERE id = $1`,
+      `UPDATE "CreatorDiscoveryRun" SET status = 'failed', "errorMessage" = $2, "updatedAt" = NOW() WHERE id = $1`,
       [runId, `Error: ${err.message}`]
     );
     throw err;
@@ -2498,7 +2518,7 @@ async function crmMetaBusinessDiscovery(pool, payload, ctx) {
     : null;
 
   await pool.query(
-    `UPDATE "CreatorDiscoveryRun" SET status = 'completed', "resultCount" = $2, notes = COALESCE(notes, $3), "updatedAt" = NOW() WHERE id = $1`,
+    `UPDATE "CreatorDiscoveryRun" SET status = 'completed', "resultsCount" = $2, "errorMessage" = COALESCE("errorMessage", $3), "updatedAt" = NOW() WHERE id = $1`,
     [runId, inserted, errorSummary]
   );
 
