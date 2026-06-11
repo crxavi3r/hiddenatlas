@@ -168,55 +168,87 @@ function parseCreatorProfiles(text) {
   throw new Error(`Could not parse AI response as JSON. Response starts with: ${s.slice(0, 200)}`);
 }
 
+// ── Normalizer helpers ────────────────────────────────────────────────────────
+
+function safeInteger(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = parseInt(String(value).replace(/[^\d]/g, ''), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function safeNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(String(value).replace('%', '').replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+
+function clampScore(value) {
+  const n = safeInteger(value);
+  if (n === null) return null;
+  return Math.max(0, Math.min(100, n));
+}
+
+function extractInstagramUsername(url) {
+  try {
+    const u = new URL(url);
+    if (!u.hostname.includes('instagram.com')) return null;
+    return u.pathname.split('/').filter(Boolean)[0] || null;
+  } catch { return null; }
+}
+
 // ── Username / profile normalizer ─────────────────────────────────────────────
 
-function normalizeAiProfile(raw) {
+export function normalizeAiProfile(raw) {
   // Extract username from any common field name
-  let username = raw.username || raw.handle || raw.instagramHandle || raw.instagramUsername || '';
+  let username = raw.username || raw.handle || raw.instagramHandle ||
+                 raw.instagramUsername || raw.account || '';
 
   // If username is missing but profileUrl is present, extract from URL
   if (!username && raw.profileUrl) {
-    const m = raw.profileUrl.match(/instagram\.com\/([A-Za-z0-9_.]+)/i);
-    if (m) username = m[1];
+    username = extractInstagramUsername(raw.profileUrl) || '';
   }
 
-  if (!username || typeof username !== 'string') return null;
-  username = username.trim().replace(/^@/, '').toLowerCase();
-  if (!username) return null;
+  if (!username || typeof username !== 'string') {
+    return { ok: false, reason: 'missing_username', raw };
+  }
 
-  const safeInt = v => {
-    if (v == null) return null;
-    const n = typeof v === 'string' ? parseInt(v.replace(/[^0-9]/g, ''), 10) : Math.round(Number(v));
-    return isNaN(n) ? null : n;
-  };
-  const safeFloat = v => {
-    if (v == null) return null;
-    const n = parseFloat(v);
-    return isNaN(n) ? null : Math.round(n * 10000) / 10000;
-  };
+  username = username.trim()
+    .replace(/^@/, '')
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//, '')
+    .split('/')[0].split('?')[0]
+    .toLowerCase();
+
+  if (!username) return { ok: false, reason: 'empty_username_after_normalize', raw };
+
+  const platform   = raw.platform || 'instagram';
+  const profileUrl = raw.profileUrl || raw.url || raw.instagramUrl ||
+                     (platform === 'instagram' ? `https://www.instagram.com/${username}/` : null);
 
   return {
-    username,
-    displayName:   raw.displayName   || raw.name    || null,
-    profileUrl:    raw.profileUrl    || `https://www.instagram.com/${username}/`,
-    avatarUrl:     raw.avatarUrl     || null,
-    followerCount: safeInt(raw.followerCount ?? raw.followersCount ?? raw.followers),
-    postCount:     safeInt(raw.postCount     ?? raw.postsCount     ?? raw.posts),
-    engagementRate: safeFloat(raw.engagementRate),
-    bio:           raw.bio           || null,
-    country:       raw.country       || null,
-    language:      raw.language      || null,
-    category:      raw.category      || null,
-    score:         safeFloat(raw.score) ?? 50,
-    fitSummary:    raw.fitSummary    || raw.summary  || null,
-    routeIdeas:    Array.isArray(raw.routeIdeas) ? raw.routeIdeas : [],
-    destinations:  Array.isArray(raw.destinations) ? raw.destinations : [],
-    rawData: {
-      source: 'ai_suggestion',
-      verificationStatus: 'unverified',
-      needsManualVerification: true,
-      confidence: raw.confidence || raw.confidenceLevel || 'medium',
-      originalData: raw,
+    ok: true,
+    data: {
+      platform,
+      username,
+      displayName:    raw.displayName  || raw.fullName || raw.name || username,
+      profileUrl,
+      avatarUrl:      raw.avatarUrl    || raw.avatar   || null,
+      followersCount: safeInteger(raw.followersCount ?? raw.followerCount ?? raw.followers ?? raw.followers_count),
+      postsCount:     safeInteger(raw.postsCount     ?? raw.postCount     ?? raw.posts     ?? raw.posts_count),
+      engagementRate: safeNumber(raw.engagementRate  ?? raw.engagement_rate),
+      bio:            raw.bio          || raw.description || null,
+      country:        raw.country      || null,
+      language:       raw.language     || null,
+      category:       raw.category     || raw.niche    || null,
+      score:          clampScore(raw.score),
+      fitSummary:     raw.fitSummary   || raw.fit      || raw.reason || null,
+      routeIdeas:     Array.isArray(raw.routeIdeas)   ? raw.routeIdeas : [],
+      rawData: {
+        source: 'ai_suggestion',
+        verificationStatus: 'unverified',
+        needsManualVerification: true,
+        confidence: raw.confidence || raw.confidenceLevel || 'medium',
+        providerRaw: raw,
+      },
     },
   };
 }
@@ -251,8 +283,10 @@ async function runClaudeDiscovery(criteria) {
 
   if (!Array.isArray(rawProfiles)) throw new Error('Claude response parsed but was not an array');
 
-  const creators = rawProfiles.map(normalizeAiProfile).filter(Boolean);
-  console.log(`[discovery:claude] parsed ${rawProfiles.length} raw profiles, normalized ${creators.length} valid profiles`);
+  const normalized = rawProfiles.map(normalizeAiProfile);
+  const creators   = normalized.filter(r => r.ok).map(r => r.data);
+  const skipped    = normalized.filter(r => !r.ok);
+  console.log(`[discovery:claude] parsed ${rawProfiles.length} raw, normalized ${creators.length} valid, skipped ${skipped.length}`, skipped.map(s => s.reason));
 
   return {
     creators,
@@ -324,8 +358,10 @@ async function runTavilyClaudeDiscovery(criteria) {
     throw new Error(`Failed to parse Tavily+Claude response as JSON: ${parseErr.message}`);
   }
 
-  const creators = rawProfiles.map(normalizeAiProfile).filter(Boolean);
-  console.log(`[discovery:tavily_claude] parsed ${rawProfiles.length} raw profiles, normalized ${creators.length} valid profiles`);
+  const normalized = rawProfiles.map(normalizeAiProfile);
+  const creators   = normalized.filter(r => r.ok).map(r => r.data);
+  const skipped    = normalized.filter(r => !r.ok);
+  console.log(`[discovery:tavily_claude] parsed ${rawProfiles.length} raw, normalized ${creators.length} valid, skipped ${skipped.length}`, skipped.map(s => s.reason));
 
   return {
     creators,

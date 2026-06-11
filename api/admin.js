@@ -2013,34 +2013,41 @@ async function crmImportResults(pool, body, ctx) {
   for (const r of results) {
     const { username, platform = 'instagram' } = r;
     if (!username) continue;
-    await pool.query(`
-      INSERT INTO "CreatorDiscoveryResult"
-        (id, "runId", platform, username, "profileUrl", "displayName", "avatarUrl",
-         "isVerified", "followerCount", "postCount", "engagementRate",
-         bio, country, language, category, niches, destinations, hashtags, mentions,
-         score, "routeIdeas", "fitSummary", status, metadata, "createdAt")
-      VALUES
-        (gen_random_uuid(), $1, $2, $3, $4, $5, $6,
-         $7, $8, $9, $10,
-         $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb,
-         $19, $20::jsonb, $21, 'new', $22::jsonb, NOW())
-      ON CONFLICT DO NOTHING
-    `, [
-      runId, platform, username,
-      r.profileUrl || `https://instagram.com/${username}`,
-      r.displayName || null, r.avatarUrl || null,
-      r.isVerified ?? false, r.followerCount ?? null, r.postCount ?? null, r.engagementRate ?? null,
-      r.bio || null, r.country || null, r.language || null, r.category || null,
-      JSON.stringify(Array.isArray(r.niches) ? r.niches : []),
-      JSON.stringify(Array.isArray(r.destinations) ? r.destinations : []),
-      JSON.stringify(Array.isArray(r.hashtags) ? r.hashtags : []),
-      JSON.stringify(Array.isArray(r.mentions) ? r.mentions : []),
-      r.score ?? null,
-      JSON.stringify(Array.isArray(r.routeIdeas) ? r.routeIdeas : []),
-      r.fitSummary || null,
-      JSON.stringify(r.metadata || {}),
-    ]);
-    inserted++;
+    const cleanUsername = String(username).trim().replace(/^@/, '').toLowerCase();
+    if (!cleanUsername) continue;
+    try {
+      await pool.query(`
+        INSERT INTO "CreatorDiscoveryResult"
+          ("runId", platform, username, "displayName", "profileUrl", "avatarUrl",
+           "followersCount", "postsCount", "engagementRate",
+           bio, country, language, category,
+           score, "fitSummary", "routeIdeas", "rawData",
+           selected, status, "createdAt")
+        VALUES
+          ($1, $2, $3, $4, $5, $6,
+           $7, $8, $9,
+           $10, $11, $12, $13,
+           $14, $15, $16::jsonb, $17::jsonb,
+           false, 'new', NOW())
+        ON CONFLICT DO NOTHING
+      `, [
+        runId, platform, cleanUsername,
+        r.displayName || null,
+        r.profileUrl || `https://www.instagram.com/${cleanUsername}/`,
+        r.avatarUrl || null,
+        r.followersCount ?? r.followerCount ?? null,
+        r.postsCount     ?? r.postCount     ?? null,
+        r.engagementRate ?? null,
+        r.bio || null, r.country || null, r.language || null, r.category || null,
+        r.score ?? null,
+        r.fitSummary || null,
+        JSON.stringify(Array.isArray(r.routeIdeas) ? r.routeIdeas : []),
+        JSON.stringify(r.rawData || r.metadata || { source: 'manual_import' }),
+      ]);
+      inserted++;
+    } catch (e) {
+      console.error(`[crmImportResults] INSERT failed for @${cleanUsername}:`, e.message);
+    }
   }
 
   await pool.query(
@@ -2248,18 +2255,23 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
     return { run: finalRun[0], results: [], inserted: 0, skipped: 0, providerStatus: { provider, ...providerMeta } };
   }
 
-  let inserted = 0;
-  let skipped  = 0;
   const insertedResults = [];
+  const insertSkipped   = [];
+  const insertFailed    = [];
   const seenUsernames   = new Set();
+
+  console.log(`[AI Discovery] processing ${creators.length} normalized profiles for runId=${runId}`);
+  if (creators[0]) console.log('[AI Discovery] first normalized profile:', JSON.stringify(creators[0]).slice(0, 800));
 
   for (const c of creators.slice(0, limit)) {
     const username = c.username;
-    if (seenUsernames.has(username)) { skipped++; continue; }
+    if (seenUsernames.has(username)) {
+      insertSkipped.push({ username, reason: 'duplicate_in_batch' });
+      continue;
+    }
     seenUsernames.add(username);
 
     try {
-      // Check if already a CRM lead
       const { rows: leadRows } = await pool.query(
         `SELECT id, status FROM "CreatorLead" WHERE platform = $1 AND username = $2 LIMIT 1`,
         [platform, username]
@@ -2267,56 +2279,70 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
       const existingLead = leadRows[0] || null;
       const resultStatus = existingLead ? 'added_to_crm' : 'new';
 
+      const rawDataJson = JSON.stringify({
+        ...(c.rawData || {}),
+        provider,
+        providerMeta,
+        existingLeadId: existingLead?.id || null,
+        existingLeadStatus: existingLead?.status || null,
+      });
+
       const { rows: resRows } = await pool.query(`
         INSERT INTO "CreatorDiscoveryResult"
-          (id, "runId", platform, username, "profileUrl", "displayName", "avatarUrl",
-           "isVerified", "followerCount", "postCount", "engagementRate",
-           bio, country, language, category, niches, destinations, hashtags, mentions,
-           score, "routeIdeas", "fitSummary", status, metadata, "createdAt")
+          ("runId", platform, username, "displayName", "profileUrl", "avatarUrl",
+           "followersCount", "postsCount", "engagementRate",
+           bio, country, language, category,
+           score, "fitSummary", "routeIdeas", "rawData",
+           selected, status, "createdAt")
         VALUES
-          (gen_random_uuid(), $1, $2, $3, $4, $5, $6,
-           false, $7, $8, $9,
-           $10, $11, $12, $13, '[]'::jsonb, $14::jsonb, '[]'::jsonb, '[]'::jsonb,
-           $15, $16::jsonb, $17, $18, $19::jsonb, NOW())
+          ($1, $2, $3, $4, $5, $6,
+           $7, $8, $9,
+           $10, $11, $12, $13,
+           $14, $15, $16::jsonb, $17::jsonb,
+           false, $18, NOW())
         ON CONFLICT DO NOTHING
-        RETURNING *
+        RETURNING id, username
       `, [
-        runId, platform, username, c.profileUrl,
-        c.displayName, c.avatarUrl,
-        c.followerCount, c.postCount, c.engagementRate,
+        runId, platform, username, c.displayName, c.profileUrl, c.avatarUrl,
+        c.followersCount, c.postsCount, c.engagementRate,
         c.bio, c.country, c.language, c.category,
-        JSON.stringify(c.destinations),
-        c.score,
+        c.score, c.fitSummary,
         JSON.stringify(c.routeIdeas),
-        c.fitSummary,
+        rawDataJson,
         resultStatus,
-        JSON.stringify({
-          source: 'ai_search', provider, providerMeta,
-          rawData: c.rawData || {},
-          existingLeadId: existingLead?.id || null,
-          existingLeadStatus: existingLead?.status || null,
-        }),
       ]);
 
       if (resRows.length) {
-        if (existingLead) resRows[0].lead_id = existingLead.id;
         insertedResults.push(resRows[0]);
-        inserted++;
       } else {
-        skipped++; // ON CONFLICT DO NOTHING — already existed
+        insertSkipped.push({ username, reason: 'duplicate_in_run' });
       }
     } catch (e) {
-      console.error(`[ai_search] INSERT failed for @${username}:`, e.message);
-      skipped++;
+      console.error(`[AI Discovery] INSERT failed for @${username}:`, e.message);
+      insertFailed.push({ username, error: e.message });
     }
   }
 
-  console.log(`[ai_search] inserted=${inserted} skipped=${skipped} runId=${runId}`);
+  console.log('[AI Discovery] insert summary', {
+    rawCount: creators.length,
+    insertedCount: insertedResults.length,
+    skippedCount: insertSkipped.length,
+    failedCount: insertFailed.length,
+    skippedReasons: insertSkipped.map(s => s.reason),
+    failedErrors: insertFailed.map(f => f.error),
+  });
+
+  const inserted = insertedResults.length;
 
   // Finalize run
-  const finalErrorMsg = (inserted === 0 && creators.length > 0)
-    ? 'AI provider returned profiles but none could be inserted (possible duplicates or data issue).'
-    : null;
+  let finalErrorMsg = null;
+  if (inserted === 0 && creators.length > 0) {
+    const firstSkip = insertSkipped[0]?.reason || null;
+    const firstFail = insertFailed[0]?.error   || null;
+    finalErrorMsg = `AI returned ${creators.length} profile${creators.length !== 1 ? 's' : ''} but none were inserted.` +
+      (insertFailed.length   > 0 ? ` ${insertFailed.length} failed: ${firstFail}.` : '') +
+      (insertSkipped.length  > 0 ? ` ${insertSkipped.length} skipped (${firstSkip}).` : '');
+  }
 
   await pool.query(
     `UPDATE "CreatorDiscoveryRun" SET status = 'completed', "resultsCount" = $2, "selectedCount" = 0, "completedAt" = NOW(), "errorMessage" = $3, "updatedAt" = NOW() WHERE id = $1`,
@@ -2490,29 +2516,38 @@ async function crmMetaBusinessDiscovery(pool, payload, ctx) {
 
       const { rows: resRows } = await pool.query(`
         INSERT INTO "CreatorDiscoveryResult"
-          (id, "runId", platform, username, "profileUrl", "displayName", "avatarUrl",
-           "isVerified", "followerCount", "postCount", "engagementRate",
-           bio, country, language, category, niches, destinations, hashtags, mentions,
-           score, "routeIdeas", "fitSummary", status, metadata, "createdAt")
+          ("runId", platform, username, "displayName", "profileUrl", "avatarUrl",
+           "followersCount", "postsCount", "engagementRate",
+           bio, country, language, category,
+           score, "fitSummary", "routeIdeas", "rawData",
+           selected, status, "createdAt")
         VALUES
-          (gen_random_uuid(), $1, 'instagram', $2, $3, $4, $5,
-           false, $6, $7, null,
-           $8, $9, $10, $11, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
-           $12, $13::jsonb, $14, $15, $16::jsonb, NOW())
-        RETURNING *
+          ($1, 'instagram', $2, $3, $4, $5,
+           $6, $7, null,
+           $8, $9, $10, $11,
+           $12, $13, $14::jsonb, $15::jsonb,
+           false, $16, NOW())
+        ON CONFLICT DO NOTHING
+        RETURNING id, username
       `, [
-        runId, username, p.profileUrl, p.displayName, p.avatarUrl,
-        p.followerCount ?? null, p.postCount ?? null, p.bio || null,
-        p.country || null, p.language || null, p.category || 'travel',
+        runId, username, p.displayName, p.profileUrl, p.avatarUrl,
+        p.followerCount ?? p.followersCount ?? null,
+        p.postCount     ?? p.postsCount     ?? null,
+        p.bio || null, p.country || null, p.language || null, p.category || 'travel',
         p.score ?? null,
-        JSON.stringify(p.routeIdeas || []),
-        p.fitSummary || null, resultStatus,
+        p.fitSummary || null,
+        JSON.stringify(Array.isArray(p.routeIdeas) ? p.routeIdeas : []),
         JSON.stringify({
-          source: 'meta_instagram_business_discovery', provider: 'meta_instagram',
-          website: p.website || null, followsCount: p.followsCount ?? null,
+          source: 'meta_instagram_business_discovery',
+          provider: 'meta_instagram',
+          verificationStatus: 'verified',
+          website: p.website || null,
+          followsCount: p.followsCount ?? null,
           media: p.rawData?.media || [],
-          existingLeadId: existingLead?.id || null, existingLeadStatus: existingLead?.status || null,
+          existingLeadId: existingLead?.id || null,
+          existingLeadStatus: existingLead?.status || null,
         }),
+        resultStatus,
       ]);
 
       if (resRows.length) {
