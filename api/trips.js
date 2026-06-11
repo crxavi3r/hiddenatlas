@@ -1049,7 +1049,7 @@ export default async function handler(req, res) {
     }
 
     // ── POST /api/trips?id= — log audit event ──────────────────────────────
-    if (req.method === 'POST' && id) {
+    if (req.method === 'POST' && id && !action) {
       const { eventType, metadata = {} } = req.body || {};
 
       if (eventType !== 'DOWNLOADED') {
