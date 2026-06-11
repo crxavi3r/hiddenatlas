@@ -1400,13 +1400,9 @@ function DesktopTable({ items, onEdit, onPreview, onTogglePublish, onDuplicate, 
                       <Copy size={13} />
                     </button>
                     {it.status === 'pending_review' ? (
-                      <span style={{
-                        fontSize: '10px', fontWeight: '600', color: '#C9A96E',
-                        padding: '3px 6px', background: '#FBF8F1', borderRadius: '4px',
-                        whiteSpace: 'nowrap',
-                      }} title="Awaiting admin review">
-                        Awaiting review
-                      </span>
+                      <button style={{ ...iconBtn, color: '#C9A96E', cursor: 'default', opacity: 0.6 }} title="Awaiting admin review" disabled>
+                        <Globe size={13} />
+                      </button>
                     ) : (
                       <button
                         onClick={() => onTogglePublish(it)}
