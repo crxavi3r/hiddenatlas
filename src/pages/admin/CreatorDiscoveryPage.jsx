@@ -42,10 +42,11 @@ const RUN_STATUS_CHIP = {
 };
 
 const SEARCH_TYPE_LABELS = {
-  ai_search:   'AI Search',
-  manual:      'Manual',
-  csv_import:  'CSV Import',
-  json_import: 'JSON Import',
+  ai_search:      'AI Search',
+  manual:         'Manual',
+  csv_import:     'CSV Import',
+  json_import:    'JSON Import',
+  provider_import: 'Meta',
 };
 
 const AI_STEPS = [
@@ -342,6 +343,187 @@ function AiSearchPanel({ onSearchDone, getToken }) {
         </p>
       </div>
     </form>
+  );
+}
+
+// ── Meta Discovery Panel ──────────────────────────────────────────────────────
+
+const EMPTY_META = {
+  usernames: '', destinationTheme: '', niche: '', creatorCountry: '', language: '',
+  minFollowers: '', maxFollowers: '',
+};
+
+function MetaDiscoveryPanel({ onSearchDone, getToken }) {
+  const [configStatus, setConfigStatus] = useState(null);
+  const [checkingConfig, setCheckingConfig] = useState(false);
+  const [form, setForm]   = useState(EMPTY_META);
+  const [searching, setSearching] = useState(false);
+  const [error, setError] = useState(null);
+  const [perUserErrors, setPerUserErrors] = useState({});
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  async function checkConfig() {
+    setCheckingConfig(true);
+    try {
+      const data = await crmCall(getToken, 'discovery.metaValidateConfig', {});
+      setConfigStatus(data);
+    } catch (e) {
+      setConfigStatus({ configured: false, valid: false, message: e.message });
+    } finally {
+      setCheckingConfig(false);
+    }
+  }
+
+  async function handleSearch(e) {
+    e.preventDefault();
+    if (!form.usernames.trim()) return;
+    setSearching(true);
+    setError(null);
+    setPerUserErrors({});
+    try {
+      const data = await crmCall(getToken, 'discovery.metaBusinessDiscovery', {
+        usernames:        form.usernames,
+        destinationTheme: form.destinationTheme || undefined,
+        niche:            form.niche            || undefined,
+        creatorCountry:   form.creatorCountry   || undefined,
+        language:         form.language         || undefined,
+        minFollowers:     form.minFollowers  ? parseInt(form.minFollowers, 10)  : undefined,
+        maxFollowers:     form.maxFollowers  ? parseInt(form.maxFollowers, 10)  : undefined,
+      });
+      if (data.errors && Object.keys(data.errors).length > 0) setPerUserErrors(data.errors);
+      onSearchDone(data);
+    } catch (e) {
+      const isNotConfigured = e.message?.includes('not configured') || e.message?.includes('META_NOT_CONFIGURED');
+      if (isNotConfigured) {
+        setConfigStatus({ configured: false, missing: [], message: e.message });
+      } else {
+        setError(e.message);
+      }
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  return (
+    <div style={{ ...S.card, minHeight: '480px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+        <Globe size={15} color="#1B6B65" />
+        <h2 style={{ fontSize: '14px', fontWeight: '700', color: '#1C1A16', margin: 0 }}>Meta Business Discovery</h2>
+        <span style={{ fontSize: '11.5px', color: '#8C8070' }}>Instagram profile enrichment</span>
+      </div>
+
+      {/* Config status */}
+      <div style={{ marginBottom: '20px', padding: '12px 14px', background: '#F8F6F2', borderRadius: '8px', border: '1px solid #E8E3DA', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1 }}>
+          {configStatus === null && (
+            <span style={{ fontSize: '12.5px', color: '#8C8070' }}>Meta configuration not checked.</span>
+          )}
+          {configStatus?.configured && configStatus?.valid && (
+            <span style={{ fontSize: '12.5px', color: '#1B6B65', fontWeight: '500', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <CheckCircle size={13} /> {configStatus.message || 'Meta configured'}
+            </span>
+          )}
+          {configStatus?.configured && configStatus?.valid === false && (
+            <span style={{ fontSize: '12.5px', color: '#C0392B', fontWeight: '500' }}>{configStatus.message}</span>
+          )}
+          {configStatus && !configStatus.configured && (
+            <div>
+              <span style={{ fontSize: '12.5px', color: '#C0392B', fontWeight: '500' }}>Not configured.</span>
+              {configStatus.missing?.length > 0 && (
+                <p style={{ fontSize: '11.5px', color: '#8C8070', margin: '2px 0 0' }}>
+                  Missing: {configStatus.missing.join(', ')}
+                </p>
+              )}
+              {configStatus.message && !configStatus.missing?.length && (
+                <p style={{ fontSize: '11.5px', color: '#8C8070', margin: '2px 0 0' }}>{configStatus.message}</p>
+              )}
+            </div>
+          )}
+        </div>
+        <button onClick={checkConfig} disabled={checkingConfig}
+          style={{ ...S.btnSecondary, fontSize: '11.5px', padding: '5px 10px', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+          {checkingConfig ? <Spinner size={11} /> : <RefreshCw size={11} />}
+          {checkingConfig ? 'Checking…' : 'Check Meta config'}
+        </button>
+      </div>
+
+      {/* Form */}
+      <form onSubmit={handleSearch} style={{ maxWidth: '960px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={S.label}>Usernames <span style={{ color: '#C9A96E' }}>required</span></label>
+            <textarea
+              value={form.usernames}
+              onChange={e => set('usernames', e.target.value)}
+              placeholder={'@username, instagram.com/username or one username per line'}
+              rows={4}
+              style={{ ...S.textarea, fontFamily: 'inherit', fontSize: '13px' }}
+            />
+            <p style={{ fontSize: '11px', color: '#C8C0B8', margin: '2px 0 0' }}>
+              Separate by comma or new line. Instagram URLs work too. Max 50 per run.
+            </p>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={S.label}>Destination / Theme <span style={{ color: '#B5AA99', fontWeight: '400' }}>optional — improves scoring</span></label>
+            <input value={form.destinationTheme} onChange={e => set('destinationTheme', e.target.value)}
+              placeholder="e.g. Japan, Morocco, family travel" style={S.input} />
+          </div>
+          <div>
+            <label style={S.label}>Niche / Category <span style={{ color: '#B5AA99', fontWeight: '400' }}>optional</span></label>
+            <input value={form.niche} onChange={e => set('niche', e.target.value)}
+              placeholder="e.g. luxury, food, family" style={S.input} />
+          </div>
+          <div>
+            <label style={S.label}>Creator Country <span style={{ color: '#B5AA99', fontWeight: '400' }}>optional</span></label>
+            <input value={form.creatorCountry} onChange={e => set('creatorCountry', e.target.value)}
+              placeholder="e.g. Portugal, Japan" style={S.input} />
+          </div>
+          <div>
+            <label style={S.label}>Language <span style={{ color: '#B5AA99', fontWeight: '400' }}>optional</span></label>
+            <input value={form.language} onChange={e => set('language', e.target.value)}
+              placeholder="e.g. pt, en, es" style={S.input} />
+          </div>
+          <div />
+          <div>
+            <label style={S.label}>Min Followers <span style={{ color: '#B5AA99', fontWeight: '400' }}>optional</span></label>
+            <input type="number" value={form.minFollowers} onChange={e => set('minFollowers', e.target.value)}
+              placeholder="e.g. 10000" style={S.input} />
+          </div>
+          <div>
+            <label style={S.label}>Max Followers <span style={{ color: '#B5AA99', fontWeight: '400' }}>optional</span></label>
+            <input type="number" value={form.maxFollowers} onChange={e => set('maxFollowers', e.target.value)}
+              placeholder="e.g. 500000" style={S.input} />
+          </div>
+        </div>
+
+        {Object.keys(perUserErrors).length > 0 && (
+          <div style={{ marginTop: '12px', padding: '10px 14px', background: '#FBF8F1', borderRadius: '8px', border: '1px solid #E8C97A' }}>
+            <p style={{ fontSize: '11.5px', fontWeight: '600', color: '#C9A96E', margin: '0 0 6px' }}>
+              {Object.keys(perUserErrors).length} username{Object.keys(perUserErrors).length !== 1 ? 's' : ''} failed:
+            </p>
+            {Object.entries(perUserErrors).map(([u, msg]) => (
+              <p key={u} style={{ fontSize: '11px', color: '#6B6156', margin: '2px 0' }}>@{u}: {msg}</p>
+            ))}
+          </div>
+        )}
+
+        {error && (
+          <div style={{ marginTop: '12px', padding: '10px 14px', background: '#FDECEA', borderRadius: '8px', border: '1px solid #F5C6C0' }}>
+            <p style={{ fontSize: '12.5px', color: '#C0392B', margin: 0 }}>{error}</p>
+          </div>
+        )}
+
+        <div style={{ marginTop: '16px' }}>
+          <button type="submit" style={{ ...S.btnPrimary, gap: '8px' }} disabled={searching || !form.usernames.trim()}>
+            {searching ? <Spinner size={13} /> : <Globe size={13} />}
+            {searching ? 'Fetching Instagram profile data from Meta…' : 'Enrich Instagram profiles'}
+          </button>
+          <p style={{ fontSize: '11px', color: '#C8C0B8', marginTop: '8px', lineHeight: '1.5' }}>
+            Uses Meta Business Discovery API. Target accounts must be Instagram Business or Creator accounts.
+          </p>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -850,14 +1032,7 @@ export default function CreatorDiscoveryPage() {
               )}
 
               {mode === 'provider' && (
-                <div style={{ ...S.card, minHeight: '480px', textAlign: 'center', padding: '48px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                  <Globe size={28} color="#D4C8BB" style={{ marginBottom: '12px' }} />
-                  <h3 style={{ fontSize: '15px', fontWeight: '600', color: '#4A433A', marginBottom: '8px' }}>External Provider Search</h3>
-                  <p style={{ fontSize: '13px', color: '#8C8070', maxWidth: '360px', margin: '0 auto 16px', lineHeight: '1.6' }}>
-                    External provider search is not configured yet. This mode will support dedicated creator discovery APIs in a future release.
-                  </p>
-                  <p style={{ fontSize: '12.5px', color: '#B5AA99' }}>Use <strong>AI Search</strong> or <strong>Manual Import</strong> in the meantime.</p>
-                </div>
+                <MetaDiscoveryPanel getToken={getToken} onSearchDone={handleAiSearchDone} />
               )}
 
               {mode === 'manual' && (

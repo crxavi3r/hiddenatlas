@@ -1750,7 +1750,9 @@ async function dispatchCrmAction(pool, action, payload, ctx) {
     case 'discovery.ignoreResult':    return crmSetResultStatus(pool, payload.id, 'ignored');
     case 'discovery.blockResult':     return crmSetResultStatus(pool, payload.id, 'blocked');
     case 'discovery.markCompleted':   return crmMarkRunCompleted(pool, payload.id);
-    case 'discovery.aiSearchProfiles':return crmAiSearchProfiles(pool, payload, ctx);
+    case 'discovery.aiSearchProfiles':  return crmAiSearchProfiles(pool, payload, ctx);
+    case 'discovery.metaValidateConfig': return crmMetaValidateConfig(pool, payload);
+    case 'discovery.metaBusinessDiscovery': return crmMetaBusinessDiscovery(pool, payload, ctx);
     case 'leads.list':                 return crmListLeads(pool, payload);
     case 'leads.get':                  return crmGetLead(pool, payload.id);
     case 'leads.update':               return crmUpdateLead(pool, payload.id, payload, ctx);
@@ -2296,6 +2298,216 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
 
   const { rows: finalRun } = await pool.query(`SELECT * FROM "CreatorDiscoveryRun" WHERE id = $1`, [runId]);
   return { run: finalRun[0], results: insertedResults, inserted, skipped, providerStatus: { provider, ...providerMeta } };
+}
+
+async function crmMetaValidateConfig(pool, payload) {
+  const { validateMetaConfig } = await import('./_lib/creatorDiscoveryProviders.js');
+  const config = validateMetaConfig();
+
+  if (!config.configured) {
+    return {
+      configured: false,
+      missing: config.missing,
+      provider: 'meta_instagram',
+      message: config.missing.length
+        ? `Missing env vars: ${config.missing.join(', ')}`
+        : 'META_PROVIDER_ENABLED is set to false',
+    };
+  }
+
+  try {
+    const ctrl  = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10_000);
+    let res;
+    try {
+      const url = new URL(`https://graph.facebook.com/${config.version}/${config.accountId}`);
+      url.searchParams.set('fields', 'id,name');
+      url.searchParams.set('access_token', config.token);
+      res = await fetch(url.toString(), { signal: ctrl.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+    const data = await res.json();
+    if (data.error) {
+      const msg = data.error.code === 190
+        ? 'Meta token is invalid or expired.'
+        : (data.error.message || 'Meta API error');
+      return { configured: true, missing: [], valid: false, provider: 'meta_instagram', message: msg };
+    }
+    return {
+      configured: true, missing: [], valid: true, provider: 'meta_instagram',
+      message: `Connected${data.name ? ` · ${data.name}` : ''}`,
+      accountId: data.id, accountName: data.name || null,
+    };
+  } catch (e) {
+    return { configured: true, missing: [], valid: false, provider: 'meta_instagram', message: `Connection test failed: ${e.message}` };
+  }
+}
+
+async function crmMetaBusinessDiscovery(pool, payload, ctx) {
+  const {
+    enrichInstagramProfilesByUsername, validateMetaConfig, normalizeUsername,
+  } = await import('./_lib/creatorDiscoveryProviders.js');
+
+  const {
+    runId: existingRunId, usernames: rawUsernames,
+    destinationTheme, niche, creatorCountry, language, minFollowers, maxFollowers,
+  } = payload;
+
+  const config = validateMetaConfig();
+  if (!config.configured) {
+    throw Object.assign(
+      new Error(`Meta provider not configured. Missing: ${config.missing.join(', ')}`),
+      { status: 503, code: 'META_NOT_CONFIGURED' }
+    );
+  }
+
+  const rawList = Array.isArray(rawUsernames)
+    ? rawUsernames
+    : typeof rawUsernames === 'string' ? rawUsernames.split(/[\n,]+/) : [];
+
+  const normalized = [
+    ...new Set(
+      rawList.map(u => normalizeUsername(u))
+        .filter(u => u && u.length >= 1 && u.length <= 30 && /^[a-zA-Z0-9_.]+$/.test(u))
+    ),
+  ].slice(0, 50);
+
+  if (!normalized.length) throw Object.assign(new Error('No valid usernames provided'), { status: 400 });
+
+  const createdById = ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null;
+
+  let run;
+  if (!existingRunId) {
+    const profileLabel = destinationTheme?.trim() || `${normalized.length} profile${normalized.length !== 1 ? 's' : ''}`;
+    const autoName = [
+      'Meta · Instagram',
+      profileLabel,
+      new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+    ].join(' · ');
+
+    const runParams = JSON.stringify({
+      provider: 'meta_instagram_business_discovery',
+      usernames: normalized,
+      destinationTheme: destinationTheme || null, niche: niche || null,
+      creatorCountry: creatorCountry || null, language: language || null,
+      minFollowers: minFollowers || null, maxFollowers: maxFollowers || null,
+    });
+
+    const { rows } = await pool.query(`
+      INSERT INTO "CreatorDiscoveryRun"
+        (id, name, platform, "searchType", destination, country, language, category,
+         "minFollowers", "maxFollowers", status, params,
+         "createdById", "createdAt", "updatedAt")
+      VALUES
+        (gen_random_uuid(), $1, 'instagram', 'provider_import', $2, $3, $4, $5,
+         $6, $7, 'running', $8::jsonb,
+         $9, NOW(), NOW())
+      RETURNING *
+    `, [
+      autoName,
+      destinationTheme || null, creatorCountry || null, language || null, niche || null,
+      minFollowers ? parseInt(minFollowers, 10) : null,
+      maxFollowers ? parseInt(maxFollowers, 10) : null,
+      runParams, createdById,
+    ]);
+    run = rows[0];
+  } else {
+    const { rows } = await pool.query(`SELECT * FROM "CreatorDiscoveryRun" WHERE id = $1 LIMIT 1`, [existingRunId]);
+    if (!rows.length) throw Object.assign(new Error('Run not found'), { status: 404 });
+    run = rows[0];
+    await pool.query(`UPDATE "CreatorDiscoveryRun" SET status = 'running', "updatedAt" = NOW() WHERE id = $1`, [existingRunId]);
+  }
+
+  const runId    = run.id;
+  const criteria = { destinationTheme, niche, creatorCountry, language, minFollowers, maxFollowers };
+
+  let enrichResult;
+  try {
+    enrichResult = await enrichInstagramProfilesByUsername(normalized, criteria);
+  } catch (err) {
+    await pool.query(
+      `UPDATE "CreatorDiscoveryRun" SET status = 'failed', notes = $2, "updatedAt" = NOW() WHERE id = $1`,
+      [runId, `Error: ${err.message}`]
+    );
+    throw err;
+  }
+
+  const { results: profiles, errors } = enrichResult;
+
+  const { rows: existing } = await pool.query(
+    `SELECT username FROM "CreatorDiscoveryResult" WHERE "runId" = $1`, [runId]
+  );
+  const existingUsernames = new Set(existing.map(r => r.username.toLowerCase()));
+
+  let inserted = 0; let skipped = 0;
+  const insertedResults = [];
+
+  for (const p of profiles) {
+    const username = (p.username || '').toLowerCase();
+    if (existingUsernames.has(username)) { skipped++; continue; }
+    existingUsernames.add(username);
+
+    try {
+      const { rows: leadRows } = await pool.query(
+        `SELECT id, status FROM "CreatorLead" WHERE platform = 'instagram' AND username = $1 LIMIT 1`, [username]
+      );
+      const existingLead = leadRows[0] || null;
+      const resultStatus = existingLead ? 'added_to_crm' : 'new';
+
+      const { rows: resRows } = await pool.query(`
+        INSERT INTO "CreatorDiscoveryResult"
+          (id, "runId", platform, username, "profileUrl", "displayName", "avatarUrl",
+           "isVerified", "followerCount", "postCount", "engagementRate",
+           bio, country, language, category, niches, destinations, hashtags, mentions,
+           score, "routeIdeas", "fitSummary", status, metadata, "createdAt")
+        VALUES
+          (gen_random_uuid(), $1, 'instagram', $2, $3, $4, $5,
+           false, $6, $7, null,
+           $8, $9, $10, $11, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
+           $12, $13::jsonb, $14, $15, $16::jsonb, NOW())
+        RETURNING *
+      `, [
+        runId, username, p.profileUrl, p.displayName, p.avatarUrl,
+        p.followerCount ?? null, p.postCount ?? null, p.bio || null,
+        p.country || null, p.language || null, p.category || 'travel',
+        p.score ?? null,
+        JSON.stringify(p.routeIdeas || []),
+        p.fitSummary || null, resultStatus,
+        JSON.stringify({
+          source: 'meta_instagram_business_discovery', provider: 'meta_instagram',
+          website: p.website || null, followsCount: p.followsCount ?? null,
+          media: p.rawData?.media || [],
+          existingLeadId: existingLead?.id || null, existingLeadStatus: existingLead?.status || null,
+        }),
+      ]);
+
+      if (resRows.length) {
+        if (existingLead) resRows[0].lead_id = existingLead.id;
+        insertedResults.push(resRows[0]);
+        inserted++;
+      }
+    } catch (e) {
+      console.warn(`[meta_discovery] insert failed for @${username}:`, e.message);
+      skipped++;
+    }
+  }
+
+  const errorSummary = Object.keys(errors).length > 0
+    ? `Errors (${Object.keys(errors).length}): ${Object.entries(errors).map(([u, m]) => `@${u}: ${m}`).join('; ')}`
+    : null;
+
+  await pool.query(
+    `UPDATE "CreatorDiscoveryRun" SET status = 'completed', "resultCount" = $2, notes = COALESCE(notes, $3), "updatedAt" = NOW() WHERE id = $1`,
+    [runId, inserted, errorSummary]
+  );
+
+  const { rows: finalRun } = await pool.query(`SELECT * FROM "CreatorDiscoveryRun" WHERE id = $1`, [runId]);
+  return {
+    run: finalRun[0], results: insertedResults, inserted, skipped, errors,
+    errorsCount: Object.keys(errors).length,
+    providerStatus: { provider: 'meta_instagram_business_discovery' },
+  };
 }
 
 async function crmMarkRunCompleted(pool, id) {

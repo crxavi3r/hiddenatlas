@@ -299,3 +299,183 @@ async function runPerplexityDiscovery(criteria) {
     providerMeta: { model: 'perplexity-sonar-online', contextSource: 'web_search' },
   };
 }
+
+// ── Meta Business Discovery Provider ─────────────────────────────────────────
+
+const META_GRAPH_URL = 'https://graph.facebook.com';
+
+export function validateMetaConfig() {
+  const version   = process.env.META_GRAPH_API_VERSION || 'v21.0';
+  const accountId = process.env.META_INSTAGRAM_ACCOUNT_ID;
+  const token     = process.env.META_PAGE_ACCESS_TOKEN || process.env.META_INSTAGRAM_ACCESS_TOKEN;
+  const enabled   = process.env.META_PROVIDER_ENABLED !== 'false';
+
+  const missing = [];
+  if (!accountId) missing.push('META_INSTAGRAM_ACCOUNT_ID');
+  if (!token)     missing.push('META_PAGE_ACCESS_TOKEN');
+
+  return { configured: missing.length === 0 && enabled, missing, version, accountId, token, enabled };
+}
+
+export function normalizeUsername(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  let s = raw.trim();
+  const urlMatch = s.match(/instagram\.com\/([A-Za-z0-9_.]+)/i);
+  if (urlMatch) return urlMatch[1].toLowerCase();
+  s = s.replace(/^@/, '').replace(/\/$/, '').replace(/\s+/g, '');
+  return s.toLowerCase();
+}
+
+function metaFmtK(n) {
+  if (n == null) return '';
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(0)}k`;
+  return String(n);
+}
+
+function calcMetaScore(profile, criteria = {}) {
+  let score = 0;
+  const bio      = (profile.biography || '').toLowerCase();
+  const captions = (profile.media?.data || []).map(m => (m.caption || '').toLowerCase()).join(' ');
+  const text     = bio + ' ' + captions;
+
+  if (/travel|viaje|viagem|voyage|trip\b|destination|itinerary|wanderlust|explorer|backpack/.test(text)) score += 20;
+
+  const dest = (criteria.destinationTheme || '').toLowerCase().split(',')[0].trim();
+  if (dest && text.includes(dest)) score += 15;
+
+  if (profile.website) score += 10;
+
+  const followers = profile.followers_count ?? 0;
+  const min = criteria.minFollowers ?? 5_000;
+  const max = criteria.maxFollowers ?? 1_000_000;
+  if (followers >= min && followers <= max) score += 10;
+
+  if ((profile.media_count ?? 0) >= 30) score += 10;
+
+  const travelCaps = (profile.media?.data || []).filter(m =>
+    /travel|trip|destination|itinerary|explore|route|guide/.test((m.caption || '').toLowerCase())
+  ).length;
+  if (travelCaps >= 3) score += 10;
+
+  const niche = (criteria.niche || '').toLowerCase();
+  if (niche && text.includes(niche)) score += 10;
+
+  if (/\b(hotel|resort|airline|tour operator|travel agency|booking\.com)\b/.test(bio)) score -= 20;
+  if (!profile.biography || profile.biography.length < 15) score -= 15;
+
+  return Math.max(0, Math.min(100, score));
+}
+
+function metaFitSummary(profile, criteria = {}) {
+  const parts = [];
+  const bio = profile.biography || '';
+  if (bio) parts.push(bio.slice(0, 120).replace(/\n/g, ' '));
+  if (profile.followers_count != null) parts.push(`${metaFmtK(profile.followers_count)} followers`);
+  if (profile.website) parts.push('has website');
+  return parts.join(' · ').slice(0, 220) || null;
+}
+
+function metaRouteIdeas(profile, criteria = {}) {
+  const ideas = [];
+  const text = [profile.biography || '', ...(profile.media?.data || []).map(m => m.caption || '')].join(' ').toLowerCase();
+  const dest = (criteria.destinationTheme || '').split(',')[0].trim();
+
+  if (dest) {
+    if (/slow|relax|pace|offbeat/.test(text))                       ideas.push(`Slow travel through ${dest}`);
+    else if (/food|eat|culinar|gastro|cuisine|restaurant/.test(text)) ideas.push(`${dest} food and culture route`);
+    else if (/luxury|boutique|premium/.test(text))                   ideas.push(`Premium ${dest} discovery`);
+    else if (/hidden|secret|off.beat|underrated/.test(text))         ideas.push(`Hidden ${dest}: beyond the guidebook`);
+    else                                                               ideas.push(`${dest} curated itinerary`);
+  }
+  if (ideas.length < 2) ideas.push(`${profile.name || profile.username || 'Creator'}'s signature travel guide`);
+  return ideas.slice(0, 3);
+}
+
+export async function enrichInstagramProfilesByUsername(usernames, criteria = {}) {
+  const config = validateMetaConfig();
+  if (!config.configured) {
+    throw Object.assign(
+      new Error(`Meta provider not configured. Missing: ${config.missing.join(', ')}`),
+      { status: 503, code: 'META_NOT_CONFIGURED' }
+    );
+  }
+
+  const { version, accountId, token } = config;
+  const fieldset = [
+    'id', 'username', 'name', 'biography', 'website',
+    'profile_picture_url', 'followers_count', 'follows_count', 'media_count',
+    'media.limit(6){id,caption,media_type,permalink,timestamp,like_count,comments_count}',
+  ].join(',');
+
+  const results = [];
+  const errors  = {};
+
+  for (const username of usernames) {
+    try {
+      const fields = `business_discovery.use_username(${username}){${fieldset}}`;
+      const url    = new URL(`${META_GRAPH_URL}/${version}/${accountId}`);
+      url.searchParams.set('fields', fields);
+      url.searchParams.set('access_token', token);
+
+      const ctrl  = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15_000);
+      let res;
+      try {
+        res = await fetch(url.toString(), { signal: ctrl.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+
+      const data = await res.json();
+
+      if (data.error) {
+        const code = data.error.code;
+        let msg    = data.error.message || 'Meta API error';
+        if (code === 100 || msg.toLowerCase().includes('business_discovery')) {
+          msg = 'Not a Business/Creator account or profile not found';
+        } else if (code === 190) {
+          msg = 'Meta token is invalid or expired';
+        } else if (code === 4 || code === 17 || code === 32) {
+          msg = 'Rate limit reached — wait a few minutes and try again';
+        }
+        errors[username] = msg;
+        continue;
+      }
+
+      const profile = data.business_discovery;
+      if (!profile) { errors[username] = 'Profile not found or not accessible'; continue; }
+
+      results.push({
+        username:     (profile.username || username).toLowerCase(),
+        displayName:  profile.name                  || null,
+        profileUrl:   `https://www.instagram.com/${profile.username || username}/`,
+        avatarUrl:    profile.profile_picture_url   || null,
+        bio:          profile.biography             || null,
+        website:      profile.website               || null,
+        followerCount: profile.followers_count      ?? null,
+        followsCount:  profile.follows_count        ?? null,
+        postCount:     profile.media_count          ?? null,
+        country:      criteria.creatorCountry       || null,
+        language:     criteria.language             || null,
+        category:     criteria.niche               || 'travel',
+        score:        calcMetaScore(profile, criteria),
+        fitSummary:   metaFitSummary(profile, criteria),
+        routeIdeas:   metaRouteIdeas(profile, criteria),
+        rawData: {
+          provider: 'meta_instagram_business_discovery',
+          apiVersion: version,
+          website:  profile.website        || null,
+          followsCount: profile.follows_count ?? null,
+          media:    profile.media?.data    || [],
+        },
+      });
+
+      await new Promise(r => setTimeout(r, 400));
+    } catch (e) {
+      errors[username] = e.name === 'AbortError' ? 'Request timed out' : (e.message || 'Unknown error');
+    }
+  }
+
+  return { results, errors, provider: 'meta_instagram_business_discovery' };
+}
