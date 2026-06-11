@@ -1128,10 +1128,15 @@ export default function CreatorDiscoveryPage() {
                   <div style={{ textAlign: 'center', padding: '40px 24px', color: '#B5AA99' }}>
                     <Users size={26} style={{ marginBottom: '10px', opacity: 0.4 }} />
                     <p style={{ fontSize: '13.5px', marginBottom: '6px' }}>No profiles in this run yet</p>
-                    {mode === 'ai_search'
-                      ? <p style={{ fontSize: '12.5px', opacity: 0.7 }}>Use AI Search to find creators for this destination.</p>
-                      : <button onClick={() => setShowImport(true)} style={{ ...S.btnPrimary, marginTop: '10px' }}><Upload size={13} /> Import Profiles</button>
-                    }
+                    {activeRun?.errorMessage ? (
+                      <p style={{ fontSize: '12px', color: '#C9A96E', background: '#FBF8F1', border: '1px solid #E8C97A', borderRadius: '6px', padding: '8px 12px', maxWidth: '320px', margin: '8px auto 0', lineHeight: '1.5' }}>
+                        {activeRun.errorMessage}
+                      </p>
+                    ) : mode === 'ai_search' ? (
+                      <p style={{ fontSize: '12.5px', opacity: 0.7 }}>Use AI Search to find Travel Designers matching this creator profile.</p>
+                    ) : (
+                      <button onClick={() => setShowImport(true)} style={{ ...S.btnPrimary, marginTop: '10px' }}><Upload size={13} /> Import Profiles</button>
+                    )}
                   </div>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>

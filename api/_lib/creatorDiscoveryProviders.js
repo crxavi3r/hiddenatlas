@@ -98,55 +98,164 @@ function buildCreatorPrompt(criteria, webContext = '') {
   } = criteria;
   const limit = Math.min(Number(targetCount) || 20, 50);
 
-  const lines = [
-    `Find potential Travel Designers / Travel Creators matching this creator profile:\n${creatorProfile}`,
-    destinationTheme && `\nOptional destination or theme context:\n${destinationTheme}`,
-    creatorCountry   && `\nCreator country:\n${creatorCountry}`,
-    language         && `\nLanguage:\n${language}`,
-    niche            && `\nNiche / category:\n${niche}`,
-    (minFollowers || maxFollowers) && `\nFollower range:\n${minFollowers ? Number(minFollowers).toLocaleString() : 'any'} to ${maxFollowers ? Number(maxFollowers).toLocaleString() : 'any'}`,
-    notes            && `\nAdditional notes:\n${notes}`,
+  const filters = [
+    creatorCountry   && `Country: ${creatorCountry}`,
+    language         && `Language: ${language}`,
+    niche            && `Niche/category: ${niche}`,
+    (minFollowers || maxFollowers) && `Followers: ${minFollowers ? Number(minFollowers).toLocaleString() : 'any'} to ${maxFollowers ? Number(maxFollowers).toLocaleString() : 'any'}`,
+    destinationTheme && `Destination/theme context: ${destinationTheme}`,
+    notes            && `Notes: ${notes}`,
   ].filter(Boolean).join('\n');
 
-  return `You are a talent scout for HiddenAtlas, a premium travel itinerary platform that partners with Travel Designers and Travel Creators.
+  return `You are a talent scout for HiddenAtlas, a travel itinerary platform partnering with Travel Designers and Creators.
 
-SEARCH REQUEST:
-${lines}
+CREATOR PROFILE BRIEF:
+${creatorProfile}
+${filters ? `\nFILTERS:\n${filters}` : ''}
 ${webContext ? `\nWEB CONTEXT:\n${webContext.slice(0, 4000)}` : ''}
 
-INCLUDE: travel creators, itinerary planners, destination experts, travel bloggers with guides or hotel recommendations.
-EXCLUDE: agencies, tour operators, hotels, airlines, meme pages, discount influencers.
+INCLUDE: travel creators, itinerary planners, destination experts, travel bloggers.
+EXCLUDE: agencies, tour operators, hotels, meme pages, generic repost accounts.
 
-SCORING (0-100): 80+ perfect itinerary potential, 60-79 strong, 40-59 possible, below 40 weak.
+Find ${limit} real Instagram accounts that match the brief above.
 
-Return ONLY a valid JSON array of exactly ${limit} objects. No markdown, no explanation. Start with [ end with ].
+IMPORTANT: Return ONLY valid JSON, no markdown, no explanation, no code blocks.
+Output this exact structure with ${limit} profiles:
+{"profiles":[{"username":"actual_instagram_handle","displayName":"Full Name","followerCount":50000,"bio":"known bio or null","country":"PT","language":"pt","category":"luxury travel","score":75,"fitSummary":"One sentence: why this creator fits the brief.","confidence":"high"}]}
 
-Each object:
-{"username":"handle_no_@","displayName":"Name or null","followerCount":number_or_null,"bio":"bio or null","country":"country or null","language":"pt|en|es|fr|etc","category":"travel niche","score":0-100,"fitSummary":"1 sentence why this creator fits","confidence":"high|medium|low"}`;
+score: 0-100 (80+ = perfect fit, 60-79 = strong, 40-59 = possible)
+confidence: high/medium/low (how certain you are this account exists and matches)
+username: real Instagram handle, no @ symbol`;
 }
 
 // ── JSON parser ───────────────────────────────────────────────────────────────
 
-function parseCreatorArray(text) {
+function parseCreatorProfiles(text) {
   let s = text.trim();
-  s = s.replace(/^```(?:json)?\s*/m, '').replace(/\s*```\s*$/m, '');
-  const start = s.indexOf('[');
-  const end   = s.lastIndexOf(']');
-  if (start === -1 || end === -1) throw new Error('No JSON array found in AI response');
-  return JSON.parse(s.slice(start, end + 1));
+  // Strip markdown fences
+  s = s.replace(/^```(?:json)?\s*/im, '').replace(/\s*```\s*$/im, '').trim();
+
+  // Try direct parse first
+  try {
+    const parsed = JSON.parse(s);
+    // {"profiles": [...]}  or  {"results": [...]}
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const arr = parsed.profiles || parsed.results || parsed.creators || parsed.data;
+      if (Array.isArray(arr)) return arr;
+    }
+    // Direct array
+    if (Array.isArray(parsed)) return parsed;
+  } catch (_) {}
+
+  // Extract first JSON object {...}
+  const objStart = s.indexOf('{');
+  const objEnd   = s.lastIndexOf('}');
+  if (objStart !== -1 && objEnd !== -1) {
+    try {
+      const parsed = JSON.parse(s.slice(objStart, objEnd + 1));
+      const arr = parsed.profiles || parsed.results || parsed.creators || parsed.data;
+      if (Array.isArray(arr)) return arr;
+    } catch (_) {}
+  }
+
+  // Fallback: extract first [...] array
+  const arrStart = s.indexOf('[');
+  const arrEnd   = s.lastIndexOf(']');
+  if (arrStart !== -1 && arrEnd !== -1) {
+    return JSON.parse(s.slice(arrStart, arrEnd + 1));
+  }
+
+  throw new Error(`Could not parse AI response as JSON. Response starts with: ${s.slice(0, 200)}`);
+}
+
+// ── Username / profile normalizer ─────────────────────────────────────────────
+
+function normalizeAiProfile(raw) {
+  // Extract username from any common field name
+  let username = raw.username || raw.handle || raw.instagramHandle || raw.instagramUsername || '';
+
+  // If username is missing but profileUrl is present, extract from URL
+  if (!username && raw.profileUrl) {
+    const m = raw.profileUrl.match(/instagram\.com\/([A-Za-z0-9_.]+)/i);
+    if (m) username = m[1];
+  }
+
+  if (!username || typeof username !== 'string') return null;
+  username = username.trim().replace(/^@/, '').toLowerCase();
+  if (!username) return null;
+
+  const safeInt = v => {
+    if (v == null) return null;
+    const n = typeof v === 'string' ? parseInt(v.replace(/[^0-9]/g, ''), 10) : Math.round(Number(v));
+    return isNaN(n) ? null : n;
+  };
+  const safeFloat = v => {
+    if (v == null) return null;
+    const n = parseFloat(v);
+    return isNaN(n) ? null : Math.round(n * 10000) / 10000;
+  };
+
+  return {
+    username,
+    displayName:   raw.displayName   || raw.name    || null,
+    profileUrl:    raw.profileUrl    || `https://www.instagram.com/${username}/`,
+    avatarUrl:     raw.avatarUrl     || null,
+    followerCount: safeInt(raw.followerCount ?? raw.followersCount ?? raw.followers),
+    postCount:     safeInt(raw.postCount     ?? raw.postsCount     ?? raw.posts),
+    engagementRate: safeFloat(raw.engagementRate),
+    bio:           raw.bio           || null,
+    country:       raw.country       || null,
+    language:      raw.language      || null,
+    category:      raw.category      || null,
+    score:         safeFloat(raw.score) ?? 50,
+    fitSummary:    raw.fitSummary    || raw.summary  || null,
+    routeIdeas:    Array.isArray(raw.routeIdeas) ? raw.routeIdeas : [],
+    destinations:  Array.isArray(raw.destinations) ? raw.destinations : [],
+    rawData: {
+      source: 'ai_suggestion',
+      verificationStatus: 'unverified',
+      needsManualVerification: true,
+      confidence: raw.confidence || raw.confidenceLevel || 'medium',
+      originalData: raw,
+    },
+  };
 }
 
 // ── Provider: Claude (knowledge-only) ────────────────────────────────────────
 
 async function runClaudeDiscovery(criteria) {
+  console.log('[discovery:claude] criteria:', JSON.stringify({
+    creatorProfile: (criteria.creatorProfile || '').slice(0, 80),
+    destinationTheme: criteria.destinationTheme || null,
+    creatorCountry: criteria.creatorCountry || null,
+    language: criteria.language || null,
+    niche: criteria.niche || null,
+    minFollowers: criteria.minFollowers || null,
+    maxFollowers: criteria.maxFollowers || null,
+    targetCount: criteria.targetCount,
+  }));
+
   const text = await callAnthropic(
-    'You are a talent acquisition assistant for HiddenAtlas. Always respond with valid JSON only, no additional text.',
+    'You are a talent acquisition assistant for HiddenAtlas. Respond with valid JSON only, exactly as instructed. No markdown, no explanation.',
     buildCreatorPrompt(criteria),
   );
-  const creators = parseCreatorArray(text);
-  if (!Array.isArray(creators)) throw new Error('AI response was not an array');
+
+  console.log(`[discovery:claude] raw response length: ${text.length}, first 500 chars: ${text.slice(0, 500)}`);
+
+  let rawProfiles;
+  try {
+    rawProfiles = parseCreatorProfiles(text);
+  } catch (parseErr) {
+    throw new Error(`Failed to parse Claude response as JSON: ${parseErr.message}`);
+  }
+
+  if (!Array.isArray(rawProfiles)) throw new Error('Claude response parsed but was not an array');
+
+  const creators = rawProfiles.map(normalizeAiProfile).filter(Boolean);
+  console.log(`[discovery:claude] parsed ${rawProfiles.length} raw profiles, normalized ${creators.length} valid profiles`);
+
   return {
-    creators: creators.filter(c => c?.username),
+    creators,
     provider: 'claude',
     providerMeta: { model: MODEL, contextSource: 'ai_knowledge' },
   };
@@ -202,13 +311,24 @@ async function runTavilyClaudeDiscovery(criteria) {
   }
 
   const text = await callAnthropic(
-    'You are a talent acquisition assistant for HiddenAtlas. Use the provided web search context to identify real Instagram travel creators. Always respond with valid JSON only.',
+    'You are a talent acquisition assistant for HiddenAtlas. Use the provided web search context to identify real Instagram travel creators. Respond with valid JSON only, exactly as instructed. No markdown, no explanation.',
     buildCreatorPrompt(criteria, webContext),
   );
-  const creators = parseCreatorArray(text);
-  if (!Array.isArray(creators)) throw new Error('AI response was not an array');
+
+  console.log(`[discovery:tavily_claude] raw response length: ${text.length}, first 500 chars: ${text.slice(0, 500)}`);
+
+  let rawProfiles;
+  try {
+    rawProfiles = parseCreatorProfiles(text);
+  } catch (parseErr) {
+    throw new Error(`Failed to parse Tavily+Claude response as JSON: ${parseErr.message}`);
+  }
+
+  const creators = rawProfiles.map(normalizeAiProfile).filter(Boolean);
+  console.log(`[discovery:tavily_claude] parsed ${rawProfiles.length} raw profiles, normalized ${creators.length} valid profiles`);
+
   return {
-    creators: creators.filter(c => c?.username),
+    creators,
     provider: 'tavily_claude',
     providerMeta: { model: MODEL, contextSource: 'tavily_web_search' },
   };

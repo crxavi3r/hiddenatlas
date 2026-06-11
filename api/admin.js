@@ -2236,21 +2236,27 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
 
   const { creators, provider, providerMeta } = discoveryResult;
 
-  // Insert results — skip duplicates per (runId, username)
-  const { rows: existing } = await pool.query(
-    `SELECT username FROM "CreatorDiscoveryResult" WHERE "runId" = $1`, [runId]
-  );
-  const existingUsernames = new Set(existing.map(r => r.username.toLowerCase()));
+  console.log(`[ai_search] provider=${provider} returned ${creators.length} normalized profiles for runId=${runId}`);
+
+  if (creators.length === 0) {
+    const emptyMsg = 'AI provider returned no profile suggestions. Try a broader creator profile or lower filters.';
+    await pool.query(
+      `UPDATE "CreatorDiscoveryRun" SET status = 'completed', "resultsCount" = 0, "selectedCount" = 0, "completedAt" = NOW(), "errorMessage" = $2, "updatedAt" = NOW() WHERE id = $1`,
+      [runId, emptyMsg]
+    );
+    const { rows: finalRun } = await pool.query(`SELECT * FROM "CreatorDiscoveryRun" WHERE id = $1`, [runId]);
+    return { run: finalRun[0], results: [], inserted: 0, skipped: 0, providerStatus: { provider, ...providerMeta } };
+  }
 
   let inserted = 0;
   let skipped  = 0;
   const insertedResults = [];
+  const seenUsernames   = new Set();
 
   for (const c of creators.slice(0, limit)) {
-    if (!c?.username) { skipped++; continue; }
-    const username = c.username.trim().replace(/^@/, '').toLowerCase();
-    if (existingUsernames.has(username)) { skipped++; continue; }
-    existingUsernames.add(username);
+    const username = c.username;
+    if (seenUsernames.has(username)) { skipped++; continue; }
+    seenUsernames.add(username);
 
     try {
       // Check if already a CRM lead
@@ -2259,8 +2265,6 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
         [platform, username]
       );
       const existingLead = leadRows[0] || null;
-
-      const profileUrl = c.profileUrl || `https://www.instagram.com/${username}/`;
       const resultStatus = existingLead ? 'added_to_crm' : 'new';
 
       const { rows: resRows } = await pool.query(`
@@ -2274,16 +2278,17 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
            false, $7, $8, $9,
            $10, $11, $12, $13, '[]'::jsonb, $14::jsonb, '[]'::jsonb, '[]'::jsonb,
            $15, $16::jsonb, $17, $18, $19::jsonb, NOW())
+        ON CONFLICT DO NOTHING
         RETURNING *
       `, [
-        runId, platform, username, profileUrl,
-        c.displayName || null, c.avatarUrl || null,
-        c.followerCount ?? null, c.postCount ?? null, c.engagementRate ?? null,
-        c.bio || null, c.country || null, c.language || null, c.category || null,
-        JSON.stringify(Array.isArray(c.destinations) ? c.destinations : []),
-        c.score ?? null,
-        JSON.stringify(Array.isArray(c.routeIdeas) ? c.routeIdeas : []),
-        c.fitSummary || null,
+        runId, platform, username, c.profileUrl,
+        c.displayName, c.avatarUrl,
+        c.followerCount, c.postCount, c.engagementRate,
+        c.bio, c.country, c.language, c.category,
+        JSON.stringify(c.destinations),
+        c.score,
+        JSON.stringify(c.routeIdeas),
+        c.fitSummary,
         resultStatus,
         JSON.stringify({
           source: 'ai_search', provider, providerMeta,
@@ -2297,17 +2302,25 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
         if (existingLead) resRows[0].lead_id = existingLead.id;
         insertedResults.push(resRows[0]);
         inserted++;
+      } else {
+        skipped++; // ON CONFLICT DO NOTHING — already existed
       }
     } catch (e) {
-      console.warn(`[ai_search] insert failed for @${username}:`, e.message);
+      console.error(`[ai_search] INSERT failed for @${username}:`, e.message);
       skipped++;
     }
   }
 
+  console.log(`[ai_search] inserted=${inserted} skipped=${skipped} runId=${runId}`);
+
   // Finalize run
+  const finalErrorMsg = (inserted === 0 && creators.length > 0)
+    ? 'AI provider returned profiles but none could be inserted (possible duplicates or data issue).'
+    : null;
+
   await pool.query(
-    `UPDATE "CreatorDiscoveryRun" SET status = 'completed', "resultsCount" = $2, "updatedAt" = NOW() WHERE id = $1`,
-    [runId, inserted]
+    `UPDATE "CreatorDiscoveryRun" SET status = 'completed', "resultsCount" = $2, "selectedCount" = 0, "completedAt" = NOW(), "errorMessage" = $3, "updatedAt" = NOW() WHERE id = $1`,
+    [runId, inserted, finalErrorMsg]
   );
 
   const { rows: finalRun } = await pool.query(`SELECT * FROM "CreatorDiscoveryRun" WHERE id = $1`, [runId]);
