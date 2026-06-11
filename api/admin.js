@@ -2186,11 +2186,11 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
       INSERT INTO "CreatorDiscoveryRun"
         (id, name, platform, "searchType", "targetDestinations", "targetCountries", "targetLanguages", categories,
          "minFollowers", "maxFollowers", status, provider, params,
-         "createdById", "createdAt", "updatedAt")
+         "createdById", "startedAt", "createdAt", "updatedAt")
       VALUES
-        (gen_random_uuid(), $1, $2, 'ai_search', $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb,
+        (gen_random_uuid(), $1, $2, 'keyword', $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb,
          $7, $8, 'running', $9, $10::jsonb,
-         $11, NOW(), NOW())
+         $11, NOW(), NOW(), NOW())
       RETURNING *
     `, [
       autoName, platform,
