@@ -668,7 +668,7 @@ export default async function handler(req, res) {
     }
 
     // ── GET /api/trips?id= — single trip (basic) ───────────────────────────
-    if (req.method === 'GET' && id) {
+    if (req.method === 'GET' && id && !action) {
       const singleAccess = await getTripAccess(id);
       if (!singleAccess.canView) return res.status(404).json({ error: 'Trip not found' });
 
