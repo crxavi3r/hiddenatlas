@@ -3129,7 +3129,7 @@ async function crmGenerateMessage(pool, leadId, body) {
   }
 
   if (!template) {
-    const fallback = `Hi ${lead.firstName || lead.username}, I came across your content and love what you create. I'd love to chat about collaborating with HiddenAtlas on a premium travel itinerary.`;
+    const fallback = `Hi ${lead.displayName?.split(' ')[0] || lead.username}, I came across your content and love what you create. I'd love to chat about collaborating with HiddenAtlas on a premium travel itinerary.`;
     return { personalizedBody: fallback, templateId: null, templateName: null };
   }
 
@@ -3144,22 +3144,42 @@ async function crmGenerateMessage(pool, leadId, body) {
 
 async function crmSaveMessage(pool, leadId, body, ctx) {
   if (!leadId) throw Object.assign(new Error('id (leadId) required'), { status: 400 });
-  const { templateId, personalizedBody, platform = 'instagram', subject } = body;
+  const { templateId, personalizedBody, channel = 'instagram', subject } = body;
   if (!personalizedBody?.trim()) throw Object.assign(new Error('personalizedBody is required'), { status: 400 });
+
+  const createdById = ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null;
+
+  const { rows: leadRows } = await pool.query(
+    `SELECT username, "profileUrl", platform FROM "CreatorLead" WHERE id = $1 LIMIT 1`, [leadId]
+  );
+  const lead = leadRows[0];
+  const resolvedChannel = channel || lead?.platform || 'instagram';
+  const metadata = JSON.stringify({
+    deliveryMode: 'manual',
+    username: lead?.username || null,
+    profileUrl: lead?.profileUrl || (lead?.username ? `https://www.instagram.com/${lead.username}/` : null),
+    source: 'lead_message_draft',
+  });
 
   const { rows } = await pool.query(`
     INSERT INTO "CreatorLeadMessage"
-      (id, "leadId", "templateId", platform, subject, body, "personalizedBody", status, "createdAt", "updatedAt")
+      (id, "leadId", "templateId", channel, direction, subject, body, status,
+       "createdById", metadata, "createdAt", "updatedAt")
     VALUES
-      (gen_random_uuid(), $1, $2, $3, $4, $5, $5, 'draft', NOW(), NOW())
+      (gen_random_uuid(), $1, $2, $3, 'outbound', $4, $5, 'draft',
+       $6, $7::jsonb, NOW(), NOW())
     RETURNING *
-  `, [leadId, templateId || null, platform, subject || null, personalizedBody.trim()]);
+  `, [leadId, templateId || null, resolvedChannel, subject || null, personalizedBody.trim(), createdById, metadata]);
 
-  await pool.query(`
-    INSERT INTO "CreatorLeadActivity"
-      (id, "leadId", type, body, metadata, "createdById", "createdAt")
-    VALUES (gen_random_uuid(), $1, 'message_prepared', 'Message prepared', '{}'::jsonb, $2, NOW())
-  `, [leadId, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
+  try {
+    await pool.query(`
+      INSERT INTO "CreatorLeadActivity"
+        (id, "leadId", type, body, metadata, "createdById", "createdAt")
+      VALUES (gen_random_uuid(), $1, 'message_prepared', 'Message saved as draft', '{}'::jsonb, $2, NOW())
+    `, [leadId, createdById]);
+  } catch (actErr) {
+    console.warn('[crmSaveMessage] activity log failed (non-blocking):', actErr.message);
+  }
 
   return { message: rows[0] };
 }

@@ -166,6 +166,12 @@ export default function CreatorLeadDetailPage() {
   const [refreshingIg, setRefreshingIg] = useState(false);
   const [igRefreshError, setIgRefreshError] = useState(null);
   const [avatarModal, setAvatarModal] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  function showToast(msg, type = 'success') {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4000);
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -195,7 +201,7 @@ export default function CreatorLeadDetailPage() {
       setShowStatusChange(false);
       setStatusNote('');
       load();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showToast(e.message, 'error'); }
     finally { setSaving(false); }
   }
 
@@ -207,7 +213,7 @@ export default function CreatorLeadDetailPage() {
       await crmCall(getToken, 'leads.addNote', { id, content: noteText.trim() });
       setNoteText('');
       load();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showToast(e.message, 'error'); }
     finally { setAddingNote(false); }
   }
 
@@ -219,7 +225,7 @@ export default function CreatorLeadDetailPage() {
       await crmCall(getToken, 'leads.createTask', { id, title: taskTitle.trim(), dueAt: taskDueAt || null });
       setTaskTitle(''); setTaskDueAt(''); setShowAddTask(false);
       load();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showToast(e.message, 'error'); }
     finally { setAddingTask(false); }
   }
 
@@ -227,7 +233,7 @@ export default function CreatorLeadDetailPage() {
     try {
       await crmCall(getToken, 'leads.updateTask', { id, taskId, ...updates });
       load();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showToast(e.message, 'error'); }
   }
 
   async function handleGenerateMessage() {
@@ -235,7 +241,7 @@ export default function CreatorLeadDetailPage() {
     try {
       const result = await crmCall(getToken, 'messages.generateForLead', { id, templateId: selectedTemplate || undefined });
       setMessageBody(result.personalizedBody || '');
-    } catch (e) { alert(e.message); }
+    } catch (e) { showToast(e.message, 'error'); }
     finally { setGeneratingMsg(false); }
   }
 
@@ -243,15 +249,21 @@ export default function CreatorLeadDetailPage() {
     if (!messageBody.trim()) return;
     setSavingMsg(true);
     try {
-      await crmCall(getToken, 'messages.saveForLead', { id, templateId: selectedTemplate || null, personalizedBody: messageBody.trim(), platform: data?.lead?.platform || 'instagram' });
+      await crmCall(getToken, 'messages.saveForLead', {
+        id,
+        templateId: selectedTemplate || null,
+        personalizedBody: messageBody.trim(),
+        channel: data?.lead?.platform || 'instagram',
+      });
       setMessageBody('');
+      showToast('Message saved as draft');
       load();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showToast(e.message, 'error'); }
     finally { setSavingMsg(false); }
   }
 
   async function handleCopyMessage(msg) {
-    await navigator.clipboard.writeText(msg.personalizedBody || msg.body).catch(() => {});
+    await navigator.clipboard.writeText(msg.body).catch(() => {});
     setCopiedMsgId(msg.id);
     setTimeout(() => setCopiedMsgId(null), 2500);
     try {
@@ -263,8 +275,9 @@ export default function CreatorLeadDetailPage() {
   async function handleMarkSent(msg) {
     try {
       await crmCall(getToken, 'messages.markSent', { msgId: msg.id });
+      showToast('Marked as sent');
       load();
-    } catch (e) { alert(e.message); }
+    } catch (e) { showToast(e.message, 'error'); }
   }
 
   async function handleRefreshInstagram() {
@@ -323,6 +336,12 @@ export default function CreatorLeadDetailPage() {
   return (
     <div style={S.page}>
       <AvatarModal src={avatarModal} onClose={() => setAvatarModal(null)} />
+
+      {toast && (
+        <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9000, padding: '12px 18px', borderRadius: '8px', background: toast.type === 'error' ? '#C0392B' : '#1B6B65', color: 'white', fontSize: '13px', fontWeight: '500', boxShadow: '0 4px 16px rgba(0,0,0,0.18)', maxWidth: '360px' }}>
+          {toast.msg}
+        </div>
+      )}
 
       <button onClick={() => navigate('/admin/creator-acquisition/crm')}
         style={{ ...S.btnSecondary, marginBottom: '18px', fontSize: '12px' }}>
@@ -656,7 +675,7 @@ export default function CreatorLeadDetailPage() {
                   </div>
                 </div>
                 <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: '13px', color: '#1C1A16', lineHeight: '1.6', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                  {msg.personalizedBody || msg.body}
+                  {msg.body}
                 </pre>
               </div>
             ))}
