@@ -104,7 +104,7 @@ function ActivityItem({ item }) {
         <Icon size={11} color={colors[item.type] || '#8C8070'} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: '12.5px', color: '#1C1A16', margin: 0 }}>{item.content}</p>
+        <p style={{ fontSize: '12.5px', color: '#1C1A16', margin: 0 }}>{item.body}</p>
         {item.type === 'status_change' && item.metadata?.from && (
           <p style={{ fontSize: '11px', color: '#8C8070', margin: '2px 0 0' }}>
             {item.metadata.from} → {item.metadata.to}

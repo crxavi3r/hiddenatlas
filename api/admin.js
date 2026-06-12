@@ -2003,15 +2003,19 @@ async function crmRefreshInstagram(pool, body, ctx) {
   ]);
 
   const createdById = ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null;
-  await pool.query(`
-    INSERT INTO "CreatorLeadActivity" (id, "leadId", type, content, metadata, "createdById", "createdAt")
-    VALUES (gen_random_uuid(), $1, 'system', $2, $3::jsonb, $4, NOW())
-  `, [
-    id,
-    `Instagram refreshed: ${v.followersCount?.toLocaleString() ?? '?'} followers, ${v.postsCount ?? '?'} posts`,
-    JSON.stringify({ followersCount: v.followersCount, postsCount: v.postsCount, refreshedAt: now }),
-    createdById,
-  ]);
+  try {
+    await pool.query(`
+      INSERT INTO "CreatorLeadActivity" (id, "leadId", type, body, metadata, "createdById", "createdAt")
+      VALUES (gen_random_uuid(), $1, 'system', $2, $3::jsonb, $4, NOW())
+    `, [
+      id,
+      `Instagram refreshed: ${v.followersCount?.toLocaleString() ?? '?'} followers, ${v.postsCount ?? '?'} posts`,
+      JSON.stringify({ followersCount: v.followersCount, postsCount: v.postsCount, refreshedAt: now }),
+      createdById,
+    ]);
+  } catch (actErr) {
+    console.warn('[refreshInstagram] activity log failed (non-blocking):', actErr.message);
+  }
 
   return { refreshed: true, lead: updated[0] };
 }
@@ -2256,7 +2260,7 @@ async function crmAddToCrm(pool, body, ctx) {
 
   // Log activity
   await pool.query(`
-    INSERT INTO "CreatorLeadActivity" (id, "leadId", type, content, metadata, "createdById", "createdAt")
+    INSERT INTO "CreatorLeadActivity" (id, "leadId", type, body, metadata, "createdById", "createdAt")
     VALUES (gen_random_uuid(), $1, 'system', $2, '{}'::jsonb, $3, NOW())
   `, [lead.id, 'Added from discovery run', createdById]);
 
@@ -2951,7 +2955,7 @@ async function crmChangeStatus(pool, id, body, ctx) {
 
   await pool.query(`
     INSERT INTO "CreatorLeadActivity"
-      (id, "leadId", type, content, metadata, "createdById", "createdAt")
+      (id, "leadId", type, body, metadata, "createdById", "createdAt")
     VALUES
       (gen_random_uuid(), $1, 'status_change', $2, $3::jsonb, $4, NOW())
   `, [
@@ -2971,7 +2975,7 @@ async function crmAddNote(pool, id, body, ctx) {
 
   const { rows } = await pool.query(`
     INSERT INTO "CreatorLeadActivity"
-      (id, "leadId", type, content, metadata, "createdById", "createdAt")
+      (id, "leadId", type, body, metadata, "createdById", "createdAt")
     VALUES (gen_random_uuid(), $1, 'note', $2, '{}'::jsonb, $3, NOW())
     RETURNING *
   `, [id, content.trim(), (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
@@ -2994,7 +2998,7 @@ async function crmCreateTask(pool, id, body, ctx) {
 
   await pool.query(`
     INSERT INTO "CreatorLeadActivity"
-      (id, "leadId", type, content, metadata, "createdById", "createdAt")
+      (id, "leadId", type, body, metadata, "createdById", "createdAt")
     VALUES (gen_random_uuid(), $1, 'task_created', $2, '{}'::jsonb, $3, NOW())
   `, [id, `Task created: ${title.trim()}`, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
 
@@ -3029,7 +3033,7 @@ async function crmUpdateTask(pool, taskId, body, ctx) {
   if (status === 'done') {
     await pool.query(`
       INSERT INTO "CreatorLeadActivity"
-        (id, "leadId", type, content, metadata, "createdById", "createdAt")
+        (id, "leadId", type, body, metadata, "createdById", "createdAt")
       VALUES (gen_random_uuid(), $1, 'task_completed', $2, '{}'::jsonb, $3, NOW())
     `, [rows[0].leadId, `Task completed: ${rows[0].title}`, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
   }
@@ -3153,7 +3157,7 @@ async function crmSaveMessage(pool, leadId, body, ctx) {
 
   await pool.query(`
     INSERT INTO "CreatorLeadActivity"
-      (id, "leadId", type, content, metadata, "createdById", "createdAt")
+      (id, "leadId", type, body, metadata, "createdById", "createdAt")
     VALUES (gen_random_uuid(), $1, 'message_prepared', 'Message prepared', '{}'::jsonb, $2, NOW())
   `, [leadId, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
 
@@ -3198,7 +3202,7 @@ async function crmMarkSent(pool, msgId, ctx) {
 
   await pool.query(`
     INSERT INTO "CreatorLeadActivity"
-      (id, "leadId", type, content, metadata, "createdById", "createdAt")
+      (id, "leadId", type, body, metadata, "createdById", "createdAt")
     VALUES (gen_random_uuid(), $1, 'message_sent', 'Message marked as sent manually', '{}'::jsonb, $2, NOW())
   `, [msg.leadId, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
 
