@@ -77,7 +77,12 @@ async function crmCall(getToken, action, payload = {}) {
     body: JSON.stringify({ action, payload }),
   });
   const json = await res.json();
-  if (!json.success) throw new Error(json.error?.message || 'Request failed');
+  if (!json.success) {
+    const err = new Error(json.error?.message || 'Request failed');
+    err.stage = json.error?.stage || null;
+    err.code  = json.error?.code  || null;
+    throw err;
+  }
   return json.data;
 }
 
@@ -126,7 +131,16 @@ function Spinner({ size = 16 }) {
 
 // ── AI Progress ───────────────────────────────────────────────────────────────
 
-function AiProgress({ currentStep, done, error }) {
+const STAGE_HINTS = {
+  create_run:  'Failed to create the discovery run in the database.',
+  ai_provider: 'The AI provider did not respond or timed out.',
+  scoring:     'AI responded but the profiles could not be parsed or structured.',
+  saving:      'Failed to save results to the database.',
+};
+
+function AiProgress({ currentStep, done, error, errorStage, errorDetail }) {
+  const [showDebug, setShowDebug] = useState(false);
+  const stageHint = errorStage ? STAGE_HINTS[errorStage] : null;
   return (
     <div style={{ padding: '20px 24px', background: '#F8F6F2', borderRadius: '8px', border: '1px solid #E8E3DA' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
@@ -155,6 +169,26 @@ function AiProgress({ currentStep, done, error }) {
           </div>
         );
       })}
+      {error && (
+        <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #EDE8E1' }}>
+          {stageHint && (
+            <p style={{ fontSize: '12.5px', fontWeight: '600', color: '#C0392B', margin: '0 0 6px' }}>{stageHint}</p>
+          )}
+          <p style={{ fontSize: '12px', color: '#8B4513', margin: '0 0 8px', wordBreak: 'break-word' }}>{errorDetail}</p>
+          <button
+            type="button"
+            onClick={() => setShowDebug(v => !v)}
+            style={{ fontSize: '11px', color: '#8C8070', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+          >
+            {showDebug ? 'Hide debug' : 'View debug'}
+          </button>
+          {showDebug && (
+            <pre style={{ fontSize: '10.5px', color: '#5C5248', background: '#EDE8E1', borderRadius: '5px', padding: '8px 10px', marginTop: '6px', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+              stage: {errorStage || 'unknown'}{'\n'}error: {errorDetail}
+            </pre>
+          )}
+        </div>
+      )}
       {!done && !error && (
         <p style={{ fontSize: '11.5px', color: '#B5AA99', marginTop: '12px' }}>
           This may take 20–40 seconds depending on the AI provider.
@@ -177,6 +211,7 @@ function AiSearchPanel({ onSearchDone, getToken }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [done, setDone]         = useState(false);
   const [error, setError]       = useState(null);
+  const [errorStage, setErrorStage] = useState(null);
   const [result, setResult]     = useState(null);
   const stepTimersRef           = useRef([]);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -221,6 +256,7 @@ function AiSearchPanel({ onSearchDone, getToken }) {
     } catch (e) {
       clearStepTimers();
       setError(e.message);
+      setErrorStage(e.stage || null);
     } finally {
       setSearching(false);
     }
@@ -229,6 +265,7 @@ function AiSearchPanel({ onSearchDone, getToken }) {
   function handleReset() {
     setDone(false);
     setError(null);
+    setErrorStage(null);
     setResult(null);
     setCurrentStep(0);
     setSearching(false);
@@ -244,7 +281,7 @@ function AiSearchPanel({ onSearchDone, getToken }) {
   if (searching || done || error) {
     return (
       <div>
-        <AiProgress currentStep={currentStep} done={done} error={!!error} />
+        <AiProgress currentStep={currentStep} done={done} error={!!error} errorStage={errorStage} errorDetail={error} />
         {done && result && (
           <div style={{ marginTop: '12px', padding: '12px 16px', background: '#EFF6F5', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
             <span style={{ fontSize: '13px', color: '#1B6B65', fontWeight: '500' }}>

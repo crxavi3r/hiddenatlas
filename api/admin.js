@@ -133,18 +133,25 @@ async function _handler(req, res) {
     // All CRM actions: POST /api/admin with body { action: "namespace.verb", payload: {...} }
     if (req.method === 'POST' && typeof (req.body ?? {}).action === 'string' && req.body.action.includes('.')) {
       const { action: crmAction, payload = {} } = req.body;
+      console.log(`[api/admin] CRM action=${crmAction}`);
       try {
         const data = await dispatchCrmAction(pool, crmAction, payload, adminCtx);
         return res.json({ success: true, data });
       } catch (err) {
-        console.error(`[api/admin] CRM action=${crmAction}:`, err.message, err.stack);
+        console.error(`[api/admin] CRM action=${crmAction} FAILED stage=${err.stage ?? 'unknown'}:`, err.message);
+        if (err.stack) console.error(err.stack);
         const isClient = err.status != null && err.status < 500;
-        const userMsg = isClient
-          ? err.message
-          : (err.message?.includes('does not exist') ? `DB schema error: ${err.message}` : 'Internal error — see server logs');
+        const isTransparent = isClient
+          || err.message?.includes('does not exist')
+          || err.code === 'PROVIDER_ERROR'
+          || err.code === 'PROVIDER_NOT_CONFIGURED'
+          || err.code === 'SCORING_ERROR';
+        const userMsg = isTransparent
+          ? (err.message?.includes('does not exist') ? `DB schema error: ${err.message}` : err.message)
+          : 'Internal error — see server logs';
         return res.status(err.status ?? 500).json({
           success: false,
-          error: { message: userMsg, code: err.code ?? 'INTERNAL_ERROR' },
+          error: { message: userMsg, code: err.code ?? 'INTERNAL_ERROR', stage: err.stage ?? null },
         });
       }
     }
@@ -1792,7 +1799,7 @@ async function crmDashboard(pool) {
       SELECT t.*, l."displayName", l.username, l.platform
       FROM "CreatorLeadTask" t
       JOIN "CreatorLead" l ON l.id = t."leadId"
-      WHERE t.status = 'pending'
+      WHERE t.status = 'open'
       ORDER BY t."dueAt" ASC NULLS LAST
       LIMIT 10
     `),
@@ -1890,7 +1897,7 @@ async function crmListLeads(pool, query) {
   const { rows } = await pool.query(`
     SELECT l.*,
       (SELECT COUNT(*) FROM "CreatorLeadMessage" m WHERE m."leadId" = l.id) AS message_count,
-      (SELECT COUNT(*) FROM "CreatorLeadTask" t WHERE t."leadId" = l.id AND t.status = 'pending') AS pending_tasks
+      (SELECT COUNT(*) FROM "CreatorLeadTask" t WHERE t."leadId" = l.id AND t.status = 'open') AS pending_tasks
     FROM "CreatorLead" l
     ${where}
     ORDER BY
@@ -2313,7 +2320,8 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
 
   const createdById = ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null;
 
-  // Create or load existing run
+  // ── Stage: create_run ─────────────────────────────────────────────────────
+  console.log(`[ai_search] stage=create_run provider=${providerName}`);
   let run;
   if (!existingRunId) {
     const profileLabel = creatorProfile.trim().slice(0, 45) + (creatorProfile.trim().length > 45 ? '…' : '');
@@ -2365,7 +2373,8 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
 
   const runId = run.id;
 
-  // Call AI provider
+  // ── Stage: ai_provider ────────────────────────────────────────────────────
+  console.log(`[ai_search] stage=ai_provider runId=${runId}`);
   let discoveryResult;
   try {
     discoveryResult = await runAiDiscovery({
@@ -2380,25 +2389,38 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
       notes,
     });
   } catch (err) {
+    console.error(`[ai_search] stage=ai_provider runId=${runId} FAILED:`, err.message);
     await pool.query(
       `UPDATE "CreatorDiscoveryRun" SET status = 'failed', "errorMessage" = $2, "updatedAt" = NOW() WHERE id = $1`,
-      [runId, `Error: ${err.message}`]
+      [runId, `[ai_provider] ${err.message}`]
     );
+    err.stage = 'ai_provider';
     throw err;
   }
 
   const { creators, provider, providerMeta } = discoveryResult;
 
-  console.log(`[ai_search] provider=${provider} returned ${creators.length} normalized profiles for runId=${runId}`);
+  // Log parse debug info if provider returned it
+  if (providerMeta?.parseError) {
+    console.warn(`[ai_search] runId=${runId} parse warning: ${providerMeta.parseError}`);
+    if (providerMeta.rawPreview) console.warn(`[ai_search] raw preview: ${providerMeta.rawPreview}`);
+  }
+
+  console.log(`[ai_search] stage=saving provider=${provider} profiles=${creators.length} runId=${runId}`);
 
   if (creators.length === 0) {
-    const emptyMsg = 'AI provider returned no profile suggestions. Try a broader creator profile or lower filters.';
+    const debugNote = providerMeta?.parseError ? ` Parse error: ${providerMeta.parseError}.` : '';
+    const emptyMsg = `AI provider returned no usable profile suggestions.${debugNote} Try a broader creator profile or lower filters.`;
     await pool.query(
       `UPDATE "CreatorDiscoveryRun" SET status = 'completed', "resultsCount" = 0, "selectedCount" = 0, "completedAt" = NOW(), "errorMessage" = $2, "updatedAt" = NOW() WHERE id = $1`,
       [runId, emptyMsg]
     );
     const { rows: finalRun } = await pool.query(`SELECT * FROM "CreatorDiscoveryRun" WHERE id = $1`, [runId]);
-    return { run: finalRun[0], results: [], inserted: 0, skipped: 0, providerStatus: { provider, ...providerMeta } };
+    return {
+      run: finalRun[0], results: [], inserted: 0, skipped: 0,
+      providerStatus: { provider, ...providerMeta },
+      warning: providerMeta?.parseError ? `AI response could not be fully parsed: ${providerMeta.parseError}` : null,
+    };
   }
 
   const insertedResults = [];
@@ -2406,8 +2428,8 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
   const insertFailed    = [];
   const seenUsernames   = new Set();
 
-  console.log(`[AI Discovery] processing ${creators.length} normalized profiles for runId=${runId}`);
-  if (creators[0]) console.log('[AI Discovery] first normalized profile:', JSON.stringify(creators[0]).slice(0, 800));
+  console.log(`[ai_search] inserting up to ${Math.min(creators.length, limit)} profiles`);
+  if (creators[0]) console.log('[ai_search] first profile sample:', JSON.stringify(creators[0]).slice(0, 400));
 
   for (const c of creators.slice(0, limit)) {
     const username = c.username;
@@ -3225,42 +3247,54 @@ async function crmMarkSent(pool, msgId, ctx) {
   if (!msgRows.length) throw Object.assign(new Error('Not found'), { status: 404 });
   const msg = msgRows[0];
 
+  const senderId = (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null);
   await pool.query(`
     UPDATE "CreatorLeadMessage"
-    SET status = 'sent_manual', "sentAt" = NOW(), "sentById" = $2, "updatedAt" = NOW()
+    SET status = 'sent',
+        "sentAt" = NOW(),
+        metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
+          'deliveryMode', 'manual',
+          'sentManually', true,
+          'sentManuallyById', $2,
+          'sentManuallyAt', NOW()::text
+        ),
+        "updatedAt" = NOW()
     WHERE id = $1
-  `, [msgId, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
+  `, [msgId, senderId]);
 
-  await pool.query(`
-    UPDATE "CreatorLead"
-    SET "lastContactedAt" = NOW(), "updatedAt" = NOW(),
-        status = CASE
-          WHEN status IN ('identified','qualified','message_prepared') THEN 'contacted'
-          ELSE status
-        END
-    WHERE id = $1
-  `, [msg.leadId]);
-
-  await pool.query(`
-    INSERT INTO "CreatorLeadActivity"
-      (id, "leadId", type, body, metadata, "createdById", "createdAt")
-    VALUES (gen_random_uuid(), $1, 'message_sent', 'Message marked as sent manually', '{}'::jsonb, $2, NOW())
-  `, [msg.leadId, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
-
-  // Auto-create follow-up task if none exists within 7 days
-  const dueAt = new Date(Date.now() + 6 * 24 * 60 * 60 * 1000);
-  const { rows: existingTasks } = await pool.query(`
-    SELECT id FROM "CreatorLeadTask"
-    WHERE "leadId" = $1 AND status = 'pending' AND "dueAt" > NOW()
-    LIMIT 1
-  `, [msg.leadId]);
-
-  if (!existingTasks.length) {
+  try {
     await pool.query(`
-      INSERT INTO "CreatorLeadTask"
-        (id, "leadId", title, "dueAt", status, "createdById", "createdAt", "updatedAt")
-      VALUES (gen_random_uuid(), $1, 'Follow up on message', $2, 'pending', $3, NOW(), NOW())
-    `, [msg.leadId, dueAt.toISOString(), (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
+      UPDATE "CreatorLead"
+      SET "lastContactedAt" = NOW(), "updatedAt" = NOW(),
+          status = CASE
+            WHEN status IN ('identified','qualified','message_prepared') THEN 'contacted'
+            ELSE status
+          END
+      WHERE id = $1
+    `, [msg.leadId]);
+
+    await pool.query(`
+      INSERT INTO "CreatorLeadActivity"
+        (id, "leadId", type, body, metadata, "createdById", "createdAt")
+      VALUES (gen_random_uuid(), $1, 'message_sent', 'Message marked as sent manually', '{}'::jsonb, $2, NOW())
+    `, [msg.leadId, senderId]);
+
+    const dueAt = new Date(Date.now() + 6 * 24 * 60 * 60 * 1000);
+    const { rows: existingTasks } = await pool.query(`
+      SELECT id FROM "CreatorLeadTask"
+      WHERE "leadId" = $1 AND status = 'open' AND "dueAt" > NOW()
+      LIMIT 1
+    `, [msg.leadId]);
+
+    if (!existingTasks.length) {
+      await pool.query(`
+        INSERT INTO "CreatorLeadTask"
+          (id, "leadId", title, "dueAt", status, type, "createdById", "createdAt", "updatedAt")
+        VALUES (gen_random_uuid(), $1, 'Follow up on message', $2, 'open', 'follow_up', $3, NOW(), NOW())
+      `, [msg.leadId, dueAt.toISOString(), senderId]);
+    }
+  } catch (err) {
+    console.warn('[crmMarkSent] post-update side effects failed:', err.message);
   }
 
   return { ok: true };

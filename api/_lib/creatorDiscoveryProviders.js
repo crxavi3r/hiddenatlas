@@ -114,18 +114,27 @@ ${creatorProfile}
 ${filters ? `\nFILTERS:\n${filters}` : ''}
 ${webContext ? `\nWEB CONTEXT:\n${webContext.slice(0, 4000)}` : ''}
 
-INCLUDE: travel creators, itinerary planners, destination experts, travel bloggers.
-EXCLUDE: agencies, tour operators, hotels, meme pages, generic repost accounts.
+INCLUDE: individual travel creators, itinerary planners, destination bloggers, authentic travel storytellers.
+EXCLUDE: agencies, tour operators, hotels, meme pages, generic repost accounts, brand pages, aggregators.
 
-Find ${limit} real Instagram accounts that match the brief above.
+STRICT RULES — follow exactly:
+1. Only include Instagram handles you are highly confident actually exist as real accounts.
+2. Never invent or guess usernames. If uncertain whether an account exists, skip it.
+3. Set followerCount to null — never estimate or invent follower numbers.
+4. Prefer real individual people over aggregator or repost pages.
+5. Return fewer profiles if you cannot find enough real matches — quality over quantity.
+
+Find up to ${limit} real Instagram accounts matching the brief above.
 
 IMPORTANT: Return ONLY valid JSON, no markdown, no explanation, no code blocks.
-Output this exact structure with ${limit} profiles:
-{"profiles":[{"username":"actual_instagram_handle","displayName":"Full Name","followerCount":50000,"bio":"known bio or null","country":"PT","language":"pt","category":"luxury travel","score":75,"fitSummary":"One sentence: why this creator fits the brief.","confidence":"high"}]}
+Output this exact structure:
+{"profiles":[{"username":"real_handle_no_at","displayName":"Full Name","followerCount":null,"bio":"known bio or null","country":"PT","language":"pt","category":"luxury travel","score":75,"fitSummary":"One sentence why this creator fits the brief.","confidence":"high"}]}
 
+Fields:
 score: 0-100 (80+ = perfect fit, 60-79 = strong, 40-59 = possible)
-confidence: high/medium/low (how certain you are this account exists and matches)
-username: real Instagram handle, no @ symbol`;
+confidence: "high" = certain account exists / "medium" = likely exists / "low" = uncertain, prefer to skip
+username: real Instagram handle without @, lowercase, no spaces
+followerCount: always null — never invent or estimate numbers`;
 }
 
 // ── JSON parser ───────────────────────────────────────────────────────────────
@@ -138,12 +147,10 @@ function parseCreatorProfiles(text) {
   // Try direct parse first
   try {
     const parsed = JSON.parse(s);
-    // {"profiles": [...]}  or  {"results": [...]}
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       const arr = parsed.profiles || parsed.results || parsed.creators || parsed.data;
       if (Array.isArray(arr)) return arr;
     }
-    // Direct array
     if (Array.isArray(parsed)) return parsed;
   } catch (_) {}
 
@@ -162,10 +169,27 @@ function parseCreatorProfiles(text) {
   const arrStart = s.indexOf('[');
   const arrEnd   = s.lastIndexOf(']');
   if (arrStart !== -1 && arrEnd !== -1) {
-    return JSON.parse(s.slice(arrStart, arrEnd + 1));
+    try {
+      return JSON.parse(s.slice(arrStart, arrEnd + 1));
+    } catch (_) {}
   }
 
   throw new Error(`Could not parse AI response as JSON. Response starts with: ${s.slice(0, 200)}`);
+}
+
+// Try to rescue individual profile objects from partially-valid JSON text
+function tryExtractPartialProfiles(text) {
+  const results = [];
+  // Match individual {...} objects that contain a "username" field
+  const re = /\{[^{}]*?"username"\s*:\s*"([^"]{2,})"[^{}]*?\}/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    try {
+      const obj = JSON.parse(m[0]);
+      if (obj.username) results.push(obj);
+    } catch {}
+  }
+  return results;
 }
 
 // ── Normalizer helpers ────────────────────────────────────────────────────────
@@ -276,13 +300,32 @@ async function runClaudeDiscovery(criteria) {
   console.log(`[discovery:claude] raw response length: ${text.length}, first 500 chars: ${text.slice(0, 500)}`);
 
   let rawProfiles;
+  let parseError = null;
   try {
     rawProfiles = parseCreatorProfiles(text);
   } catch (parseErr) {
-    throw new Error(`Failed to parse Claude response as JSON: ${parseErr.message}`);
+    parseError = parseErr.message;
+    console.warn('[discovery:claude] JSON parse failed:', parseErr.message);
+    rawProfiles = tryExtractPartialProfiles(text);
+    if (rawProfiles.length > 0) {
+      console.log(`[discovery:claude] partial extraction rescued ${rawProfiles.length} profile(s)`);
+    } else {
+      console.error('[discovery:claude] complete parse failure — returning empty. Raw preview:', text.slice(0, 300));
+      return {
+        creators: [],
+        provider: 'claude',
+        providerMeta: { model: MODEL, contextSource: 'ai_knowledge', parseError, rawPreview: text.slice(0, 300) },
+      };
+    }
   }
 
-  if (!Array.isArray(rawProfiles)) throw new Error('Claude response parsed but was not an array');
+  if (!Array.isArray(rawProfiles)) {
+    return {
+      creators: [],
+      provider: 'claude',
+      providerMeta: { model: MODEL, contextSource: 'ai_knowledge', parseError: 'Parsed value was not an array' },
+    };
+  }
 
   const normalized = rawProfiles.map(normalizeAiProfile);
   const creators   = normalized.filter(r => r.ok).map(r => r.data);
@@ -292,7 +335,7 @@ async function runClaudeDiscovery(criteria) {
   return {
     creators,
     provider: 'claude',
-    providerMeta: { model: MODEL, contextSource: 'ai_knowledge' },
+    providerMeta: { model: MODEL, contextSource: 'ai_knowledge', ...(parseError ? { parseError } : {}) },
   };
 }
 
@@ -353,10 +396,31 @@ async function runTavilyClaudeDiscovery(criteria) {
   console.log(`[discovery:tavily_claude] raw response length: ${text.length}, first 500 chars: ${text.slice(0, 500)}`);
 
   let rawProfiles;
+  let parseError = null;
   try {
     rawProfiles = parseCreatorProfiles(text);
   } catch (parseErr) {
-    throw new Error(`Failed to parse Tavily+Claude response as JSON: ${parseErr.message}`);
+    parseError = parseErr.message;
+    console.warn('[discovery:tavily_claude] JSON parse failed:', parseErr.message);
+    rawProfiles = tryExtractPartialProfiles(text);
+    if (rawProfiles.length > 0) {
+      console.log(`[discovery:tavily_claude] partial extraction rescued ${rawProfiles.length} profile(s)`);
+    } else {
+      console.error('[discovery:tavily_claude] complete parse failure — returning empty. Raw preview:', text.slice(0, 300));
+      return {
+        creators: [],
+        provider: 'tavily_claude',
+        providerMeta: { model: MODEL, contextSource: 'tavily_web_search', parseError, rawPreview: text.slice(0, 300) },
+      };
+    }
+  }
+
+  if (!Array.isArray(rawProfiles)) {
+    return {
+      creators: [],
+      provider: 'tavily_claude',
+      providerMeta: { model: MODEL, contextSource: 'tavily_web_search', parseError: 'Parsed value was not an array' },
+    };
   }
 
   const normalized = rawProfiles.map(normalizeAiProfile);
@@ -367,7 +431,7 @@ async function runTavilyClaudeDiscovery(criteria) {
   return {
     creators,
     provider: 'tavily_claude',
-    providerMeta: { model: MODEL, contextSource: 'tavily_web_search' },
+    providerMeta: { model: MODEL, contextSource: 'tavily_web_search', ...(parseError ? { parseError } : {}) },
   };
 }
 
