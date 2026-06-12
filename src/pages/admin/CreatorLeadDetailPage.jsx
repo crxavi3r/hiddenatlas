@@ -72,10 +72,10 @@ async function crmCall(getToken, action, payload = {}) {
 }
 
 function TaskItem({ task, onUpdate }) {
-  const isOverdue = task.dueAt && new Date(task.dueAt) < new Date() && task.status === 'pending';
+  const isOverdue = task.dueAt && new Date(task.dueAt) < new Date() && task.status !== 'done' && task.status !== 'cancelled';
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px 0', borderBottom: '1px solid #F4F1EC' }}>
-      <button onClick={() => onUpdate(task.id, { status: task.status === 'done' ? 'pending' : 'done', completedAt: task.status === 'done' ? null : new Date().toISOString() })}
+      <button onClick={() => onUpdate(task.id, { status: task.status === 'done' ? 'open' : 'done', completedAt: task.status === 'done' ? null : new Date().toISOString() })}
         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: task.status === 'done' ? '#1B6B65' : '#C8C0B8', flexShrink: 0, marginTop: '1px' }}>
         <CheckSquare size={16} />
       </button>
@@ -324,7 +324,7 @@ export default function CreatorLeadDetailPage() {
 
   const { lead, messages = [], activities = [], tasks = [] } = data;
   const instagramUrl = lead.profileUrl || (lead.platform === 'instagram' ? `https://instagram.com/${lead.username}` : null);
-  const pendingTasks = tasks.filter(t => t.status === 'pending');
+  const pendingTasks = tasks.filter(t => t.status !== 'done' && t.status !== 'cancelled');
   const doneTasks    = tasks.filter(t => t.status === 'done');
 
   // Derive last Instagram refresh timestamp from aiAnalysis

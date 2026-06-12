@@ -2983,18 +2983,33 @@ async function crmAddNote(pool, id, body, ctx) {
   return { activity: rows[0] };
 }
 
+const VALID_TASK_STATUSES = new Set(['open','done','cancelled','snoozed']);
+const VALID_TASK_TYPES    = new Set(['follow_up','demo','prepare_proposal','review','other']);
+function normalizeTaskStatus(s) {
+  if (!s) return 'open';
+  if (VALID_TASK_STATUSES.has(s)) return s;
+  if (s === 'pending' || s === 'todo' || s === 'active' || s === 'scheduled' || s === 'new') return 'open';
+  if (s === 'completed') return 'done';
+  return 'open';
+}
+function normalizeTaskType(t) {
+  if (!t) return 'follow_up';
+  return VALID_TASK_TYPES.has(t) ? t : 'follow_up';
+}
+
 async function crmCreateTask(pool, id, body, ctx) {
   if (!id) throw Object.assign(new Error('id required'), { status: 400 });
-  const { title, description, dueAt } = body;
+  const { title, description, dueAt, type } = body;
   if (!title?.trim()) throw Object.assign(new Error('title is required'), { status: 400 });
 
+  const taskType = normalizeTaskType(type);
   const { rows } = await pool.query(`
     INSERT INTO "CreatorLeadTask"
-      (id, "leadId", title, description, "dueAt", status, "createdById", "createdAt", "updatedAt")
+      (id, "leadId", type, title, description, "dueAt", status, "createdById", "createdAt", "updatedAt")
     VALUES
-      (gen_random_uuid(), $1, $2, $3, $4, 'pending', $5, NOW(), NOW())
+      (gen_random_uuid(), $1, $2, $3, $4, $5, 'open', $6, NOW(), NOW())
     RETURNING *
-  `, [id, title.trim(), description || null, dueAt || null, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
+  `, [id, taskType, title.trim(), description || null, dueAt || null, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
 
   await pool.query(`
     INSERT INTO "CreatorLeadActivity"
@@ -3007,7 +3022,7 @@ async function crmCreateTask(pool, id, body, ctx) {
 
 async function crmUpdateTask(pool, taskId, body, ctx) {
   if (!taskId) throw Object.assign(new Error('taskId required'), { status: 400 });
-  const { status, completedAt, snoozedUntil, title, description, dueAt } = body;
+  const { status: rawStatus, completedAt, title, description, dueAt } = body;
 
   const sets = [];
   const params = [];
@@ -3016,9 +3031,11 @@ async function crmUpdateTask(pool, taskId, body, ctx) {
   if (title !== undefined)       { sets.push(`title = $${p++}`); params.push(title); }
   if (description !== undefined) { sets.push(`description = $${p++}`); params.push(description); }
   if (dueAt !== undefined)       { sets.push(`"dueAt" = $${p++}`); params.push(dueAt); }
-  if (status !== undefined)      { sets.push(`status = $${p++}`); params.push(status); }
+  if (rawStatus !== undefined) {
+    const normStatus = normalizeTaskStatus(rawStatus);
+    sets.push(`status = $${p++}`); params.push(normStatus);
+  }
   if (completedAt !== undefined) { sets.push(`"completedAt" = $${p++}`); params.push(completedAt); }
-  if (snoozedUntil !== undefined){ sets.push(`"snoozedUntil" = $${p++}`); params.push(snoozedUntil); }
 
   if (!sets.length) throw Object.assign(new Error('Nothing to update'), { status: 400 });
   sets.push(`"updatedAt" = NOW()`);
@@ -3030,12 +3047,16 @@ async function crmUpdateTask(pool, taskId, body, ctx) {
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
 
-  if (status === 'done') {
-    await pool.query(`
-      INSERT INTO "CreatorLeadActivity"
-        (id, "leadId", type, body, metadata, "createdById", "createdAt")
-      VALUES (gen_random_uuid(), $1, 'task_completed', $2, '{}'::jsonb, $3, NOW())
-    `, [rows[0].leadId, `Task completed: ${rows[0].title}`, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
+  if (rows[0].status === 'done' && rawStatus !== undefined) {
+    try {
+      await pool.query(`
+        INSERT INTO "CreatorLeadActivity"
+          (id, "leadId", type, body, metadata, "createdById", "createdAt")
+        VALUES (gen_random_uuid(), $1, 'task_completed', $2, '{}'::jsonb, $3, NOW())
+      `, [rows[0].leadId, `Task completed: ${rows[0].title}`, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
+    } catch (actErr) {
+      console.warn('[crmUpdateTask] activity log failed (non-blocking):', actErr.message);
+    }
   }
 
   return { task: rows[0] };
