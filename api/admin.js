@@ -1864,7 +1864,7 @@ async function crmListLeads(pool, query) {
   if (language)        { conditions.push(`l.language = $${p++}`); params.push(language); }
   if (platform)        { conditions.push(`l.platform = $${p++}`); params.push(platform); }
   if (minScore)        { conditions.push(`l.score >= $${p++}`); params.push(parseFloat(minScore)); }
-  if (minFollowers)    { conditions.push(`l."followerCount" >= $${p++}`); params.push(parseInt(minFollowers, 10)); }
+  if (minFollowers)    { conditions.push(`l."followersCount" >= $${p++}`); params.push(parseInt(minFollowers, 10)); }
   if (assignedTo)      { conditions.push(`l."assignedTo" = $${p++}`); params.push(assignedTo); }
   if (overdueOnly === 'true') {
     conditions.push(`l."nextFollowUpAt" < NOW() AND l.status NOT IN ('rejected','blocked','not_fit','active')`);
@@ -2071,58 +2071,127 @@ async function crmAddToCrm(pool, body, ctx) {
   );
   if (!rRows.length) throw Object.assign(new Error('Result not found'), { status: 404 });
   const result = rRows[0];
+  const createdById = ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null;
 
-  // Upsert CreatorLead by platform + username
-  const { rows: leadRows } = await pool.query(`
-    INSERT INTO "CreatorLead"
-      (id, platform, username, "profileUrl", "displayName", "firstName", "avatarUrl",
-       "isVerified", bio, country, language, category, niches, destinations, hashtags, mentions,
-       "followerCount", "postCount", "engagementRate",
-       score, "fitSummary", "routeIdeas", status, "sourceRunId", "sourceResultId",
-       "createdAt", "updatedAt")
-    VALUES
-      (gen_random_uuid(), $1, $2, $3, $4, $5, $6,
-       $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14::jsonb, $15::jsonb,
-       $16, $17, $18,
-       $19, $20, $21::jsonb, 'identified', $22, $23,
-       NOW(), NOW())
-    ON CONFLICT (platform, username) DO UPDATE SET
-      "avatarUrl"       = EXCLUDED."avatarUrl",
-      "followerCount"   = EXCLUDED."followerCount",
-      "engagementRate"  = EXCLUDED."engagementRate",
-      "updatedAt"       = NOW()
-    RETURNING *
-  `, [
-    result.platform, result.username,
-    result.profileUrl, result.displayName,
-    result.displayName?.split(' ')[0] || null,
-    result.avatarUrl, result.isVerified,
-    result.bio, result.country, result.language, result.category,
-    JSON.stringify(result.niches ?? []),
-    JSON.stringify(result.destinations ?? []),
-    JSON.stringify(result.hashtags ?? []),
-    JSON.stringify(result.mentions ?? []),
-    result.followerCount, result.postCount, result.engagementRate,
-    result.score, result.fitSummary,
-    JSON.stringify(result.routeIdeas ?? []),
-    result.runId, resultId,
-  ]);
+  // Fetch run to get destinations
+  const { rows: runRows } = await pool.query(
+    `SELECT "targetDestinations", params FROM "CreatorDiscoveryRun" WHERE id = $1 LIMIT 1`,
+    [result.runId]
+  );
+  const run = runRows[0];
+  const runTargetDests = Array.isArray(run?.targetDestinations) ? run.targetDestinations : [];
+  const runParamDest   = run?.params?.destinationTheme ? [run.params.destinationTheme] : [];
+  const destinations   = runTargetDests.length > 0 ? runTargetDests : runParamDest;
 
-  const lead = leadRows[0];
+  const niches     = result.category ? [result.category] : [];
+  const routeIdeas = Array.isArray(result.routeIdeas) ? result.routeIdeas : [];
+  const aiAnalysis = JSON.stringify({
+    source:                   'creator_discovery',
+    discoveryResultId:        result.id,
+    runId:                    result.runId,
+    rawData:                  result.rawData || {},
+    verificationStatus:       result.rawData?.verificationStatus || 'unverified',
+    needsManualVerification:  true,
+  });
 
-  // Update result status + link
+  // Expression index lower(username) means ON CONFLICT won't work directly —
+  // use manual SELECT + UPDATE/INSERT
+  const { rows: existingRows } = await pool.query(
+    `SELECT id FROM "CreatorLead" WHERE platform = $1 AND lower(username) = lower($2) LIMIT 1`,
+    [result.platform, result.username]
+  );
+
+  let lead;
+  let isNew = false;
+
+  if (existingRows.length) {
+    const leadId = existingRows[0].id;
+    const { rows: updated } = await pool.query(`
+      UPDATE "CreatorLead"
+      SET "displayName"    = COALESCE($1,  "displayName"),
+          "profileUrl"     = COALESCE($2,  "profileUrl"),
+          "avatarUrl"      = COALESCE($3,  "avatarUrl"),
+          bio              = COALESCE($4,  bio),
+          "followersCount" = COALESCE($5,  "followersCount"),
+          "postsCount"     = COALESCE($6,  "postsCount"),
+          "engagementRate" = COALESCE($7,  "engagementRate"),
+          country          = COALESCE($8,  country),
+          language         = COALESCE($9,  language),
+          category         = COALESCE($10, category),
+          score            = COALESCE($11, score),
+          "fitSummary"     = COALESCE($12, "fitSummary"),
+          "routeIdeas"     = COALESCE($13::jsonb, "routeIdeas"),
+          "aiAnalysis"     = COALESCE("aiAnalysis", '{}'::jsonb) || $14::jsonb,
+          "sourceRunId"    = COALESCE("sourceRunId", $15),
+          "updatedAt"      = NOW()
+      WHERE id = $16
+      RETURNING *
+    `, [
+      result.displayName, result.profileUrl, result.avatarUrl,
+      result.bio, result.followersCount, result.postsCount, result.engagementRate,
+      result.country, result.language, result.category,
+      result.score, result.fitSummary,
+      routeIdeas.length ? JSON.stringify(routeIdeas) : null,
+      aiAnalysis, result.runId,
+      leadId,
+    ]);
+    lead = updated[0];
+  } else {
+    isNew = true;
+    const { rows: inserted } = await pool.query(`
+      INSERT INTO "CreatorLead" (
+        platform, username, "displayName", "profileUrl", "avatarUrl",
+        bio, "followersCount", "postsCount", "engagementRate",
+        country, language, category,
+        niches, destinations, hashtags, mentions,
+        score, priority, "fitSummary", "routeIdeas",
+        "aiAnalysis", source, "sourceRunId", status,
+        "createdById", "createdAt", "updatedAt"
+      ) VALUES (
+        $1, $2, $3, $4, $5,
+        $6, $7, $8, $9,
+        $10, $11, $12,
+        $13::jsonb, $14::jsonb, '[]'::jsonb, '[]'::jsonb,
+        $15, 0, $16, $17::jsonb,
+        $18::jsonb, 'ai_discovery', $19, 'identified',
+        $20, NOW(), NOW()
+      )
+      RETURNING *
+    `, [
+      result.platform, result.username, result.displayName, result.profileUrl, result.avatarUrl,
+      result.bio, result.followersCount, result.postsCount, result.engagementRate,
+      result.country, result.language, result.category,
+      JSON.stringify(niches), JSON.stringify(destinations),
+      result.score, result.fitSummary,
+      JSON.stringify(routeIdeas), aiAnalysis, result.runId,
+      createdById,
+    ]);
+    lead = inserted[0];
+  }
+
+  // Mark result as added + link lead + mark selected
   await pool.query(
-    `UPDATE "CreatorDiscoveryResult" SET status = 'added_to_crm', "leadId" = $1 WHERE id = $2`,
+    `UPDATE "CreatorDiscoveryResult" SET status = 'added_to_crm', "leadId" = $1, selected = true WHERE id = $2`,
     [lead.id, resultId]
   );
+
+  // Recalculate selectedCount on the run
+  await pool.query(`
+    UPDATE "CreatorDiscoveryRun"
+    SET "selectedCount" = (
+      SELECT COUNT(*) FROM "CreatorDiscoveryResult"
+      WHERE "runId" = $1 AND status = 'added_to_crm'
+    ), "updatedAt" = NOW()
+    WHERE id = $1
+  `, [result.runId]);
 
   // Log activity
   await pool.query(`
     INSERT INTO "CreatorLeadActivity" (id, "leadId", type, content, metadata, "createdById", "createdAt")
     VALUES (gen_random_uuid(), $1, 'system', $2, '{}'::jsonb, $3, NOW())
-  `, [lead.id, `Added from discovery run`, (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null)]);
+  `, [lead.id, 'Added from discovery run', createdById]);
 
-  return { lead, isNew: !rRows[0].leadId };
+  return { lead, isNew };
 }
 
 async function crmSetResultStatus(pool, id, status) {
