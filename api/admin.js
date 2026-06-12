@@ -1762,6 +1762,7 @@ async function dispatchCrmAction(pool, action, payload, ctx) {
     case 'leads.addNote':              return crmAddNote(pool, payload.id, payload, ctx);
     case 'leads.createTask':           return crmCreateTask(pool, payload.id, payload, ctx);
     case 'leads.updateTask':           return crmUpdateTask(pool, payload.taskId, payload, ctx);
+    case 'leads.refreshInstagram':    return crmRefreshInstagram(pool, payload, ctx);
     case 'messages.listTemplates':     return crmListTemplates(pool, payload.platform, payload.language);
     case 'messages.createTemplate':    return crmCreateTemplate(pool, payload, ctx);
     case 'messages.updateTemplate':    return crmUpdateTemplate(pool, payload.id, payload);
@@ -1946,6 +1947,73 @@ async function crmGetLead(pool, id) {
     activities: activities.rows,
     tasks: tasks.rows,
   };
+}
+
+async function crmRefreshInstagram(pool, body, ctx) {
+  const { id } = body;
+  if (!id) throw Object.assign(new Error('id required'), { status: 400 });
+
+  const { rows } = await pool.query(`SELECT * FROM "CreatorLead" WHERE id = $1 LIMIT 1`, [id]);
+  if (!rows.length) throw Object.assign(new Error('Lead not found'), { status: 404 });
+  const lead = rows[0];
+
+  if (!lead.username) throw Object.assign(new Error('Lead has no username'), { status: 400 });
+
+  const { verifyInstagramCreatorProfile } = await import('./_lib/creatorDiscoveryProviders.js');
+  const v = await verifyInstagramCreatorProfile(lead.username);
+
+  if (v.code === 'META_PROVIDER_NOT_CONFIGURED') {
+    return { refreshed: false, configError: true, missing: v.missing, error: v.error };
+  }
+
+  if (!v.verified) {
+    return { refreshed: false, error: v.error, metaCode: v.metaCode || null };
+  }
+
+  const now = new Date().toISOString();
+  const currentAiAnalysis = (typeof lead.aiAnalysis === 'object' && lead.aiAnalysis) ? lead.aiAnalysis : {};
+  const newAiAnalysis = JSON.stringify({
+    ...currentAiAnalysis,
+    lastInstagramRefresh: {
+      refreshedAt: now,
+      followersCount: v.followersCount,
+      postsCount: v.postsCount,
+      source: 'meta_business_discovery',
+    },
+    metaBusinessDiscovery: v.rawMetaProfile || null,
+  });
+
+  const { rows: updated } = await pool.query(`
+    UPDATE "CreatorLead"
+    SET "followersCount" = $1,
+        "postsCount"     = $2,
+        bio              = COALESCE($3, bio),
+        "avatarUrl"      = COALESCE($4, "avatarUrl"),
+        "displayName"    = COALESCE($5, "displayName"),
+        "profileUrl"     = COALESCE($6, "profileUrl"),
+        "websiteUrl"     = COALESCE($7, "websiteUrl"),
+        "aiAnalysis"     = $8::jsonb,
+        "updatedAt"      = NOW()
+    WHERE id = $9
+    RETURNING *
+  `, [
+    v.followersCount, v.postsCount,
+    v.bio, v.avatarUrl, v.displayName, v.profileUrl, v.website,
+    newAiAnalysis, id,
+  ]);
+
+  const createdById = ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null;
+  await pool.query(`
+    INSERT INTO "CreatorLeadActivity" (id, "leadId", type, content, metadata, "createdById", "createdAt")
+    VALUES (gen_random_uuid(), $1, 'system', $2, $3::jsonb, $4, NOW())
+  `, [
+    id,
+    `Instagram refreshed: ${v.followersCount?.toLocaleString() ?? '?'} followers, ${v.postsCount ?? '?'} posts`,
+    JSON.stringify({ followersCount: v.followersCount, postsCount: v.postsCount, refreshedAt: now }),
+    createdById,
+  ]);
+
+  return { refreshed: true, lead: updated[0] };
 }
 
 async function crmListTemplates(pool, platform, language) {
@@ -2138,6 +2206,7 @@ async function crmAddToCrm(pool, body, ctx) {
     lead = updated[0];
   } else {
     isNew = true;
+    const resultSource = result.rawData?.verificationStatus === 'verified' ? 'meta_business_discovery' : 'ai_discovery';
     const { rows: inserted } = await pool.query(`
       INSERT INTO "CreatorLead" (
         platform, username, "displayName", "profileUrl", "avatarUrl",
@@ -2153,8 +2222,8 @@ async function crmAddToCrm(pool, body, ctx) {
         $10, $11, $12,
         $13::jsonb, $14::jsonb, '[]'::jsonb, '[]'::jsonb,
         $15, 0, $16, $17::jsonb,
-        $18::jsonb, 'ai_discovery', $19, 'identified',
-        $20, NOW(), NOW()
+        $18::jsonb, $19, $20, 'identified',
+        $21, NOW(), NOW()
       )
       RETURNING *
     `, [
@@ -2163,7 +2232,7 @@ async function crmAddToCrm(pool, body, ctx) {
       result.country, result.language, result.category,
       JSON.stringify(niches), JSON.stringify(destinations),
       result.score, result.fitSummary,
-      JSON.stringify(routeIdeas), aiAnalysis, result.runId,
+      JSON.stringify(routeIdeas), aiAnalysis, resultSource, result.runId,
       createdById,
     ]);
     lead = inserted[0];
@@ -2422,8 +2491,30 @@ async function crmAiSearchProfiles(pool, payload, ctx) {
     [runId, inserted, finalErrorMsg]
   );
 
+  // Auto-verify first 5 inserted results if Meta is configured
+  let autoVerified = 0, autoFailed = 0;
+  if (insertedResults.length > 0) {
+    const { validateMetaConfig } = await import('./_lib/creatorDiscoveryProviders.js');
+    const metaConfig = validateMetaConfig();
+    if (metaConfig.configured) {
+      console.log(`[AI Discovery] auto-verifying up to 5 profiles via Meta`);
+      for (const row of insertedResults.slice(0, 5)) {
+        try {
+          const vResult = await crmVerifyProfile(pool, { resultId: row.id }, ctx);
+          if (vResult.verified) autoVerified++;
+          else autoFailed++;
+        } catch (e) {
+          console.error(`[AI Discovery] auto-verify error for @${row.username}:`, e.message);
+          autoFailed++;
+        }
+        await new Promise(r => setTimeout(r, 400));
+      }
+      console.log(`[AI Discovery] auto-verify done: ${autoVerified} verified, ${autoFailed} failed`);
+    }
+  }
+
   const { rows: finalRun } = await pool.query(`SELECT * FROM "CreatorDiscoveryRun" WHERE id = $1`, [runId]);
-  return { run: finalRun[0], results: insertedResults, inserted, skipped, providerStatus: { provider, ...providerMeta } };
+  return { run: finalRun[0], results: insertedResults, inserted, skipped: insertSkipped.length, autoVerified, autoFailed, providerStatus: { provider, ...providerMeta } };
 }
 
 async function crmMetaValidateConfig(pool, payload) {

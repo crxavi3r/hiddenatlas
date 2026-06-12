@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { ArrowLeft, Instagram, Copy, CheckCircle, Send, Clock, MessageSquare, Activity, CheckSquare, Edit2, X, PlusCircle, Users, RefreshCw } from 'lucide-react';
+import {
+  ArrowLeft, Instagram, Copy, CheckCircle, Clock, MessageSquare,
+  Activity, CheckSquare, Edit2, X, PlusCircle, Users, RefreshCw,
+  ExternalLink, Camera,
+} from 'lucide-react';
 
 const S = {
   page:    { padding: '28px 32px', background: '#FAFAF8', minHeight: '100vh' },
@@ -91,7 +95,7 @@ function TaskItem({ task, onUpdate }) {
 }
 
 function ActivityItem({ item }) {
-  const icons = { status_change: Activity, note: MessageSquare, message_prepared: MessageSquare, message_sent: Send, task_created: CheckSquare, task_completed: CheckCircle, system: Activity };
+  const icons = { status_change: Activity, note: MessageSquare, message_prepared: MessageSquare, message_sent: ExternalLink, task_created: CheckSquare, task_completed: CheckCircle, system: Activity };
   const Icon = icons[item.type] || Activity;
   const colors = { status_change: '#C9A96E', note: '#1B6B65', message_sent: '#1B6B65', message_prepared: '#8C8070', system: '#B5AA99', task_created: '#8C8070', task_completed: '#1B6B65' };
   return (
@@ -110,6 +114,21 @@ function ActivityItem({ item }) {
           {fmtDate(item.createdAt, true)}
         </p>
       </div>
+    </div>
+  );
+}
+
+function AvatarModal({ src, onClose }) {
+  if (!src) return null;
+  return (
+    <div onClick={onClose}
+      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.88)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}>
+      <img src={src} alt="" onClick={e => e.stopPropagation()}
+        style={{ maxWidth: '80vw', maxHeight: '80vh', borderRadius: '10px', objectFit: 'contain', boxShadow: '0 8px 40px rgba(0,0,0,0.5)', cursor: 'default' }} />
+      <button onClick={onClose}
+        style={{ position: 'absolute', top: '20px', right: '24px', background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+        <X size={18} />
+      </button>
     </div>
   );
 }
@@ -143,6 +162,10 @@ export default function CreatorLeadDetailPage() {
   const [generatingMsg, setGeneratingMsg]       = useState(false);
   const [savingMsg, setSavingMsg]               = useState(false);
   const [copiedMsgId, setCopiedMsgId]           = useState(null);
+
+  const [refreshingIg, setRefreshingIg] = useState(false);
+  const [igRefreshError, setIgRefreshError] = useState(null);
+  const [avatarModal, setAvatarModal] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -210,8 +233,8 @@ export default function CreatorLeadDetailPage() {
   async function handleGenerateMessage() {
     setGeneratingMsg(true);
     try {
-      const data = await crmCall(getToken, 'messages.generateForLead', { id, templateId: selectedTemplate || undefined });
-      setMessageBody(data.personalizedBody || '');
+      const result = await crmCall(getToken, 'messages.generateForLead', { id, templateId: selectedTemplate || undefined });
+      setMessageBody(result.personalizedBody || '');
     } catch (e) { alert(e.message); }
     finally { setGeneratingMsg(false); }
   }
@@ -244,6 +267,27 @@ export default function CreatorLeadDetailPage() {
     } catch (e) { alert(e.message); }
   }
 
+  async function handleRefreshInstagram() {
+    setRefreshingIg(true);
+    setIgRefreshError(null);
+    try {
+      const result = await crmCall(getToken, 'leads.refreshInstagram', { id });
+      if (result.configError) {
+        setIgRefreshError('Instagram verification is not configured. Add META_GRAPH_ACCESS_TOKEN and META_INSTAGRAM_ACCOUNT_ID to Vercel environment variables.');
+        return;
+      }
+      if (!result.refreshed) {
+        setIgRefreshError(result.error || 'Instagram refresh failed');
+        return;
+      }
+      load();
+    } catch (e) {
+      setIgRefreshError(e.message);
+    } finally {
+      setRefreshingIg(false);
+    }
+  }
+
   if (loading) return <div style={{ ...S.page, color: '#8C8070' }}>Loading lead…</div>;
   if (error) return (
     <div style={S.page}>
@@ -270,20 +314,36 @@ export default function CreatorLeadDetailPage() {
   const pendingTasks = tasks.filter(t => t.status === 'pending');
   const doneTasks    = tasks.filter(t => t.status === 'done');
 
+  // Derive last Instagram refresh timestamp from aiAnalysis
+  const aiAnalysis = (typeof lead.aiAnalysis === 'object' && lead.aiAnalysis) ? lead.aiAnalysis : {};
+  const lastRefreshedAt = aiAnalysis.lastInstagramRefresh?.refreshedAt || null;
+  const isIgVerified = aiAnalysis.lastInstagramRefresh?.source === 'meta_business_discovery'
+    || aiAnalysis.metaBusinessDiscovery != null;
+
   return (
     <div style={S.page}>
+      <AvatarModal src={avatarModal} onClose={() => setAvatarModal(null)} />
+
       <button onClick={() => navigate('/admin/creator-acquisition/crm')}
         style={{ ...S.btnSecondary, marginBottom: '18px', fontSize: '12px' }}>
         <ArrowLeft size={12} /> Back to CRM
       </button>
 
+      {/* Header card */}
       <div style={S.card}>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div style={{ width: '64px', height: '64px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#F4F1EC' }}>
+          <div
+            onClick={() => lead.avatarUrl && setAvatarModal(lead.avatarUrl)}
+            style={{ width: '64px', height: '64px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#F4F1EC', cursor: lead.avatarUrl ? 'zoom-in' : 'default', position: 'relative' }}>
             {lead.avatarUrl
               ? <img src={lead.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
               : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Users size={24} color="#C8C0B8" /></div>
             }
+            {lead.avatarUrl && (
+              <div style={{ position: 'absolute', bottom: '2px', right: '2px', background: 'rgba(0,0,0,0.45)', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Camera size={9} color="white" />
+              </div>
+            )}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -303,8 +363,11 @@ export default function CreatorLeadDetailPage() {
               {lead.language && ` · ${lead.language}`}
             </p>
             <div style={{ display: 'flex', gap: '16px', marginTop: '6px', flexWrap: 'wrap' }}>
-              {lead.followerCount != null && (
-                <span style={{ fontSize: '12px', color: '#4A433A' }}><strong>{fmtFollowers(lead.followerCount)}</strong> followers</span>
+              {lead.followersCount != null && (
+                <span style={{ fontSize: '12px', color: '#4A433A' }}><strong>{fmtFollowers(lead.followersCount)}</strong> followers</span>
+              )}
+              {lead.postsCount != null && (
+                <span style={{ fontSize: '12px', color: '#4A433A' }}><strong>{lead.postsCount}</strong> posts</span>
               )}
               {lead.engagementRate != null && (
                 <span style={{ fontSize: '12px', color: '#4A433A' }}><strong>{Number(lead.engagementRate).toFixed(1)}%</strong> engagement</span>
@@ -314,7 +377,7 @@ export default function CreatorLeadDetailPage() {
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {instagramUrl && (
               <a href={instagramUrl} target="_blank" rel="noopener noreferrer" style={{ ...S.btnSecondary, textDecoration: 'none', color: '#E1306C', borderColor: '#F5C6C0' }}>
-                <Instagram size={13} /> Open
+                <Instagram size={13} /> Open IG
               </a>
             )}
             <button onClick={() => setShowStatusChange(v => !v)} style={S.btnSecondary}>
@@ -347,6 +410,7 @@ export default function CreatorLeadDetailPage() {
         )}
       </div>
 
+      {/* Tabs */}
       <div style={{ borderBottom: '1px solid #E8E3DA', marginBottom: '-1px', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
         {[
           { key: 'overview',  label: 'Overview',               icon: Users },
@@ -361,24 +425,28 @@ export default function CreatorLeadDetailPage() {
       </div>
 
       <div style={{ ...S.card, borderRadius: '0 10px 10px 10px' }}>
+
+        {/* ── Overview ── */}
         {activeTab === 'overview' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '28px' }}>
+
+            {/* Left: Profile + CRM fields */}
             <div>
               <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '14px' }}>Profile Information</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                 {[
-                  ['First Name', lead.firstName], ['Email', lead.email],
-                  ['Website', lead.website], ['Category', lead.category],
-                  ['Country', lead.country], ['Language', lead.language],
-                  ['Followers', lead.followerCount != null ? fmtFollowers(lead.followerCount) : null],
-                  ['Engagement', lead.engagementRate != null ? `${Number(lead.engagementRate).toFixed(1)}%` : null],
-                  ['Priority', lead.priority], ['Assigned To', lead.assignedTo],
+                  ['Category', lead.category],
+                  ['Country', lead.country],
+                  ['Language', lead.language],
+                  ['Email', lead.email],
+                  ['Website', lead.websiteUrl],
+                  ['Priority', lead.priority != null ? String(lead.priority) : null],
                   ['Last Contacted', fmtDate(lead.lastContactedAt)],
                   ['Next Follow-up', fmtDate(lead.nextFollowUpAt)],
                 ].map(([k, v]) => (
                   <div key={k}>
                     <span style={S.label}>{k}</span>
-                    <span style={{ ...S.value, color: v ? '#1C1A16' : '#C8C0B8' }}>{v || '—'}</span>
+                    <span style={{ ...S.value, color: v && v !== '—' ? '#1C1A16' : '#C8C0B8' }}>{v || '—'}</span>
                   </div>
                 ))}
               </div>
@@ -388,62 +456,142 @@ export default function CreatorLeadDetailPage() {
                   <p style={{ ...S.value, lineHeight: '1.5', margin: 0 }}>{lead.bio}</p>
                 </div>
               )}
-            </div>
-            <div>
               {lead.fitSummary && (
-                <div style={{ marginBottom: '16px' }}>
+                <div style={{ marginTop: '14px' }}>
                   <span style={S.label}>Fit Summary</span>
                   <p style={{ ...S.value, lineHeight: '1.5', margin: 0 }}>{lead.fitSummary}</p>
                 </div>
               )}
               {(Array.isArray(lead.destinations) ? lead.destinations : []).length > 0 && (
-                <div style={{ marginBottom: '14px' }}>
+                <div style={{ marginTop: '14px' }}>
                   <span style={S.label}>Destinations</span>
                   <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginTop: '4px' }}>
-                    {(Array.isArray(lead.destinations) ? lead.destinations : []).map(d => (
+                    {lead.destinations.map(d => (
                       <span key={d} style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '9px', background: '#EFF6F5', color: '#1B6B65', fontWeight: '500' }}>{d}</span>
                     ))}
                   </div>
                 </div>
               )}
               {(Array.isArray(lead.niches) ? lead.niches : []).length > 0 && (
-                <div style={{ marginBottom: '14px' }}>
+                <div style={{ marginTop: '14px' }}>
                   <span style={S.label}>Niches</span>
                   <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginTop: '4px' }}>
-                    {(Array.isArray(lead.niches) ? lead.niches : []).map(n => (
+                    {lead.niches.map(n => (
                       <span key={n} style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '9px', background: '#FBF8F1', color: '#C9A96E', fontWeight: '500' }}>{n}</span>
                     ))}
                   </div>
                 </div>
               )}
               {(Array.isArray(lead.routeIdeas) ? lead.routeIdeas : []).length > 0 && (
-                <div style={{ marginBottom: '14px' }}>
+                <div style={{ marginTop: '14px' }}>
                   <span style={S.label}>Route Ideas</span>
                   <ul style={{ margin: '4px 0 0', paddingLeft: '16px' }}>
-                    {(Array.isArray(lead.routeIdeas) ? lead.routeIdeas : []).map((idea, i) => (
+                    {lead.routeIdeas.map((idea, i) => (
                       <li key={i} style={{ fontSize: '12.5px', color: '#4A433A', marginBottom: '2px' }}>{idea}</li>
                     ))}
                   </ul>
                 </div>
               )}
-              {(Array.isArray(lead.positiveSignals) ? lead.positiveSignals : []).length > 0 && (
-                <div style={{ marginBottom: '14px' }}>
-                  <span style={S.label}>Positive Signals</span>
-                  <ul style={{ margin: '4px 0 0', paddingLeft: '16px' }}>
-                    {(Array.isArray(lead.positiveSignals) ? lead.positiveSignals : []).map((s, i) => (
-                      <li key={i} style={{ fontSize: '12.5px', color: '#1B6B65', marginBottom: '2px' }}>{s}</li>
-                    ))}
-                  </ul>
+            </div>
+
+            {/* Right: Instagram verification block */}
+            <div>
+              <div style={{ border: '1px solid #E8E3DA', borderRadius: '10px', padding: '16px 18px', background: '#FAFAF8' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                  <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Instagram size={13} color="#E1306C" /> Instagram
+                    {isIgVerified && (
+                      <span style={{ fontSize: '9.5px', fontWeight: '700', letterSpacing: '0.4px', textTransform: 'uppercase', color: '#1B6B65', background: '#EFF6F5', padding: '2px 6px', borderRadius: '8px' }}>Verified</span>
+                    )}
+                  </h3>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button onClick={handleRefreshInstagram} disabled={refreshingIg}
+                      title="Re-fetch latest data from Instagram via Meta API"
+                      style={{ ...S.btnSecondary, fontSize: '11.5px', padding: '5px 10px', color: refreshingIg ? '#B5AA99' : '#1B6B65' }}>
+                      <RefreshCw size={11} style={{ animation: refreshingIg ? 'spin 1s linear infinite' : 'none' }} />
+                      {refreshingIg ? 'Refreshing…' : 'Refresh'}
+                    </button>
+                    {instagramUrl && (
+                      <a href={instagramUrl} target="_blank" rel="noopener noreferrer"
+                        style={{ ...S.btnSecondary, textDecoration: 'none', fontSize: '11.5px', padding: '5px 10px', color: '#E1306C', borderColor: '#F5C6C0' }}>
+                        <ExternalLink size={11} /> Open
+                      </a>
+                    )}
+                  </div>
                 </div>
-              )}
+
+                {igRefreshError && (
+                  <div style={{ background: '#FDECEA', border: '1px solid #F5C6C0', borderRadius: '6px', padding: '8px 12px', marginBottom: '12px', fontSize: '12px', color: '#C0392B' }}>
+                    {igRefreshError}
+                    <button onClick={() => setIgRefreshError(null)} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#C0392B', padding: 0 }}>
+                      <X size={12} />
+                    </button>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                  <div
+                    onClick={() => lead.avatarUrl && setAvatarModal(lead.avatarUrl)}
+                    style={{ width: '56px', height: '56px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#F4F1EC', cursor: lead.avatarUrl ? 'zoom-in' : 'default', border: '2px solid #E8E3DA', position: 'relative' }}>
+                    {lead.avatarUrl
+                      ? <img src={lead.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
+                      : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Users size={20} color="#C8C0B8" /></div>
+                    }
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: '13.5px', fontWeight: '600', color: '#1C1A16', margin: '0 0 2px' }}>
+                      {lead.displayName || '—'}
+                    </p>
+                    <p style={{ fontSize: '12px', color: '#8C8070', margin: '0 0 8px', fontFamily: 'monospace' }}>@{lead.username}</p>
+                    <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+                      <div>
+                        <span style={{ ...S.label, marginBottom: '1px' }}>Followers</span>
+                        <span style={{ fontSize: '15px', fontWeight: '700', color: lead.followersCount != null ? '#1C1A16' : '#C8C0B8' }}>
+                          {fmtFollowers(lead.followersCount)}
+                        </span>
+                      </div>
+                      <div>
+                        <span style={{ ...S.label, marginBottom: '1px' }}>Posts</span>
+                        <span style={{ fontSize: '15px', fontWeight: '700', color: lead.postsCount != null ? '#1C1A16' : '#C8C0B8' }}>
+                          {lead.postsCount ?? '—'}
+                        </span>
+                      </div>
+                      {lead.engagementRate != null && (
+                        <div>
+                          <span style={{ ...S.label, marginBottom: '1px' }}>Engagement</span>
+                          <span style={{ fontSize: '15px', fontWeight: '700', color: '#1C1A16' }}>
+                            {Number(lead.engagementRate).toFixed(1)}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {lead.websiteUrl && (
+                      <a href={lead.websiteUrl} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: '12px', color: '#1B6B65', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '6px', wordBreak: 'break-all', textDecoration: 'none' }}>
+                        <ExternalLink size={10} /> {lead.websiteUrl}
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {lastRefreshedAt && (
+                  <p style={{ fontSize: '11px', color: '#B5AA99', marginTop: '12px', marginBottom: 0 }}>
+                    Last Instagram refresh: {fmtDate(lastRefreshedAt, true)}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         )}
 
+        {/* ── Messages ── */}
         {activeTab === 'messages' && (
           <div>
             <div style={{ marginBottom: '20px', padding: '16px', background: '#F8F6F2', borderRadius: '8px', border: '1px solid #E8E3DA' }}>
               <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '12px' }}>Prepare Message</h4>
+              <div style={{ marginBottom: '8px', padding: '8px 12px', background: '#FEF9EC', border: '1px solid #F5D56E', borderRadius: '6px', fontSize: '12px', color: '#7A5D0A' }}>
+                Messages are saved as drafts. Copy the text and send manually via Instagram DM.
+              </div>
               <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
                 <div style={{ flex: '1 1 200px' }}>
                   <label style={S.label}>Template</label>
@@ -467,7 +615,7 @@ export default function CreatorLeadDetailPage() {
               />
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
                 <button onClick={handleSaveMessage} disabled={!messageBody.trim() || savingMsg} style={{ ...S.btnPrimary, opacity: !messageBody.trim() ? 0.5 : 1 }}>
-                  <Send size={13} /> {savingMsg ? 'Saving…' : 'Save Message'}
+                  {savingMsg ? 'Saving…' : 'Save as Draft'}
                 </button>
               </div>
             </div>
@@ -488,21 +636,21 @@ export default function CreatorLeadDetailPage() {
                     {msg.copiedAt && <span style={{ fontSize: '11px', color: '#B5AA99', marginLeft: '8px' }}>Copied {fmtDate(msg.copiedAt)}</span>}
                     {msg.sentAt && <span style={{ fontSize: '11px', color: '#B5AA99', marginLeft: '8px' }}>Sent {fmtDate(msg.sentAt)}</span>}
                   </div>
-                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap' }}>
                     <button onClick={() => handleCopyMessage(msg)}
                       style={{ ...S.btnPrimary, padding: '5px 12px', fontSize: '12px', background: copiedMsgId === msg.id ? '#2E8B57' : '#1B6B65' }}>
                       {copiedMsgId === msg.id ? <CheckCircle size={12} /> : <Copy size={12} />}
-                      {copiedMsgId === msg.id ? 'Copied!' : 'Copy'}
+                      {copiedMsgId === msg.id ? 'Copied!' : 'Copy for IG DM'}
                     </button>
                     {instagramUrl && (
                       <a href={instagramUrl} target="_blank" rel="noopener noreferrer"
                         style={{ ...S.btnSecondary, textDecoration: 'none', color: '#E1306C', borderColor: '#F5C6C0', padding: '5px 10px', fontSize: '12px' }}>
-                        <Instagram size={12} /> DM
+                        <Instagram size={12} /> Open Instagram
                       </a>
                     )}
                     {msg.status !== 'sent_manual' && (
                       <button onClick={() => handleMarkSent(msg)} style={{ ...S.btnSecondary, fontSize: '11.5px', padding: '5px 10px' }}>
-                        <Send size={11} /> Mark Sent
+                        <CheckCircle size={11} /> Mark Sent
                       </button>
                     )}
                   </div>
@@ -515,6 +663,7 @@ export default function CreatorLeadDetailPage() {
           </div>
         )}
 
+        {/* ── Tasks ── */}
         {activeTab === 'tasks' && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
@@ -548,6 +697,7 @@ export default function CreatorLeadDetailPage() {
           </div>
         )}
 
+        {/* ── Activity ── */}
         {activeTab === 'activity' && (
           <div>
             <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '14px' }}>Activity & Notes</h3>

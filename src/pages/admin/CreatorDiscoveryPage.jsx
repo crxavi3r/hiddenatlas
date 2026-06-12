@@ -4,7 +4,7 @@ import { useAuth } from '@clerk/clerk-react';
 import {
   PlusCircle, Upload, Eye, UserPlus, EyeOff, Ban,
   X, Search, ExternalLink, Users, RefreshCw, CheckCircle,
-  Sparkles, Globe, FileUp, ChevronLeft,
+  Sparkles, Globe, FileUp, ChevronLeft, Camera,
 } from 'lucide-react';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -542,7 +542,7 @@ function MetaDiscoveryPanel({ onSearchDone, getToken }) {
 
 // ── Result Row ────────────────────────────────────────────────────────────────
 
-function ResultRow({ result, onAddToCrm, onIgnore, onBlock, onVerify, acting, verifying, metaNotConfigured }) {
+function ResultRow({ result, onAddToCrm, onIgnore, onBlock, onVerify, acting, verifying, metaNotConfigured, onExpandAvatar }) {
   const navigate = useNavigate();
   const isActing    = acting === result.id;
   const isVerifying = verifying?.has(result.id);
@@ -563,11 +563,18 @@ function ResultRow({ result, onAddToCrm, onIgnore, onBlock, onVerify, acting, ve
     <tr style={{ borderBottom: '1px solid #F4F1EC', opacity: isActing ? 0.5 : 1 }}>
       <td style={{ padding: '9px 10px', verticalAlign: 'middle' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: '30px', height: '30px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#F4F1EC' }}>
+          <div
+            onClick={() => result.avatarUrl && onExpandAvatar?.(result.avatarUrl)}
+            style={{ width: '30px', height: '30px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#F4F1EC', cursor: result.avatarUrl ? 'zoom-in' : 'default', position: 'relative' }}>
             {result.avatarUrl
               ? <img src={result.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.currentTarget.style.display = 'none'; }} />
               : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#C8C0B8' }}><Users size={11} /></div>
             }
+            {result.avatarUrl && (
+              <div style={{ position: 'absolute', bottom: '1px', right: '1px', background: 'rgba(0,0,0,0.45)', borderRadius: '50%', width: '12px', height: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                <Camera size={6} color="white" />
+              </div>
+            )}
           </div>
           <div>
             <p style={{ fontWeight: '600', fontSize: '12px', color: '#1C1A16', margin: 0, whiteSpace: 'nowrap' }}>
@@ -885,6 +892,7 @@ export default function CreatorDiscoveryPage() {
   const [verifying, setVerifying]       = useState(new Set());
   const [verifyingAll, setVerifyingAll] = useState(false);
   const [metaNotConfigured, setMetaNotConfigured] = useState(false);
+  const [avatarModal, setAvatarModal]   = useState(null);
   const [showImport, setShowImport]   = useState(false);
   const [showNewRun, setShowNewRun]   = useState(false);
   const [toast, setToast]             = useState(null);
@@ -1031,6 +1039,18 @@ export default function CreatorDiscoveryPage() {
 
   return (
     <div style={S.page}>
+      {avatarModal && (
+        <div onClick={() => setAvatarModal(null)}
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.88)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}>
+          <img src={avatarModal} alt="" onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '80vw', maxHeight: '80vh', borderRadius: '10px', objectFit: 'contain', boxShadow: '0 8px 40px rgba(0,0,0,0.5)', cursor: 'default' }} />
+          <button onClick={() => setAvatarModal(null)}
+            style={{ position: 'absolute', top: '20px', right: '24px', background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
@@ -1292,7 +1312,8 @@ export default function CreatorDiscoveryPage() {
                             onVerify={handleVerify}
                             acting={acting}
                             verifying={verifying}
-                            metaNotConfigured={metaNotConfigured} />
+                            metaNotConfigured={metaNotConfigured}
+                            onExpandAvatar={setAvatarModal} />
                         ))}
                       </tbody>
                     </table>
