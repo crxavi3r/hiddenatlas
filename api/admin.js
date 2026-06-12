@@ -2676,16 +2676,18 @@ async function crmVerifyProfile(pool, body) {
     };
   }
 
-  const currentRaw = (v && typeof result.rawData === 'object' && result.rawData) ? result.rawData : {};
+  const currentRaw = (typeof result.rawData === 'object' && result.rawData) ? result.rawData : {};
   const now        = new Date().toISOString();
 
   if (v.verified) {
     const newRaw = {
       ...currentRaw,
-      verificationStatus: 'verified',
-      metricsSource:      v.metricsSource,
-      verifiedAt:         now,
-      verificationError:  null,
+      verificationStatus:    'verified',
+      metricsSource:         'meta_business_discovery',
+      followersSource:       'meta_business_discovery',
+      verifiedAt:            now,
+      verificationError:     null,
+      metaBusinessDiscovery: v.rawMetaProfile || null,
     };
     await pool.query(`
       UPDATE "CreatorDiscoveryResult"
@@ -2694,9 +2696,10 @@ async function crmVerifyProfile(pool, body) {
           bio              = COALESCE($3, bio),
           "avatarUrl"      = COALESCE($4, "avatarUrl"),
           "displayName"    = COALESCE($5, "displayName"),
-          "rawData"        = $6::jsonb
-      WHERE id = $7
-    `, [v.followersCount, v.postsCount, v.bio, v.avatarUrl, v.displayName, JSON.stringify(newRaw), resultId]);
+          "profileUrl"     = COALESCE($6, "profileUrl"),
+          "rawData"        = $7::jsonb
+      WHERE id = $8
+    `, [v.followersCount, v.postsCount, v.bio, v.avatarUrl, v.displayName, v.profileUrl, JSON.stringify(newRaw), resultId]);
   } else {
     const newRaw = {
       ...currentRaw,
@@ -2752,14 +2755,24 @@ async function crmVerifyAllProfiles(pool, body) {
       const now = new Date().toISOString();
 
       if (v.verified) {
-        const newRaw = { ...currentRaw, verificationStatus: 'verified', metricsSource: v.metricsSource, verifiedAt: now, verificationError: null };
+        const newRaw = {
+          ...currentRaw,
+          verificationStatus:    'verified',
+          metricsSource:         'meta_business_discovery',
+          followersSource:       'meta_business_discovery',
+          verifiedAt:            now,
+          verificationError:     null,
+          metaBusinessDiscovery: v.rawMetaProfile || null,
+        };
         await pool.query(`
           UPDATE "CreatorDiscoveryResult"
           SET "followersCount" = $1, "postsCount" = $2,
               bio = COALESCE($3, bio), "avatarUrl" = COALESCE($4, "avatarUrl"),
-              "displayName" = COALESCE($5, "displayName"), "rawData" = $6::jsonb
-          WHERE id = $7
-        `, [v.followersCount, v.postsCount, v.bio, v.avatarUrl, v.displayName, JSON.stringify(newRaw), row.id]);
+              "displayName" = COALESCE($5, "displayName"),
+              "profileUrl"  = COALESCE($6, "profileUrl"),
+              "rawData"     = $7::jsonb
+          WHERE id = $8
+        `, [v.followersCount, v.postsCount, v.bio, v.avatarUrl, v.displayName, v.profileUrl, JSON.stringify(newRaw), row.id]);
         verified++;
       } else {
         const newRaw = { ...currentRaw, verificationStatus: 'unverified', metricsSource: 'not_available', verificationError: v.error, verifiedAt: now };

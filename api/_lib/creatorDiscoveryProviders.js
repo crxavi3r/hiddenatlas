@@ -419,14 +419,17 @@ async function runPerplexityDiscovery(criteria) {
 const META_GRAPH_URL = 'https://graph.facebook.com';
 
 export function validateMetaConfig() {
-  const version   = process.env.META_GRAPH_API_VERSION || 'v21.0';
+  const version   = process.env.META_GRAPH_API_VERSION || 'v25.0';
   const accountId = process.env.META_INSTAGRAM_ACCOUNT_ID;
-  const token     = process.env.META_PAGE_ACCESS_TOKEN || process.env.META_INSTAGRAM_ACCESS_TOKEN;
+  // META_GRAPH_ACCESS_TOKEN is the preferred User Token; fall back to legacy names
+  const token     = process.env.META_GRAPH_ACCESS_TOKEN
+                 || process.env.META_PAGE_ACCESS_TOKEN
+                 || process.env.META_INSTAGRAM_ACCESS_TOKEN;
   const enabled   = process.env.META_PROVIDER_ENABLED !== 'false';
 
   const missing = [];
   if (!accountId) missing.push('META_INSTAGRAM_ACCOUNT_ID');
-  if (!token)     missing.push('META_PAGE_ACCESS_TOKEN');
+  if (!token)     missing.push('META_GRAPH_ACCESS_TOKEN');
 
   return { configured: missing.length === 0 && enabled, missing, version, accountId, token, enabled };
 }
@@ -596,7 +599,7 @@ export async function enrichInstagramProfilesByUsername(usernames, criteria = {}
 
 // ── Instagram Profile Verification (single profile) ───────────────────────────
 
-export async function verifyInstagramCreatorProfile(username) {
+export async function verifyInstagramCreatorProfile(usernameRaw) {
   const config = validateMetaConfig();
   if (!config.configured) {
     return {
@@ -608,54 +611,82 @@ export async function verifyInstagramCreatorProfile(username) {
     };
   }
 
+  // Always normalize: strip @, extract from URL, lowercase, no spaces
+  const cleanUsername = normalizeUsername(usernameRaw);
+  if (!cleanUsername) {
+    return { verified: false, metricsSource: 'not_available', error: 'Invalid or empty username' };
+  }
+
   const { version, accountId, token } = config;
   const fieldset = 'id,username,name,biography,profile_picture_url,followers_count,media_count,website';
-  const fields   = `business_discovery.use_username(${username}){${fieldset}}`;
-  const url      = new URL(`${META_GRAPH_URL}/${version}/${accountId}`);
-  url.searchParams.set('fields', fields);
-  url.searchParams.set('access_token', token);
+  // Correct field syntax: business_discovery.username() — NOT use_username()
+  const fields   = `business_discovery.username(${cleanUsername}){${fieldset}}`;
+  // Build URL manually to avoid URLSearchParams encoding issues with { } ( )
+  const urlWithoutToken = `${META_GRAPH_URL}/${version}/${accountId}?fields=${encodeURIComponent(fields)}`;
+  const fullUrl         = `${urlWithoutToken}&access_token=${token}`;
+
+  console.log('[Discovery] verifyProfile request:', {
+    usernameOriginal:    usernameRaw,
+    cleanUsername,
+    igBusinessAccountId: accountId,
+    graphApiUrl:         urlWithoutToken,  // safe: no token
+  });
 
   const ctrl  = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15_000);
   try {
-    const res = await fetch(url.toString(), { signal: ctrl.signal });
+    const res = await fetch(fullUrl, { signal: ctrl.signal });
     clearTimeout(timer);
     const data = await res.json();
 
     if (data.error) {
-      const code = data.error.code;
-      let msg = data.error.message || 'Meta API error';
-      if (code === 100 || msg.toLowerCase().includes('business_discovery')) {
-        msg = 'Not a Business/Creator account or profile not found';
-      } else if (code === 190) {
-        msg = 'Meta token is invalid or expired';
-      } else if (code === 4 || code === 17 || code === 32) {
-        msg = 'Rate limit reached — wait a few minutes and try again';
+      const errCode    = data.error.code;
+      const errSubcode = data.error.error_subcode;
+      const errMsg     = data.error.message || 'Meta API error';
+      console.error('[Discovery] Meta API error:', { code: errCode, subcode: errSubcode, message: errMsg, cleanUsername });
+
+      let userMsg;
+      if (errCode === 190 || errCode === 102 || errCode === 467) {
+        userMsg = 'Meta token is invalid or expired';
+      } else if (errCode === 4 || errCode === 17 || errCode === 32 || errCode === 613) {
+        userMsg = 'Rate limit reached — wait a few minutes and try again';
+      } else if (errCode === 200 || errCode === 10 || errCode === 3 || (errCode >= 200 && errCode <= 299)) {
+        userMsg = 'Meta permission/token error — check token scopes';
+      } else if (errCode === 100) {
+        // subcode 33 = object does not exist; other = bad param or unsupported operation
+        userMsg = errSubcode === 33
+          ? 'Profile not found or not eligible for Business Discovery'
+          : 'Meta API error (code 100): possible bad parameter or unsupported account';
+      } else {
+        userMsg = `Meta API error (code ${errCode}): ${errMsg}`;
       }
-      return { verified: false, metricsSource: 'not_available', error: msg };
+      return { verified: false, metricsSource: 'not_available', error: userMsg, metaCode: errCode };
     }
 
     const profile = data.business_discovery;
+    console.log('[Discovery] business_discovery present:', !!profile, profile ? { username: profile.username, followers: profile.followers_count } : null);
+
     if (!profile) {
-      return { verified: false, metricsSource: 'not_available', error: 'Profile not found or not accessible' };
+      return { verified: false, metricsSource: 'not_available', error: 'Profile not found or not eligible for Business Discovery' };
     }
 
+    const igUsername = profile.username || cleanUsername;
     return {
-      verified:      true,
-      metricsSource: 'meta_business_discovery',
-      followersCount: profile.followers_count ?? null,
-      postsCount:     profile.media_count     ?? null,
-      bio:            profile.biography       || null,
-      avatarUrl:      profile.profile_picture_url || null,
-      displayName:    profile.name            || null,
-      website:        profile.website         || null,
+      verified:        true,
+      metricsSource:   'meta_business_discovery',
+      followersCount:  profile.followers_count ?? null,
+      postsCount:      profile.media_count     ?? null,
+      bio:             profile.biography       || null,
+      avatarUrl:       profile.profile_picture_url || null,
+      displayName:     profile.name            || null,
+      website:         profile.website         || null,
+      profileUrl:      `https://www.instagram.com/${igUsername}/`,
+      rawMetaProfile:  profile,
     };
   } catch (e) {
     clearTimeout(timer);
-    return {
-      verified: false,
-      metricsSource: 'not_available',
-      error: e.name === 'AbortError' ? 'Request timed out (15s)' : (e.message || 'Unknown error'),
-    };
+    const msg = e.name === 'AbortError' ? 'Request timed out (15s)' : (e.message || 'Unknown error');
+    console.error('[Discovery] verifyProfile fetch error:', msg);
+    return { verified: false, metricsSource: 'not_available', error: msg };
   }
 }
