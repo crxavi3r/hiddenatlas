@@ -333,6 +333,18 @@ export default function CreatorLeadDetailPage() {
   const isIgVerified = aiAnalysis.lastInstagramRefresh?.source === 'meta_business_discovery'
     || aiAnalysis.metaBusinessDiscovery != null;
 
+  // Instagram Messaging API eligibility:
+  // Requires an existing conversation (thread/recipient id from an inbound message or opt-in),
+  // an open messaging window, and valid API token. Cold DM to any username is not allowed.
+  const igMeta         = aiAnalysis; // eligibility stored inside aiAnalysis
+  const hasThreadId    = !!(lead.externalThreadId || igMeta.instagramThreadId || igMeta.instagramRecipientId);
+  const windowExpiry   = igMeta.messagingWindowExpiresAt ? new Date(igMeta.messagingWindowExpiresAt) : null;
+  const windowOpen     = windowExpiry && windowExpiry > new Date();
+  const isMessagingEligible = lead.platform === 'instagram'
+    && hasThreadId
+    && (igMeta.instagramMessagingEligible === true)
+    && windowOpen;
+
   return (
     <div style={S.page}>
       <AvatarModal src={avatarModal} onClose={() => setAvatarModal(null)} />
@@ -606,11 +618,22 @@ export default function CreatorLeadDetailPage() {
         {/* ── Messages ── */}
         {activeTab === 'messages' && (
           <div>
+            {/* Messaging eligibility notice */}
+            {!isMessagingEligible && (
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '10px 14px', background: '#F8F6F2', border: '1px solid #E8E3DA', borderRadius: '8px', marginBottom: '16px' }}>
+                <Instagram size={14} color="#8C8070" style={{ flexShrink: 0, marginTop: '1px' }} />
+                <div>
+                  <p style={{ margin: 0, fontSize: '12.5px', fontWeight: '600', color: '#4A433A' }}>Direct Instagram sending not available for this profile yet.</p>
+                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#8C8070' }}>
+                    Copy the message and send it manually from <strong>@hiddenatlas.travel</strong>. Direct API sending requires an existing Instagram conversation initiated by the creator.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Compose area */}
             <div style={{ marginBottom: '20px', padding: '16px', background: '#F8F6F2', borderRadius: '8px', border: '1px solid #E8E3DA' }}>
               <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', marginBottom: '12px' }}>Prepare Message</h4>
-              <div style={{ marginBottom: '8px', padding: '8px 12px', background: '#FEF9EC', border: '1px solid #F5D56E', borderRadius: '6px', fontSize: '12px', color: '#7A5D0A' }}>
-                Messages are saved as drafts. Copy the text and send manually via Instagram DM.
-              </div>
               <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
                 <div style={{ flex: '1 1 200px' }}>
                   <label style={S.label}>Template</label>
@@ -642,43 +665,67 @@ export default function CreatorLeadDetailPage() {
             {messages.length === 0 && (
               <p style={{ textAlign: 'center', color: '#B5AA99', padding: '24px' }}>No messages yet</p>
             )}
-            {messages.map(msg => (
-              <div key={msg.id} style={{ padding: '14px', border: '1px solid #E8E3DA', borderRadius: '8px', marginBottom: '10px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '8px' }}>
-                  <div>
-                    {msg.template_name && (
-                      <span style={{ fontSize: '11px', color: '#8C8070', display: 'block', marginBottom: '2px' }}>Template: {msg.template_name}</span>
-                    )}
-                    <span style={{ fontSize: '10.5px', fontWeight: '700', letterSpacing: '0.4px', textTransform: 'uppercase', color: msg.status === 'sent_manual' ? '#1B6B65' : msg.status === 'copied' ? '#C9A96E' : '#8C8070', background: msg.status === 'sent_manual' ? '#EFF6F5' : msg.status === 'copied' ? '#FBF8F1' : '#F4F1EC', padding: '2px 7px', borderRadius: '9px' }}>
-                      {(msg.status ?? '').replace(/_/g, ' ')}
-                    </span>
-                    {msg.copiedAt && <span style={{ fontSize: '11px', color: '#B5AA99', marginLeft: '8px' }}>Copied {fmtDate(msg.copiedAt)}</span>}
-                    {msg.sentAt && <span style={{ fontSize: '11px', color: '#B5AA99', marginLeft: '8px' }}>Sent {fmtDate(msg.sentAt)}</span>}
-                  </div>
-                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap' }}>
-                    <button onClick={() => handleCopyMessage(msg)}
-                      style={{ ...S.btnPrimary, padding: '5px 12px', fontSize: '12px', background: copiedMsgId === msg.id ? '#2E8B57' : '#1B6B65' }}>
-                      {copiedMsgId === msg.id ? <CheckCircle size={12} /> : <Copy size={12} />}
-                      {copiedMsgId === msg.id ? 'Copied!' : 'Copy for IG DM'}
-                    </button>
-                    {instagramUrl && (
-                      <a href={instagramUrl} target="_blank" rel="noopener noreferrer"
-                        style={{ ...S.btnSecondary, textDecoration: 'none', color: '#E1306C', borderColor: '#F5C6C0', padding: '5px 10px', fontSize: '12px' }}>
-                        <Instagram size={12} /> Open Instagram
-                      </a>
-                    )}
-                    {msg.status !== 'sent_manual' && (
-                      <button onClick={() => handleMarkSent(msg)} style={{ ...S.btnSecondary, fontSize: '11.5px', padding: '5px 10px' }}>
-                        <CheckCircle size={11} /> Mark Sent
+            {messages.map(msg => {
+              const msgEligible = isMessagingEligible && msg.status !== 'sent_manual';
+              return (
+                <div key={msg.id} style={{ padding: '14px', border: '1px solid #E8E3DA', borderRadius: '8px', marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '8px' }}>
+                    <div>
+                      {msg.template_name && (
+                        <span style={{ fontSize: '11px', color: '#8C8070', display: 'block', marginBottom: '2px' }}>Template: {msg.template_name}</span>
+                      )}
+                      <span style={{
+                        fontSize: '10.5px', fontWeight: '700', letterSpacing: '0.4px', textTransform: 'uppercase',
+                        color: msg.status === 'sent_manual' ? '#1B6B65' : msg.status === 'sent' ? '#1B6B65' : msg.status === 'copied' ? '#C9A96E' : '#8C8070',
+                        background: msg.status === 'sent_manual' || msg.status === 'sent' ? '#EFF6F5' : msg.status === 'copied' ? '#FBF8F1' : '#F4F1EC',
+                        padding: '2px 7px', borderRadius: '9px',
+                      }}>
+                        {msg.status === 'sent_manual' ? 'sent manually' : (msg.status ?? '').replace(/_/g, ' ')}
+                      </span>
+                      {msg.channel && msg.channel !== 'instagram' && (
+                        <span style={{ fontSize: '10.5px', color: '#B5AA99', marginLeft: '6px' }}>{msg.channel}</span>
+                      )}
+                      {msg.copiedAt && <span style={{ fontSize: '11px', color: '#B5AA99', marginLeft: '8px' }}>Copied {fmtDate(msg.copiedAt)}</span>}
+                      {msg.sentAt && <span style={{ fontSize: '11px', color: '#B5AA99', marginLeft: '8px' }}>Sent {fmtDate(msg.sentAt)}</span>}
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap' }}>
+                      {/* Send via Instagram API — only when messaging-eligible (no active conversation = never shows) */}
+                      {msgEligible && (
+                        <button
+                          onClick={() => {
+                            if (window.confirm('This will send from @hiddenatlas.travel via Instagram. Continue?')) {
+                              showToast('Instagram API sending not yet implemented', 'error');
+                            }
+                          }}
+                          style={{ ...S.btnPrimary, padding: '5px 12px', fontSize: '12px', background: '#E1306C', borderColor: '#E1306C' }}>
+                          <Instagram size={12} /> Send via Instagram
+                        </button>
+                      )}
+                      {/* Manual flow — always visible */}
+                      <button onClick={() => handleCopyMessage(msg)}
+                        style={{ ...S.btnPrimary, padding: '5px 12px', fontSize: '12px', background: copiedMsgId === msg.id ? '#2E8B57' : '#1B6B65' }}>
+                        {copiedMsgId === msg.id ? <CheckCircle size={12} /> : <Copy size={12} />}
+                        {copiedMsgId === msg.id ? 'Copied!' : 'Copy for IG DM'}
                       </button>
-                    )}
+                      {instagramUrl && (
+                        <a href={instagramUrl} target="_blank" rel="noopener noreferrer"
+                          style={{ ...S.btnSecondary, textDecoration: 'none', color: '#E1306C', borderColor: '#F5C6C0', padding: '5px 10px', fontSize: '12px' }}>
+                          <Instagram size={12} /> Open Instagram
+                        </a>
+                      )}
+                      {msg.status !== 'sent_manual' && msg.status !== 'sent' && (
+                        <button onClick={() => handleMarkSent(msg)} style={{ ...S.btnSecondary, fontSize: '11.5px', padding: '5px 10px' }}>
+                          <CheckCircle size={11} /> Mark Sent
+                        </button>
+                      )}
+                    </div>
                   </div>
+                  <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: '13px', color: '#1C1A16', lineHeight: '1.6', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    {msg.body}
+                  </pre>
                 </div>
-                <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: '13px', color: '#1C1A16', lineHeight: '1.6', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                  {msg.body}
-                </pre>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
