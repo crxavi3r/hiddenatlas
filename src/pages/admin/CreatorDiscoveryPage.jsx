@@ -542,7 +542,7 @@ function MetaDiscoveryPanel({ onSearchDone, getToken }) {
 
 // ── Result Row ────────────────────────────────────────────────────────────────
 
-function ResultRow({ result, onAddToCrm, onIgnore, onBlock, onVerify, acting, verifying }) {
+function ResultRow({ result, onAddToCrm, onIgnore, onBlock, onVerify, acting, verifying, metaNotConfigured }) {
   const navigate = useNavigate();
   const isActing    = acting === result.id;
   const isVerifying = verifying?.has(result.id);
@@ -557,7 +557,7 @@ function ResultRow({ result, onAddToCrm, onIgnore, onBlock, onVerify, acting, ve
   const isAiSuggestion = meta.source === 'ai_suggestion';
   const verifStatus    = meta.verificationStatus; // 'verified' | 'unverified' | undefined
   const isVerified     = verifStatus === 'verified';
-  const canVerify      = !isVerified && onVerify;
+  const canVerify      = !isVerified && onVerify && !metaNotConfigured;
 
   return (
     <tr style={{ borderBottom: '1px solid #F4F1EC', opacity: isActing ? 0.5 : 1 }}>
@@ -645,6 +645,12 @@ function ResultRow({ result, onAddToCrm, onIgnore, onBlock, onVerify, acting, ve
               title="Verify via Instagram API"
               style={{ ...S.btnSecondary, padding: '4px 6px', fontSize: '10px', color: isVerifying ? '#B5AA99' : '#1B6B65' }}>
               {isVerifying ? '…' : '✓IG'}
+            </button>
+          )}
+          {!isVerified && !canVerify && metaNotConfigured && (
+            <button disabled title="Meta verification not configured"
+              style={{ ...S.btnSecondary, padding: '4px 6px', fontSize: '10px', color: '#C8C0B8', cursor: 'not-allowed', opacity: 0.6 }}>
+              ✓IG
             </button>
           )}
           {profileUrl && (
@@ -876,8 +882,9 @@ export default function CreatorDiscoveryPage() {
   const [runsError, setRunsError]     = useState(null);
   const [runError, setRunError]       = useState(null);
   const [acting, setActing]           = useState(null);
-  const [verifying, setVerifying]     = useState(new Set());
+  const [verifying, setVerifying]       = useState(new Set());
   const [verifyingAll, setVerifyingAll] = useState(false);
+  const [metaNotConfigured, setMetaNotConfigured] = useState(false);
   const [showImport, setShowImport]   = useState(false);
   const [showNewRun, setShowNewRun]   = useState(false);
   const [toast, setToast]             = useState(null);
@@ -961,12 +968,15 @@ export default function CreatorDiscoveryPage() {
     setVerifying(prev => new Set([...prev, result.id]));
     try {
       const data = await crmCall(getToken, 'discovery.verifyProfile', { resultId: result.id });
+      if (data.configError) {
+        setMetaNotConfigured(true);
+        return;
+      }
       if (data.verified) {
         showToast(`@${result.username} verified via Instagram API`);
       } else {
         showToast(`@${result.username}: ${data.error || 'could not verify'}`, 'error');
       }
-      // Update this row in local state without full reload
       setRunData(prev => prev ? {
         ...prev,
         results: prev.results.map(r => r.id === result.id ? { ...r, ...data.result } : r),
@@ -983,6 +993,10 @@ export default function CreatorDiscoveryPage() {
     setVerifyingAll(true);
     try {
       const data = await crmCall(getToken, 'discovery.verifyAllProfiles', { runId: activeRunId });
+      if (data.configError) {
+        setMetaNotConfigured(true);
+        return;
+      }
       showToast(`Verified ${data.verified} profiles${data.failed > 0 ? `, ${data.failed} failed` : ''}`);
       loadRun(activeRunId);
     } catch (e) {
@@ -1192,9 +1206,9 @@ export default function CreatorDiscoveryPage() {
                       <button onClick={() => loadRun(activeRunId)} style={S.btnSecondary} title="Refresh">
                         <RefreshCw size={12} />
                       </button>
-                      <button onClick={handleVerifyAll} disabled={verifyingAll}
-                        title="Verify unverified profiles via Instagram API"
-                        style={{ ...S.btnSecondary, fontSize: '12px', color: verifyingAll ? '#B5AA99' : '#1B6B65' }}>
+                      <button onClick={handleVerifyAll} disabled={verifyingAll || metaNotConfigured}
+                        title={metaNotConfigured ? 'Meta verification not configured' : 'Verify unverified profiles via Instagram API'}
+                        style={{ ...S.btnSecondary, fontSize: '12px', color: (verifyingAll || metaNotConfigured) ? '#B5AA99' : '#1B6B65', cursor: metaNotConfigured ? 'not-allowed' : 'pointer', opacity: metaNotConfigured ? 0.6 : 1 }}>
                         {verifyingAll ? <RefreshCw size={12} /> : <CheckCircle size={12} />}
                         {verifyingAll ? 'Verifying…' : 'Verify all'}
                       </button>
@@ -1217,6 +1231,18 @@ export default function CreatorDiscoveryPage() {
                 </>
               )}
 
+              {metaNotConfigured && (
+                <div style={{ background: '#FEF9EC', border: '1px solid #F5D56E', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                  <span style={{ fontSize: '15px', lineHeight: 1 }}>⚠</span>
+                  <div>
+                    <p style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: '#7A5D0A' }}>Instagram verification is not configured</p>
+                    <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#9A7A20' }}>
+                      Add <code style={{ background: '#FDF3C7', padding: '1px 4px', borderRadius: '3px', fontSize: '11px' }}>META_INSTAGRAM_ACCOUNT_ID</code> and{' '}
+                      <code style={{ background: '#FDF3C7', padding: '1px 4px', borderRadius: '3px', fontSize: '11px' }}>META_PAGE_ACCESS_TOKEN</code> to Vercel environment variables.
+                    </p>
+                  </div>
+                </div>
+              )}
               {loading && <p style={{ textAlign: 'center', color: '#8C8070', padding: '30px' }}>Loading profiles…</p>}
               {runError && (
                 <div style={{ textAlign: 'center', padding: '24px' }}>
@@ -1265,7 +1291,8 @@ export default function CreatorDiscoveryPage() {
                             onBlock={r => handleResultAction(r, 'blocked')}
                             onVerify={handleVerify}
                             acting={acting}
-                            verifying={verifying} />
+                            verifying={verifying}
+                            metaNotConfigured={metaNotConfigured} />
                         ))}
                       </tbody>
                     </table>

@@ -2664,7 +2664,17 @@ async function crmVerifyProfile(pool, body) {
 
   const { verifyInstagramCreatorProfile } = await import('./_lib/creatorDiscoveryProviders.js');
   const v = await verifyInstagramCreatorProfile(result.username);
-  console.log(`[Discovery] verifyProfile @${result.username}:`, { verified: v.verified, error: v.error || null });
+  console.log(`[Discovery] verifyProfile @${result.username}:`, { verified: v.verified, code: v.code || null, error: v.error || null });
+
+  if (v.code === 'META_PROVIDER_NOT_CONFIGURED') {
+    return {
+      verified:    false,
+      configError: true,
+      missing:     v.missing,
+      error:       v.error,
+      result,
+    };
+  }
 
   const currentRaw = (v && typeof result.rawData === 'object' && result.rawData) ? result.rawData : {};
   const now        = new Date().toISOString();
@@ -2722,7 +2732,17 @@ async function crmVerifyAllProfiles(pool, body) {
 
   if (!toVerify.length) return { verified: 0, failed: 0, skipped: 0, total: 0 };
 
-  const { verifyInstagramCreatorProfile } = await import('./_lib/creatorDiscoveryProviders.js');
+  const { validateMetaConfig, verifyInstagramCreatorProfile } = await import('./_lib/creatorDiscoveryProviders.js');
+  const metaConfig = validateMetaConfig();
+  if (!metaConfig.configured) {
+    return {
+      verified: 0, failed: 0, skipped: toVerify.length, total: toVerify.length,
+      configError: true,
+      missing: metaConfig.missing,
+      error: `Meta provider not configured. Missing: ${metaConfig.missing.join(', ')}`,
+    };
+  }
+
   let verified = 0, failed = 0;
 
   for (const row of toVerify) {

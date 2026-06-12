@@ -601,6 +601,8 @@ export async function verifyInstagramCreatorProfile(username) {
   if (!config.configured) {
     return {
       verified: false,
+      code:     'META_PROVIDER_NOT_CONFIGURED',
+      missing:  config.missing,
       metricsSource: 'not_available',
       error: `Meta provider not configured. Missing: ${config.missing.join(', ')}`,
     };
