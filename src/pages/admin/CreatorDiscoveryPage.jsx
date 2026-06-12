@@ -542,16 +542,22 @@ function MetaDiscoveryPanel({ onSearchDone, getToken }) {
 
 // ── Result Row ────────────────────────────────────────────────────────────────
 
-function ResultRow({ result, onAddToCrm, onIgnore, onBlock, acting }) {
+function ResultRow({ result, onAddToCrm, onIgnore, onBlock, onVerify, acting, verifying }) {
   const navigate = useNavigate();
-  const isActing = acting === result.id;
-  const status   = result.status ?? 'new';
-  const chip     = STATUS_CHIP[status] || STATUS_CHIP.new;
-  const profileUrl = result.profileUrl || (result.platform === 'instagram' ? `https://www.instagram.com/${result.username}/` : null);
+  const isActing    = acting === result.id;
+  const isVerifying = verifying?.has(result.id);
+  const status      = result.status ?? 'new';
+  const chip        = STATUS_CHIP[status] || STATUS_CHIP.new;
+  const profileUrl  = result.profileUrl || (result.platform === 'instagram' ? `https://www.instagram.com/${result.username}/` : null);
   // rawData is the real column name; metadata is the legacy fallback
   const meta = (result.rawData && typeof result.rawData === 'object') ? result.rawData
              : (result.metadata && typeof result.metadata === 'object') ? result.metadata
              : {};
+
+  const isAiSuggestion = meta.source === 'ai_suggestion';
+  const verifStatus    = meta.verificationStatus; // 'verified' | 'unverified' | undefined
+  const isVerified     = verifStatus === 'verified';
+  const canVerify      = !isVerified && onVerify;
 
   return (
     <tr style={{ borderBottom: '1px solid #F4F1EC', opacity: isActing ? 0.5 : 1 }}>
@@ -571,26 +577,44 @@ function ResultRow({ result, onAddToCrm, onIgnore, onBlock, acting }) {
           </div>
         </div>
       </td>
-      <td style={{ padding: '9px 10px', verticalAlign: 'middle', fontSize: '11px', color: '#4A433A' }}>{fmtK(result.followersCount ?? result.followerCount)}</td>
+      <td style={{ padding: '9px 10px', verticalAlign: 'middle', fontSize: '11px', color: '#4A433A' }}>
+        {result.followersCount != null ? fmtK(result.followersCount) : (
+          <span style={{ color: '#B5AA99' }}>—</span>
+        )}
+        {isAiSuggestion && !isVerified && (
+          <span style={{ display: 'block', fontSize: '9px', color: '#C9A96E', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.3px', marginTop: '1px' }}>AI</span>
+        )}
+      </td>
       <td style={{ padding: '9px 10px', verticalAlign: 'middle', fontSize: '11px', color: '#8C8070' }}>{result.country || '—'}</td>
       <td style={{ padding: '9px 10px', verticalAlign: 'middle', fontSize: '11px', color: '#8C8070' }}>{result.language || '—'}</td>
       <td style={{ padding: '9px 10px', verticalAlign: 'middle', fontSize: '11px', color: '#8C8070', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{result.category || '—'}</td>
       <td style={{ padding: '9px 10px', verticalAlign: 'middle' }}><ScoreBadge score={result.score} /></td>
       <td style={{ padding: '9px 10px', verticalAlign: 'top', maxWidth: '220px' }}>
         {result.fitSummary && (
-          <p style={{ fontSize: '11px', color: '#4A433A', margin: 0, lineHeight: '1.5',
+          <p style={{ fontSize: '11px', color: '#4A433A', margin: '0 0 3px', lineHeight: '1.5',
             display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
             {result.fitSummary}
           </p>
         )}
-        {(meta.confidence || meta.rawData?.confidenceLevel) && (() => {
-          const conf = meta.confidence || meta.rawData?.confidenceLevel;
-          return (
-            <span style={{ fontSize: '9.5px', color: conf === 'high' ? '#1B6B65' : conf === 'medium' ? '#C9A96E' : '#B5AA99', fontWeight: '600', textTransform: 'uppercase' }}>
-              {conf}
-            </span>
-          );
-        })()}
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+          {isAiSuggestion && (
+            <span style={{ fontSize: '8.5px', background: '#FBF8F1', color: '#C9A96E', border: '1px solid #E8D99A', borderRadius: '3px', padding: '1px 4px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.3px' }}>AI suggestion</span>
+          )}
+          {isVerified && (
+            <span style={{ fontSize: '8.5px', background: '#EFF6F5', color: '#1B6B65', border: '1px solid #A8D5D0', borderRadius: '3px', padding: '1px 4px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.3px' }}>✓ Verified</span>
+          )}
+          {isAiSuggestion && !isVerified && (
+            <span style={{ fontSize: '8.5px', background: '#F8F6F2', color: '#B5AA99', border: '1px solid #E8E3DA', borderRadius: '3px', padding: '1px 4px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.3px' }}>Unverified</span>
+          )}
+          {meta.confidence && (
+            <span style={{ fontSize: '8.5px', color: meta.confidence === 'high' ? '#1B6B65' : meta.confidence === 'medium' ? '#C9A96E' : '#B5AA99', fontWeight: '600', textTransform: 'uppercase' }}>{meta.confidence}</span>
+          )}
+        </div>
+        {meta.verificationError && (
+          <p style={{ fontSize: '9px', color: '#B5AA99', margin: '2px 0 0', fontStyle: 'italic' }} title={meta.verificationError}>
+            {meta.verificationError.slice(0, 50)}{meta.verificationError.length > 50 ? '…' : ''}
+          </p>
+        )}
       </td>
       <td style={{ padding: '9px 10px', verticalAlign: 'middle' }}>
         <span style={S.chip(chip.color, chip.bg)}>{status.replace(/_/g, ' ')}</span>
@@ -614,6 +638,13 @@ function ResultRow({ result, onAddToCrm, onIgnore, onBlock, acting }) {
             <button onClick={() => navigate(`/admin/creator-acquisition/leads/${result.lead_id || meta.existingLeadId}`)}
               style={{ ...S.btnSecondary, padding: '4px 8px', fontSize: '10.5px', color: '#1B6B65' }}>
               <Eye size={10} /> Lead
+            </button>
+          )}
+          {canVerify && (
+            <button onClick={() => onVerify(result)} disabled={isActing || isVerifying}
+              title="Verify via Instagram API"
+              style={{ ...S.btnSecondary, padding: '4px 6px', fontSize: '10px', color: isVerifying ? '#B5AA99' : '#1B6B65' }}>
+              {isVerifying ? '…' : '✓IG'}
             </button>
           )}
           {profileUrl && (
@@ -845,6 +876,8 @@ export default function CreatorDiscoveryPage() {
   const [runsError, setRunsError]     = useState(null);
   const [runError, setRunError]       = useState(null);
   const [acting, setActing]           = useState(null);
+  const [verifying, setVerifying]     = useState(new Set());
+  const [verifyingAll, setVerifyingAll] = useState(false);
   const [showImport, setShowImport]   = useState(false);
   const [showNewRun, setShowNewRun]   = useState(false);
   const [toast, setToast]             = useState(null);
@@ -922,6 +955,41 @@ export default function CreatorDiscoveryPage() {
       loadRun(activeRunId);
       loadRuns();
     } catch (e) { showToast(e.message, 'error'); }
+  }
+
+  async function handleVerify(result) {
+    setVerifying(prev => new Set([...prev, result.id]));
+    try {
+      const data = await crmCall(getToken, 'discovery.verifyProfile', { resultId: result.id });
+      if (data.verified) {
+        showToast(`@${result.username} verified via Instagram API`);
+      } else {
+        showToast(`@${result.username}: ${data.error || 'could not verify'}`, 'error');
+      }
+      // Update this row in local state without full reload
+      setRunData(prev => prev ? {
+        ...prev,
+        results: prev.results.map(r => r.id === result.id ? { ...r, ...data.result } : r),
+      } : prev);
+    } catch (e) {
+      showToast(`Verify failed: ${e.message}`, 'error');
+    } finally {
+      setVerifying(prev => { const s = new Set(prev); s.delete(result.id); return s; });
+    }
+  }
+
+  async function handleVerifyAll() {
+    if (!activeRunId) return;
+    setVerifyingAll(true);
+    try {
+      const data = await crmCall(getToken, 'discovery.verifyAllProfiles', { runId: activeRunId });
+      showToast(`Verified ${data.verified} profiles${data.failed > 0 ? `, ${data.failed} failed` : ''}`);
+      loadRun(activeRunId);
+    } catch (e) {
+      showToast(`Verify all failed: ${e.message}`, 'error');
+    } finally {
+      setVerifyingAll(false);
+    }
   }
 
   const activeRun = runs.find(r => r.id === activeRunId) ?? runData?.run;
@@ -1124,6 +1192,12 @@ export default function CreatorDiscoveryPage() {
                       <button onClick={() => loadRun(activeRunId)} style={S.btnSecondary} title="Refresh">
                         <RefreshCw size={12} />
                       </button>
+                      <button onClick={handleVerifyAll} disabled={verifyingAll}
+                        title="Verify unverified profiles via Instagram API"
+                        style={{ ...S.btnSecondary, fontSize: '12px', color: verifyingAll ? '#B5AA99' : '#1B6B65' }}>
+                        {verifyingAll ? <RefreshCw size={12} /> : <CheckCircle size={12} />}
+                        {verifyingAll ? 'Verifying…' : 'Verify all'}
+                      </button>
                       {activeRun.status !== 'completed' && activeRun.status !== 'failed' && (
                         <button onClick={handleMarkCompleted} style={{ ...S.btnSecondary, fontSize: '12px' }}>
                           <CheckCircle size={12} /> Mark Completed
@@ -1189,7 +1263,9 @@ export default function CreatorDiscoveryPage() {
                             onAddToCrm={handleAddToCrm}
                             onIgnore={r => handleResultAction(r, 'ignored')}
                             onBlock={r => handleResultAction(r, 'blocked')}
-                            acting={acting} />
+                            onVerify={handleVerify}
+                            acting={acting}
+                            verifying={verifying} />
                         ))}
                       </tbody>
                     </table>

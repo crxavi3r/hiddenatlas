@@ -1753,6 +1753,8 @@ async function dispatchCrmAction(pool, action, payload, ctx) {
     case 'discovery.aiSearchProfiles':  return crmAiSearchProfiles(pool, payload, ctx);
     case 'discovery.metaValidateConfig': return crmMetaValidateConfig(pool, payload);
     case 'discovery.metaBusinessDiscovery': return crmMetaBusinessDiscovery(pool, payload, ctx);
+    case 'discovery.verifyProfile':      return crmVerifyProfile(pool, payload, ctx);
+    case 'discovery.verifyAllProfiles':  return crmVerifyAllProfiles(pool, payload, ctx);
     case 'leads.list':                 return crmListLeads(pool, payload);
     case 'leads.get':                  return crmGetLead(pool, payload.id);
     case 'leads.update':               return crmUpdateLead(pool, payload.id, payload, ctx);
@@ -2578,6 +2580,112 @@ async function crmMetaBusinessDiscovery(pool, payload, ctx) {
     errorsCount: Object.keys(errors).length,
     providerStatus: { provider: 'meta_instagram_business_discovery' },
   };
+}
+
+async function crmVerifyProfile(pool, body) {
+  const { resultId } = body;
+  if (!resultId) throw Object.assign(new Error('resultId required'), { status: 400 });
+
+  const { rows } = await pool.query(
+    `SELECT id, username, "rawData" FROM "CreatorDiscoveryResult" WHERE id = $1 LIMIT 1`,
+    [resultId]
+  );
+  if (!rows.length) throw Object.assign(new Error('Result not found'), { status: 404 });
+  const result = rows[0];
+
+  const { verifyInstagramCreatorProfile } = await import('./_lib/creatorDiscoveryProviders.js');
+  const v = await verifyInstagramCreatorProfile(result.username);
+  console.log(`[Discovery] verifyProfile @${result.username}:`, { verified: v.verified, error: v.error || null });
+
+  const currentRaw = (v && typeof result.rawData === 'object' && result.rawData) ? result.rawData : {};
+  const now        = new Date().toISOString();
+
+  if (v.verified) {
+    const newRaw = {
+      ...currentRaw,
+      verificationStatus: 'verified',
+      metricsSource:      v.metricsSource,
+      verifiedAt:         now,
+      verificationError:  null,
+    };
+    await pool.query(`
+      UPDATE "CreatorDiscoveryResult"
+      SET "followersCount" = $1,
+          "postsCount"     = $2,
+          bio              = COALESCE($3, bio),
+          "avatarUrl"      = COALESCE($4, "avatarUrl"),
+          "displayName"    = COALESCE($5, "displayName"),
+          "rawData"        = $6::jsonb
+      WHERE id = $7
+    `, [v.followersCount, v.postsCount, v.bio, v.avatarUrl, v.displayName, JSON.stringify(newRaw), resultId]);
+  } else {
+    const newRaw = {
+      ...currentRaw,
+      verificationStatus: 'unverified',
+      metricsSource:      v.metricsSource || 'not_available',
+      verificationError:  v.error,
+      verifiedAt:         now,
+    };
+    await pool.query(
+      `UPDATE "CreatorDiscoveryResult" SET "rawData" = $1::jsonb WHERE id = $2`,
+      [JSON.stringify(newRaw), resultId]
+    );
+  }
+
+  const { rows: updated } = await pool.query(
+    `SELECT * FROM "CreatorDiscoveryResult" WHERE id = $1`, [resultId]
+  );
+  return { result: updated[0], verified: v.verified, error: v.error || null };
+}
+
+async function crmVerifyAllProfiles(pool, body) {
+  const { runId, limit = 20 } = body;
+  if (!runId) throw Object.assign(new Error('runId required'), { status: 400 });
+
+  const { rows: toVerify } = await pool.query(`
+    SELECT id, username, "rawData"
+    FROM "CreatorDiscoveryResult"
+    WHERE "runId" = $1
+      AND ("rawData"->>'verificationStatus' IS NULL OR "rawData"->>'verificationStatus' = 'unverified')
+    ORDER BY COALESCE(score, 0) DESC, "createdAt" DESC
+    LIMIT $2
+  `, [runId, Math.min(parseInt(limit, 10) || 20, 50)]);
+
+  if (!toVerify.length) return { verified: 0, failed: 0, skipped: 0, total: 0 };
+
+  const { verifyInstagramCreatorProfile } = await import('./_lib/creatorDiscoveryProviders.js');
+  let verified = 0, failed = 0;
+
+  for (const row of toVerify) {
+    try {
+      const v = await verifyInstagramCreatorProfile(row.username);
+      const currentRaw = (typeof row.rawData === 'object' && row.rawData) ? row.rawData : {};
+      const now = new Date().toISOString();
+
+      if (v.verified) {
+        const newRaw = { ...currentRaw, verificationStatus: 'verified', metricsSource: v.metricsSource, verifiedAt: now, verificationError: null };
+        await pool.query(`
+          UPDATE "CreatorDiscoveryResult"
+          SET "followersCount" = $1, "postsCount" = $2,
+              bio = COALESCE($3, bio), "avatarUrl" = COALESCE($4, "avatarUrl"),
+              "displayName" = COALESCE($5, "displayName"), "rawData" = $6::jsonb
+          WHERE id = $7
+        `, [v.followersCount, v.postsCount, v.bio, v.avatarUrl, v.displayName, JSON.stringify(newRaw), row.id]);
+        verified++;
+      } else {
+        const newRaw = { ...currentRaw, verificationStatus: 'unverified', metricsSource: 'not_available', verificationError: v.error, verifiedAt: now };
+        await pool.query(`UPDATE "CreatorDiscoveryResult" SET "rawData" = $1::jsonb WHERE id = $2`, [JSON.stringify(newRaw), row.id]);
+        failed++;
+      }
+    } catch (e) {
+      console.error(`[Discovery] verifyAll error for @${row.username}:`, e.message);
+      failed++;
+    }
+    await new Promise(r => setTimeout(r, 400));
+  }
+
+  console.log(`[Discovery] verifyAllProfiles runId=${runId}: verified=${verified} failed=${failed} total=${toVerify.length}`);
+  return { verified, failed, skipped: 0, total: toVerify.length };
 }
 
 async function crmMarkRunCompleted(pool, id) {

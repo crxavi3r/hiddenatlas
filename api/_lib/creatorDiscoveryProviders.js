@@ -229,19 +229,20 @@ export function normalizeAiProfile(raw) {
     data: {
       platform,
       username,
-      displayName:    raw.displayName  || raw.fullName || raw.name || username,
+      displayName:   raw.displayName || raw.fullName || raw.name || username,
       profileUrl,
-      avatarUrl:      raw.avatarUrl    || raw.avatar   || null,
-      followersCount: safeInteger(raw.followersCount ?? raw.followerCount ?? raw.followers ?? raw.followers_count),
-      postsCount:     safeInteger(raw.postsCount     ?? raw.postCount     ?? raw.posts     ?? raw.posts_count),
-      engagementRate: safeNumber(raw.engagementRate  ?? raw.engagement_rate),
-      bio:            raw.bio          || raw.description || null,
-      country:        raw.country      || null,
-      language:       raw.language     || null,
-      category:       raw.category     || raw.niche    || null,
-      score:          clampScore(raw.score),
-      fitSummary:     raw.fitSummary   || raw.fit      || raw.reason || null,
-      routeIdeas:     Array.isArray(raw.routeIdeas)   ? raw.routeIdeas : [],
+      avatarUrl:     null, // AI cannot provide verified avatar
+      // Metrics are NEVER taken from AI — only from real provider (Meta API, etc.)
+      followersCount: null,
+      postsCount:     null,
+      engagementRate: null,
+      bio:           raw.bio || raw.description || null,
+      country:       raw.country   || null,
+      language:      raw.language  || null,
+      category:      raw.category  || raw.niche || null,
+      score:         clampScore(raw.score),
+      fitSummary:    raw.fitSummary || raw.fit || raw.reason || null,
+      routeIdeas:    Array.isArray(raw.routeIdeas) ? raw.routeIdeas : [],
       rawData: {
         source: 'ai_suggestion',
         verificationStatus: 'unverified',
@@ -591,4 +592,68 @@ export async function enrichInstagramProfilesByUsername(usernames, criteria = {}
   }
 
   return { results, errors, provider: 'meta_instagram_business_discovery' };
+}
+
+// ── Instagram Profile Verification (single profile) ───────────────────────────
+
+export async function verifyInstagramCreatorProfile(username) {
+  const config = validateMetaConfig();
+  if (!config.configured) {
+    return {
+      verified: false,
+      metricsSource: 'not_available',
+      error: `Meta provider not configured. Missing: ${config.missing.join(', ')}`,
+    };
+  }
+
+  const { version, accountId, token } = config;
+  const fieldset = 'id,username,name,biography,profile_picture_url,followers_count,media_count,website';
+  const fields   = `business_discovery.use_username(${username}){${fieldset}}`;
+  const url      = new URL(`${META_GRAPH_URL}/${version}/${accountId}`);
+  url.searchParams.set('fields', fields);
+  url.searchParams.set('access_token', token);
+
+  const ctrl  = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15_000);
+  try {
+    const res = await fetch(url.toString(), { signal: ctrl.signal });
+    clearTimeout(timer);
+    const data = await res.json();
+
+    if (data.error) {
+      const code = data.error.code;
+      let msg = data.error.message || 'Meta API error';
+      if (code === 100 || msg.toLowerCase().includes('business_discovery')) {
+        msg = 'Not a Business/Creator account or profile not found';
+      } else if (code === 190) {
+        msg = 'Meta token is invalid or expired';
+      } else if (code === 4 || code === 17 || code === 32) {
+        msg = 'Rate limit reached — wait a few minutes and try again';
+      }
+      return { verified: false, metricsSource: 'not_available', error: msg };
+    }
+
+    const profile = data.business_discovery;
+    if (!profile) {
+      return { verified: false, metricsSource: 'not_available', error: 'Profile not found or not accessible' };
+    }
+
+    return {
+      verified:      true,
+      metricsSource: 'meta_business_discovery',
+      followersCount: profile.followers_count ?? null,
+      postsCount:     profile.media_count     ?? null,
+      bio:            profile.biography       || null,
+      avatarUrl:      profile.profile_picture_url || null,
+      displayName:    profile.name            || null,
+      website:        profile.website         || null,
+    };
+  } catch (e) {
+    clearTimeout(timer);
+    return {
+      verified: false,
+      metricsSource: 'not_available',
+      error: e.name === 'AbortError' ? 'Request timed out (15s)' : (e.message || 'Unknown error'),
+    };
+  }
 }
