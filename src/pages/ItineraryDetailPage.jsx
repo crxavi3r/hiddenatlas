@@ -11,6 +11,7 @@ import { getCoverImage, getMapImage } from '../lib/itineraryImages';
 import { resolveDayImages, resolveGalleryImages, resolveResearchImages } from '../lib/resolveItineraryImages';
 import { useTrack } from '../hooks/useTrack';
 import FormattedText from '../components/FormattedText';
+import Lightbox from '../components/Lightbox';
 import JapanRouteMap from '../components/JapanRouteMap';
 import MoroccoRouteMap from '../components/MoroccoRouteMap';
 import PhilippinesRouteMap from '../components/PhilippinesRouteMap';
@@ -262,7 +263,7 @@ function UnlockedSidebar({ itinerary, onDownload }) {
 // ─────────────────────────────────────────────────────────────
 // Day entry — renders locked or unlocked
 // ─────────────────────────────────────────────────────────────
-function DayEntry({ day, index, isLocked, isLast, dayStops = [] }) {
+function DayEntry({ day, index, isLocked, isLast, dayStops = [], onImageClick }) {
   return (
     <div id={`day-${day.day}`} style={{ display: 'flex', gap: '24px', position: 'relative' }}>
       {/* Timeline dot */}
@@ -358,10 +359,16 @@ function DayEntry({ day, index, isLocked, isLast, dayStops = [] }) {
         )}
 
         {day.img && !isLocked && (
-          <img
-            src={day.img} alt={day.title}
-            style={{ marginTop: '16px', width: '100%', maxWidth: '480px', height: '220px', objectFit: 'cover', borderRadius: '6px' }}
-          />
+          <div
+            data-lightbox-trigger={onImageClick ? 'true' : undefined}
+            onClick={onImageClick || undefined}
+            style={{ marginTop: '16px', display: 'inline-block', maxWidth: '480px', width: '100%' }}
+          >
+            <img
+              src={day.img} alt={day.title}
+              style={{ width: '100%', height: '220px', objectFit: 'cover', borderRadius: '6px', display: 'block' }}
+            />
+          </div>
         )}
       </div>
     </div>
@@ -474,6 +481,7 @@ export default function ItineraryDetailPage() {
   const [dbDays, setDbDays]                           = useState(null);
   const [dbCoverImage, setDbCoverImage]               = useState(null);
   const [dbDayStops, setDbDayStops]                   = useState([]);
+  const [lightboxIndex, setLightboxIndex]             = useState(null);
 
   // ── DB fetch for CMS-only itineraries (not in static bundle) ────────────────
   useEffect(() => {
@@ -966,6 +974,29 @@ export default function ItineraryDetailPage() {
     days,
     dbAssets
   );
+
+  // ── Lightbox image index ──────────────────────────────────────────────────
+  // Build a flat list of all visible images in page order (gallery → days → research)
+  // so clicking any image opens the lightbox at the correct position.
+  const lightboxImages = [];
+  const galleryLightboxIdx = [];
+  galleryImages.forEach((img) => {
+    galleryLightboxIdx.push(lightboxImages.length);
+    lightboxImages.push({ src: img.src, alt: `${title} — ${img.filename.replace(/[-_]/g, ' ').replace(/\.\w+$/, '')}` });
+  });
+  const dayLightboxIdx = {}; // day.day → lightbox index
+  resolvedDays.forEach((day, i) => {
+    const isLocked = isPremium && !hasAccess && i >= 2;
+    if (day.imgs[0] && !isLocked) {
+      dayLightboxIdx[day.day] = lightboxImages.length;
+      lightboxImages.push({ src: day.imgs[0], alt: day.title });
+    }
+  });
+  const researchLightboxIdx = [];
+  researchImages.forEach((img) => {
+    researchLightboxIdx.push(lightboxImages.length);
+    lightboxImages.push({ src: img.src, alt: `On location — ${title}` });
+  });
 
   // ── Parent chooser page ───────────────────────────────────────────────────
   if (itinerary.isParent && itinerary.childItineraries) {
@@ -1477,12 +1508,17 @@ export default function ItineraryDetailPage() {
                   gap: '8px',
                 }}>
                   {galleryImages.map((img, i) => (
-                    <div key={i} style={{
-                      aspectRatio: i === 0 ? '16/10' : '1/1',
-                      gridColumn: i === 0 ? '1 / -1' : 'auto',
-                      overflow: 'hidden',
-                      borderRadius: '6px',
-                    }}>
+                    <div
+                      key={i}
+                      data-lightbox-trigger="true"
+                      onClick={() => setLightboxIndex(galleryLightboxIdx[i])}
+                      style={{
+                        aspectRatio: i === 0 ? '16/10' : '1/1',
+                        gridColumn: i === 0 ? '1 / -1' : 'auto',
+                        overflow: 'hidden',
+                        borderRadius: '6px',
+                      }}
+                    >
                       <img
                         src={img.src}
                         alt={`${title} — ${img.filename.replace(/[-_]/g, ' ').replace(/\.\w+$/, '')}`}
@@ -1515,6 +1551,7 @@ export default function ItineraryDetailPage() {
                       isLocked={isLocked}
                       isLast={i === resolvedDays.length - 1}
                       dayStops={isLocked ? [] : thisDayStops}
+                      onImageClick={dayLightboxIdx[day.day] !== undefined ? () => setLightboxIndex(dayLightboxIdx[day.day]) : null}
                     />
                   );
                 })}
@@ -1669,7 +1706,12 @@ export default function ItineraryDetailPage() {
                     gap: '8px',
                   }}>
                     {researchImages.map((img, i) => (
-                      <div key={i} style={{ aspectRatio: '4/3', overflow: 'hidden', borderRadius: '6px' }}>
+                      <div
+                        key={i}
+                        data-lightbox-trigger="true"
+                        onClick={() => setLightboxIndex(researchLightboxIdx[i])}
+                        style={{ aspectRatio: '4/3', overflow: 'hidden', borderRadius: '6px' }}
+                      >
                         <img
                           src={img.src}
                           alt={`On location — ${title}`}
@@ -1739,6 +1781,15 @@ export default function ItineraryDetailPage() {
           .ha-detail-body { padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)) !important; }
         }
       `}</style>
+
+      {lightboxIndex !== null && (
+        <Lightbox
+          images={lightboxImages}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onNavigate={setLightboxIndex}
+        />
+      )}
 
     </div>
   );

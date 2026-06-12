@@ -158,7 +158,8 @@
       "Bash(DATABASE_URL=\"postgresql://neondb_owner:npg_a2iV6SXDknBP@ep-cool-sky-adch5pxa-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require\" npx prisma db pull)",
       "Bash(sed -n '1990,2000p' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/api/admin.js)",
       "Bash(sed -n '2300,2310p' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/api/admin.js)",
-      "Bash(sed -n '2520,2530p' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/api/admin.js)"
+      "Bash(sed -n '2520,2530p' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/api/admin.js)",
+      "Bash(node_modules/.bin/vite build *)"
     ]
   }
 }
