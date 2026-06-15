@@ -131,7 +131,7 @@ export default function EditLeadModal({ lead, getToken, onClose, onSaved }) {
   }
 
   return (
-    <div style={S.overlay} onClick={e => e.target === e.currentTarget && !loading && onClose()}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid #E8E3DA' }}>
