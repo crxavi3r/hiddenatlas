@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { Eye, Instagram, ChevronLeft, ChevronRight, Filter, X, Users, RefreshCw, Plus, UserPlus } from 'lucide-react';
+import { Eye, Instagram, ChevronLeft, ChevronRight, Filter, X, Users, RefreshCw, Plus, UserPlus, Pencil } from 'lucide-react';
+import EditLeadModal from './EditLeadModal.jsx';
 
 const S = {
   page:    { padding: '28px 32px', background: '#FAFAF8', minHeight: '100vh' },
@@ -54,8 +55,10 @@ function fmtFollowers(n) {
 }
 
 function PriorityDot({ priority }) {
+  const INT_MAP = { 0: 'low', 1: 'medium', 2: 'high' };
+  const p = typeof priority === 'number' ? (INT_MAP[priority] ?? null) : priority;
   const colors = { high: '#C0392B', medium: '#C9A96E', low: '#8C8070' };
-  return <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: colors[priority] || '#C8C0B8', display: 'inline-block' }} title={priority} />;
+  return <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: colors[p] || '#C8C0B8', display: 'inline-block' }} title={p ?? String(priority ?? '')} />;
 }
 
 async function crmCall(getToken, action, payload = {}) {
@@ -377,6 +380,7 @@ export default function CreatorCRMPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage]           = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingLead, setEditingLead]   = useState(null);
 
   const [filters, setFilters] = useState({
     status:           searchParams.get('status') || '',
@@ -417,6 +421,17 @@ export default function CreatorCRMPage() {
 
   return (
     <div style={S.page}>
+      {editingLead && (
+        <EditLeadModal
+          lead={editingLead}
+          getToken={getToken}
+          onClose={() => setEditingLead(null)}
+          onSaved={updated => {
+            setLeads(ls => ls.map(l => l.id === updated.id ? { ...l, ...updated } : l));
+            setEditingLead(null);
+          }}
+        />
+      )}
       {showAddModal && (
         <AddLeadModal
           getToken={getToken}
@@ -584,6 +599,10 @@ export default function CreatorCRMPage() {
                         <button onClick={() => navigate(`/admin/creator-acquisition/leads/${lead.id}`)}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px', color: '#1B6B65', display: 'flex', alignItems: 'center' }} title="View detail">
                           <Eye size={13} />
+                        </button>
+                        <button onClick={() => setEditingLead(lead)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', borderRadius: '4px', color: '#8C8070', display: 'flex', alignItems: 'center' }} title="Edit lead">
+                          <Pencil size={13} />
                         </button>
                         {lead.profileUrl && (
                           <a href={lead.profileUrl} target="_blank" rel="noopener noreferrer"

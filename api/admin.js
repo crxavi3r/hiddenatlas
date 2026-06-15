@@ -3227,26 +3227,58 @@ async function crmUpdateLead(pool, id, body, ctx) {
 
   const allowed = [
     'displayName','firstName','email','websiteUrl','bio','country','language','category',
-    'niches','destinations','hashtags','mentions','followerCount','postCount',
-    'engagementRate','score','priority','assignedTo','nextFollowUpAt',
+    'niches','destinations','hashtags','mentions',
+    'followersCount','postsCount',   // correct DB column names (was followerCount, postCount)
+    'engagementRate','score','priority','assignedTo',
+    'lastContactedAt','nextFollowUpAt',
     'fitSummary','routeIdeas','positiveSignals','risks','nextBestAction',
-    'avatarUrl','profileUrl',
+    'avatarUrl','profileUrl','username',
   ];
+
+  const jsonFields = new Set(['niches','destinations','hashtags','mentions','routeIdeas','positiveSignals','risks']);
+
+  // Normalize and dedup-check username if being changed
+  let updates = { ...body };
+  if ('username' in updates && updates.username) {
+    const normalized = String(updates.username).replace(/^@/, '').toLowerCase().trim();
+    if (normalized) {
+      const { rows: dup } = await pool.query(
+        `SELECT id FROM "CreatorLead" WHERE lower(username) = $1 AND id != $2 LIMIT 1`,
+        [normalized, id]
+      );
+      if (dup.length) {
+        throw Object.assign(new Error(`@${normalized} already exists in CRM`), { status: 409 });
+      }
+      updates.username = normalized;
+    } else {
+      delete updates.username;
+    }
+  }
 
   const sets = [];
   const params = [];
   let p = 1;
 
   for (const key of allowed) {
-    if (key in body) {
-      const val = body[key];
-      if (['niches','destinations','hashtags','mentions','routeIdeas','positiveSignals','risks'].includes(key)) {
-        sets.push(`"${key}" = $${p++}::jsonb`);
-        params.push(JSON.stringify(Array.isArray(val) ? val : []));
-      } else {
-        sets.push(`"${key}" = $${p++}`);
-        params.push(val === '' ? null : val);
-      }
+    if (!(key in updates)) continue;
+    const val = updates[key];
+
+    if (jsonFields.has(key)) {
+      sets.push(`"${key}" = $${p++}::jsonb`);
+      params.push(JSON.stringify(Array.isArray(val) ? val : []));
+    } else if (key === 'priority') {
+      // DB column is INTEGER: map string labels or pass numeric value
+      const pMap = { low: 0, medium: 1, high: 2 };
+      const pVal = val === '' || val == null
+        ? null
+        : typeof val === 'string' && val in pMap
+          ? pMap[val]
+          : parseInt(val, 10);
+      sets.push(`"priority" = $${p++}`);
+      params.push(Number.isNaN(pVal) ? null : pVal);
+    } else {
+      sets.push(`"${key}" = $${p++}`);
+      params.push(val === '' ? null : val);
     }
   }
 

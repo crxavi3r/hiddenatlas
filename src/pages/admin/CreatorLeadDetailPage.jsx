@@ -4,8 +4,9 @@ import { useAuth } from '@clerk/clerk-react';
 import {
   ArrowLeft, Instagram, Copy, CheckCircle, Clock, MessageSquare,
   Activity, CheckSquare, Edit2, X, PlusCircle, Users, RefreshCw,
-  ExternalLink, Camera,
+  ExternalLink, Camera, Pencil,
 } from 'lucide-react';
+import EditLeadModal from './EditLeadModal.jsx';
 
 const S = {
   page:    { padding: '28px 32px', background: '#FAFAF8', minHeight: '100vh' },
@@ -147,6 +148,7 @@ export default function CreatorLeadDetailPage() {
   const [newStatus, setNewStatus]         = useState('');
   const [statusNote, setStatusNote]       = useState('');
   const [showStatusChange, setShowStatusChange] = useState(false);
+  const [showEdit, setShowEdit]                 = useState(false);
 
   const [noteText, setNoteText]   = useState('');
   const [addingNote, setAddingNote] = useState(false);
@@ -349,6 +351,18 @@ export default function CreatorLeadDetailPage() {
     <div style={S.page}>
       <AvatarModal src={avatarModal} onClose={() => setAvatarModal(null)} />
 
+      {showEdit && (
+        <EditLeadModal
+          lead={lead}
+          getToken={getToken}
+          onClose={() => setShowEdit(false)}
+          onSaved={updated => {
+            setData(d => ({ ...d, lead: { ...d.lead, ...updated } }));
+            setShowEdit(false);
+          }}
+        />
+      )}
+
       {toast && (
         <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9000, padding: '12px 18px', borderRadius: '8px', background: toast.type === 'error' ? '#C0392B' : '#1B6B65', color: 'white', fontSize: '13px', fontWeight: '500', boxShadow: '0 4px 16px rgba(0,0,0,0.18)', maxWidth: '360px' }}>
           {toast.msg}
@@ -411,6 +425,9 @@ export default function CreatorLeadDetailPage() {
                 <Instagram size={13} /> Open IG
               </a>
             )}
+            <button onClick={() => setShowEdit(true)} style={S.btnSecondary}>
+              <Pencil size={13} /> Edit Lead
+            </button>
             <button onClick={() => setShowStatusChange(v => !v)} style={S.btnSecondary}>
               <Edit2 size={13} /> Change Status
             </button>
@@ -471,7 +488,7 @@ export default function CreatorLeadDetailPage() {
                   ['Language', lead.language],
                   ['Email', lead.email],
                   ['Website', lead.websiteUrl],
-                  ['Priority', lead.priority != null ? String(lead.priority) : null],
+                  ['Priority', lead.priority != null ? ({ 0: 'Low', 1: 'Medium', 2: 'High' }[lead.priority] ?? String(lead.priority)) : null],
                   ['Last Contacted', fmtDate(lead.lastContactedAt)],
                   ['Next Follow-up', fmtDate(lead.nextFollowUpAt)],
                 ].map(([k, v]) => (
