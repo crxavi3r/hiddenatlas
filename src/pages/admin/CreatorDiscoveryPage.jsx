@@ -406,6 +406,9 @@ const EMPTY_META = {
 function MetaDiscoveryPanel({ onSearchDone, getToken }) {
   const [configStatus, setConfigStatus] = useState(null);
   const [checkingConfig, setCheckingConfig] = useState(false);
+  const [debugResult, setDebugResult]   = useState(null);
+  const [runningDebug, setRunningDebug] = useState(false);
+  const [showDebugJson, setShowDebugJson] = useState(false);
   const [form, setForm]   = useState(EMPTY_META);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState(null);
@@ -421,6 +424,23 @@ function MetaDiscoveryPanel({ onSearchDone, getToken }) {
       setConfigStatus({ configured: false, valid: false, message: e.message });
     } finally {
       setCheckingConfig(false);
+    }
+  }
+
+  async function runLiveDebug() {
+    setRunningDebug(true);
+    setDebugResult(null);
+    setShowDebugJson(false);
+    try {
+      const username = form.usernames.trim().split(/[\s,]+/)[0].replace(/^@/, '') || 'atickettotakeoff';
+      const data = await crmCall(getToken, 'debug.metaDiscovery', { username });
+      setDebugResult(data);
+      setShowDebugJson(true);
+    } catch (e) {
+      setDebugResult({ error: e.message });
+      setShowDebugJson(true);
+    } finally {
+      setRunningDebug(false);
     }
   }
 
@@ -490,12 +510,62 @@ function MetaDiscoveryPanel({ onSearchDone, getToken }) {
             </div>
           )}
         </div>
-        <button onClick={checkConfig} disabled={checkingConfig}
-          style={{ ...S.btnSecondary, fontSize: '11.5px', padding: '5px 10px', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-          {checkingConfig ? <Spinner size={11} /> : <RefreshCw size={11} />}
-          {checkingConfig ? 'Checking…' : 'Check Meta config'}
-        </button>
+        <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+          <button onClick={checkConfig} disabled={checkingConfig}
+            style={{ ...S.btnSecondary, fontSize: '11.5px', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            {checkingConfig ? <Spinner size={11} /> : <RefreshCw size={11} />}
+            {checkingConfig ? 'Checking…' : 'Check Meta config'}
+          </button>
+          <button onClick={runLiveDebug} disabled={runningDebug}
+            title="Run live /me + Business Discovery test with the exact token production is using"
+            style={{ ...S.btnSecondary, fontSize: '11.5px', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px', color: runningDebug ? '#B5AA99' : '#7A5C1E', borderColor: '#E8D9B8' }}>
+            {runningDebug ? <Spinner size={11} /> : <Globe size={11} />}
+            {runningDebug ? 'Testing…' : 'Live debug'}
+          </button>
+        </div>
       </div>
+
+      {debugResult && (
+        <div style={{ marginBottom: '16px', background: debugResult.error ? '#FDECEA' : (debugResult.ok ? '#EFF6F5' : '#FBF8F1'), border: `1px solid ${debugResult.error ? '#F5C6C0' : (debugResult.ok ? '#C3DDD9' : '#E8D9B8')}`, borderRadius: '8px', padding: '12px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12.5px', fontWeight: '700', color: debugResult.error ? '#C0392B' : (debugResult.ok ? '#1B6B65' : '#7A5C1E') }}>
+                {debugResult.error ? 'Debug error' : (debugResult.ok ? 'All tests passed' : 'Tests failed — see details')}
+              </span>
+              {debugResult.envInfo && (
+                <span style={{ fontSize: '11px', color: '#8C8070' }}>
+                  token: {debugResult.envInfo.tokenSourceSelected} · {debugResult.envInfo.tokenLength} chars · {debugResult.envInfo.tokenPrefix}…{debugResult.envInfo.tokenSuffix}
+                </span>
+              )}
+            </div>
+            <button onClick={() => setShowDebugJson(v => !v)}
+              style={{ fontSize: '11px', color: '#8C8070', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+              {showDebugJson ? 'Hide JSON' : 'Show JSON'}
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: showDebugJson ? '10px' : 0 }}>
+            <div style={{ fontSize: '11.5px', color: '#4A433A', background: 'white', borderRadius: '5px', padding: '8px 10px', border: '1px solid #E8E3DA' }}>
+              <strong style={{ fontSize: '11px', color: '#8C8070', display: 'block', marginBottom: '3px' }}>/me test</strong>
+              {debugResult.meTest?.ok
+                ? <span style={{ color: '#1B6B65' }}>✓ {debugResult.meTest.name} (id {debugResult.meTest.id})</span>
+                : <span style={{ color: '#C0392B' }}>✗ code {debugResult.meTest?.errorCode} — {debugResult.meTest?.errorMsg || debugResult.meTest?.threw || 'failed'}</span>
+              }
+            </div>
+            <div style={{ fontSize: '11.5px', color: '#4A433A', background: 'white', borderRadius: '5px', padding: '8px 10px', border: '1px solid #E8E3DA' }}>
+              <strong style={{ fontSize: '11px', color: '#8C8070', display: 'block', marginBottom: '3px' }}>Business Discovery</strong>
+              {debugResult.discoveryTest?.ok
+                ? <span style={{ color: '#1B6B65' }}>✓ @{debugResult.discoveryTest.profile?.username} · {debugResult.discoveryTest.profile?.followers_count?.toLocaleString()} followers</span>
+                : <span style={{ color: '#C0392B' }}>✗ code {debugResult.discoveryTest?.errorCode}{debugResult.discoveryTest?.errorSubcode ? `/${debugResult.discoveryTest.errorSubcode}` : ''} — {debugResult.discoveryTest?.errorMsg || debugResult.discoveryTest?.threw || 'failed'}</span>
+              }
+            </div>
+          </div>
+          {showDebugJson && (
+            <pre style={{ fontSize: '10.5px', color: '#5C5248', background: '#EDE8E1', borderRadius: '5px', padding: '8px 10px', margin: 0, overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+              {JSON.stringify(debugResult, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
 
       {/* Form */}
       <form onSubmit={handleSearch} style={{ maxWidth: '960px' }}>
