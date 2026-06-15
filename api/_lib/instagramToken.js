@@ -1,5 +1,7 @@
-// Central Instagram token lifecycle management for per-creator OAuth tokens
+// Central Instagram token lifecycle management for per-creator OAuth tokens.
 // Used by CRM import, Discovery enrichment, and Instagram Publishing.
+//
+// NEVER log the full access token — only the last 4 chars when needed.
 
 const IG_REFRESH_ENDPOINT    = 'https://graph.instagram.com/refresh_access_token';
 const REFRESH_THRESHOLD_DAYS = 7;
@@ -58,6 +60,80 @@ export async function ensureValidInstagramToken(pool, creatorId) {
   }
 
   return { status: 'OK', token, accountId, refreshed: false };
+}
+
+/**
+ * Determines the correct Meta access token for CRM / Business Discovery API calls.
+ *
+ * Priority:
+ *   1. Per-creator OAuth token (`ctx.creatorId`) — refreshed preventively if needed
+ *   2. Server env var (`META_GRAPH_ACCESS_TOKEN` / `META_PAGE_ACCESS_TOKEN`)
+ *
+ * Returns one of:
+ *   { status: 'OK',                     token, accountId, source: 'creator'|'env', creatorSlug? }
+ *   { status: 'CREATOR_TOKEN_EXPIRED',  creatorSlug }   — creator token exists but expired
+ *   { status: 'ENV_NOT_CONFIGURED',     missing }        — no creator token, env vars absent
+ *
+ * @param {import('pg').Pool} pool
+ * @param {{ creatorId?: string|null, creatorSlug?: string|null }} ctx
+ */
+export async function getMetaAccessTokenForDiscovery(pool, ctx) {
+  if (ctx?.creatorId) {
+    const result = await ensureValidInstagramToken(pool, ctx.creatorId);
+
+    if (result.status === 'OK') {
+      console.info('[MetaDiscovery] Using per-creator OAuth token:', {
+        creatorId:   ctx.creatorId,
+        accountId:   result.accountId,
+        source:      'creator',
+        tokenTail:   result.token?.slice(-4),
+        refreshed:   result.refreshed,
+      });
+      return {
+        status:      'OK',
+        token:       result.token,
+        accountId:   result.accountId,
+        source:      'creator',
+        creatorSlug: ctx.creatorSlug ?? null,
+      };
+    }
+
+    if (result.status === 'EXPIRED') {
+      console.warn('[MetaDiscovery] Creator token expired — cannot fall back to env var:', {
+        creatorId:   ctx.creatorId,
+        creatorSlug: ctx.creatorSlug ?? null,
+      });
+      return {
+        status:      'CREATOR_TOKEN_EXPIRED',
+        creatorSlug: ctx.creatorSlug ?? null,
+      };
+    }
+
+    // NOT_CONNECTED: creator has no OAuth token — fall through to env var
+    console.info('[MetaDiscovery] Creator has no OAuth token — trying env var:', {
+      creatorId: ctx.creatorId,
+    });
+  }
+
+  // Try server-level env var token
+  const version   = process.env.META_GRAPH_API_VERSION || 'v25.0';
+  const accountId = process.env.META_INSTAGRAM_ACCOUNT_ID;
+  const token     = process.env.META_GRAPH_ACCESS_TOKEN
+                 || process.env.META_PAGE_ACCESS_TOKEN
+                 || process.env.META_INSTAGRAM_ACCESS_TOKEN;
+  const missing   = [];
+  if (!accountId) missing.push('META_INSTAGRAM_ACCOUNT_ID');
+  if (!token)     missing.push('META_GRAPH_ACCESS_TOKEN');
+
+  if (missing.length) {
+    console.warn('[MetaDiscovery] Env var Meta token not configured:', { missing });
+    return { status: 'ENV_NOT_CONFIGURED', missing };
+  }
+
+  console.info('[MetaDiscovery] Using server env var Meta token:', {
+    accountId, source: 'env', version, tokenTail: token.slice(-4),
+  });
+  return { status: 'OK', token, accountId, source: 'env', version };
 }
 
 async function _refreshToken(pool, creatorId, currentToken) {

@@ -25,12 +25,13 @@ import { createClerkClient }   from '@clerk/backend';
 
 /**
  * @typedef {Object} UserCtx
- * @property {string}      userId     — internal UUID from "User".id (or clerkId when no DB row)
+ * @property {string}      userId      — internal UUID from "User".id (or clerkId when no DB row)
  * @property {string}      email
- * @property {string}      role       — 'user' | 'admin' | 'designer'
- * @property {string|null} creatorId  — "Creator".id if user has an active creator profile
- * @property {boolean}     isAdmin    — role === 'admin' || isAdminEmail(email)
- * @property {boolean}     isDesigner — role === 'designer' OR role === 'admin'
+ * @property {string}      role        — 'user' | 'admin' | 'designer'
+ * @property {string|null} creatorId   — "Creator".id if user has an active creator profile
+ * @property {string|null} creatorSlug — "Creator".slug if user has an active creator profile
+ * @property {boolean}     isAdmin     — role === 'admin' || isAdminEmail(email)
+ * @property {boolean}     isDesigner  — role === 'designer' OR role === 'admin'
  */
 
 /**
@@ -49,7 +50,7 @@ export async function resolveUserCtx(authHeader, pool) {
 
   try {
     const { rows } = await pool.query(
-      `SELECT u.id, u.email, u.role, c.id AS "creatorId"
+      `SELECT u.id, u.email, u.role, c.id AS "creatorId", c.slug AS "creatorSlug"
        FROM "User" u
        LEFT JOIN "Creator" c ON c.user_id = u.id AND c.is_active = true
        WHERE u."clerkId" = $1 LIMIT 1`,
@@ -73,12 +74,13 @@ export async function resolveUserCtx(authHeader, pool) {
         if (isAdminEmail(primaryEmail)) {
           console.warn(`[resolveUserCtx] ADMIN FALLBACK GRANTED — email=${primaryEmail} clerkId=${clerkId}`);
           return {
-            userId:    clerkId,   // no DB row, use clerkId as stand-in
-            email:     primaryEmail,
-            role:      'admin',
-            creatorId: null,
-            isAdmin:   true,
-            isDesigner: true,
+            userId:      clerkId,   // no DB row, use clerkId as stand-in
+            email:       primaryEmail,
+            role:        'admin',
+            creatorId:   null,
+            creatorSlug: null,
+            isAdmin:     true,
+            isDesigner:  true,
           };
         }
 
@@ -89,17 +91,18 @@ export async function resolveUserCtx(authHeader, pool) {
       return null;
     }
 
-    const { id: userId, email, role, creatorId } = rows[0];
+    const { id: userId, email, role, creatorId, creatorSlug } = rows[0];
     const isAdmin    = role === 'admin' || isAdminEmail(email);
     const isDesigner = role === 'designer' || role === 'admin' || isAdminEmail(email) || creatorId !== null;
 
-    console.log(`[resolveUserCtx] clerkId=${clerkId} userId=${userId} email=${email} role=${role} isAdmin=${isAdmin} isDesigner=${isDesigner}`);
+    console.log(`[resolveUserCtx] clerkId=${clerkId} userId=${userId} email=${email} role=${role} isAdmin=${isAdmin} isDesigner=${isDesigner} creatorSlug=${creatorSlug ?? 'none'}`);
 
     return {
       userId,
       email,
-      role:       role ?? 'user',
-      creatorId:  creatorId ?? null,
+      role:        role ?? 'user',
+      creatorId:   creatorId ?? null,
+      creatorSlug: creatorSlug ?? null,
       isAdmin,
       isDesigner,
     };
