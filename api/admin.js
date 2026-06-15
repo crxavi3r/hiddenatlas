@@ -1776,6 +1776,7 @@ async function dispatchCrmAction(pool, action, payload, ctx) {
     case 'leads.createTask':           return crmCreateTask(pool, payload.id, payload, ctx);
     case 'leads.updateTask':           return crmUpdateTask(pool, payload.taskId, payload, ctx);
     case 'leads.refreshInstagram':    return crmRefreshInstagram(pool, payload, ctx);
+    case 'leads.bulkChangeStatus':    return crmBulkChangeStatus(pool, payload, ctx);
     case 'leads.create':              return crmCreateLead(pool, payload, ctx);
     case 'leads.importInstagram':     return crmImportInstagramLead(pool, payload, ctx);
     case 'debug.metaDiscovery':       return debugMetaDiscovery(payload, ctx);
@@ -3341,14 +3342,22 @@ async function crmUpdateLead(pool, id, body, ctx) {
   if (!id) throw Object.assign(new Error('id required'), { status: 400 });
 
   const allowed = [
-    'displayName','firstName','email','websiteUrl','bio','country','language','category',
+    'displayName','firstName','email','websiteUrl','bio','country','language','category','platform',
     'niches','destinations','hashtags','mentions',
-    'followersCount','postsCount',   // correct DB column names (was followerCount, postCount)
+    'followersCount','postsCount',
     'engagementRate','score','priority','assignedTo',
+    'status',
     'lastContactedAt','nextFollowUpAt',
     'fitSummary','routeIdeas','positiveSignals','risks','nextBestAction',
     'avatarUrl','profileUrl','username',
   ];
+
+  // Validate status before processing
+  if ('status' in body && body.status != null && body.status !== '') {
+    if (!PIPELINE_STATUSES.includes(body.status)) {
+      throw Object.assign(new Error(`Invalid status: ${body.status}`), { status: 400 });
+    }
+  }
 
   const jsonFields = new Set(['niches','destinations','hashtags','mentions','routeIdeas','positiveSignals','risks']);
 
@@ -3440,6 +3449,49 @@ async function crmChangeStatus(pool, id, body, ctx) {
   ]);
 
   return { lead: rows[0] };
+}
+
+async function crmBulkChangeStatus(pool, body, ctx) {
+  const { leadIds, updates } = body;
+  if (!Array.isArray(leadIds) || leadIds.length === 0) {
+    throw Object.assign(new Error('leadIds must be a non-empty array'), { status: 400 });
+  }
+  if (leadIds.length > 200) {
+    throw Object.assign(new Error('Max 200 leads per bulk update'), { status: 400 });
+  }
+  const { status } = updates ?? {};
+  if (!status) throw Object.assign(new Error('updates.status is required'), { status: 400 });
+  if (!PIPELINE_STATUSES.includes(status)) {
+    throw Object.assign(new Error(`Invalid status. Valid: ${PIPELINE_STATUSES.join(', ')}`), { status: 400 });
+  }
+
+  const placeholders = leadIds.map((_, i) => `$${i + 2}`).join(', ');
+  const { rows: updated, rowCount } = await pool.query(
+    `UPDATE "CreatorLead" SET status = $1, "updatedAt" = NOW()
+     WHERE id IN (${placeholders}) RETURNING id`,
+    [status, ...leadIds]
+  );
+
+  const createdById = ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null;
+  if (updated.length > 0) {
+    try {
+      await pool.query(`
+        INSERT INTO "CreatorLeadActivity"
+          (id, "leadId", type, body, metadata, "createdById", "createdAt")
+        SELECT gen_random_uuid(), unnest($1::uuid[]), 'status_change',
+               $2, $3::jsonb, $4, NOW()
+      `, [
+        updated.map(r => r.id),
+        `Bulk status set to ${status}`,
+        JSON.stringify({ bulk: true, to: status }),
+        createdById,
+      ]);
+    } catch (actErr) {
+      console.warn('[bulkChangeStatus] activity log failed (non-blocking):', actErr.message);
+    }
+  }
+
+  return { updated: rowCount, updatedIds: updated.map(r => r.id) };
 }
 
 async function crmAddNote(pool, id, body, ctx) {

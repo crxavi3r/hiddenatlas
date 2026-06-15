@@ -382,6 +382,12 @@ export default function CreatorCRMPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingLead, setEditingLead]   = useState(null);
 
+  const [selectedLeads, setSelectedLeads] = useState(new Set());
+  const [toast, setToast]               = useState(null);
+  const [bulkStatus, setBulkStatus]     = useState('');
+  const [bulkConfirm, setBulkConfirm]   = useState(false);
+  const [bulkLoading, setBulkLoading]   = useState(false);
+
   const [filters, setFilters] = useState({
     status:           searchParams.get('status') || '',
     country:          searchParams.get('country') || '',
@@ -408,6 +414,7 @@ export default function CreatorCRMPage() {
       const data = await crmCall(getToken, 'leads.list', payload);
       setLeads(data.leads ?? []);
       setTotal(data.total ?? 0);
+      setSelectedLeads(new Set());
     } catch (e) {
       setError(e.message);
     } finally {
@@ -419,8 +426,59 @@ export default function CreatorCRMPage() {
 
   const activeFilters = Object.entries(filters).filter(([k, v]) => v && v !== 'false' && k !== 'q').length;
 
+  const allPageSelected = leads.length > 0 && leads.every(l => selectedLeads.has(l.id));
+  const somePageSelected = leads.some(l => selectedLeads.has(l.id));
+
+  function showToast(msg, type = 'success') {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  }
+
+  function toggleSelect(id) {
+    setSelectedLeads(s => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelectedLeads(s => {
+      const next = new Set(s);
+      if (allPageSelected) leads.forEach(l => next.delete(l.id));
+      else leads.forEach(l => next.add(l.id));
+      return next;
+    });
+  }
+
+  async function handleBulkApply() {
+    if (!bulkStatus || selectedLeads.size === 0) return;
+    setBulkLoading(true);
+    try {
+      await crmCall(getToken, 'leads.bulkChangeStatus', {
+        leadIds: [...selectedLeads],
+        updates: { status: bulkStatus },
+      });
+      showToast(`Status updated for ${selectedLeads.size} lead${selectedLeads.size > 1 ? 's' : ''}`);
+      setSelectedLeads(new Set());
+      setBulkStatus('');
+      setBulkConfirm(false);
+      load();
+    } catch (e) {
+      showToast(e.message || 'Bulk update failed', 'error');
+      setBulkConfirm(false);
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
   return (
     <div style={S.page}>
+      {toast && (
+        <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9000, padding: '12px 18px', borderRadius: '8px', background: toast.type === 'error' ? '#C0392B' : '#1B6B65', color: 'white', fontSize: '13px', fontWeight: '500', boxShadow: '0 4px 16px rgba(0,0,0,0.18)', maxWidth: '320px' }}>
+          {toast.msg}
+        </div>
+      )}
       {editingLead && (
         <EditLeadModal
           lead={editingLead}
@@ -429,6 +487,7 @@ export default function CreatorCRMPage() {
           onSaved={updated => {
             setLeads(ls => ls.map(l => l.id === updated.id ? { ...l, ...updated } : l));
             setEditingLead(null);
+            showToast('Lead updated');
           }}
         />
       )}
@@ -517,6 +576,48 @@ export default function CreatorCRMPage() {
         )}
       </div>
 
+      {selectedLeads.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px', background: '#1C1A16', color: 'white', borderRadius: '8px', padding: '10px 16px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '12.5px', fontWeight: '600', flexShrink: 0 }}>
+            {selectedLeads.size} selected
+          </span>
+          <div style={{ width: '1px', height: '16px', background: 'rgba(255,255,255,0.2)', flexShrink: 0 }} />
+          {!bulkConfirm ? (
+            <>
+              <select value={bulkStatus} onChange={e => setBulkStatus(e.target.value)}
+                style={{ padding: '5px 8px', borderRadius: '5px', border: 'none', fontSize: '12px', color: '#1C1A16', background: 'white', cursor: 'pointer' }}>
+                <option value="">Change status to…</option>
+                {PIPELINE_STATUSES.map(s => (
+                  <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
+              <button onClick={() => { if (bulkStatus) setBulkConfirm(true); }} disabled={!bulkStatus}
+                style={{ padding: '5px 12px', borderRadius: '5px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600', background: '#C9A96E', color: '#1C1A16', opacity: bulkStatus ? 1 : 0.5 }}>
+                Apply
+              </button>
+              <button onClick={() => { setSelectedLeads(new Set()); setBulkStatus(''); }}
+                style={{ padding: '5px 10px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '12px', background: 'transparent', color: 'white', marginLeft: 'auto' }}>
+                Clear
+              </button>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.85)' }}>
+                Change {selectedLeads.size} lead{selectedLeads.size > 1 ? 's' : ''} to <strong style={{ color: 'white' }}>{bulkStatus.replace(/_/g, ' ')}</strong>?
+              </span>
+              <button onClick={handleBulkApply} disabled={bulkLoading}
+                style={{ padding: '5px 12px', borderRadius: '5px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600', background: '#1B6B65', color: 'white' }}>
+                {bulkLoading ? 'Updating…' : 'Confirm'}
+              </button>
+              <button onClick={() => setBulkConfirm(false)} disabled={bulkLoading}
+                style={{ padding: '5px 10px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '12px', background: 'transparent', color: 'white' }}>
+                Cancel
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       <div style={S.card}>
         {error && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
@@ -535,6 +636,15 @@ export default function CreatorCRMPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
+                  <th style={{ ...S.th, width: '36px', padding: '9px 8px 9px 14px' }}>
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      ref={el => { if (el) el.indeterminate = somePageSelected && !allPageSelected; }}
+                      onChange={toggleAll}
+                      style={{ cursor: 'pointer', width: '14px', height: '14px', accentColor: '#1B6B65' }}
+                    />
+                  </th>
                   {['Creator','Platform','Followers','Engagement','Country','Score','Priority','Status','Last Contact','Follow-up','Actions'].map(h => (
                     <th key={h} style={S.th}>{h}</th>
                   ))}
@@ -542,7 +652,15 @@ export default function CreatorCRMPage() {
               </thead>
               <tbody>
                 {leads.map(lead => (
-                  <tr key={lead.id} style={{ borderBottom: '1px solid #F4F1EC' }}>
+                  <tr key={lead.id} style={{ borderBottom: '1px solid #F4F1EC', background: selectedLeads.has(lead.id) ? '#F8F6F2' : 'transparent' }}>
+                    <td style={{ padding: '10px 8px 10px 14px', verticalAlign: 'middle', width: '36px' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedLeads.has(lead.id)}
+                        onChange={() => toggleSelect(lead.id)}
+                        style={{ cursor: 'pointer', width: '14px', height: '14px', accentColor: '#1B6B65' }}
+                      />
+                    </td>
                     <td style={{ padding: '10px 14px', verticalAlign: 'middle' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
                         <div style={{ width: '32px', height: '32px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#F4F1EC' }}>
