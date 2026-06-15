@@ -1975,7 +1975,20 @@ async function crmRefreshInstagram(pool, body, ctx) {
   if (!lead.username) throw Object.assign(new Error('Lead has no username'), { status: 400 });
 
   const { verifyInstagramCreatorProfile } = await import('./_lib/creatorDiscoveryProviders.js');
-  const v = await verifyInstagramCreatorProfile(lead.username);
+  const { ensureValidInstagramToken: _ensureToken2 } = await import('./_lib/instagramToken.js');
+
+  let enrichOpts2 = {};
+  if (ctx.creatorId) {
+    const tokenResult = await _ensureToken2(pool, ctx.creatorId);
+    if (tokenResult.status === 'EXPIRED') {
+      return { refreshed: false, error: 'Instagram token has expired. Reconnect Instagram in Creator settings.', metaCode: 190 };
+    }
+    if (tokenResult.status === 'OK' && tokenResult.token && tokenResult.accountId) {
+      enrichOpts2 = { token: tokenResult.token, accountId: tokenResult.accountId };
+    }
+  }
+
+  const v = await verifyInstagramCreatorProfile(lead.username, enrichOpts2);
 
   if (v.code === 'META_PROVIDER_NOT_CONFIGURED') {
     return { refreshed: false, configError: true, missing: v.missing, error: v.error };
@@ -2192,40 +2205,67 @@ async function crmImportInstagramLead(pool, body, ctx) {
   const createdById = ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null;
 
   // ── Instagram enrichment — best effort, never blocks lead creation ────────
+  const { ensureValidInstagramToken: _ensureToken } = await import('./_lib/instagramToken.js');
+
+  // Prefer the calling user's own creator OAuth token over the server env var token.
+  // If the creator token is expired we skip the Meta call entirely rather than letting
+  // it fail with a confusing 190 error.
+  let enrichOpts    = {};
+  let skipEnrichment = false;
+
+  if (ctx.creatorId) {
+    const tokenResult = await _ensureToken(pool, ctx.creatorId);
+    if (tokenResult.status === 'OK' && tokenResult.token && tokenResult.accountId) {
+      enrichOpts = { token: tokenResult.token, accountId: tokenResult.accountId };
+    } else if (tokenResult.status === 'EXPIRED') {
+      skipEnrichment = true;
+      console.warn('[CreatorLeadImport] Creator token expired — skipping Meta enrichment:', {
+        username, creatorId: ctx.creatorId,
+      });
+    }
+    // NOT_CONNECTED: fall through to env var token (enrichOpts stays {})
+  }
+
   let v = null;
-  try {
-    v = await verifyInstagramCreatorProfile(username);
-  } catch (enrichErr) {
-    console.warn('[CreatorLeadImport] Unexpected error during Instagram enrichment (non-blocking):', {
-      username, error: enrichErr.message,
-    });
+  if (!skipEnrichment) {
+    try {
+      v = await verifyInstagramCreatorProfile(username, enrichOpts);
+    } catch (enrichErr) {
+      console.warn('[CreatorLeadImport] Unexpected enrichment error (non-blocking):', {
+        username, error: enrichErr.message,
+      });
+    }
   }
 
   const dataFetched = v?.verified === true;
-
   let warning = null;
   let warningCode = null;
 
   if (!dataFetched) {
-    const metaCode = v?.metaCode ?? null;
-    if (!v) {
-      warningCode = 'META_ENRICHMENT_FAILED';
-      warning = 'Lead created. Instagram data could not be fetched.';
-    } else if (v.code === 'META_PROVIDER_NOT_CONFIGURED') {
-      warningCode = 'META_NOT_CONFIGURED';
-      warning = 'Lead created. Instagram enrichment is not configured on this server.';
-    } else if (metaCode === 190 || metaCode === 102 || metaCode === 467) {
+    if (skipEnrichment) {
       warningCode = 'META_TOKEN_EXPIRED';
-      warning = 'Lead created, but your Instagram connection has expired. Update the Meta access token to enable automatic enrichment.';
-      console.warn('[CreatorLeadImport] Meta token expired during import:', { username, metaCode });
-    } else if (metaCode === 4 || metaCode === 17 || metaCode === 32 || metaCode === 613) {
-      warningCode = 'META_RATE_LIMITED';
-      warning = 'Lead created. Instagram enrichment was skipped due to Meta API rate limiting — try again later.';
+      warning = 'Lead created, but Instagram enrichment was skipped because your Meta connection has expired. Reconnect Instagram to enable automatic enrichment.';
     } else {
-      warningCode = 'META_ENRICHMENT_FAILED';
-      warning = 'Lead created. Some Instagram data could not be fetched automatically.';
+      const metaCode = v?.metaCode ?? null;
+      if (!v) {
+        warningCode = 'META_ENRICHMENT_FAILED';
+        warning = 'Lead created. Instagram data could not be fetched.';
+      } else if (v.code === 'META_PROVIDER_NOT_CONFIGURED') {
+        warningCode = 'META_NOT_CONFIGURED';
+        warning = 'Lead created. Instagram enrichment is not configured on this server.';
+      } else if (metaCode === 190 || metaCode === 102 || metaCode === 467) {
+        warningCode = 'META_TOKEN_EXPIRED';
+        warning = 'Lead created, but Instagram enrichment was skipped because your Meta connection has expired. Reconnect Instagram to enable automatic enrichment.';
+        console.warn('[CreatorLeadImport] Meta token expired during enrichment:', { username, metaCode });
+      } else if (metaCode === 4 || metaCode === 17 || metaCode === 32 || metaCode === 613) {
+        warningCode = 'META_RATE_LIMITED';
+        warning = 'Lead created. Instagram enrichment was skipped due to Meta API rate limiting — try again later.';
+      } else {
+        warningCode = 'META_ENRICHMENT_FAILED';
+        warning = 'Lead created. Some Instagram data could not be fetched automatically.';
+      }
+      console.info('[CreatorLeadImport] Creating minimal lead for @' + username, { warningCode, metaCode });
     }
-    console.info('[CreatorLeadImport] Creating minimal lead for @' + username, { warningCode, metaCode });
   }
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -2289,7 +2329,7 @@ async function crmImportInstagramLead(pool, body, ctx) {
     console.warn('[CreatorLeadImport] activity log failed (non-blocking):', actErr.message);
   }
 
-  return { lead, duplicate: false, dataFetched, warning, warningCode };
+  return { lead, duplicate: false, dataFetched, warning, warningCode, reconnectSlug: ctx.creatorSlug ?? null };
 }
 
 async function crmListTemplates(pool, platform, language) {

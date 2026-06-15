@@ -141,7 +141,7 @@ function AddLeadModal({ getToken, onClose, onCreated, navigate }) {
       if (data.duplicate) {
         setDupId(data.existingId);
       } else {
-        setSuccess({ leadId: data.lead.id, username: data.lead.username, warning: data.warning, warningCode: data.warningCode });
+        setSuccess({ leadId: data.lead.id, username: data.lead.username, warning: data.warning, warningCode: data.warningCode, reconnectSlug: data.reconnectSlug ?? null });
         onCreated();
       }
     } catch (err) {
@@ -219,7 +219,14 @@ function AddLeadModal({ getToken, onClose, onCreated, navigate }) {
             </p>
             {success.warningCode === 'META_TOKEN_EXPIRED' && (
               <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#7A5C1E', lineHeight: '1.5' }}>
-                Instagram enrichment was skipped — the Meta access token has expired. Ask your admin to refresh it in the server settings.
+                Instagram enrichment was skipped because the Meta connection has expired.{' '}
+                {success.reconnectSlug
+                  ? <button onClick={() => { navigate(`/admin/creators/${success.reconnectSlug}`); onClose(); }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', color: '#1B6B65', fontWeight: '600', padding: 0, textDecoration: 'underline' }}>
+                      Reconnect Instagram
+                    </button>
+                  : 'Reconnect Instagram via Creator settings to enable automatic enrichment.'
+                }
               </p>
             )}
             {success.warningCode === 'META_NOT_CONFIGURED' && (

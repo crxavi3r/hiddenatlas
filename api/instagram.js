@@ -984,19 +984,34 @@ async function handlePreview(pool, itineraryId, ctx) {
     }
   }
 
-  const tokenWarning = (() => {
-    if (!it.instagram_token_expires_at) return null;
-    const daysLeft = (new Date(it.instagram_token_expires_at) - Date.now()) / 86_400_000;
-    if (daysLeft < 7)  return 'Instagram access token expires very soon. Reconnect in Creator settings.';
-    if (daysLeft < 14) return 'Instagram access token expires in under 2 weeks. Consider reconnecting soon.';
-    return null;
-  })();
+  // Ensure token is valid; auto-refresh if expiring within 7 days
+  const { ensureValidInstagramToken: _ensurePreviewToken } = await import('./_lib/instagramToken.js');
+  const previewTokenResult = await _ensurePreviewToken(pool, it.creator_id);
+
+  let activeToken = it.instagram_access_token;
+  let tokenWarning = null;
+  let tokenRefreshed = false;
+
+  if (previewTokenResult.status === 'EXPIRED') {
+    tokenWarning = 'Instagram access token has expired. Reconnect in Creator settings to enable publishing.';
+  } else if (previewTokenResult.status === 'NOT_CONNECTED') {
+    tokenWarning = 'No Instagram account connected to this creator.';
+  } else {
+    activeToken    = previewTokenResult.token;
+    tokenRefreshed = previewTokenResult.refreshed;
+    if (!tokenRefreshed) {
+      const daysLeft = it.instagram_token_expires_at
+        ? (new Date(it.instagram_token_expires_at) - Date.now()) / 86_400_000
+        : Infinity;
+      if (daysLeft < 14) tokenWarning = 'Instagram access token expires in under 2 weeks. Consider reconnecting soon.';
+    }
+  }
 
   // Run debug_token for diagnostic logging only — the result does NOT block publishing.
   // The preflight check is unreliable: INSTAGRAM_CLIENT_ID is the Instagram App ID,
   // which differs from the Meta App ID that graph.facebook.com/debug_token expects.
   // Real permission errors are surfaced from Meta's response during the actual publish call.
-  await hasPublishPermission(it.instagram_access_token);
+  if (activeToken) await hasPublishPermission(activeToken);
 
   return {
     caption:   generateCaption(it),
@@ -1006,6 +1021,7 @@ async function handlePreview(pool, itineraryId, ctx) {
       destination: it.destination, country: it.country, durationDays: it.durationDays,
     },
     tokenWarning,
+    tokenRefreshed,
   };
 }
 
@@ -1030,16 +1046,36 @@ async function handlePublish(pool, body, ctx) {
   if (!rows.length) throw Object.assign(new Error('Itinerary not found'), { status: 404 });
   const {
     instagram_account_id:      igAccountId,
-    instagram_access_token:    accessToken,
     creator_id:                creatorId,
     instagram_token_expires_at: tokenExpiresAt,
   } = rows[0];
 
-  if (!igAccountId || !accessToken) {
+  if (!igAccountId) {
     throw Object.assign(
       new Error("Creator has no connected Instagram account — connect via Creator settings"),
       { status: 400 }
     );
+  }
+
+  // Ensure token is valid; auto-refresh if expiring within 7 days
+  const { ensureValidInstagramToken } = await import('./_lib/instagramToken.js');
+  const tokenResult = await ensureValidInstagramToken(pool, creatorId);
+
+  if (tokenResult.status === 'EXPIRED') {
+    throw Object.assign(
+      new Error("Instagram access token has expired — reconnect via Creator settings to continue publishing"),
+      { status: 400, code: 'META_TOKEN_EXPIRED' }
+    );
+  }
+  if (tokenResult.status === 'NOT_CONNECTED') {
+    throw Object.assign(
+      new Error("Creator has no connected Instagram account — connect via Creator settings"),
+      { status: 400 }
+    );
+  }
+  const accessToken = tokenResult.token;
+  if (tokenResult.refreshed) {
+    console.info('[instagram:publish] Token auto-refreshed before publish:', { creatorId, itineraryId });
   }
 
   const publishTokenHash = crypto.createHash('sha256').update(accessToken).digest('hex').slice(0, 12);

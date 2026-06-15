@@ -663,16 +663,26 @@ export async function enrichInstagramProfilesByUsername(usernames, criteria = {}
 
 // ── Instagram Profile Verification (single profile) ───────────────────────────
 
-export async function verifyInstagramCreatorProfile(usernameRaw) {
-  const config = validateMetaConfig();
-  if (!config.configured) {
-    return {
-      verified: false,
-      code:     'META_PROVIDER_NOT_CONFIGURED',
-      missing:  config.missing,
-      metricsSource: 'not_available',
-      error: `Meta provider not configured. Missing: ${config.missing.join(', ')}`,
-    };
+export async function verifyInstagramCreatorProfile(usernameRaw, opts = {}) {
+  // opts.token + opts.accountId let callers supply a per-creator OAuth token
+  // instead of the server-level env var token.
+  let version, accountId, token;
+  if (opts.token && opts.accountId) {
+    version   = process.env.META_GRAPH_API_VERSION || 'v25.0';
+    accountId = opts.accountId;
+    token     = opts.token;
+  } else {
+    const config = validateMetaConfig();
+    if (!config.configured) {
+      return {
+        verified: false,
+        code:     'META_PROVIDER_NOT_CONFIGURED',
+        missing:  config.missing,
+        metricsSource: 'not_available',
+        error: `Meta provider not configured. Missing: ${config.missing.join(', ')}`,
+      };
+    }
+    ({ version, accountId, token } = config);
   }
 
   // Always normalize: strip @, extract from URL, lowercase, no spaces
@@ -680,8 +690,6 @@ export async function verifyInstagramCreatorProfile(usernameRaw) {
   if (!cleanUsername) {
     return { verified: false, metricsSource: 'not_available', error: 'Invalid or empty username' };
   }
-
-  const { version, accountId, token } = config;
   const fieldset = 'id,username,name,biography,profile_picture_url,followers_count,media_count,website';
   // Correct field syntax: business_discovery.username() — NOT use_username()
   const fields   = `business_discovery.username(${cleanUsername}){${fieldset}}`;
