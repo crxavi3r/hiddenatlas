@@ -2038,7 +2038,7 @@ async function crmCreateLead(pool, body, ctx) {
     email = '',
     country = '',
     bio = '',
-    website = '',
+    websiteUrl = '',
     followerCount,
     engagementRate,
     score,
@@ -2100,7 +2100,7 @@ async function crmCreateLead(pool, body, ctx) {
   const { rows: inserted } = await pool.query(`
     INSERT INTO "CreatorLead" (
       id, platform, username, "displayName", "profileUrl",
-      email, bio, website, country,
+      email, bio, "websiteUrl", country,
       "followersCount", "engagementRate", score,
       priority, status, source,
       niches, destinations, hashtags, mentions, "routeIdeas",
@@ -2116,7 +2116,7 @@ async function crmCreateLead(pool, body, ctx) {
     RETURNING *
   `, [
     platform, username, displayName, profileUrl,
-    email.trim() || null, bio.trim() || null, website.trim() || null, country.trim() || null,
+    email.trim() || null, bio.trim() || null, websiteUrl.trim() || null, country.trim() || null,
     followersInt, engFloat, scoreFloat,
     priority, status,
     createdById,
@@ -2194,7 +2194,7 @@ async function crmImportInstagramLead(pool, body, ctx) {
   const { rows: inserted } = await pool.query(`
     INSERT INTO "CreatorLead" (
       id, platform, username, "displayName", "profileUrl",
-      "avatarUrl", bio, website,
+      "avatarUrl", bio, "websiteUrl",
       "followersCount", "postsCount",
       "aiAnalysis", source, status, priority,
       niches, destinations, hashtags, mentions, "routeIdeas",
@@ -2214,7 +2214,7 @@ async function crmImportInstagramLead(pool, body, ctx) {
     profileUrl,
     dataFetched ? (v.avatarUrl || null) : null,
     dataFetched ? (v.bio || null) : null,
-    dataFetched ? (v.website || null) : null,
+    dataFetched ? (v.website ?? null) : null,
     dataFetched ? (v.followersCount ?? null) : null,
     dataFetched ? (v.postsCount ?? null) : null,
     aiAnalysisJson,
@@ -3133,7 +3133,7 @@ async function crmUpdateLead(pool, id, body, ctx) {
   if (!id) throw Object.assign(new Error('id required'), { status: 400 });
 
   const allowed = [
-    'displayName','firstName','email','website','bio','country','language','category',
+    'displayName','firstName','email','websiteUrl','bio','country','language','category',
     'niches','destinations','hashtags','mentions','followerCount','postCount',
     'engagementRate','score','priority','assignedTo','nextFollowUpAt',
     'fitSummary','routeIdeas','positiveSignals','risks','nextBestAction',
