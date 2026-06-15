@@ -1770,6 +1770,8 @@ async function dispatchCrmAction(pool, action, payload, ctx) {
     case 'leads.createTask':           return crmCreateTask(pool, payload.id, payload, ctx);
     case 'leads.updateTask':           return crmUpdateTask(pool, payload.taskId, payload, ctx);
     case 'leads.refreshInstagram':    return crmRefreshInstagram(pool, payload, ctx);
+    case 'leads.create':              return crmCreateLead(pool, payload, ctx);
+    case 'leads.importInstagram':     return crmImportInstagramLead(pool, payload, ctx);
     case 'messages.listTemplates':     return crmListTemplates(pool, payload.platform, payload.language);
     case 'messages.createTemplate':    return crmCreateTemplate(pool, payload, ctx);
     case 'messages.updateTemplate':    return crmUpdateTemplate(pool, payload.id, payload);
@@ -2025,6 +2027,216 @@ async function crmRefreshInstagram(pool, body, ctx) {
   }
 
   return { refreshed: true, lead: updated[0] };
+}
+
+async function crmCreateLead(pool, body, ctx) {
+  const {
+    platform = 'instagram',
+    username: rawUsername = '',
+    displayName: rawDisplayName = '',
+    profileUrl: rawProfileUrl = '',
+    email = '',
+    country = '',
+    bio = '',
+    website = '',
+    followerCount,
+    engagementRate,
+    score,
+    priority = 'medium',
+    status = 'identified',
+    notes = '',
+  } = body;
+
+  let username = rawUsername.trim().toLowerCase().replace(/^@/, '').replace(/\/$/, '');
+  let profileUrl = rawProfileUrl.trim() || null;
+  const displayName = rawDisplayName.trim() || null;
+
+  // Extract username from Instagram URL if not provided
+  if (!username && profileUrl && platform === 'instagram') {
+    const m = profileUrl.match(/instagram\.com\/([A-Za-z0-9_.]+)/i);
+    if (m) username = m[1].toLowerCase();
+  }
+
+  if (!username && !displayName) {
+    throw Object.assign(new Error('Name or username is required'), { status: 400 });
+  }
+
+  // Generate a stable username from displayName if none
+  if (!username) {
+    const slug = displayName.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').slice(0, 24);
+    username = `${slug}_${Date.now().toString().slice(-6)}`;
+  }
+
+  if (profileUrl) {
+    try { new URL(profileUrl); } catch {
+      throw Object.assign(new Error('Profile URL is not valid'), { status: 400 });
+    }
+  }
+  if (!profileUrl && platform === 'instagram') {
+    profileUrl = `https://www.instagram.com/${username}/`;
+  }
+
+  // Dedup: platform + username
+  const { rows: dupUser } = await pool.query(
+    `SELECT id FROM "CreatorLead" WHERE platform = $1 AND lower(username) = lower($2) LIMIT 1`,
+    [platform, username]
+  );
+  if (dupUser.length) return { duplicate: true, existingId: dupUser[0].id };
+
+  // Dedup: profileUrl
+  if (profileUrl) {
+    const { rows: dupUrl } = await pool.query(
+      `SELECT id FROM "CreatorLead" WHERE "profileUrl" = $1 LIMIT 1`,
+      [profileUrl]
+    );
+    if (dupUrl.length) return { duplicate: true, existingId: dupUrl[0].id };
+  }
+
+  const createdById = ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null;
+  const followersInt = followerCount != null && followerCount !== '' ? parseInt(followerCount, 10) || null : null;
+  const engFloat     = engagementRate != null && engagementRate !== '' ? parseFloat(engagementRate) || null : null;
+  const scoreFloat   = score != null && score !== '' ? parseFloat(score) || null : null;
+
+  const { rows: inserted } = await pool.query(`
+    INSERT INTO "CreatorLead" (
+      id, platform, username, "displayName", "profileUrl",
+      email, bio, website, country,
+      "followersCount", "engagementRate", score,
+      priority, status, source,
+      niches, destinations, hashtags, mentions, "routeIdeas",
+      "createdById", "createdAt", "updatedAt"
+    ) VALUES (
+      gen_random_uuid(), $1, $2, $3, $4,
+      $5, $6, $7, $8,
+      $9, $10, $11,
+      $12, $13, 'manual',
+      '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
+      $14, NOW(), NOW()
+    )
+    RETURNING *
+  `, [
+    platform, username, displayName, profileUrl,
+    email.trim() || null, bio.trim() || null, website.trim() || null, country.trim() || null,
+    followersInt, engFloat, scoreFloat,
+    priority, status,
+    createdById,
+  ]);
+
+  const lead = inserted[0];
+
+  const actNote = notes.trim()
+    ? `Added manually. Notes: ${notes.trim()}`
+    : 'Added manually to CRM';
+  try {
+    await pool.query(`
+      INSERT INTO "CreatorLeadActivity" (id, "leadId", type, body, metadata, "createdById", "createdAt")
+      VALUES (gen_random_uuid(), $1, 'system', $2, '{}'::jsonb, $3, NOW())
+    `, [lead.id, actNote, createdById]);
+  } catch (actErr) {
+    console.warn('[crmCreateLead] activity log failed (non-blocking):', actErr.message);
+  }
+
+  return { lead, duplicate: false };
+}
+
+async function crmImportInstagramLead(pool, body, ctx) {
+  const { instagramUrl } = body;
+  if (!instagramUrl?.trim()) {
+    throw Object.assign(new Error('Instagram URL is required'), { status: 400 });
+  }
+
+  const rawInput = instagramUrl.trim();
+
+  if (/instagram\.com\/(p|reel|reels|stories|tv)\//i.test(rawInput)) {
+    throw Object.assign(
+      new Error('Please add a profile URL, not a post or reel URL.'),
+      { status: 400, code: 'INVALID_INSTAGRAM_URL' }
+    );
+  }
+
+  const { normalizeUsername, verifyInstagramCreatorProfile } = await import('./_lib/creatorDiscoveryProviders.js');
+  const username = normalizeUsername(rawInput);
+
+  if (!username || !/^[a-zA-Z0-9_.]+$/.test(username)) {
+    throw Object.assign(
+      new Error('Could not extract a valid Instagram username from this URL'),
+      { status: 400, code: 'INVALID_INSTAGRAM_URL' }
+    );
+  }
+
+  const profileUrl = `https://www.instagram.com/${username}/`;
+
+  // Dedup check
+  const { rows: dupRows } = await pool.query(
+    `SELECT id FROM "CreatorLead" WHERE platform = 'instagram' AND lower(username) = lower($1) LIMIT 1`,
+    [username]
+  );
+  if (dupRows.length) return { duplicate: true, existingId: dupRows[0].id };
+
+  const createdById = ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null;
+
+  const v = await verifyInstagramCreatorProfile(username);
+  const dataFetched = v.verified;
+
+  let warning = null;
+  if (!dataFetched) {
+    warning = v.code === 'META_PROVIDER_NOT_CONFIGURED'
+      ? 'Lead created. Instagram data enrichment is not configured.'
+      : 'Lead created. Some Instagram data could not be fetched automatically.';
+  }
+
+  const aiAnalysisJson = JSON.stringify(dataFetched ? {
+    source: 'instagram_url_import',
+    metaBusinessDiscovery: v.rawMetaProfile || null,
+    importedAt: new Date().toISOString(),
+  } : {});
+
+  const { rows: inserted } = await pool.query(`
+    INSERT INTO "CreatorLead" (
+      id, platform, username, "displayName", "profileUrl",
+      "avatarUrl", bio, website,
+      "followersCount", "postsCount",
+      "aiAnalysis", source, status, priority,
+      niches, destinations, hashtags, mentions, "routeIdeas",
+      "createdById", "createdAt", "updatedAt"
+    ) VALUES (
+      gen_random_uuid(), 'instagram', $1, $2, $3,
+      $4, $5, $6,
+      $7, $8,
+      $9::jsonb, 'instagram_url', 'identified', 'medium',
+      '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
+      $10, NOW(), NOW()
+    )
+    RETURNING *
+  `, [
+    username,
+    dataFetched ? (v.displayName || null) : null,
+    profileUrl,
+    dataFetched ? (v.avatarUrl || null) : null,
+    dataFetched ? (v.bio || null) : null,
+    dataFetched ? (v.website || null) : null,
+    dataFetched ? (v.followersCount ?? null) : null,
+    dataFetched ? (v.postsCount ?? null) : null,
+    aiAnalysisJson,
+    createdById,
+  ]);
+
+  const lead = inserted[0];
+
+  const actNote = dataFetched
+    ? `Added via Instagram URL import. @${username} — ${v.followersCount?.toLocaleString() ?? '?'} followers.`
+    : `Added via Instagram URL import. @${username}. Instagram data could not be fetched.`;
+
+  try {
+    await pool.query(`
+      INSERT INTO "CreatorLeadActivity" (id, "leadId", type, body, metadata, "createdById", "createdAt")
+      VALUES (gen_random_uuid(), $1, 'system', $2, '{}'::jsonb, $3, NOW())
+    `, [lead.id, actNote, createdById]);
+  } catch (actErr) {
+    console.warn('[crmImportInstagramLead] activity log failed (non-blocking):', actErr.message);
+  }
+
+  return { lead, duplicate: false, dataFetched, warning };
 }
 
 async function crmListTemplates(pool, platform, language) {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { Eye, Instagram, ChevronLeft, ChevronRight, Filter, X, Users, RefreshCw } from 'lucide-react';
+import { Eye, Instagram, ChevronLeft, ChevronRight, Filter, X, Users, RefreshCw, Plus, UserPlus } from 'lucide-react';
 
 const S = {
   page:    { padding: '28px 32px', background: '#FAFAF8', minHeight: '100vh' },
@@ -70,17 +70,303 @@ async function crmCall(getToken, action, payload = {}) {
   return json.data;
 }
 
+const PLATFORMS = [
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'tiktok',    label: 'TikTok' },
+  { value: 'youtube',   label: 'YouTube' },
+];
+
+const PRIORITIES = [
+  { value: 'high',   label: 'High' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'low',    label: 'Low' },
+];
+
+function AddLeadModal({ getToken, onClose, onCreated, navigate }) {
+  const [tab, setTab]         = useState('manual');
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState(null);
+  const [success, setSuccess] = useState(null); // { leadId, username, warning }
+  const [dupId, setDupId]     = useState(null);
+
+  const emptyForm = {
+    platform: 'instagram', username: '', displayName: '', profileUrl: '',
+    country: '', email: '', followerCount: '', engagementRate: '',
+    bio: '', priority: 'medium', status: 'identified', score: '', notes: '',
+  };
+  const [form, setForm] = useState(emptyForm);
+  const [igUrl, setIgUrl] = useState('');
+
+  const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const resetState = () => {
+    setError(null);
+    setSuccess(null);
+    setDupId(null);
+  };
+
+  const handleManualSubmit = async (e) => {
+    e.preventDefault();
+    resetState();
+    setLoading(true);
+    try {
+      const data = await crmCall(getToken, 'leads.create', {
+        platform:      form.platform,
+        username:      form.username,
+        displayName:   form.displayName,
+        profileUrl:    form.profileUrl,
+        email:         form.email,
+        country:       form.country,
+        bio:           form.bio,
+        followerCount: form.followerCount,
+        engagementRate: form.engagementRate,
+        score:         form.score,
+        priority:      form.priority,
+        status:        form.status,
+        notes:         form.notes,
+      });
+      if (data.duplicate) {
+        setDupId(data.existingId);
+      } else {
+        setSuccess({ leadId: data.lead.id, username: data.lead.username });
+        onCreated();
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInstagramSubmit = async (e) => {
+    e.preventDefault();
+    resetState();
+    setLoading(true);
+    try {
+      const data = await crmCall(getToken, 'leads.importInstagram', { instagramUrl: igUrl });
+      if (data.duplicate) {
+        setDupId(data.existingId);
+      } else {
+        setSuccess({ leadId: data.lead.id, username: data.lead.username, warning: data.warning });
+        onCreated();
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const overlay = {
+    position: 'fixed', inset: 0, background: 'rgba(28,26,22,0.55)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    zIndex: 1000, padding: '16px',
+  };
+  const modal = {
+    background: 'white', borderRadius: '12px', padding: '28px 28px 24px',
+    width: '100%', maxWidth: '520px', maxHeight: '90vh', overflowY: 'auto',
+    boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
+  };
+  const tabBar = {
+    display: 'flex', gap: '4px', marginBottom: '20px',
+    background: '#F8F6F2', borderRadius: '8px', padding: '3px',
+  };
+  const tabBtn = (active) => ({
+    flex: 1, padding: '7px 12px', borderRadius: '6px', border: 'none', cursor: 'pointer',
+    fontSize: '12.5px', fontWeight: '600',
+    background: active ? 'white' : 'transparent',
+    color: active ? '#1C1A16' : '#8C8070',
+    boxShadow: active ? '0 1px 4px rgba(0,0,0,0.10)' : 'none',
+    transition: 'all 0.15s',
+  });
+  const row = { marginBottom: '14px' };
+  const label = { fontSize: '11.5px', fontWeight: '600', color: '#4A433A', marginBottom: '5px', display: 'block' };
+  const inp = { ...S.input, width: '100%', boxSizing: 'border-box' };
+  const sel = { ...S.select, width: '100%', boxSizing: 'border-box' };
+  const grid2 = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' };
+
+  return (
+    <div style={overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={modal}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <UserPlus size={18} color="#1B6B65" />
+            <span style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '17px', fontWeight: '700', color: '#1C1A16' }}>
+              Add lead
+            </span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8C8070', padding: '2px' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div style={tabBar}>
+          <button style={tabBtn(tab === 'manual')}   onClick={() => { setTab('manual');    resetState(); }}>Manual</button>
+          <button style={tabBtn(tab === 'instagram')} onClick={() => { setTab('instagram'); resetState(); }}>Instagram URL</button>
+        </div>
+
+        {/* Duplicate warning */}
+        {dupId && (
+          <div style={{ background: '#FBF8F1', border: '1px solid #E8D9B8', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
+            <p style={{ margin: 0, fontSize: '13px', color: '#7A5C1E', fontWeight: '600' }}>This creator already exists in CRM</p>
+            <button
+              onClick={() => { navigate(`/admin/creator-acquisition/leads/${dupId}`); onClose(); }}
+              style={{ marginTop: '6px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', color: '#1B6B65', fontWeight: '600', padding: 0, textDecoration: 'underline' }}>
+              View existing lead
+            </button>
+          </div>
+        )}
+
+        {/* Success banner */}
+        {success && !dupId && (
+          <div style={{ background: '#EFF6F5', border: '1px solid #A8D5D0', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
+            <p style={{ margin: 0, fontSize: '13px', color: '#1B6B65', fontWeight: '600' }}>
+              Lead @{success.username} created successfully.
+            </p>
+            {success.warning && (
+              <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#4A433A' }}>{success.warning}</p>
+            )}
+            <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+              <button onClick={() => { navigate(`/admin/creator-acquisition/leads/${success.leadId}`); onClose(); }}
+                style={{ ...S.btnPrimary, fontSize: '12px', padding: '5px 12px' }}>View lead</button>
+              <button onClick={() => { setSuccess(null); setForm(emptyForm); setIgUrl(''); }}
+                style={{ ...S.btnSecondary, fontSize: '12px', padding: '5px 12px' }}>Add another</button>
+            </div>
+          </div>
+        )}
+
+        {/* Error banner */}
+        {error && (
+          <div style={{ background: '#FDECEA', border: '1px solid #F5C6C0', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px' }}>
+            <p style={{ margin: 0, fontSize: '12.5px', color: '#C0392B' }}>{error}</p>
+          </div>
+        )}
+
+        {tab === 'manual' && !success && (
+          <form onSubmit={handleManualSubmit}>
+            <div style={row}>
+              <label style={label}>Platform</label>
+              <select value={form.platform} onChange={e => setField('platform', e.target.value)} style={sel}>
+                {PLATFORMS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </select>
+            </div>
+
+            <div style={grid2}>
+              <div>
+                <label style={label}>Display name</label>
+                <input value={form.displayName} onChange={e => setField('displayName', e.target.value)} placeholder="Rotas da Bruna" style={inp} />
+              </div>
+              <div>
+                <label style={label}>Username</label>
+                <input value={form.username} onChange={e => setField('username', e.target.value)} placeholder="rotasdabruna" style={inp} />
+              </div>
+            </div>
+
+            <div style={row}>
+              <label style={label}>Profile URL</label>
+              <input value={form.profileUrl} onChange={e => setField('profileUrl', e.target.value)} placeholder="https://www.instagram.com/rotasdabruna/" style={inp} />
+            </div>
+
+            <div style={grid2}>
+              <div>
+                <label style={label}>Country</label>
+                <input value={form.country} onChange={e => setField('country', e.target.value)} placeholder="Portugal" style={inp} />
+              </div>
+              <div>
+                <label style={label}>Email <span style={{ color: '#B5AA99', fontWeight: '400' }}>(optional)</span></label>
+                <input type="email" value={form.email} onChange={e => setField('email', e.target.value)} placeholder="contact@..." style={inp} />
+              </div>
+            </div>
+
+            <div style={grid2}>
+              <div>
+                <label style={label}>Followers <span style={{ color: '#B5AA99', fontWeight: '400' }}>(optional)</span></label>
+                <input type="number" value={form.followerCount} onChange={e => setField('followerCount', e.target.value)} placeholder="45000" style={inp} min="0" />
+              </div>
+              <div>
+                <label style={label}>Engagement % <span style={{ color: '#B5AA99', fontWeight: '400' }}>(optional)</span></label>
+                <input type="number" value={form.engagementRate} onChange={e => setField('engagementRate', e.target.value)} placeholder="3.5" step="0.1" style={inp} min="0" max="100" />
+              </div>
+            </div>
+
+            <div style={row}>
+              <label style={label}>Bio / notes <span style={{ color: '#B5AA99', fontWeight: '400' }}>(optional)</span></label>
+              <textarea value={form.bio} onChange={e => setField('bio', e.target.value)} rows={2} placeholder="Travel creator based in Portugal..." style={{ ...inp, resize: 'vertical', fontFamily: 'inherit' }} />
+            </div>
+
+            <div style={grid2}>
+              <div>
+                <label style={label}>Priority</label>
+                <select value={form.priority} onChange={e => setField('priority', e.target.value)} style={sel}>
+                  {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={label}>Score <span style={{ color: '#B5AA99', fontWeight: '400' }}>(0–10, optional)</span></label>
+                <input type="number" value={form.score} onChange={e => setField('score', e.target.value)} placeholder="—" step="0.1" min="0" max="10" style={inp} />
+              </div>
+            </div>
+
+            <div style={{ ...row, marginBottom: '20px' }}>
+              <label style={label}>Internal notes <span style={{ color: '#B5AA99', fontWeight: '400' }}>(optional)</span></label>
+              <textarea value={form.notes} onChange={e => setField('notes', e.target.value)} rows={2} placeholder="How we found this creator, context..." style={{ ...inp, resize: 'vertical', fontFamily: 'inherit' }} />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button type="button" onClick={onClose} style={S.btnSecondary}>Cancel</button>
+              <button type="submit" disabled={loading} style={{ ...S.btnPrimary, opacity: loading ? 0.7 : 1 }}>
+                {loading ? 'Saving…' : 'Add lead'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {tab === 'instagram' && !success && (
+          <form onSubmit={handleInstagramSubmit}>
+            <p style={{ fontSize: '12.5px', color: '#4A433A', marginTop: 0, marginBottom: '16px', lineHeight: '1.6' }}>
+              Paste an Instagram profile URL. We will try to enrich the lead automatically with public data via the Instagram API.
+            </p>
+            <div style={{ ...row, marginBottom: '20px' }}>
+              <label style={label}>Instagram profile URL</label>
+              <input
+                value={igUrl}
+                onChange={e => { setIgUrl(e.target.value); resetState(); }}
+                placeholder="https://www.instagram.com/rotasdabruna/"
+                style={inp}
+                autoFocus
+              />
+              <p style={{ fontSize: '11px', color: '#8C8070', margin: '5px 0 0' }}>
+                Accepted: profile URL, @username, or plain username.
+              </p>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button type="button" onClick={onClose} style={S.btnSecondary}>Cancel</button>
+              <button type="submit" disabled={loading || !igUrl.trim()} style={{ ...S.btnPrimary, opacity: (loading || !igUrl.trim()) ? 0.7 : 1 }}>
+                {loading
+                  ? <><RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} /> Importing…</>
+                  : <><Instagram size={12} /> Import</>
+                }
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function CreatorCRMPage() {
   const { getToken }     = useAuth();
   const navigate         = useNavigate();
   const [searchParams]   = useSearchParams();
 
-  const [leads, setLeads]       = useState([]);
-  const [total, setTotal]       = useState(0);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState(null);
+  const [leads, setLeads]         = useState([]);
+  const [total, setTotal]         = useState(0);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [page, setPage]         = useState(1);
+  const [page, setPage]           = useState(1);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const [filters, setFilters] = useState({
     status:           searchParams.get('status') || '',
@@ -121,11 +407,23 @@ export default function CreatorCRMPage() {
 
   return (
     <div style={S.page}>
+      {showAddModal && (
+        <AddLeadModal
+          getToken={getToken}
+          navigate={navigate}
+          onClose={() => setShowAddModal(false)}
+          onCreated={() => { load(); }}
+        />
+      )}
+
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 style={S.title}>Travel Designer CRM</h1>
           <p style={S.sub}>{total} lead{total !== 1 ? 's' : ''} total</p>
         </div>
+        <button onClick={() => setShowAddModal(true)} style={S.btnPrimary}>
+          <Plus size={14} /> Add lead
+        </button>
       </div>
 
       <div style={{ ...S.card, marginBottom: '16px', padding: '12px 16px' }}>
