@@ -132,7 +132,12 @@ function AddLeadModal({ getToken, onClose, onCreated, navigate }) {
         onCreated();
       }
     } catch (err) {
-      setError(err.message);
+      const msg = err.message || '';
+      setError(
+        msg.startsWith('DB schema') || msg.startsWith('Internal error')
+          ? 'Could not create lead. Please try again or check if this creator already exists.'
+          : msg
+      );
     } finally {
       setLoading(false);
     }
@@ -147,11 +152,16 @@ function AddLeadModal({ getToken, onClose, onCreated, navigate }) {
       if (data.duplicate) {
         setDupId(data.existingId);
       } else {
-        setSuccess({ leadId: data.lead.id, username: data.lead.username, warning: data.warning });
+        setSuccess({ leadId: data.lead.id, username: data.lead.username, warning: data.warning, warningCode: data.warningCode });
         onCreated();
       }
     } catch (err) {
-      setError(err.message);
+      const msg = err.message || '';
+      setError(
+        msg.startsWith('DB schema') || msg.startsWith('Internal error')
+          ? 'Could not create lead. Please try again or check if this creator already exists.'
+          : msg
+      );
     } finally {
       setLoading(false);
     }
@@ -223,10 +233,27 @@ function AddLeadModal({ getToken, onClose, onCreated, navigate }) {
             <p style={{ margin: 0, fontSize: '13px', color: '#1B6B65', fontWeight: '600' }}>
               Lead @{success.username} created successfully.
             </p>
-            {success.warning && (
-              <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#4A433A' }}>{success.warning}</p>
+            {success.warningCode === 'META_TOKEN_EXPIRED' && (
+              <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#7A5C1E', lineHeight: '1.5' }}>
+                Instagram enrichment was skipped — the Meta access token has expired. Ask your admin to refresh it in the server settings.
+              </p>
             )}
-            <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+            {success.warningCode === 'META_NOT_CONFIGURED' && (
+              <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#4A433A', lineHeight: '1.5' }}>
+                Instagram enrichment is not configured. The lead was created with username and profile URL only.
+              </p>
+            )}
+            {success.warningCode === 'META_RATE_LIMITED' && (
+              <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#4A433A', lineHeight: '1.5' }}>
+                Instagram enrichment was skipped due to Meta API rate limiting. You can refresh Instagram data from the lead detail page later.
+              </p>
+            )}
+            {success.warningCode === 'META_ENRICHMENT_FAILED' && (
+              <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#4A433A', lineHeight: '1.5' }}>
+                Instagram data could not be fetched automatically. You can try refreshing from the lead detail page.
+              </p>
+            )}
+            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
               <button onClick={() => { navigate(`/admin/creator-acquisition/leads/${success.leadId}`); onClose(); }}
                 style={{ ...S.btnPrimary, fontSize: '12px', padding: '5px 12px' }}>View lead</button>
               <button onClick={() => { setSuccess(null); setForm(emptyForm); setIgUrl(''); }}

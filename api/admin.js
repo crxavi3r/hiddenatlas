@@ -2175,15 +2175,43 @@ async function crmImportInstagramLead(pool, body, ctx) {
 
   const createdById = ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null;
 
-  const v = await verifyInstagramCreatorProfile(username);
-  const dataFetched = v.verified;
+  // ── Instagram enrichment — best effort, never blocks lead creation ────────
+  let v = null;
+  try {
+    v = await verifyInstagramCreatorProfile(username);
+  } catch (enrichErr) {
+    console.warn('[CreatorLeadImport] Unexpected error during Instagram enrichment (non-blocking):', {
+      username, error: enrichErr.message,
+    });
+  }
+
+  const dataFetched = v?.verified === true;
 
   let warning = null;
+  let warningCode = null;
+
   if (!dataFetched) {
-    warning = v.code === 'META_PROVIDER_NOT_CONFIGURED'
-      ? 'Lead created. Instagram data enrichment is not configured.'
-      : 'Lead created. Some Instagram data could not be fetched automatically.';
+    const metaCode = v?.metaCode ?? null;
+    if (!v) {
+      warningCode = 'META_ENRICHMENT_FAILED';
+      warning = 'Lead created. Instagram data could not be fetched.';
+    } else if (v.code === 'META_PROVIDER_NOT_CONFIGURED') {
+      warningCode = 'META_NOT_CONFIGURED';
+      warning = 'Lead created. Instagram enrichment is not configured on this server.';
+    } else if (metaCode === 190 || metaCode === 102 || metaCode === 467) {
+      warningCode = 'META_TOKEN_EXPIRED';
+      warning = 'Lead created, but your Instagram connection has expired. Update the Meta access token to enable automatic enrichment.';
+      console.warn('[CreatorLeadImport] Meta token expired during import:', { username, metaCode });
+    } else if (metaCode === 4 || metaCode === 17 || metaCode === 32 || metaCode === 613) {
+      warningCode = 'META_RATE_LIMITED';
+      warning = 'Lead created. Instagram enrichment was skipped due to Meta API rate limiting — try again later.';
+    } else {
+      warningCode = 'META_ENRICHMENT_FAILED';
+      warning = 'Lead created. Some Instagram data could not be fetched automatically.';
+    }
+    console.info('[CreatorLeadImport] Creating minimal lead for @' + username, { warningCode, metaCode });
   }
+  // ─────────────────────────────────────────────────────────────────────────
 
   const aiAnalysisJson = JSON.stringify(dataFetched ? {
     source: 'instagram_url_import',
@@ -2225,7 +2253,7 @@ async function crmImportInstagramLead(pool, body, ctx) {
 
   const actNote = dataFetched
     ? `Added via Instagram URL import. @${username} — ${v.followersCount?.toLocaleString() ?? '?'} followers.`
-    : `Added via Instagram URL import. @${username}. Instagram data could not be fetched.`;
+    : `Added via Instagram URL import. @${username}. Instagram enrichment skipped (${warningCode}).`;
 
   try {
     await pool.query(`
@@ -2233,10 +2261,10 @@ async function crmImportInstagramLead(pool, body, ctx) {
       VALUES (gen_random_uuid(), $1, 'system', $2, '{}'::jsonb, $3, NOW())
     `, [lead.id, actNote, createdById]);
   } catch (actErr) {
-    console.warn('[crmImportInstagramLead] activity log failed (non-blocking):', actErr.message);
+    console.warn('[CreatorLeadImport] activity log failed (non-blocking):', actErr.message);
   }
 
-  return { lead, duplicate: false, dataFetched, warning };
+  return { lead, duplicate: false, dataFetched, warning, warningCode };
 }
 
 async function crmListTemplates(pool, platform, language) {
