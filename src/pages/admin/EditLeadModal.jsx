@@ -9,6 +9,33 @@ const PIPELINE_STATUSES = [
 
 const PLATFORMS = ['instagram', 'tiktok', 'youtube', 'other'];
 
+// ── Styles (module-level so they're stable across renders) ───────────────────
+const S = {
+  overlay:  { position: 'fixed', inset: 0, background: 'rgba(28,26,22,0.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1100, padding: '40px 16px', overflowY: 'auto' },
+  modal:    { background: 'white', borderRadius: '12px', width: '100%', maxWidth: '640px', boxShadow: '0 8px 32px rgba(0,0,0,0.18)', margin: 'auto' },
+  inp:      { width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #D4C8BB', fontSize: '13px', color: '#1C1A16', boxSizing: 'border-box', outline: 'none', background: 'white' },
+  ta:       { width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #D4C8BB', fontSize: '13px', color: '#1C1A16', boxSizing: 'border-box', outline: 'none', background: 'white', resize: 'vertical', fontFamily: 'inherit', minHeight: '72px' },
+  lbl:      { display: 'block', fontSize: '11px', fontWeight: '600', color: '#8C8070', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' },
+  grid2:    { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' },
+  tabBar:   { display: 'flex', gap: '2px', marginBottom: '20px', background: '#F4F1EC', borderRadius: '8px', padding: '3px' },
+  secTitle: { fontSize: '11.5px', fontWeight: '700', color: '#8C8070', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px', marginTop: 0 },
+};
+
+function tabBtn(active) {
+  return { flex: 1, padding: '7px 10px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12.5px', fontWeight: active ? '600' : '400', background: active ? 'white' : 'transparent', color: active ? '#1C1A16' : '#8C8070', boxShadow: active ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.12s' };
+}
+
+// ── Field helper (module-level — stable reference, no focus loss) ────────────
+function Field({ label, span, children }) {
+  return (
+    <div style={span === 2 ? { gridColumn: '1 / -1' } : {}}>
+      <label style={S.lbl}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+// ── Utilities ────────────────────────────────────────────────────────────────
 function toDateInput(ts) {
   if (!ts) return '';
   try { return new Date(ts).toISOString().slice(0, 10); } catch { return ''; }
@@ -40,6 +67,7 @@ function initForm(lead) {
   };
 }
 
+// ── Component ────────────────────────────────────────────────────────────────
 export default function EditLeadModal({ lead, getToken, onClose, onSaved }) {
   const [form, setForm]       = useState(() => initForm(lead));
   const [section, setSection] = useState('profile');
@@ -102,29 +130,9 @@ export default function EditLeadModal({ lead, getToken, onClose, onSaved }) {
     }
   }
 
-  const overlay  = { position: 'fixed', inset: 0, background: 'rgba(28,26,22,0.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1100, padding: '40px 16px', overflowY: 'auto' };
-  const modal    = { background: 'white', borderRadius: '12px', width: '100%', maxWidth: '640px', boxShadow: '0 8px 32px rgba(0,0,0,0.18)', margin: 'auto' };
-  const inp      = { width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #D4C8BB', fontSize: '13px', color: '#1C1A16', boxSizing: 'border-box', outline: 'none', background: 'white' };
-  const sel      = { ...inp };
-  const ta       = { ...inp, resize: 'vertical', fontFamily: 'inherit', minHeight: '72px' };
-  const lbl      = { display: 'block', fontSize: '11px', fontWeight: '600', color: '#8C8070', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' };
-  const grid2    = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' };
-  const tabBar   = { display: 'flex', gap: '2px', marginBottom: '20px', background: '#F4F1EC', borderRadius: '8px', padding: '3px' };
-  const tabBtn   = active => ({ flex: 1, padding: '7px 10px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12.5px', fontWeight: active ? '600' : '400', background: active ? 'white' : 'transparent', color: active ? '#1C1A16' : '#8C8070', boxShadow: active ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.12s' });
-  const secTitle = { fontSize: '11.5px', fontWeight: '700', color: '#8C8070', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px', marginTop: 0 };
-
-  function Field({ label, span, children }) {
-    return (
-      <div style={span === 2 ? { gridColumn: '1 / -1' } : {}}>
-        <label style={lbl}>{label}</label>
-        {children}
-      </div>
-    );
-  }
-
   return (
-    <div style={overlay} onClick={e => e.target === e.currentTarget && !loading && onClose()}>
-      <div style={modal}>
+    <div style={S.overlay} onClick={e => e.target === e.currentTarget && !loading && onClose()}>
+      <div style={S.modal}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: '1px solid #E8E3DA' }}>
           <div>
@@ -139,7 +147,7 @@ export default function EditLeadModal({ lead, getToken, onClose, onSaved }) {
         <form onSubmit={handleSave}>
           <div style={{ padding: '20px 22px' }}>
             {/* Tab nav */}
-            <div style={tabBar}>
+            <div style={S.tabBar}>
               {[['profile', 'Profile'], ['crm', 'CRM'], ['instagram', 'Instagram']].map(([k, label]) => (
                 <button key={k} type="button" style={tabBtn(section === k)} onClick={() => setSection(k)}>{label}</button>
               ))}
@@ -148,39 +156,39 @@ export default function EditLeadModal({ lead, getToken, onClose, onSaved }) {
             {/* Profile */}
             {section === 'profile' && (
               <>
-                <p style={secTitle}>Profile Information</p>
-                <div style={grid2}>
+                <p style={S.secTitle}>Profile Information</p>
+                <div style={S.grid2}>
                   <Field label="Display Name">
-                    <input style={inp} value={form.displayName} onChange={e => set('displayName', e.target.value)} placeholder="Creator name" />
+                    <input style={S.inp} value={form.displayName} onChange={e => set('displayName', e.target.value)} placeholder="Creator name" />
                   </Field>
                   <Field label="Username">
-                    <input style={inp} value={form.username} onChange={e => set('username', e.target.value.replace(/^@/, ''))} placeholder="username" />
+                    <input style={S.inp} value={form.username} onChange={e => set('username', e.target.value.replace(/^@/, ''))} placeholder="username" />
                   </Field>
                   <Field label="Platform">
-                    <select style={sel} value={form.platform} onChange={e => set('platform', e.target.value)}>
+                    <select style={S.inp} value={form.platform} onChange={e => set('platform', e.target.value)}>
                       {PLATFORMS.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
                     </select>
                   </Field>
                   <Field label="Category">
-                    <input style={inp} value={form.category} onChange={e => set('category', e.target.value)} placeholder="travel, lifestyle…" />
+                    <input style={S.inp} value={form.category} onChange={e => set('category', e.target.value)} placeholder="travel, lifestyle…" />
                   </Field>
                   <Field label="Country">
-                    <input style={inp} value={form.country} onChange={e => set('country', e.target.value)} placeholder="Portugal" />
+                    <input style={S.inp} value={form.country} onChange={e => set('country', e.target.value)} placeholder="Portugal" />
                   </Field>
                   <Field label="Language">
-                    <input style={inp} value={form.language} onChange={e => set('language', e.target.value)} placeholder="en, pt, es…" />
+                    <input style={S.inp} value={form.language} onChange={e => set('language', e.target.value)} placeholder="en, pt, es…" />
                   </Field>
                   <Field label="Email">
-                    <input style={inp} type="text" value={form.email} onChange={e => set('email', e.target.value)} placeholder="creator@email.com" />
+                    <input style={S.inp} type="text" value={form.email} onChange={e => set('email', e.target.value)} placeholder="creator@email.com" />
                   </Field>
                   <Field label="Website">
-                    <input style={inp} value={form.websiteUrl} onChange={e => set('websiteUrl', e.target.value)} placeholder="https://…" />
+                    <input style={S.inp} value={form.websiteUrl} onChange={e => set('websiteUrl', e.target.value)} placeholder="https://…" />
                   </Field>
                   <Field label="Bio" span={2}>
-                    <textarea style={ta} value={form.bio} onChange={e => set('bio', e.target.value)} placeholder="Creator bio…" />
+                    <textarea style={S.ta} value={form.bio} onChange={e => set('bio', e.target.value)} placeholder="Creator bio…" />
                   </Field>
                   <Field label="Niches (comma separated)" span={2}>
-                    <input style={inp} value={form.niches} onChange={e => set('niches', e.target.value)} placeholder="travel, adventure, photography" />
+                    <input style={S.inp} value={form.niches} onChange={e => set('niches', e.target.value)} placeholder="travel, adventure, photography" />
                     {form.niches && (
                       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '6px' }}>
                         {form.niches.split(',').map(s => s.trim()).filter(Boolean).map(tag => (
@@ -196,15 +204,15 @@ export default function EditLeadModal({ lead, getToken, onClose, onSaved }) {
             {/* CRM */}
             {section === 'crm' && (
               <>
-                <p style={secTitle}>CRM Data</p>
-                <div style={grid2}>
+                <p style={S.secTitle}>CRM Data</p>
+                <div style={S.grid2}>
                   <Field label="Status">
-                    <select style={sel} value={form.status} onChange={e => set('status', e.target.value)}>
+                    <select style={S.inp} value={form.status} onChange={e => set('status', e.target.value)}>
                       {PIPELINE_STATUSES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
                     </select>
                   </Field>
                   <Field label="Priority">
-                    <select style={sel} value={form.priority} onChange={e => set('priority', e.target.value)}>
+                    <select style={S.inp} value={form.priority} onChange={e => set('priority', e.target.value)}>
                       <option value="">None</option>
                       <option value="0">Low</option>
                       <option value="1">Medium</option>
@@ -212,17 +220,17 @@ export default function EditLeadModal({ lead, getToken, onClose, onSaved }) {
                     </select>
                   </Field>
                   <Field label="Score (0–10)">
-                    <input style={inp} type="number" min="0" max="10" step="0.1" value={form.score} onChange={e => set('score', e.target.value)} placeholder="0–10" />
+                    <input style={S.inp} type="number" min="0" max="10" step="0.1" value={form.score} onChange={e => set('score', e.target.value)} placeholder="0–10" />
                   </Field>
                   <div />
                   <Field label="Last Contacted">
-                    <input style={inp} type="date" value={form.lastContactedAt} onChange={e => set('lastContactedAt', e.target.value)} />
+                    <input style={S.inp} type="date" value={form.lastContactedAt} onChange={e => set('lastContactedAt', e.target.value)} />
                   </Field>
                   <Field label="Next Follow-up">
-                    <input style={inp} type="date" value={form.nextFollowUpAt} onChange={e => set('nextFollowUpAt', e.target.value)} />
+                    <input style={S.inp} type="date" value={form.nextFollowUpAt} onChange={e => set('nextFollowUpAt', e.target.value)} />
                   </Field>
                   <Field label="Fit Summary" span={2}>
-                    <textarea style={{ ...ta, minHeight: '90px' }} value={form.fitSummary} onChange={e => set('fitSummary', e.target.value)} placeholder="Summary of this creator's fit for HiddenAtlas…" />
+                    <textarea style={{ ...S.ta, minHeight: '90px' }} value={form.fitSummary} onChange={e => set('fitSummary', e.target.value)} placeholder="Summary of this creator's fit for HiddenAtlas…" />
                   </Field>
                 </div>
               </>
@@ -231,25 +239,25 @@ export default function EditLeadModal({ lead, getToken, onClose, onSaved }) {
             {/* Instagram */}
             {section === 'instagram' && (
               <>
-                <p style={secTitle}>Instagram / Social Data</p>
+                <p style={S.secTitle}>Instagram / Social Data</p>
                 <p style={{ fontSize: '12px', color: '#8C8070', marginBottom: '14px', marginTop: '-6px', background: '#F8F6F2', padding: '8px 10px', borderRadius: '6px', lineHeight: '1.5' }}>
                   Fields marked with * update automatically when you click "Refresh Instagram". Manual edits here are preserved for CRM-only data.
                 </p>
-                <div style={grid2}>
+                <div style={S.grid2}>
                   <Field label="Profile URL" span={2}>
-                    <input style={inp} value={form.profileUrl} onChange={e => set('profileUrl', e.target.value)} placeholder="https://www.instagram.com/username/" />
+                    <input style={S.inp} value={form.profileUrl} onChange={e => set('profileUrl', e.target.value)} placeholder="https://www.instagram.com/username/" />
                   </Field>
                   <Field label="Avatar URL *" span={2}>
-                    <input style={inp} value={form.avatarUrl} onChange={e => set('avatarUrl', e.target.value)} placeholder="https://…" />
+                    <input style={S.inp} value={form.avatarUrl} onChange={e => set('avatarUrl', e.target.value)} placeholder="https://…" />
                   </Field>
                   <Field label="Followers *">
-                    <input style={inp} type="number" min="0" value={form.followersCount} onChange={e => set('followersCount', e.target.value)} placeholder="45000" />
+                    <input style={S.inp} type="number" min="0" value={form.followersCount} onChange={e => set('followersCount', e.target.value)} placeholder="45000" />
                   </Field>
                   <Field label="Posts *">
-                    <input style={inp} type="number" min="0" value={form.postsCount} onChange={e => set('postsCount', e.target.value)} placeholder="320" />
+                    <input style={S.inp} type="number" min="0" value={form.postsCount} onChange={e => set('postsCount', e.target.value)} placeholder="320" />
                   </Field>
                   <Field label="Engagement Rate % *">
-                    <input style={inp} type="number" min="0" max="100" step="0.01" value={form.engagementRate} onChange={e => set('engagementRate', e.target.value)} placeholder="3.5" />
+                    <input style={S.inp} type="number" min="0" max="100" step="0.01" value={form.engagementRate} onChange={e => set('engagementRate', e.target.value)} placeholder="3.5" />
                   </Field>
                 </div>
               </>
