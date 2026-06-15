@@ -114,22 +114,32 @@ export async function ensureValidInstagramToken(pool, creatorId) {
 export function getMetaDiscoveryConnection() {
   const version   = process.env.META_GRAPH_API_VERSION || 'v25.0';
   const accountId = process.env.META_INSTAGRAM_ACCOUNT_ID;
-  const token     = process.env.META_GRAPH_ACCESS_TOKEN
-                 || process.env.META_PAGE_ACCESS_TOKEN
-                 || process.env.META_INSTAGRAM_ACCESS_TOKEN;
 
-  // Always log env var presence so missing values are visible in Vercel logs
+  // META_PAGE_ACCESS_TOKEN is the primary token in Vercel.
+  // META_GRAPH_ACCESS_TOKEN accepted as alias — PAGE token takes priority.
+  const pageTok  = process.env.META_PAGE_ACCESS_TOKEN;
+  const graphTok = process.env.META_GRAPH_ACCESS_TOKEN;
+  const igTok    = process.env.META_INSTAGRAM_ACCESS_TOKEN;
+  const token    = pageTok || graphTok || igTok;
+  const tokenVar = pageTok ? 'META_PAGE_ACCESS_TOKEN'
+                 : graphTok ? 'META_GRAPH_ACCESS_TOKEN'
+                 : igTok ? 'META_INSTAGRAM_ACCESS_TOKEN'
+                 : '(none)';
+
+  // Diagnostic log — always emitted so Vercel logs show the exact state
   console.info('[MetaDiscovery] Env var diagnostic:', {
+    NODE_ENV:                           process.env.NODE_ENV ?? '(not set)',
+    VERCEL_ENV:                         process.env.VERCEL_ENV ?? '(not set)',
+    VERCEL_GIT_COMMIT_SHA:              (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 8) || '(not set)',
     'META_INSTAGRAM_ACCOUNT_ID exists': Boolean(accountId),
     igBusinessAccountId:                accountId ?? '(not set)',
-    'META_PAGE_ACCESS_TOKEN exists':    Boolean(process.env.META_PAGE_ACCESS_TOKEN),
-    'META_GRAPH_ACCESS_TOKEN exists':   Boolean(process.env.META_GRAPH_ACCESS_TOKEN),
-    tokenSource:                        process.env.META_GRAPH_ACCESS_TOKEN ? 'META_GRAPH_ACCESS_TOKEN'
-                                      : process.env.META_PAGE_ACCESS_TOKEN   ? 'META_PAGE_ACCESS_TOKEN'
-                                      : process.env.META_INSTAGRAM_ACCESS_TOKEN ? 'META_INSTAGRAM_ACCESS_TOKEN'
-                                      : '(none)',
+    'META_PAGE_ACCESS_TOKEN exists':    Boolean(pageTok),
+    'META_GRAPH_ACCESS_TOKEN exists':   Boolean(graphTok),
+    tokenSourceSelected:                tokenVar,
+    tokenLength:                        token ? token.length : 0,
+    tokenPrefix:                        token ? token.slice(0, 8) : '(no token)',
+    tokenSuffix:                        token ? token.slice(-4)   : '(no token)',
     graphEndpoint:                      `graph.facebook.com/${version}`,
-    tokenTail:                          token ? token.slice(-4) : '(no token)',
   });
 
   const missing = [];
@@ -141,7 +151,7 @@ export function getMetaDiscoveryConnection() {
     return { status: 'NOT_CONFIGURED', missing };
   }
 
-  return { status: 'OK', token, accountId, version, tokenTail: token.slice(-4) };
+  return { status: 'OK', token, accountId, version, tokenVar, tokenTail: token.slice(-4) };
 }
 
 // ── Internal: token refresh ───────────────────────────────────────────────────

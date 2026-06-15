@@ -291,7 +291,7 @@ export default function CreatorLeadDetailPage() {
     try {
       const result = await crmCall(getToken, 'leads.refreshInstagram', { id });
       if (result.configError) {
-        setIgRefreshError('Instagram enrichment is not configured on this server. Ask an admin to add META_GRAPH_ACCESS_TOKEN and META_INSTAGRAM_ACCOUNT_ID to the environment.');
+        setIgRefreshError('Instagram enrichment is not configured on this server. Admin must set META_PAGE_ACCESS_TOKEN and META_INSTAGRAM_ACCOUNT_ID in Vercel, then redeploy.');
         return;
       }
       if (result.isTokenExpired || result.isServerTokenExpired) {

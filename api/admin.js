@@ -1778,6 +1778,7 @@ async function dispatchCrmAction(pool, action, payload, ctx) {
     case 'leads.refreshInstagram':    return crmRefreshInstagram(pool, payload, ctx);
     case 'leads.create':              return crmCreateLead(pool, payload, ctx);
     case 'leads.importInstagram':     return crmImportInstagramLead(pool, payload, ctx);
+    case 'debug.metaDiscovery':       return debugMetaDiscovery(payload, ctx);
     case 'messages.listTemplates':     return crmListTemplates(pool, payload.platform, payload.language);
     case 'messages.createTemplate':    return crmCreateTemplate(pool, payload, ctx);
     case 'messages.updateTemplate':    return crmUpdateTemplate(pool, payload.id, payload);
@@ -1788,6 +1789,79 @@ async function dispatchCrmAction(pool, action, payload, ctx) {
     default:
       throw Object.assign(new Error(`Unknown CRM action: ${action}`), { status: 400 });
   }
+}
+
+// ── Admin debug: Meta Discovery connection test ───────────────────────────────
+async function debugMetaDiscovery(payload, ctx) {
+  if (!ctx.isAdmin) throw Object.assign(new Error('Admin only'), { status: 403 });
+
+  const version   = process.env.META_GRAPH_API_VERSION || 'v25.0';
+  const accountId = process.env.META_INSTAGRAM_ACCOUNT_ID;
+  const pageTok   = process.env.META_PAGE_ACCESS_TOKEN;
+  const graphTok  = process.env.META_GRAPH_ACCESS_TOKEN;
+  const igTok     = process.env.META_INSTAGRAM_ACCESS_TOKEN;
+  const token     = pageTok || graphTok || igTok;
+  const tokenVar  = pageTok ? 'META_PAGE_ACCESS_TOKEN'
+                  : graphTok ? 'META_GRAPH_ACCESS_TOKEN'
+                  : igTok ? 'META_INSTAGRAM_ACCESS_TOKEN'
+                  : null;
+
+  const envInfo = {
+    NODE_ENV:                         process.env.NODE_ENV ?? null,
+    VERCEL_ENV:                       process.env.VERCEL_ENV ?? null,
+    VERCEL_URL:                       process.env.VERCEL_URL ?? null,
+    VERCEL_GIT_COMMIT_SHA:            (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 8) || null,
+    'META_INSTAGRAM_ACCOUNT_ID':      accountId ?? null,
+    'META_PAGE_ACCESS_TOKEN exists':  Boolean(pageTok),
+    'META_GRAPH_ACCESS_TOKEN exists': Boolean(graphTok),
+    tokenSourceSelected:              tokenVar ?? '(none — no token env var found)',
+    tokenLength:                      token?.length ?? 0,
+    tokenPrefix:                      token ? token.slice(0, 8) : null,
+    tokenSuffix:                      token ? token.slice(-4)   : null,
+    graphEndpoint:                    `graph.facebook.com/${version}`,
+  };
+
+  if (!token || !accountId) {
+    return { ok: false, envInfo, error: 'Token or accountId missing — see envInfo above' };
+  }
+
+  const BASE = `https://graph.facebook.com/${version}`;
+
+  // Test 1: GET /me (verifies token is valid at all)
+  let meTest = null;
+  try {
+    const url = `${BASE}/me?fields=id,name&access_token=${encodeURIComponent(token)}`;
+    const r   = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    const d   = await r.json();
+    meTest = d.error
+      ? { ok: false, httpStatus: r.status, errorCode: d.error.code, errorSubcode: d.error.error_subcode, errorMsg: d.error.message }
+      : { ok: true,  httpStatus: r.status, id: d.id, name: d.name };
+  } catch (e) {
+    meTest = { ok: false, threw: e.message };
+  }
+
+  // Test 2: Business Discovery for a known public profile
+  const testUsername = payload?.username || 'rotasdabruna';
+  const fieldset = 'id,username,name,biography,followers_count,media_count,profile_picture_url,website';
+  let discoveryTest = null;
+  try {
+    const fields    = `business_discovery.username(${testUsername}){${fieldset}}`;
+    const safeUrl   = `${BASE}/${accountId}?fields=${encodeURIComponent(fields)}`;
+    const fullUrl   = `${safeUrl}&access_token=${encodeURIComponent(token)}`;
+    const r         = await fetch(fullUrl, { signal: AbortSignal.timeout(15_000) });
+    const d         = await r.json();
+    discoveryTest = d.error
+      ? { ok: false, httpStatus: r.status, errorCode: d.error.code, errorSubcode: d.error.error_subcode, errorMsg: d.error.message, endpointWithoutToken: safeUrl }
+      : { ok: true,  httpStatus: r.status, profile: d?.[accountId]?.business_discovery ?? d?.business_discovery ?? d, endpointWithoutToken: safeUrl };
+  } catch (e) {
+    discoveryTest = { ok: false, threw: e.message };
+  }
+
+  console.info('[MetaDiscovery] debugMetaDiscovery result:', {
+    envInfo, meTest, discoveryTest: { ...discoveryTest, profile: discoveryTest?.ok ? '(see response)' : undefined },
+  });
+
+  return { ok: meTest?.ok && discoveryTest?.ok, envInfo, meTest, discoveryTest };
 }
 
 async function crmDashboard(pool) {

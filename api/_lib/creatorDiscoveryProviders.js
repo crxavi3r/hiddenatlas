@@ -485,15 +485,15 @@ const META_GRAPH_URL = 'https://graph.facebook.com';
 export function validateMetaConfig() {
   const version   = process.env.META_GRAPH_API_VERSION || 'v25.0';
   const accountId = process.env.META_INSTAGRAM_ACCOUNT_ID;
-  // META_GRAPH_ACCESS_TOKEN is the preferred User Token; fall back to legacy names
-  const token     = process.env.META_GRAPH_ACCESS_TOKEN
-                 || process.env.META_PAGE_ACCESS_TOKEN
+  // META_PAGE_ACCESS_TOKEN is the primary token; META_GRAPH_ACCESS_TOKEN accepted as alias
+  const token     = process.env.META_PAGE_ACCESS_TOKEN
+                 || process.env.META_GRAPH_ACCESS_TOKEN
                  || process.env.META_INSTAGRAM_ACCESS_TOKEN;
   const enabled   = process.env.META_PROVIDER_ENABLED !== 'false';
 
   const missing = [];
   if (!accountId) missing.push('META_INSTAGRAM_ACCOUNT_ID');
-  if (!token)     missing.push('META_GRAPH_ACCESS_TOKEN');
+  if (!token)     missing.push('META_PAGE_ACCESS_TOKEN');
 
   return { configured: missing.length === 0 && enabled, missing, version, accountId, token, enabled };
 }
