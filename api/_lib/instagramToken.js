@@ -122,15 +122,19 @@ export function getMetaDiscoveryConnection() {
   console.info('[MetaDiscovery] Env var diagnostic:', {
     'META_INSTAGRAM_ACCOUNT_ID exists': Boolean(accountId),
     igBusinessAccountId:                accountId ?? '(not set)',
-    'META_GRAPH_ACCESS_TOKEN exists':   Boolean(process.env.META_GRAPH_ACCESS_TOKEN),
     'META_PAGE_ACCESS_TOKEN exists':    Boolean(process.env.META_PAGE_ACCESS_TOKEN),
+    'META_GRAPH_ACCESS_TOKEN exists':   Boolean(process.env.META_GRAPH_ACCESS_TOKEN),
+    tokenSource:                        process.env.META_GRAPH_ACCESS_TOKEN ? 'META_GRAPH_ACCESS_TOKEN'
+                                      : process.env.META_PAGE_ACCESS_TOKEN   ? 'META_PAGE_ACCESS_TOKEN'
+                                      : process.env.META_INSTAGRAM_ACCESS_TOKEN ? 'META_INSTAGRAM_ACCESS_TOKEN'
+                                      : '(none)',
     graphEndpoint:                      `graph.facebook.com/${version}`,
     tokenTail:                          token ? token.slice(-4) : '(no token)',
   });
 
   const missing = [];
   if (!accountId) missing.push('META_INSTAGRAM_ACCOUNT_ID');
-  if (!token)     missing.push('META_GRAPH_ACCESS_TOKEN');
+  if (!token)     missing.push('META_PAGE_ACCESS_TOKEN');
 
   if (missing.length) {
     console.warn('[MetaDiscovery] Connection not configured — missing env vars:', { missing });

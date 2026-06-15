@@ -609,10 +609,13 @@ export default function CreatorLeadDetailPage() {
 
                 {igTokenExpired && (
                   <div style={{ background: '#FBF8F1', border: '1px solid #E8D9B8', borderRadius: '6px', padding: '10px 12px', marginBottom: '12px' }}>
-                    <p style={{ margin: 0, fontSize: '12.5px', fontWeight: '600', color: '#7A5C1E' }}>Server Meta token expired</p>
+                    <p style={{ margin: 0, fontSize: '12.5px', fontWeight: '600', color: '#7A5C1E' }}>Server Meta token expired or invalid</p>
                     <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#7A5C1E', lineHeight: '1.5' }}>
-                      The server-level Meta API token has expired. Lead data and manual edits are safe.
-                      Admin must renew <code style={{ background: '#F4EDD8', padding: '1px 4px', borderRadius: '3px', fontSize: '11px' }}>META_GRAPH_ACCESS_TOKEN</code> in Vercel environment variables.
+                      Lead data and manual edits are safe. Check{' '}
+                      <code style={{ background: '#F4EDD8', padding: '1px 4px', borderRadius: '3px', fontSize: '11px' }}>META_PAGE_ACCESS_TOKEN</code>{' '}
+                      and{' '}
+                      <code style={{ background: '#F4EDD8', padding: '1px 4px', borderRadius: '3px', fontSize: '11px' }}>META_INSTAGRAM_ACCOUNT_ID</code>{' '}
+                      in Vercel, then redeploy.
                     </p>
                     <div style={{ marginTop: '8px' }}>
                       <button onClick={() => { setIgTokenExpired(false); setIgRefreshError(null); }}
