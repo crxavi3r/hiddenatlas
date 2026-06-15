@@ -515,6 +515,14 @@ export default async function handler(req, res) {
         const ctx = await verifyUser(req.headers.authorization, pool);
         return res.json(await handleAuthUrl(req, pool, ctx));
       }
+      if (action === 'my-auth-url') {
+        const ctx = await verifyUser(req.headers.authorization, pool);
+        if (!ctx.creatorId) {
+          return res.status(400).json({ success: false, error: 'No creator profile associated with your account. Contact an admin to reconnect the Meta token.' });
+        }
+        req.query.creatorId = ctx.creatorId;
+        return res.json(await handleAuthUrl(req, pool, ctx));
+      }
       if (action === 'preview') {
         const ctx = await verifyUser(req.headers.authorization, pool);
         return res.json(await handlePreview(pool, req.query.id, ctx));

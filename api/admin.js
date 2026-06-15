@@ -1981,7 +1981,11 @@ async function crmRefreshInstagram(pool, body, ctx) {
   if (ctx.creatorId) {
     const tokenResult = await _ensureToken2(pool, ctx.creatorId);
     if (tokenResult.status === 'EXPIRED') {
-      return { refreshed: false, error: 'Instagram token has expired. Reconnect Instagram in Creator settings.', metaCode: 190 };
+      return {
+        refreshed: false, isTokenExpired: true, metaCode: 190,
+        error: 'Instagram token has expired. Reconnect Instagram to re-enable enrichment.',
+        reconnectSlug: ctx.creatorSlug ?? null,
+      };
     }
     if (tokenResult.status === 'OK' && tokenResult.token && tokenResult.accountId) {
       enrichOpts2 = { token: tokenResult.token, accountId: tokenResult.accountId };
@@ -1995,7 +1999,14 @@ async function crmRefreshInstagram(pool, body, ctx) {
   }
 
   if (!v.verified) {
-    return { refreshed: false, error: v.error, metaCode: v.metaCode || null };
+    const isTokenExpired = v.metaCode === 190 || v.metaCode === 102 || v.metaCode === 467;
+    return {
+      refreshed: false,
+      error: v.error,
+      metaCode: v.metaCode || null,
+      isTokenExpired,
+      reconnectSlug: isTokenExpired ? (ctx.creatorSlug ?? null) : null,
+    };
   }
 
   const now = new Date().toISOString();
@@ -2013,8 +2024,8 @@ async function crmRefreshInstagram(pool, body, ctx) {
 
   const { rows: updated } = await pool.query(`
     UPDATE "CreatorLead"
-    SET "followersCount" = $1,
-        "postsCount"     = $2,
+    SET "followersCount" = COALESCE($1, "followersCount"),
+        "postsCount"     = COALESCE($2, "postsCount"),
         bio              = COALESCE($3, bio),
         "avatarUrl"      = COALESCE($4, "avatarUrl"),
         "displayName"    = COALESCE($5, "displayName"),
@@ -2025,8 +2036,8 @@ async function crmRefreshInstagram(pool, body, ctx) {
     WHERE id = $9
     RETURNING *
   `, [
-    v.followersCount, v.postsCount,
-    v.bio, v.avatarUrl, v.displayName, v.profileUrl, v.website,
+    v.followersCount ?? null, v.postsCount ?? null,
+    v.bio || null, v.avatarUrl || null, v.displayName || null, v.profileUrl || null, v.website || null,
     newAiAnalysis, id,
   ]);
 

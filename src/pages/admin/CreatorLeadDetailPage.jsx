@@ -165,8 +165,11 @@ export default function CreatorLeadDetailPage() {
   const [savingMsg, setSavingMsg]               = useState(false);
   const [copiedMsgId, setCopiedMsgId]           = useState(null);
 
-  const [refreshingIg, setRefreshingIg] = useState(false);
+  const [refreshingIg, setRefreshingIg]     = useState(false);
   const [igRefreshError, setIgRefreshError] = useState(null);
+  const [igTokenExpired, setIgTokenExpired] = useState(false);
+  const [igReconnectSlug, setIgReconnectSlug] = useState(null);
+  const [reconnecting, setReconnecting]     = useState(false);
   const [avatarModal, setAvatarModal] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -288,18 +291,49 @@ export default function CreatorLeadDetailPage() {
     try {
       const result = await crmCall(getToken, 'leads.refreshInstagram', { id });
       if (result.configError) {
-        setIgRefreshError('Instagram verification is not configured. Add META_GRAPH_ACCESS_TOKEN and META_INSTAGRAM_ACCOUNT_ID to Vercel environment variables.');
+        setIgRefreshError('Instagram enrichment is not configured on this server. Ask an admin to add META_GRAPH_ACCESS_TOKEN and META_INSTAGRAM_ACCOUNT_ID to the environment.');
+        return;
+      }
+      if (result.isTokenExpired) {
+        setIgTokenExpired(true);
+        setIgReconnectSlug(result.reconnectSlug ?? null);
+        setIgRefreshError(null);
         return;
       }
       if (!result.refreshed) {
         setIgRefreshError(result.error || 'Instagram refresh failed');
         return;
       }
+      setIgTokenExpired(false);
       load();
     } catch (e) {
       setIgRefreshError(e.message);
     } finally {
       setRefreshingIg(false);
+    }
+  }
+
+  async function handleReconnectMeta() {
+    setReconnecting(true);
+    try {
+      const token = await getToken();
+      const res   = await fetch('/api/instagram?action=my-auth-url', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else if (igReconnectSlug) {
+        navigate(`/admin/creators/${igReconnectSlug}`);
+      } else {
+        navigate('/admin/creators');
+      }
+    } catch {
+      // fallback: send them to creator settings list
+      if (igReconnectSlug) navigate(`/admin/creators/${igReconnectSlug}`);
+      else navigate('/admin/creators');
+    } finally {
+      setReconnecting(false);
     }
   }
 
@@ -545,20 +579,32 @@ export default function CreatorLeadDetailPage() {
             {/* Right: Instagram verification block */}
             <div>
               <div style={{ border: '1px solid #E8E3DA', borderRadius: '10px', padding: '16px 18px', background: '#FAFAF8' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: igTokenExpired ? '10px' : '14px' }}>
                   <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Instagram size={13} color="#E1306C" /> Instagram
-                    {isIgVerified && (
+                    {isIgVerified && !igTokenExpired && (
                       <span style={{ fontSize: '9.5px', fontWeight: '700', letterSpacing: '0.4px', textTransform: 'uppercase', color: '#1B6B65', background: '#EFF6F5', padding: '2px 6px', borderRadius: '8px' }}>Verified</span>
+                    )}
+                    {igTokenExpired && (
+                      <span style={{ fontSize: '9.5px', fontWeight: '700', letterSpacing: '0.4px', textTransform: 'uppercase', color: '#C0392B', background: '#FDECEA', padding: '2px 6px', borderRadius: '8px' }}>Token Expired</span>
                     )}
                   </h3>
                   <div style={{ display: 'flex', gap: '6px' }}>
-                    <button onClick={handleRefreshInstagram} disabled={refreshingIg}
-                      title="Re-fetch latest data from Instagram via Meta API"
-                      style={{ ...S.btnSecondary, fontSize: '11.5px', padding: '5px 10px', color: refreshingIg ? '#B5AA99' : '#1B6B65' }}>
-                      <RefreshCw size={11} style={{ animation: refreshingIg ? 'spin 1s linear infinite' : 'none' }} />
-                      {refreshingIg ? 'Refreshing…' : 'Refresh'}
-                    </button>
+                    {!igTokenExpired && (
+                      <button onClick={handleRefreshInstagram} disabled={refreshingIg}
+                        title="Re-fetch latest data from Instagram via Meta API"
+                        style={{ ...S.btnSecondary, fontSize: '11.5px', padding: '5px 10px', color: refreshingIg ? '#B5AA99' : '#1B6B65' }}>
+                        <RefreshCw size={11} style={{ animation: refreshingIg ? 'spin 1s linear infinite' : 'none' }} />
+                        {refreshingIg ? 'Refreshing…' : 'Refresh'}
+                      </button>
+                    )}
+                    {igTokenExpired && (
+                      <button onClick={handleReconnectMeta} disabled={reconnecting}
+                        style={{ ...S.btnSecondary, fontSize: '11.5px', padding: '5px 10px', color: reconnecting ? '#B5AA99' : '#C9A96E', borderColor: '#E8D9B8' }}>
+                        <RefreshCw size={11} />
+                        {reconnecting ? 'Redirecting…' : 'Reconnect Meta'}
+                      </button>
+                    )}
                     {instagramUrl && (
                       <a href={instagramUrl} target="_blank" rel="noopener noreferrer"
                         style={{ ...S.btnSecondary, textDecoration: 'none', fontSize: '11.5px', padding: '5px 10px', color: '#E1306C', borderColor: '#F5C6C0' }}>
@@ -568,7 +614,26 @@ export default function CreatorLeadDetailPage() {
                   </div>
                 </div>
 
-                {igRefreshError && (
+                {igTokenExpired && (
+                  <div style={{ background: '#FBF8F1', border: '1px solid #E8D9B8', borderRadius: '6px', padding: '10px 12px', marginBottom: '12px' }}>
+                    <p style={{ margin: 0, fontSize: '12.5px', fontWeight: '600', color: '#7A5C1E' }}>Meta connection expired</p>
+                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#7A5C1E', lineHeight: '1.5' }}>
+                      Instagram enrichment is unavailable until you reconnect. Lead data and manual edits are safe.
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                      <button onClick={handleReconnectMeta} disabled={reconnecting}
+                        style={{ padding: '5px 12px', borderRadius: '5px', border: 'none', cursor: reconnecting ? 'wait' : 'pointer', fontSize: '12px', fontWeight: '600', background: '#C9A96E', color: 'white', display: 'inline-flex', alignItems: 'center', gap: '5px', opacity: reconnecting ? 0.7 : 1 }}>
+                        <RefreshCw size={10} /> {reconnecting ? 'Redirecting…' : 'Reconnect Instagram'}
+                      </button>
+                      <button onClick={() => { setIgTokenExpired(false); setIgRefreshError(null); }}
+                        style={{ padding: '5px 12px', borderRadius: '5px', border: '1px solid #E8D9B8', cursor: 'pointer', fontSize: '12px', background: 'white', color: '#7A5C1E' }}>
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {!igTokenExpired && igRefreshError && (
                   <div style={{ background: '#FDECEA', border: '1px solid #F5C6C0', borderRadius: '6px', padding: '8px 12px', marginBottom: '12px', fontSize: '12px', color: '#C0392B' }}>
                     {igRefreshError}
                     <button onClick={() => setIgRefreshError(null)} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#C0392B', padding: 0 }}>
