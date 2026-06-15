@@ -563,7 +563,7 @@ export default function CreatorCRMPage() {
                       <span style={{ fontSize: '11px', color: '#4A433A', textTransform: 'capitalize' }}>{lead.platform}</span>
                     </td>
                     <td style={{ padding: '10px 14px', verticalAlign: 'middle', fontSize: '12px', color: '#1C1A16', fontWeight: '500' }}>
-                      {fmtFollowers(lead.followerCount)}
+                      {fmtFollowers(lead.followersCount)}
                     </td>
                     <td style={{ padding: '10px 14px', verticalAlign: 'middle', fontSize: '12px', color: '#4A433A' }}>
                       {lead.engagementRate != null ? `${Number(lead.engagementRate).toFixed(1)}%` : '—'}

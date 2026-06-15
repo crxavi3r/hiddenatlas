@@ -2078,21 +2078,32 @@ async function crmRefreshInstagram(pool, body, ctx) {
   });
 
   if (!v.verified) {
-    const isServerTokenExpired = v.metaCode === 190 || v.metaCode === 102 || v.metaCode === 467;
+    const isServerTokenExpired = v.errorCategory === 'token';
+    const isProfileError       = v.errorCategory === 'profile_not_found';
+
     console.warn('[MetaDiscovery] Business Discovery failed:', {
+      usernameToDiscover:  lead.username,
       igBusinessAccountId: conn.accountId,
       tokenSource:         'env',
-      metaCode:            v.metaCode ?? null,
+      metaErrorCode:       v.metaCode        ?? null,
+      metaErrorSubcode:    v.metaSubcode      ?? null,
+      metaErrorType:       v.metaType         ?? null,
+      metaErrorMessage:    v.metaRawMessage   ?? null,
+      errorCategory:       v.errorCategory    ?? null,
       isServerTokenExpired,
-      usernameToDiscover:  lead.username,
+      isProfileError,
     });
     return {
-      refreshed: false,
-      error: v.error,
-      metaCode: v.metaCode || null,
-      isTokenExpired: isServerTokenExpired,
+      refreshed:           false,
+      error:               v.error,
+      errorCategory:       v.errorCategory    || null,
+      metaCode:            v.metaCode         || null,
+      metaSubcode:         v.metaSubcode       || null,
+      metaType:            v.metaType          || null,
+      isTokenExpired:      isServerTokenExpired,
       isServerTokenExpired,
-      reconnectSlug: null,  // server token — admin must update env var, not run creator OAuth
+      isProfileError,
+      reconnectSlug:       null,
     };
   }
 

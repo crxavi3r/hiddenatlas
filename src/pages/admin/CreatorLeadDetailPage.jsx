@@ -168,6 +168,7 @@ export default function CreatorLeadDetailPage() {
   const [refreshingIg, setRefreshingIg]     = useState(false);
   const [igRefreshError, setIgRefreshError] = useState(null);
   const [igTokenExpired, setIgTokenExpired] = useState(false);
+  const [igProfileError, setIgProfileError] = useState(false);
   const [igReconnectSlug, setIgReconnectSlug] = useState(null);
   const [reconnecting, setReconnecting]     = useState(false);
   const [avatarModal, setAvatarModal] = useState(null);
@@ -288,6 +289,7 @@ export default function CreatorLeadDetailPage() {
   async function handleRefreshInstagram() {
     setRefreshingIg(true);
     setIgRefreshError(null);
+    setIgProfileError(false);
     try {
       const result = await crmCall(getToken, 'leads.refreshInstagram', { id });
       if (result.configError) {
@@ -296,7 +298,14 @@ export default function CreatorLeadDetailPage() {
       }
       if (result.isTokenExpired || result.isServerTokenExpired) {
         setIgTokenExpired(true);
-        setIgReconnectSlug(null);  // server token — no creator OAuth reconnect
+        setIgProfileError(false);
+        setIgReconnectSlug(null);
+        setIgRefreshError(null);
+        return;
+      }
+      if (result.isProfileError) {
+        setIgProfileError(true);
+        setIgTokenExpired(false);
         setIgRefreshError(null);
         return;
       }
@@ -305,6 +314,7 @@ export default function CreatorLeadDetailPage() {
         return;
       }
       setIgTokenExpired(false);
+      setIgProfileError(false);
       load();
     } catch (e) {
       setIgRefreshError(e.message);
@@ -579,18 +589,21 @@ export default function CreatorLeadDetailPage() {
             {/* Right: Instagram verification block */}
             <div>
               <div style={{ border: '1px solid #E8E3DA', borderRadius: '10px', padding: '16px 18px', background: '#FAFAF8' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: igTokenExpired ? '10px' : '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: (igTokenExpired || igProfileError) ? '10px' : '14px' }}>
                   <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#1C1A16', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Instagram size={13} color="#E1306C" /> Instagram
-                    {isIgVerified && !igTokenExpired && (
+                    {isIgVerified && !igTokenExpired && !igProfileError && (
                       <span style={{ fontSize: '9.5px', fontWeight: '700', letterSpacing: '0.4px', textTransform: 'uppercase', color: '#1B6B65', background: '#EFF6F5', padding: '2px 6px', borderRadius: '8px' }}>Verified</span>
                     )}
                     {igTokenExpired && (
-                      <span style={{ fontSize: '9.5px', fontWeight: '700', letterSpacing: '0.4px', textTransform: 'uppercase', color: '#C0392B', background: '#FDECEA', padding: '2px 6px', borderRadius: '8px' }}>Token Expired</span>
+                      <span style={{ fontSize: '9.5px', fontWeight: '700', letterSpacing: '0.4px', textTransform: 'uppercase', color: '#C0392B', background: '#FDECEA', padding: '2px 6px', borderRadius: '8px' }}>OAuth Error</span>
+                    )}
+                    {igProfileError && (
+                      <span style={{ fontSize: '9.5px', fontWeight: '700', letterSpacing: '0.4px', textTransform: 'uppercase', color: '#7A5C1E', background: '#FBF8F1', padding: '2px 6px', borderRadius: '8px' }}>Not Eligible</span>
                     )}
                   </h3>
                   <div style={{ display: 'flex', gap: '6px' }}>
-                    {!igTokenExpired && (
+                    {!igTokenExpired && !igProfileError && (
                       <button onClick={handleRefreshInstagram} disabled={refreshingIg}
                         title="Re-fetch latest data from Instagram via Meta API"
                         style={{ ...S.btnSecondary, fontSize: '11.5px', padding: '5px 10px', color: refreshingIg ? '#B5AA99' : '#1B6B65' }}>
@@ -609,13 +622,15 @@ export default function CreatorLeadDetailPage() {
 
                 {igTokenExpired && (
                   <div style={{ background: '#FBF8F1', border: '1px solid #E8D9B8', borderRadius: '6px', padding: '10px 12px', marginBottom: '12px' }}>
-                    <p style={{ margin: 0, fontSize: '12.5px', fontWeight: '600', color: '#7A5C1E' }}>Server Meta token expired or invalid</p>
+                    <p style={{ margin: 0, fontSize: '12.5px', fontWeight: '600', color: '#7A5C1E' }}>Meta OAuth error (code 190)</p>
                     <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#7A5C1E', lineHeight: '1.5' }}>
-                      Lead data and manual edits are safe. Check{' '}
+                      This can mean the server token is expired, OR this specific account is not accessible via Business Discovery.
+                      If other accounts enrich successfully, the token is likely fine — this profile may be private or not a Business/Creator account.
+                      If all enrichments fail, check{' '}
                       <code style={{ background: '#F4EDD8', padding: '1px 4px', borderRadius: '3px', fontSize: '11px' }}>META_PAGE_ACCESS_TOKEN</code>{' '}
                       and{' '}
                       <code style={{ background: '#F4EDD8', padding: '1px 4px', borderRadius: '3px', fontSize: '11px' }}>META_INSTAGRAM_ACCOUNT_ID</code>{' '}
-                      in Vercel, then redeploy.
+                      in Vercel, then redeploy. Lead data and manual edits are safe.
                     </p>
                     <div style={{ marginTop: '8px' }}>
                       <button onClick={() => { setIgTokenExpired(false); setIgRefreshError(null); }}
@@ -626,7 +641,22 @@ export default function CreatorLeadDetailPage() {
                   </div>
                 )}
 
-                {!igTokenExpired && igRefreshError && (
+                {!igTokenExpired && igProfileError && (
+                  <div style={{ background: '#FBF8F1', border: '1px solid #DDD0BC', borderRadius: '6px', padding: '10px 12px', marginBottom: '12px' }}>
+                    <p style={{ margin: 0, fontSize: '12.5px', fontWeight: '600', color: '#6B5B3E' }}>Profile not available for enrichment</p>
+                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6B5B3E', lineHeight: '1.5' }}>
+                      Instagram profile could not be enriched. The account may not be a Business or Creator account, may be private, or may not be available via Meta Business Discovery. Lead data and manual edits are safe.
+                    </p>
+                    <div style={{ marginTop: '8px' }}>
+                      <button onClick={() => setIgProfileError(false)}
+                        style={{ padding: '5px 12px', borderRadius: '5px', border: '1px solid #DDD0BC', cursor: 'pointer', fontSize: '12px', background: 'white', color: '#6B5B3E' }}>
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {!igTokenExpired && !igProfileError && igRefreshError && (
                   <div style={{ background: '#FDECEA', border: '1px solid #F5C6C0', borderRadius: '6px', padding: '8px 12px', marginBottom: '12px', fontSize: '12px', color: '#C0392B' }}>
                     {igRefreshError}
                     <button onClick={() => setIgRefreshError(null)} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#C0392B', padding: 0 }}>

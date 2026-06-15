@@ -713,33 +713,60 @@ export async function verifyInstagramCreatorProfile(usernameRaw, opts = {}) {
 
     if (data.error) {
       const errCode    = data.error.code;
-      const errSubcode = data.error.error_subcode;
-      const errMsg     = data.error.message || 'Meta API error';
-      console.error('[Discovery] Meta API error:', { code: errCode, subcode: errSubcode, message: errMsg, cleanUsername });
+      const errSubcode = data.error.error_subcode ?? null;
+      const errType    = data.error.type           ?? null;
+      const errMsg     = data.error.message        || 'Meta API error';
+      console.error('[Discovery] Meta API error:', {
+        username:  cleanUsername,
+        code:      errCode,
+        subcode:   errSubcode,
+        type:      errType,
+        message:   errMsg,
+      });
 
       let userMsg;
+      let errorCategory;
       if (errCode === 190 || errCode === 102 || errCode === 467) {
-        userMsg = 'Meta token is invalid or expired';
+        userMsg       = 'Meta OAuth error — token may be invalid/expired, or this account is not accessible via Business Discovery';
+        errorCategory = 'token';
       } else if (errCode === 4 || errCode === 17 || errCode === 32 || errCode === 613) {
-        userMsg = 'Rate limit reached — wait a few minutes and try again';
-      } else if (errCode === 200 || errCode === 10 || errCode === 3 || (errCode >= 200 && errCode <= 299)) {
-        userMsg = 'Meta permission/token error — check token scopes';
-      } else if (errCode === 100) {
-        // subcode 33 = object does not exist; other = bad param or unsupported operation
-        userMsg = errSubcode === 33
+        userMsg       = 'Rate limit reached — wait a few minutes and try again';
+        errorCategory = 'rate_limit';
+      } else if (errCode === 10 || errCode === 3 || (errCode >= 200 && errCode <= 299)) {
+        userMsg       = 'Meta permission error — check token scopes (instagram_basic, pages_show_list, business_management)';
+        errorCategory = 'permission';
+      } else if (errCode === 100 || errCode === 803) {
+        const notFound = errCode === 803 || errSubcode === 33;
+        userMsg       = notFound
           ? 'Profile not found or not eligible for Business Discovery'
-          : 'Meta API error (code 100): possible bad parameter or unsupported account';
+          : `Meta API error (code ${errCode}${errSubcode ? `, subcode ${errSubcode}` : ''}): bad parameter or unsupported account type`;
+        errorCategory = notFound ? 'profile_not_found' : 'bad_request';
       } else {
-        userMsg = `Meta API error (code ${errCode}): ${errMsg}`;
+        userMsg       = `Meta API error (code ${errCode}): ${errMsg}`;
+        errorCategory = 'unknown';
       }
-      return { verified: false, metricsSource: 'not_available', error: userMsg, metaCode: errCode };
+      return {
+        verified:       false,
+        metricsSource:  'not_available',
+        error:          userMsg,
+        errorCategory,
+        metaCode:       errCode,
+        metaSubcode:    errSubcode,
+        metaType:       errType,
+        metaRawMessage: errMsg,
+      };
     }
 
     const profile = data.business_discovery;
     console.log('[Discovery] business_discovery present:', !!profile, profile ? { username: profile.username, followers: profile.followers_count } : null);
 
     if (!profile) {
-      return { verified: false, metricsSource: 'not_available', error: 'Profile not found or not eligible for Business Discovery' };
+      return {
+        verified:      false,
+        metricsSource: 'not_available',
+        error:         'Profile not found or not eligible for Business Discovery',
+        errorCategory: 'profile_not_found',
+      };
     }
 
     const igUsername = profile.username || cleanUsername;
