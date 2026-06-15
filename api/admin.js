@@ -1975,37 +1975,59 @@ async function crmRefreshInstagram(pool, body, ctx) {
   if (!lead.username) throw Object.assign(new Error('Lead has no username'), { status: 400 });
 
   const { verifyInstagramCreatorProfile } = await import('./_lib/creatorDiscoveryProviders.js');
-  const { getMetaAccessTokenForDiscovery } = await import('./_lib/instagramToken.js');
+  const { getMetaDiscoveryConnection }    = await import('./_lib/instagramToken.js');
 
-  const tokenResult = await getMetaAccessTokenForDiscovery(pool, ctx);
+  // Business Discovery uses the server-level Meta connection (env vars), NOT the
+  // per-creator publishing token. The creator token is for their own account; the
+  // discovery token is for the HiddenAtlas business account (META_INSTAGRAM_ACCOUNT_ID).
+  const conn = getMetaDiscoveryConnection();
 
-  if (tokenResult.status === 'CREATOR_TOKEN_EXPIRED') {
+  console.info('[MetaDiscovery] CRM refresh request:', {
+    igBusinessAccountId: conn.accountId ?? null,
+    tokenSource:         conn.status === 'OK' ? 'env' : 'none',
+    tokenTail:           conn.tokenTail ?? null,
+    usernameToDiscover:  lead.username,
+    leadId:              id,
+  });
+
+  if (conn.status === 'NOT_CONFIGURED') {
     return {
-      refreshed: false, isTokenExpired: true, metaCode: 190,
-      error: 'Instagram token has expired. Reconnect Instagram to re-enable enrichment.',
-      reconnectSlug: tokenResult.creatorSlug,
+      refreshed: false, configError: true, missing: conn.missing,
+      error: `Meta Discovery not configured. Set: ${conn.missing.join(', ')}`,
     };
-  }
-  if (tokenResult.status === 'ENV_NOT_CONFIGURED') {
-    return { refreshed: false, configError: true, missing: tokenResult.missing, error: 'Meta provider not configured on this server.' };
   }
 
   const v = await verifyInstagramCreatorProfile(lead.username, {
-    token:     tokenResult.token,
-    accountId: tokenResult.accountId,
+    token:     conn.token,
+    accountId: conn.accountId,
   });
 
   if (!v.verified) {
-    const isTokenExpired = v.metaCode === 190 || v.metaCode === 102 || v.metaCode === 467;
+    const isServerTokenExpired = v.metaCode === 190 || v.metaCode === 102 || v.metaCode === 467;
+    console.warn('[MetaDiscovery] Business Discovery failed:', {
+      igBusinessAccountId: conn.accountId,
+      tokenSource:         'env',
+      metaCode:            v.metaCode ?? null,
+      isServerTokenExpired,
+      usernameToDiscover:  lead.username,
+    });
     return {
       refreshed: false,
       error: v.error,
       metaCode: v.metaCode || null,
-      isTokenExpired,
-      // Only provide reconnect slug when using a creator token — env var tokens require admin action
-      reconnectSlug: (isTokenExpired && tokenResult.source === 'creator') ? tokenResult.creatorSlug : null,
+      isTokenExpired: isServerTokenExpired,
+      isServerTokenExpired,
+      reconnectSlug: null,  // server token — admin must update env var, not run creator OAuth
     };
   }
+
+  console.info('[MetaDiscovery] Business Discovery success:', {
+    igBusinessAccountId: conn.accountId,
+    tokenSource:         'env',
+    usernameToDiscover:  lead.username,
+    followersCount:      v.followersCount,
+    postsCount:          v.postsCount,
+  });
 
   const now = new Date().toISOString();
   const currentAiAnalysis = (typeof lead.aiAnalysis === 'object' && lead.aiAnalysis) ? lead.aiAnalysis : {};
@@ -2214,25 +2236,26 @@ async function crmImportInstagramLead(pool, body, ctx) {
   const createdById = ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null;
 
   // ── Instagram enrichment — best effort, never blocks lead creation ────────
-  const { getMetaAccessTokenForDiscovery: _getDiscoveryToken } = await import('./_lib/instagramToken.js');
+  const { getMetaDiscoveryConnection: _getConn } = await import('./_lib/instagramToken.js');
 
-  const importTokenResult = await _getDiscoveryToken(pool, ctx);
+  // Discovery uses the server-level env var connection, not the creator's publishing token.
+  const importConn = _getConn();
 
   let enrichOpts     = {};
   let skipEnrichment = false;
 
-  if (importTokenResult.status === 'CREATOR_TOKEN_EXPIRED') {
+  if (importConn.status === 'NOT_CONFIGURED') {
     skipEnrichment = true;
-    console.warn('[CreatorLeadImport] Creator token expired — skipping Meta enrichment:', {
-      username, creatorId: ctx.creatorId,
-    });
-  } else if (importTokenResult.status === 'ENV_NOT_CONFIGURED') {
-    skipEnrichment = true;
-    console.warn('[CreatorLeadImport] Meta env vars not configured — skipping enrichment:', {
-      username, missing: importTokenResult.missing,
+    console.warn('[CreatorLeadImport] Meta Discovery not configured — skipping enrichment:', {
+      username, missing: importConn.missing,
     });
   } else {
-    enrichOpts = { token: importTokenResult.token, accountId: importTokenResult.accountId };
+    enrichOpts = { token: importConn.token, accountId: importConn.accountId };
+    console.info('[CreatorLeadImport] Discovery connection ready:', {
+      igBusinessAccountId: importConn.accountId,
+      tokenTail: importConn.tokenTail,
+      usernameToDiscover: username,
+    });
   }
 
   let v = null;
@@ -2252,13 +2275,8 @@ async function crmImportInstagramLead(pool, body, ctx) {
 
   if (!dataFetched) {
     if (skipEnrichment) {
-      if (importTokenResult.status === 'ENV_NOT_CONFIGURED') {
-        warningCode = 'META_NOT_CONFIGURED';
-        warning = 'Lead created. Instagram enrichment is not configured on this server.';
-      } else {
-        warningCode = 'META_TOKEN_EXPIRED';
-        warning = 'Lead created, but Instagram enrichment was skipped because your Meta connection has expired. Reconnect Instagram to enable automatic enrichment.';
-      }
+      warningCode = 'META_NOT_CONFIGURED';
+      warning = 'Lead created. Instagram enrichment is not configured on this server (META_INSTAGRAM_ACCOUNT_ID / META_GRAPH_ACCESS_TOKEN missing).';
     } else {
       const metaCode = v?.metaCode ?? null;
       if (!v) {
@@ -2340,10 +2358,7 @@ async function crmImportInstagramLead(pool, body, ctx) {
     console.warn('[CreatorLeadImport] activity log failed (non-blocking):', actErr.message);
   }
 
-  return {
-    lead, duplicate: false, dataFetched, warning, warningCode,
-    reconnectSlug: importTokenResult?.creatorSlug ?? null,
-  };
+  return { lead, duplicate: false, dataFetched, warning, warningCode };
 }
 
 async function crmListTemplates(pool, platform, language) {

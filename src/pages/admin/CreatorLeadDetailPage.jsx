@@ -294,9 +294,9 @@ export default function CreatorLeadDetailPage() {
         setIgRefreshError('Instagram enrichment is not configured on this server. Ask an admin to add META_GRAPH_ACCESS_TOKEN and META_INSTAGRAM_ACCOUNT_ID to the environment.');
         return;
       }
-      if (result.isTokenExpired) {
+      if (result.isTokenExpired || result.isServerTokenExpired) {
         setIgTokenExpired(true);
-        setIgReconnectSlug(result.reconnectSlug ?? null);
+        setIgReconnectSlug(null);  // server token — no creator OAuth reconnect
         setIgRefreshError(null);
         return;
       }
@@ -598,13 +598,6 @@ export default function CreatorLeadDetailPage() {
                         {refreshingIg ? 'Refreshing…' : 'Refresh'}
                       </button>
                     )}
-                    {igTokenExpired && (
-                      <button onClick={handleReconnectMeta} disabled={reconnecting}
-                        style={{ ...S.btnSecondary, fontSize: '11.5px', padding: '5px 10px', color: reconnecting ? '#B5AA99' : '#C9A96E', borderColor: '#E8D9B8' }}>
-                        <RefreshCw size={11} />
-                        {reconnecting ? 'Redirecting…' : 'Reconnect Meta'}
-                      </button>
-                    )}
                     {instagramUrl && (
                       <a href={instagramUrl} target="_blank" rel="noopener noreferrer"
                         style={{ ...S.btnSecondary, textDecoration: 'none', fontSize: '11.5px', padding: '5px 10px', color: '#E1306C', borderColor: '#F5C6C0' }}>
@@ -616,15 +609,12 @@ export default function CreatorLeadDetailPage() {
 
                 {igTokenExpired && (
                   <div style={{ background: '#FBF8F1', border: '1px solid #E8D9B8', borderRadius: '6px', padding: '10px 12px', marginBottom: '12px' }}>
-                    <p style={{ margin: 0, fontSize: '12.5px', fontWeight: '600', color: '#7A5C1E' }}>Meta connection expired</p>
+                    <p style={{ margin: 0, fontSize: '12.5px', fontWeight: '600', color: '#7A5C1E' }}>Server Meta token expired</p>
                     <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#7A5C1E', lineHeight: '1.5' }}>
-                      Instagram enrichment is unavailable until you reconnect. Lead data and manual edits are safe.
+                      The server-level Meta API token has expired. Lead data and manual edits are safe.
+                      Admin must renew <code style={{ background: '#F4EDD8', padding: '1px 4px', borderRadius: '3px', fontSize: '11px' }}>META_GRAPH_ACCESS_TOKEN</code> in Vercel environment variables.
                     </p>
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                      <button onClick={handleReconnectMeta} disabled={reconnecting}
-                        style={{ padding: '5px 12px', borderRadius: '5px', border: 'none', cursor: reconnecting ? 'wait' : 'pointer', fontSize: '12px', fontWeight: '600', background: '#C9A96E', color: 'white', display: 'inline-flex', alignItems: 'center', gap: '5px', opacity: reconnecting ? 0.7 : 1 }}>
-                        <RefreshCw size={10} /> {reconnecting ? 'Redirecting…' : 'Reconnect Instagram'}
-                      </button>
+                    <div style={{ marginTop: '8px' }}>
                       <button onClick={() => { setIgTokenExpired(false); setIgRefreshError(null); }}
                         style={{ padding: '5px 12px', borderRadius: '5px', border: '1px solid #E8D9B8', cursor: 'pointer', fontSize: '12px', background: 'white', color: '#7A5C1E' }}>
                         Dismiss
