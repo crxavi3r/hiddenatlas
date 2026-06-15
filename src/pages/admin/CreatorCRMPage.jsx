@@ -76,11 +76,6 @@ const PLATFORMS = [
   { value: 'youtube',   label: 'YouTube' },
 ];
 
-const PRIORITIES = [
-  { value: 'high',   label: 'High' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'low',    label: 'Low' },
-];
 
 function AddLeadModal({ getToken, onClose, onCreated, navigate }) {
   const [tab, setTab]         = useState('manual');
@@ -92,7 +87,7 @@ function AddLeadModal({ getToken, onClose, onCreated, navigate }) {
   const emptyForm = {
     platform: 'instagram', username: '', displayName: '', profileUrl: '',
     country: '', email: '', followerCount: '', engagementRate: '',
-    bio: '', priority: 'medium', status: 'identified', score: '', notes: '',
+    bio: '', status: 'identified', score: '', notes: '',
   };
   const [form, setForm] = useState(emptyForm);
   const [igUrl, setIgUrl] = useState('');
@@ -111,19 +106,18 @@ function AddLeadModal({ getToken, onClose, onCreated, navigate }) {
     setLoading(true);
     try {
       const data = await crmCall(getToken, 'leads.create', {
-        platform:      form.platform,
-        username:      form.username,
-        displayName:   form.displayName,
-        profileUrl:    form.profileUrl,
-        email:         form.email,
-        country:       form.country,
-        bio:           form.bio,
-        followerCount: form.followerCount,
+        platform:       form.platform,
+        username:       form.username,
+        displayName:    form.displayName,
+        profileUrl:     form.profileUrl,
+        email:          form.email,
+        country:        form.country,
+        bio:            form.bio,
+        followerCount:  form.followerCount,
         engagementRate: form.engagementRate,
-        score:         form.score,
-        priority:      form.priority,
-        status:        form.status,
-        notes:         form.notes,
+        score:          form.score,
+        status:         form.status,
+        notes:          form.notes,
       });
       if (data.duplicate) {
         setDupId(data.existingId);
@@ -132,12 +126,7 @@ function AddLeadModal({ getToken, onClose, onCreated, navigate }) {
         onCreated();
       }
     } catch (err) {
-      const msg = err.message || '';
-      setError(
-        msg.startsWith('DB schema') || msg.startsWith('Internal error')
-          ? 'Could not create lead. Please try again or check if this creator already exists.'
-          : msg
-      );
+      setError(err.message || 'Could not create lead. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -156,12 +145,7 @@ function AddLeadModal({ getToken, onClose, onCreated, navigate }) {
         onCreated();
       }
     } catch (err) {
-      const msg = err.message || '';
-      setError(
-        msg.startsWith('DB schema') || msg.startsWith('Internal error')
-          ? 'Could not create lead. Please try again or check if this creator already exists.'
-          : msg
-      );
+      setError(err.message || 'Could not create lead. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -321,17 +305,9 @@ function AddLeadModal({ getToken, onClose, onCreated, navigate }) {
               <textarea value={form.bio} onChange={e => setField('bio', e.target.value)} rows={2} placeholder="Travel creator based in Portugal..." style={{ ...inp, resize: 'vertical', fontFamily: 'inherit' }} />
             </div>
 
-            <div style={grid2}>
-              <div>
-                <label style={label}>Priority</label>
-                <select value={form.priority} onChange={e => setField('priority', e.target.value)} style={sel}>
-                  {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={label}>Score <span style={{ color: '#B5AA99', fontWeight: '400' }}>(0–10, optional)</span></label>
-                <input type="number" value={form.score} onChange={e => setField('score', e.target.value)} placeholder="—" step="0.1" min="0" max="10" style={inp} />
-              </div>
+            <div style={row}>
+              <label style={label}>Score <span style={{ color: '#B5AA99', fontWeight: '400' }}>(0–10, optional)</span></label>
+              <input type="number" value={form.score} onChange={e => setField('score', e.target.value)} placeholder="—" step="0.1" min="0" max="10" style={{ ...inp, maxWidth: '200px' }} />
             </div>
 
             <div style={{ ...row, marginBottom: '20px' }}>

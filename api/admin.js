@@ -141,13 +141,19 @@ async function _handler(req, res) {
         console.error(`[api/admin] CRM action=${crmAction} FAILED stage=${err.stage ?? 'unknown'}:`, err.message);
         if (err.stack) console.error(err.stack);
         const isClient = err.status != null && err.status < 500;
+        // pg error codes: 22P02 = invalid_text_representation, 23502 = not_null_violation,
+        // 23503 = foreign_key_violation, 23505 = unique_violation, 42703 = undefined_column
+        const isPgError = typeof err.code === 'string' && /^[0-9]/.test(err.code);
         const isTransparent = isClient
           || err.message?.includes('does not exist')
           || err.code === 'PROVIDER_ERROR'
           || err.code === 'PROVIDER_NOT_CONFIGURED'
-          || err.code === 'SCORING_ERROR';
+          || err.code === 'SCORING_ERROR'
+          || isPgError;
         const userMsg = isTransparent
-          ? (err.message?.includes('does not exist') ? `DB schema error: ${err.message}` : err.message)
+          ? (err.message?.includes('does not exist')
+              ? `DB schema error: ${err.message}`
+              : isPgError ? `DB error (${err.code}): ${err.message}` : err.message)
           : 'Internal error — see server logs';
         return res.status(err.status ?? 500).json({
           success: false,
@@ -2042,7 +2048,6 @@ async function crmCreateLead(pool, body, ctx) {
     followerCount,
     engagementRate,
     score,
-    priority = 'medium',
     status = 'identified',
     notes = '',
   } = body;
@@ -2097,32 +2102,43 @@ async function crmCreateLead(pool, body, ctx) {
   const engFloat     = engagementRate != null && engagementRate !== '' ? parseFloat(engagementRate) || null : null;
   const scoreFloat   = score != null && score !== '' ? parseFloat(score) || null : null;
 
-  const { rows: inserted } = await pool.query(`
-    INSERT INTO "CreatorLead" (
-      id, platform, username, "displayName", "profileUrl",
-      email, bio, "websiteUrl", country,
-      "followersCount", "engagementRate", score,
-      priority, status, source,
-      niches, destinations, hashtags, mentions, "routeIdeas",
-      "createdById", "createdAt", "updatedAt"
-    ) VALUES (
-      gen_random_uuid(), $1, $2, $3, $4,
-      $5, $6, $7, $8,
-      $9, $10, $11,
-      $12, $13, 'manual',
-      '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
-      $14, NOW(), NOW()
-    )
-    RETURNING *
-  `, [
-    platform, username, displayName, profileUrl,
-    email.trim() || null, bio.trim() || null, websiteUrl.trim() || null, country.trim() || null,
-    followersInt, engFloat, scoreFloat,
-    priority, status,
-    createdById,
-  ]);
-
-  const lead = inserted[0];
+  // Explicit whitelist — only known real DB columns; priority = 0 (integer default)
+  let lead;
+  try {
+    const { rows: inserted } = await pool.query(`
+      INSERT INTO "CreatorLead" (
+        id, platform, username, "displayName", "profileUrl",
+        email, bio, "websiteUrl", country,
+        "followersCount", "engagementRate", score,
+        status, priority, source,
+        niches, destinations, hashtags, mentions, "routeIdeas",
+        "createdById", "createdAt", "updatedAt"
+      ) VALUES (
+        gen_random_uuid(), $1, $2, $3, $4,
+        $5, $6, $7, $8,
+        $9, $10, $11,
+        $12, 0, 'manual',
+        '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
+        $13, NOW(), NOW()
+      )
+      RETURNING *
+    `, [
+      platform, username, displayName, profileUrl,
+      email.trim() || null, bio.trim() || null, websiteUrl.trim() || null, country.trim() || null,
+      followersInt, engFloat, scoreFloat,
+      status,
+      createdById,
+    ]);
+    lead = inserted[0];
+  } catch (dbErr) {
+    console.error('[crmCreateLead] INSERT failed:', {
+      username, platform,
+      error: dbErr.message,
+      pgCode: dbErr.code,
+      detail: dbErr.detail,
+    });
+    throw dbErr;
+  }
 
   const actNote = notes.trim()
     ? `Added manually. Notes: ${notes.trim()}`
@@ -2213,43 +2229,52 @@ async function crmImportInstagramLead(pool, body, ctx) {
   }
   // ─────────────────────────────────────────────────────────────────────────
 
-  const aiAnalysisJson = JSON.stringify(dataFetched ? {
-    source: 'instagram_url_import',
-    metaBusinessDiscovery: v.rawMetaProfile || null,
-    importedAt: new Date().toISOString(),
-  } : {});
+  // Explicit whitelist — only known real DB columns; priority = 0 (integer default)
+  const aiAnalysis = dataFetched
+    ? { source: 'instagram_url_import', metaBusinessDiscovery: v.rawMetaProfile || null }
+    : { enrichmentWarning: warningCode ?? 'META_ENRICHMENT_FAILED' };
 
-  const { rows: inserted } = await pool.query(`
-    INSERT INTO "CreatorLead" (
-      id, platform, username, "displayName", "profileUrl",
-      "avatarUrl", bio, "websiteUrl",
-      "followersCount", "postsCount",
-      "aiAnalysis", source, status, priority,
-      niches, destinations, hashtags, mentions, "routeIdeas",
-      "createdById", "createdAt", "updatedAt"
-    ) VALUES (
-      gen_random_uuid(), 'instagram', $1, $2, $3,
-      $4, $5, $6,
-      $7, $8,
-      $9::jsonb, 'instagram_url', 'identified', 'medium',
-      '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
-      $10, NOW(), NOW()
-    )
-    RETURNING *
-  `, [
-    username,
-    dataFetched ? (v.displayName || null) : null,
-    profileUrl,
-    dataFetched ? (v.avatarUrl || null) : null,
-    dataFetched ? (v.bio || null) : null,
-    dataFetched ? (v.website ?? null) : null,
-    dataFetched ? (v.followersCount ?? null) : null,
-    dataFetched ? (v.postsCount ?? null) : null,
-    aiAnalysisJson,
-    createdById,
-  ]);
-
-  const lead = inserted[0];
+  let lead;
+  try {
+    const { rows: inserted } = await pool.query(`
+      INSERT INTO "CreatorLead" (
+        id, platform, username, "displayName", "profileUrl",
+        "avatarUrl", bio, "websiteUrl",
+        "followersCount", "postsCount",
+        "aiAnalysis", source, status, priority,
+        niches, destinations, hashtags, mentions, "routeIdeas",
+        "createdById", "createdAt", "updatedAt"
+      ) VALUES (
+        gen_random_uuid(), 'instagram', $1, $2, $3,
+        $4, $5, $6,
+        $7, $8,
+        $9::jsonb, 'instagram_url', 'identified', 0,
+        '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
+        $10, NOW(), NOW()
+      )
+      RETURNING *
+    `, [
+      username,
+      dataFetched ? (v.displayName || null) : null,
+      profileUrl,
+      dataFetched ? (v.avatarUrl || null) : null,
+      dataFetched ? (v.bio || null) : null,
+      dataFetched ? (v.website ?? null) : null,
+      dataFetched ? (v.followersCount ?? null) : null,
+      dataFetched ? (v.postsCount ?? null) : null,
+      JSON.stringify(aiAnalysis),
+      createdById,
+    ]);
+    lead = inserted[0];
+  } catch (dbErr) {
+    console.error('[CreatorLeadImport] INSERT failed:', {
+      username, profileUrl, dataFetched, warningCode,
+      error: dbErr.message,
+      pgCode: dbErr.code,
+      detail: dbErr.detail,
+    });
+    throw dbErr;
+  }
 
   const actNote = dataFetched
     ? `Added via Instagram URL import. @${username} — ${v.followersCount?.toLocaleString() ?? '?'} followers.`
