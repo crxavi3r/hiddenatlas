@@ -117,21 +117,26 @@ export function getMetaDiscoveryConnection() {
   const token     = process.env.META_GRAPH_ACCESS_TOKEN
                  || process.env.META_PAGE_ACCESS_TOKEN
                  || process.env.META_INSTAGRAM_ACCESS_TOKEN;
+
+  // Always log env var presence so missing values are visible in Vercel logs
+  console.info('[MetaDiscovery] Env var diagnostic:', {
+    'META_INSTAGRAM_ACCOUNT_ID exists': Boolean(accountId),
+    igBusinessAccountId:                accountId ?? '(not set)',
+    'META_GRAPH_ACCESS_TOKEN exists':   Boolean(process.env.META_GRAPH_ACCESS_TOKEN),
+    'META_PAGE_ACCESS_TOKEN exists':    Boolean(process.env.META_PAGE_ACCESS_TOKEN),
+    graphEndpoint:                      `graph.facebook.com/${version}`,
+    tokenTail:                          token ? token.slice(-4) : '(no token)',
+  });
+
   const missing = [];
   if (!accountId) missing.push('META_INSTAGRAM_ACCOUNT_ID');
   if (!token)     missing.push('META_GRAPH_ACCESS_TOKEN');
 
   if (missing.length) {
-    console.warn('[MetaDiscovery] Connection not configured:', { missing });
+    console.warn('[MetaDiscovery] Connection not configured — missing env vars:', { missing });
     return { status: 'NOT_CONFIGURED', missing };
   }
 
-  console.info('[MetaDiscovery] Connection ready:', {
-    igBusinessAccountId: accountId,
-    tokenSource: 'env',
-    tokenTail: token.slice(-4),
-    version,
-  });
   return { status: 'OK', token, accountId, version, tokenTail: token.slice(-4) };
 }
 

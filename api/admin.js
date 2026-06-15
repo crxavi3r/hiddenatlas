@@ -1986,6 +1986,7 @@ async function crmRefreshInstagram(pool, body, ctx) {
     igBusinessAccountId: conn.accountId ?? null,
     tokenSource:         conn.status === 'OK' ? 'env' : 'none',
     tokenTail:           conn.tokenTail ?? null,
+    graphEndpoint:       conn.status === 'OK' ? `graph.facebook.com/${conn.version}` : null,
     usernameToDiscover:  lead.username,
     leadId:              id,
   });
