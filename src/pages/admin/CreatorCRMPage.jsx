@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { Eye, Instagram, ChevronLeft, ChevronRight, Filter, X, Users, RefreshCw, Plus, UserPlus, Pencil } from 'lucide-react';
+import { Eye, Instagram, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Filter, X, Users, RefreshCw, Plus, UserPlus, Pencil } from 'lucide-react';
 import EditLeadModal from './EditLeadModal.jsx';
 
 const S = {
@@ -371,7 +371,7 @@ function AddLeadModal({ getToken, onClose, onCreated, navigate }) {
 export default function CreatorCRMPage() {
   const { getToken }     = useAuth();
   const navigate         = useNavigate();
-  const [searchParams]   = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [leads, setLeads]         = useState([]);
   const [total, setTotal]         = useState(0);
@@ -381,6 +381,9 @@ export default function CreatorCRMPage() {
   const [page, setPage]           = useState(1);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingLead, setEditingLead]   = useState(null);
+
+  const [sortBy, setSortBy]   = useState(searchParams.get('sort') || '');
+  const [sortDir, setSortDir] = useState(searchParams.get('direction') || '');
 
   const [selectedLeads, setSelectedLeads] = useState(new Set());
   const [toast, setToast]               = useState(null);
@@ -405,12 +408,38 @@ export default function CreatorCRMPage() {
 
   const setFilter = (k, v) => setFilters(f => ({ ...f, [k]: v }));
 
+  const SORTABLE_COLS = {
+    'Creator':      { key: 'creator',     defaultDir: 'asc'  },
+    'Followers':    { key: 'followers',   defaultDir: 'desc' },
+    'Engagement':   { key: 'engagement',  defaultDir: 'desc' },
+    'Country':      { key: 'country',     defaultDir: 'asc'  },
+    'Score':        { key: 'score',       defaultDir: 'desc' },
+    'Priority':     { key: 'priority',    defaultDir: 'desc' },
+    'Status':       { key: 'status',      defaultDir: 'asc'  },
+    'Last Contact': { key: 'lastContact', defaultDir: 'desc' },
+    'Follow-up':    { key: 'followUp',    defaultDir: 'asc'  },
+  };
+
+  function handleSort(colKey, defaultDir) {
+    const newDir = sortBy === colKey ? (sortDir === 'asc' ? 'desc' : 'asc') : defaultDir;
+    setSortBy(colKey);
+    setSortDir(newDir);
+    setPage(1);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('sort', colKey);
+      next.set('direction', newDir);
+      return next;
+    });
+  }
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const payload = { page: String(page) };
       Object.entries(filters).forEach(([k, v]) => { if (v) payload[k] = v; });
+      if (sortBy) { payload.sortBy = sortBy; payload.sortDir = sortDir || 'asc'; }
       const data = await crmCall(getToken, 'leads.list', payload);
       setLeads(data.leads ?? []);
       setTotal(data.total ?? 0);
@@ -420,7 +449,7 @@ export default function CreatorCRMPage() {
     } finally {
       setLoading(false);
     }
-  }, [getToken, filters, page]);
+  }, [getToken, filters, page, sortBy, sortDir]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -645,9 +674,21 @@ export default function CreatorCRMPage() {
                       style={{ cursor: 'pointer', width: '14px', height: '14px', accentColor: '#1B6B65' }}
                     />
                   </th>
-                  {['Creator','Platform','Followers','Engagement','Country','Score','Priority','Status','Last Contact','Follow-up','Actions'].map(h => (
-                    <th key={h} style={S.th}>{h}</th>
-                  ))}
+                  {['Creator','Platform','Followers','Engagement','Country','Score','Priority','Status','Last Contact','Follow-up','Actions'].map(h => {
+                    const sortInfo = SORTABLE_COLS[h];
+                    if (!sortInfo) return <th key={h} style={S.th}>{h}</th>;
+                    const isActive = sortBy === sortInfo.key;
+                    const SortIcon = isActive && sortDir === 'desc' ? ChevronDown : ChevronUp;
+                    return (
+                      <th key={h} style={{ ...S.th, cursor: 'pointer', userSelect: 'none' }}
+                        onClick={() => handleSort(sortInfo.key, sortInfo.defaultDir)}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          {h}
+                          <SortIcon size={10} style={{ opacity: isActive ? 1 : 0.3, color: isActive ? '#1B6B65' : 'inherit', flexShrink: 0 }} />
+                        </span>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>

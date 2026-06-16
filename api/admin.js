@@ -1944,6 +1944,7 @@ async function crmListLeads(pool, query) {
     status, country, language, platform, minScore, minFollowers,
     assignedTo, overdueOnly, hasBeenContacted, destination, niche,
     page = '1', q = '',
+    sortBy = '', sortDir = '',
   } = query;
 
   const conditions = [];
@@ -1977,21 +1978,50 @@ async function crmListLeads(pool, query) {
   const limit = 50;
   const offsetVal = (pageNum - 1) * limit;
 
+  // Whitelist of sortable columns → SQL expressions
+  const SORT_EXPRS = {
+    creator:     `COALESCE(l."displayName", l.username)`,
+    followers:   `l."followersCount"`,
+    engagement:  `l."engagementRate"`,
+    country:     `l.country`,
+    score:       `l.score`,
+    priority:    `l.priority`,
+    status:      `l.status`,
+    lastContact: `l."lastContactedAt"`,
+    followUp:    `l."nextFollowUpAt"`,
+  };
+  const NULLABLE_SORT_COLS = new Set(['followers', 'engagement', 'score', 'priority', 'lastContact', 'followUp']);
+
+  // Rejected/blocked/not_fit always go to the bottom (unless user sorts by status)
+  const statusWeightExpr = `CASE WHEN l.status IN ('rejected','blocked','not_fit') THEN 1 ELSE 0 END`;
+  const dir = sortDir === 'asc' ? 'ASC' : 'DESC';
+
+  let orderByClause;
+  if (sortBy && SORT_EXPRS[sortBy]) {
+    const colExpr = SORT_EXPRS[sortBy];
+    const nulls = NULLABLE_SORT_COLS.has(sortBy) ? 'NULLS LAST' : '';
+    if (sortBy === 'status') {
+      orderByClause = `${colExpr} ${dir}`;
+    } else {
+      orderByClause = `${statusWeightExpr} ASC, ${colExpr} ${dir} ${nulls}`;
+    }
+  } else {
+    orderByClause = `
+      ${statusWeightExpr} ASC,
+      l.priority DESC NULLS LAST,
+      l."followersCount" DESC NULLS LAST,
+      COALESCE(l.score, 0) DESC,
+      l."updatedAt" DESC
+    `;
+  }
+
   const { rows } = await pool.query(`
     SELECT l.*,
       (SELECT COUNT(*) FROM "CreatorLeadMessage" m WHERE m."leadId" = l.id) AS message_count,
       (SELECT COUNT(*) FROM "CreatorLeadTask" t WHERE t."leadId" = l.id AND t.status = 'open') AS pending_tasks
     FROM "CreatorLead" l
     ${where}
-    ORDER BY
-      CASE l.status
-        WHEN 'pending_review' THEN 0
-        WHEN 'identified'     THEN 1
-        WHEN 'qualified'      THEN 2
-        ELSE 10
-      END,
-      COALESCE(l.score, 0) DESC,
-      l."createdAt" DESC
+    ORDER BY ${orderByClause}
     LIMIT ${limit} OFFSET ${offsetVal}
   `, params);
 
