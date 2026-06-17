@@ -667,22 +667,30 @@ function FieldError({ msg }) {
 // ─────────────────────────────────────────────
 // BookingModal — type-adaptive, supports create + edit
 // ─────────────────────────────────────────────
-function BookingModal({ open, dayNumber, editBooking, stopCtx, availableDays, itineraryDayStops, onClose, onSave, saving, tripStartDate, tripEndDate }) {
-  const [form,          setForm]          = useState(BOOKING_DEFAULTS);
-  const [linkedStopId,  setLinkedStopId]  = useState(null);
-  const [linkedDayNum,  setLinkedDayNum]  = useState(null);
+function BookingModal({ open, dayNumber, editBooking, stopCtx, availableDays, itineraryDayStops, tripItems, onClose, onSave, saving, tripStartDate, tripEndDate }) {
+  const [form,              setForm]              = useState(BOOKING_DEFAULTS);
+  const [linkedStopId,      setLinkedStopId]      = useState(null);   // itineraryDayStop.id
+  const [linkedTripItemId,  setLinkedTripItemId]  = useState(null);   // TripItem.id
+  const [linkedDayNum,      setLinkedDayNum]      = useState(null);
 
   useEffect(() => {
     if (!open) return;
     setForm(initBookingForm(editBooking, stopCtx, dayNumber, tripStartDate));
     if (stopCtx?.stopId) {
       setLinkedStopId(stopCtx.stopId);
+      setLinkedTripItemId(null);
       setLinkedDayNum(dayNumber ?? stopCtx.dayNumber ?? null);
+    } else if (editBooking?.tripItemId) {
+      setLinkedStopId(null);
+      setLinkedTripItemId(editBooking.tripItemId);
+      setLinkedDayNum(editBooking.dayNumber ?? null);
     } else if (editBooking?.metadata?.itineraryDayStopId) {
       setLinkedStopId(editBooking.metadata.itineraryDayStopId);
+      setLinkedTripItemId(null);
       setLinkedDayNum(editBooking.dayNumber ?? null);
     } else {
       setLinkedStopId(null);
+      setLinkedTripItemId(null);
       setLinkedDayNum(dayNumber ?? null);
     }
   }, [open, editBooking, stopCtx, dayNumber, tripStartDate]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -731,7 +739,7 @@ function BookingModal({ open, dayNumber, editBooking, stopCtx, availableDays, it
       : form.type === 'flight'
       ? (form.meta.departureTime || form.time)
       : form.time;
-    // Persist linked stop in metadata (merge safely, don't wipe existing keys)
+    // Persist linked itinerary stop in metadata (merge safely, don't wipe existing keys)
     const finalMeta = { ...form.meta };
     if (linkedStopId) {
       finalMeta.itineraryDayStopId = linkedStopId;
@@ -749,9 +757,10 @@ function BookingModal({ open, dayNumber, editBooking, stopCtx, availableDays, it
       date: finalDate,
       time: finalTime,
       metadata: finalMeta,
-      // Pass explicit day link so API uses it instead of recalculating from date
-      dayNumber:  linkedDayNum  ?? null,
-      tripDayId:  selectedTripDay?.id ?? null,
+      // Pass explicit day + item link so API uses them directly
+      dayNumber:    linkedDayNum      ?? null,
+      tripDayId:    selectedTripDay?.id ?? null,
+      tripItemId:   linkedTripItemId  ?? null,
     });
   }
 
@@ -964,36 +973,72 @@ function BookingModal({ open, dayNumber, editBooking, stopCtx, availableDays, it
           <p style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.8px', textTransform: 'uppercase', color: MUTED, marginBottom: '8px' }}>
             Link to itinerary (optional)
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-            <div>
-              <p style={{ fontSize: '11px', color: MUTED, marginBottom: '4px' }}>Day</p>
-              <select value={linkedDayNum ?? ''} style={inputStyle}
-                onChange={e => { const v = e.target.value ? Number(e.target.value) : null; setLinkedDayNum(v); setLinkedStopId(null); if (v && tripStartDate) set('date', dayNumberToDate(tripStartDate, v)); }}>
-                <option value="">Not linked</option>
-                {(availableDays || []).map(d => <option key={d.dayNumber} value={d.dayNumber}>Day {d.dayNumber}</option>)}
-              </select>
-            </div>
-            <div>
-              <p style={{ fontSize: '11px', color: MUTED, marginBottom: '4px' }}>Place / stop</p>
-              <select value={linkedStopId ?? ''} style={inputStyle} disabled={!linkedDayNum}
-                onChange={e => {
-                  const sid = e.target.value || null;
-                  setLinkedStopId(sid);
-                  if (sid) {
-                    const s = (itineraryDayStops || []).find(s => s.id === sid);
-                    if (s) {
-                      if (!form.title)        set('title',        s.title);
-                      if (!form.locationName) set('locationName', s.locationName || s.title);
-                    }
-                  }
-                }}>
-                <option value="">No specific stop</option>
-                {(itineraryDayStops || []).filter(s => s.dayNumber === linkedDayNum).map(s =>
-                  <option key={s.id} value={s.id}>{s.title}</option>
-                )}
-              </select>
-            </div>
-          </div>
+          {(() => {
+            const dayItinStops = (itineraryDayStops || []).filter(s => s.dayNumber === linkedDayNum);
+            const dayTripItems = (tripItems || [])
+              .filter(i => i.dayNumber === linkedDayNum && !i.isHidden)
+              .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+            // Encode select value as "item:{id}" or "stop:{id}" to support both sources
+            const stopSelectValue = linkedTripItemId
+              ? `item:${linkedTripItemId}`
+              : linkedStopId
+              ? `stop:${linkedStopId}`
+              : '';
+            function handlePlaceChange(e) {
+              const v = e.target.value;
+              if (!v) {
+                setLinkedStopId(null); setLinkedTripItemId(null);
+              } else if (v.startsWith('item:')) {
+                const itemId = v.slice(5);
+                setLinkedTripItemId(itemId); setLinkedStopId(null);
+                const item = dayTripItems.find(i => i.id === itemId);
+                if (item) {
+                  if (!form.title)        set('title',        item.title);
+                  if (!form.locationName) set('locationName', item.locationName || item.title);
+                }
+              } else if (v.startsWith('stop:')) {
+                const sid = v.slice(5);
+                setLinkedStopId(sid); setLinkedTripItemId(null);
+                const s = dayItinStops.find(s => s.id === sid);
+                if (s) {
+                  if (!form.title)        set('title',        s.title);
+                  if (!form.locationName) set('locationName', s.locationName || s.title);
+                }
+              }
+            }
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <p style={{ fontSize: '11px', color: MUTED, marginBottom: '4px' }}>Day</p>
+                  <select value={linkedDayNum ?? ''} style={inputStyle}
+                    onChange={e => {
+                      const v = e.target.value ? Number(e.target.value) : null;
+                      setLinkedDayNum(v); setLinkedStopId(null); setLinkedTripItemId(null);
+                      if (v && tripStartDate) set('date', dayNumberToDate(tripStartDate, v));
+                    }}>
+                    <option value="">Not linked</option>
+                    {(availableDays || []).map(d => <option key={d.dayNumber} value={d.dayNumber}>Day {d.dayNumber}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p style={{ fontSize: '11px', color: MUTED, marginBottom: '4px' }}>Place / stop</p>
+                  <select value={stopSelectValue} style={inputStyle} disabled={!linkedDayNum} onChange={handlePlaceChange}>
+                    <option value="">No specific stop</option>
+                    {dayTripItems.length > 0 && (
+                      <optgroup label="Added places">
+                        {dayTripItems.map(i => <option key={`item:${i.id}`} value={`item:${i.id}`}>{i.title}</option>)}
+                      </optgroup>
+                    )}
+                    {dayItinStops.length > 0 && (
+                      <optgroup label="Itinerary stops">
+                        {dayItinStops.map(s => <option key={`stop:${s.id}`} value={`stop:${s.id}`}>{s.title}</option>)}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -2613,10 +2658,11 @@ export default function TripDetailPage() {
               ...b,
               ...form,
               // Use confirmed DB values from RETURNING clause — not just optimistic form state
-              dayNumber: data.dayNumber  ?? form.dayNumber  ?? b.dayNumber,
-              tripDayId: data.tripDayId  ?? form.tripDayId  ?? b.tripDayId,
+              dayNumber:   data.dayNumber   ?? form.dayNumber   ?? b.dayNumber,
+              tripDayId:   data.tripDayId   ?? form.tripDayId   ?? b.tripDayId,
+              tripItemId:  data.tripItemId  ?? form.tripItemId  ?? b.tripItemId,
               // Prefer the DB-returned metadata (what was actually persisted)
-              metadata:  data.metadata   ?? form.metadata   ?? b.metadata,
+              metadata:    data.metadata    ?? form.metadata    ?? b.metadata,
             };
           }),
         }));
@@ -2626,7 +2672,8 @@ export default function TripDetailPage() {
         const stopCtx = bookingCtx?.stopCtx;
         const body = {
           ...form,
-          tripDayId: bookingCtx?.dayId || null,
+          // form.tripDayId comes from modal's selectedTripDay — trust it; fall back to context
+          tripDayId: form.tripDayId || bookingCtx?.dayId || null,
           latitude:  form.latitude  || stopCtx?.latitude  || null,
           longitude: form.longitude || stopCtx?.longitude || null,
         };
@@ -3025,6 +3072,7 @@ export default function TripDetailPage() {
           stopCtx={bookingCtx?.stopCtx || null}
           availableDays={(workspace?.tripDays || []).sort((a, b) => a.dayNumber - b.dayNumber)}
           itineraryDayStops={workspace?.itineraryDayStops || []}
+          tripItems={workspace?.tripItems || []}
           onClose={() => { setBookingCtx(null); setEditingBooking(null); }}
           onSave={handleSaveBooking}
           saving={savingBooking}

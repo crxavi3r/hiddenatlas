@@ -1015,6 +1015,20 @@ export default async function handler(req, res) {
         resolvedTripDayId = resolved.tripDayId;
       }
 
+      // Validate tripItemId belongs to this trip and, if we know the day, to this day
+      if (tripItemId) {
+        const { rows: itemCheck } = await pool.query(
+          `SELECT "tripId", "tripDayId" FROM "TripItem" WHERE id = $1`,
+          [tripItemId]
+        );
+        if (!itemCheck.length || itemCheck[0].tripId !== id) {
+          return res.status(400).json({ error: 'Invalid stop for selected trip' });
+        }
+        if (resolvedTripDayId && itemCheck[0].tripDayId && itemCheck[0].tripDayId !== resolvedTripDayId) {
+          return res.status(400).json({ error: 'Invalid stop for selected day' });
+        }
+      }
+
       const { rows } = await pool.query(
         `INSERT INTO "TripBooking" (id, "tripId", "tripDayId", "tripItemId", "dayNumber", type, status, title, date, time, "locationName", provider, "confirmationReference", notes, url, metadata, "createdAt", "updatedAt")
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, NOW(), NOW())
@@ -1039,7 +1053,7 @@ export default async function handler(req, res) {
       if (!bookAccess.canEdit) return res.status(403).json({ error: 'Permission denied' });
 
       const tripId = bookingRows[0].tripId;
-      const { type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata, latitude, longitude, dayNumber: explicitDayNumber, tripDayId: explicitTripDayId } = req.body || {};
+      const { type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata, latitude, longitude, dayNumber: explicitDayNumber, tripDayId: explicitTripDayId, tripItemId: newTripItemId } = req.body || {};
 
       const meta = (metadata && typeof metadata === 'object') ? metadata : {};
       const rawBookingType = type || bookingRows[0].currentType || 'other';
@@ -1066,25 +1080,43 @@ export default async function handler(req, res) {
         ({ dayNumber, tripDayId } = resolveBookingDay(date, startDate, tripDayRows));
       }
 
+      // Validate newTripItemId if provided
+      let resolvedTripItemId = newTripItemId !== undefined ? (newTripItemId || null) : undefined;
+      if (resolvedTripItemId) {
+        const { rows: itemCheck } = await pool.query(
+          `SELECT "tripId", "tripDayId" FROM "TripItem" WHERE id = $1`,
+          [resolvedTripItemId]
+        );
+        if (!itemCheck.length || itemCheck[0].tripId !== tripId) {
+          return res.status(400).json({ error: 'Invalid stop for selected trip' });
+        }
+        if (tripDayId && itemCheck[0].tripDayId && itemCheck[0].tripDayId !== tripDayId) {
+          return res.status(400).json({ error: 'Invalid stop for selected day' });
+        }
+      }
+
       const { rows: updated } = await pool.query(
         `UPDATE "TripBooking"
          SET type = COALESCE($1, type), title = COALESCE($2, title),
              date = $3, time = $4, "locationName" = $5, provider = $6,
              "confirmationReference" = $7, notes = $8, url = $9,
              metadata = $10::jsonb, "dayNumber" = $11, "tripDayId" = $12,
+             "tripItemId" = CASE WHEN $16::boolean THEN $17 ELSE "tripItemId" END,
              latitude = COALESCE($14::float8, latitude),
              longitude = COALESCE($15::float8, longitude),
              "updatedAt" = NOW()
          WHERE id = $13
-         RETURNING id, "dayNumber", "tripDayId", metadata, latitude, longitude`,
-        [type || null, title || null, date || null, time || null,
+         RETURNING id, "dayNumber", "tripDayId", "tripItemId", metadata, latitude, longitude`,
+        [type || null, title || null, date || null, normalizedTime || null,
          locationName || null, provider || null, confirmationReference || null,
          notes || null, url || null, JSON.stringify(meta), dayNumber, tripDayId, bookingId,
          latitude != null ? Number(latitude) : null,
-         longitude != null ? Number(longitude) : null]
+         longitude != null ? Number(longitude) : null,
+         resolvedTripItemId !== undefined,  // $16: whether to update tripItemId
+         resolvedTripItemId ?? null]        // $17: the new value (or null to clear)
       );
       const saved = updated[0] || {};
-      return res.status(200).json({ ok: true, dayNumber: saved.dayNumber, tripDayId: saved.tripDayId, metadata: saved.metadata });
+      return res.status(200).json({ ok: true, dayNumber: saved.dayNumber, tripDayId: saved.tripDayId, tripItemId: saved.tripItemId, metadata: saved.metadata });
     }
 
     // Remap all bookings for a trip when startDate changes
