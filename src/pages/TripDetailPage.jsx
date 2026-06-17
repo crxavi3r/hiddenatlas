@@ -479,20 +479,35 @@ function PersonalOverviewModal({ workspace, open, onClose, onSave, saving }) {
 }
 
 // ─────────────────────────────────────────────
-// AddItemModal — add custom item to a day
+// ItemModal — add or edit a custom TripItem
 // ─────────────────────────────────────────────
-function AddItemModal({ open, dayNumber, onClose, onSave, saving }) {
+function ItemModal({ open, dayNumber, editItem, onClose, onSave, saving }) {
+  const isEdit = !!editItem;
   const EMPTY = { type: 'attraction', title: '', time: '', locationName: '', durationMinutes: '', notes: '' };
   const [form, setForm] = useState(EMPTY);
+
+  useEffect(() => {
+    if (open) {
+      setForm(isEdit ? {
+        type:            editItem.type            || 'attraction',
+        title:           editItem.title           || '',
+        time:            editItem.time || editItem.startTime || '',
+        locationName:    editItem.locationName    || '',
+        durationMinutes: editItem.durationMinutes != null ? String(editItem.durationMinutes) : '',
+        notes:           editItem.notes           || '',
+      } : EMPTY);
+    }
+  }, [open, editItem]);
+
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
   function isDirty() { return form.title || form.locationName || form.notes || form.time; }
   function requestClose() {
-    if (isDirty() && !window.confirm('Discard changes?')) return;
-    setForm(EMPTY); onClose();
+    if (!isEdit && isDirty() && !window.confirm('Discard changes?')) return;
+    onClose();
   }
 
   return (
-    <Modal open={open} onRequestClose={requestClose} title={`Add to Day ${dayNumber || ''}`}>
+    <Modal open={open} onRequestClose={requestClose} title={isEdit ? 'Edit item' : `Add to Day ${dayNumber || ''}`}>
       <FormField label="Type">
         <select value={form.type} onChange={e => set('type', e.target.value)} style={inputStyle}>
           {ITEM_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -501,7 +516,6 @@ function AddItemModal({ open, dayNumber, onClose, onSave, saving }) {
       <FormField label="Name / Title">
         <input type="text" value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. Djemaa el-Fna" style={inputStyle} autoFocus />
       </FormField>
-      {/* Time + Duration in aligned columns */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
         <FormField label="Time (optional)">
           <input type="text" value={form.time} onChange={e => set('time', e.target.value)} placeholder="10:00" style={inputStyle} />
@@ -519,7 +533,7 @@ function AddItemModal({ open, dayNumber, onClose, onSave, saving }) {
       <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
         <button style={btnSecondary} onClick={requestClose}>Cancel</button>
         <button style={btnPrimary} onClick={() => onSave(form)} disabled={saving || !form.title.trim()}>
-          {saving ? 'Adding...' : 'Add item'}
+          {saving ? 'Saving...' : isEdit ? 'Save changes' : 'Add item'}
         </button>
       </div>
     </Modal>
@@ -1048,12 +1062,16 @@ function formatDuration(minutes) {
   return `${h}h ${m}m`;
 }
 
-function ItemCard({ item, onDelete, canEdit = true }) {
+function ItemCard({ item, onDelete, onEdit, canEdit = true }) {
   const color = TYPE_COLORS[item.type] || MUTED;
   const typeLabel = ITEM_TYPES.find(t => t.value === item.type)?.label || item.type;
   const timeDisplay = formatItemTime(item);
   const durationDisplay = formatDuration(item.durationMinutes);
   const metaParts = [timeDisplay, durationDisplay, item.locationName].filter(Boolean);
+
+  function handleDelete() {
+    if (window.confirm(`Remove "${item.title}"?`)) onDelete(item.id);
+  }
 
   return (
     <div style={{
@@ -1089,13 +1107,24 @@ function ItemCard({ item, onDelete, canEdit = true }) {
         )}
       </div>
       {canEdit && (
-        <button
-          onClick={() => onDelete(item.id)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C8BFB5', padding: '2px', flexShrink: 0 }}
-          title="Remove item"
-        >
-          <X size={14} />
-        </button>
+        <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+          {onEdit && (
+            <button
+              onClick={() => onEdit(item)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '2px' }}
+              title="Edit item"
+            >
+              <Pencil size={13} />
+            </button>
+          )}
+          <button
+            onClick={handleDelete}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C8BFB5', padding: '2px' }}
+            title="Remove item"
+          >
+            <X size={14} />
+          </button>
+        </div>
       )}
     </div>
   );
@@ -1396,7 +1425,7 @@ function DayBookingItem({ booking, onEdit, tripName, itineraryDayStops = [], can
 // DaySection — one full day in the timeline
 // ─────────────────────────────────────────────
 
-function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, hiddenStopIds = [], tripName = '', canEdit = true }) {
+function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditItem, onEditBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, hiddenStopIds = [], tripName = '', canEdit = true }) {
   const [expanded,     setExpanded]     = useState(true);
   const [confirmHide,  setConfirmHide]  = useState(null);  // stop object pending confirmation
   const [lastHidden,   setLastHidden]   = useState(null);  // { stopId, stopTitle } for undo
@@ -1616,7 +1645,7 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
             {/* User items */}
             {dayItems.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                {dayItems.map(item => <ItemCard key={item.id} item={item} onDelete={onDeleteItem} canEdit={canEdit} />)}
+                {dayItems.map(item => <ItemCard key={item.id} item={item} onDelete={onDeleteItem} onEdit={onEditItem} canEdit={canEdit} />)}
               </div>
             )}
 
@@ -1872,7 +1901,7 @@ function OverviewTab({ workspace, onEditDetails, onEditPersonal }) {
 // ─────────────────────────────────────────────
 // DaysTab
 // ─────────────────────────────────────────────
-function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, onDeleteItem, onEditBooking, canEdit = true }) {
+function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, onDeleteItem, onEditItem, onEditBooking, canEdit = true }) {
   const { itinerary, tripDays, tripItems, tripNotes, tripBookings, assets, itineraryDayStops = [], hiddenStopIds = [], trip } = workspace;
   const tripName = trip?.title || trip?.destination || '';
   const content = parseContent(itinerary?.content);
@@ -1923,6 +1952,7 @@ function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFr
               onRestoreDayStops={onRestoreDayStops}
               hiddenStopIds={hiddenStopIds}
               onDeleteItem={onDeleteItem}
+              onEditItem={onEditItem}
               onEditBooking={onEditBooking}
               tripName={tripName}
               canEdit={canEdit}
@@ -2273,6 +2303,7 @@ export default function TripDetailPage() {
   const [showDetails, setShowDetails]           = useState(false);
   const [savingDetails, setSavingDetails]       = useState(false);
   const [addItemCtx, setAddItemCtx]             = useState(null);   // { dayId, dayNumber }
+  const [editingItem, setEditingItem]           = useState(null);   // TripItem object for editing
   const [savingItem, setSavingItem]             = useState(false);
   const [addNoteCtx, setAddNoteCtx]             = useState(null);   // { dayId, dayNumber } or {}
   const [editNote, setEditNote]                 = useState(null);   // note object for editing
@@ -2482,6 +2513,31 @@ export default function TripDetailPage() {
       setAddItemCtx(null);
     } catch {
       alert('Could not add item. Please try again.');
+    } finally {
+      setSavingItem(false);
+    }
+  }
+
+  // ── Update TripItem ───────────────────────────────────────────
+  async function handleUpdateItem(form) {
+    if (!editingItem) return;
+    setSavingItem(true);
+    try {
+      const res = await api.post(`/api/trips?action=item&itemId=${editingItem.id}`, form);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Update failed');
+      }
+      const { item } = await res.json();
+      if (item) {
+        setWorkspace(w => ({ ...w, tripItems: w.tripItems.map(i => i.id === editingItem.id ? item : i) }));
+      } else {
+        const wsRes = await api.get(`/api/trips?id=${id}&action=workspace`);
+        if (wsRes.ok) setWorkspace(await wsRes.json());
+      }
+      setEditingItem(null);
+    } catch (err) {
+      alert(`Could not update item: ${err.message || 'Please try again.'}`);
     } finally {
       setSavingItem(false);
     }
@@ -2870,6 +2926,7 @@ export default function TripDetailPage() {
             onRestoreStop={access.canEdit ? handleRestoreStop : undefined}
             onRestoreDayStops={access.canEdit ? handleRestoreDayStops : undefined}
             onDeleteItem={access.canEdit ? handleDeleteItem : undefined}
+            onEditItem={access.canEdit ? (item => setEditingItem(item)) : undefined}
             onEditBooking={access.canEdit ? (b => { setEditingBooking(b); setBookingCtx({}); }) : undefined}
             canEdit={access.canEdit}
           />
@@ -2938,12 +2995,13 @@ export default function TripDetailPage() {
         />
       )}
 
-      {addItemCtx && access.canEdit && (
-        <AddItemModal
-          open={!!addItemCtx}
-          dayNumber={addItemCtx.dayNumber}
-          onClose={() => setAddItemCtx(null)}
-          onSave={handleSaveItem}
+      {(addItemCtx || editingItem) && access.canEdit && (
+        <ItemModal
+          open={!!(addItemCtx || editingItem)}
+          dayNumber={addItemCtx?.dayNumber}
+          editItem={editingItem}
+          onClose={() => { setAddItemCtx(null); setEditingItem(null); }}
+          onSave={editingItem ? handleUpdateItem : handleSaveItem}
           saving={savingItem}
         />
       )}

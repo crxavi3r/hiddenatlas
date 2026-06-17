@@ -866,28 +866,47 @@ export default async function handler(req, res) {
       const itemAccess = await getTripAccess(itemRows[0].tripId);
       if (!itemAccess.canEdit) return res.status(403).json({ error: 'Permission denied' });
 
-      const { type, title, description, time, startTime, endTime, durationMinutes, locationName, notes, bookingReference, status, sortOrder, latitude, longitude } = req.body || {};
-      await pool.query(
+      const { type: rawType, title, description, time, startTime, endTime, durationMinutes, locationName, address, notes, url, provider, bookingReference, status, sortOrder, latitude, longitude } = req.body || {};
+
+      // Normalize and whitelist type
+      const ITEM_TYPE_WHITELIST = ['attraction','restaurant','hotel','transfer','flight','event','note','break','booking','other'];
+      const ITEM_TYPE_ALIAS = { place: 'attraction', place_to_visit: 'attraction', visit: 'attraction', activity: 'attraction', free_time: 'break', freetime: 'break' };
+      let normalizedType = null;
+      if (rawType) {
+        const lower = String(rawType).toLowerCase().trim();
+        normalizedType = ITEM_TYPE_WHITELIST.includes(lower) ? lower : (ITEM_TYPE_ALIAS[lower] ?? null);
+        if (!normalizedType) return res.status(400).json({ error: 'Invalid item type' });
+      }
+
+      const { rows: updated } = await pool.query(
         `UPDATE "TripItem"
          SET type = COALESCE($1, type), title = COALESCE($2, title),
              description = $3, time = $4, "startTime" = $5, "endTime" = $6,
-             "durationMinutes" = $7, "locationName" = $8, notes = $9,
-             "bookingReference" = $10, status = COALESCE($11, status),
-             "sortOrder" = COALESCE($12, "sortOrder"),
-             latitude = COALESCE($14::float8, latitude),
-             longitude = COALESCE($15::float8, longitude),
+             "durationMinutes" = $7, "locationName" = $8, address = $9,
+             notes = $10, url = $11, provider = $12,
+             "bookingReference" = $13, status = COALESCE($14, status),
+             "sortOrder" = COALESCE($15, "sortOrder"),
+             latitude = COALESCE($17::float8, latitude),
+             longitude = COALESCE($18::float8, longitude),
              "updatedAt" = NOW()
-         WHERE id = $13`,
-        [type || null, title || null, description || null, time || null,
+         WHERE id = $16
+         RETURNING id, "tripId", "tripDayId", "dayNumber", type, title, description,
+                   time, "startTime", "endTime", "durationMinutes",
+                   "locationName", address, latitude, longitude,
+                   notes, provider, url, status, "isHidden", "isLocked",
+                   "sortOrder", metadata, "createdAt", "updatedAt"`,
+        [normalizedType, title || null, description || null, time || null,
          startTime || null, endTime || null,
          durationMinutes != null ? Number(durationMinutes) : null,
-         locationName || null, notes || null, bookingReference || null,
+         locationName || null, address || null,
+         notes || null, url || null, provider || null,
+         bookingReference || null,
          status || null, sortOrder != null ? Number(sortOrder) : null,
          itemId,
          latitude != null ? Number(latitude) : null,
          longitude != null ? Number(longitude) : null]
       );
-      return res.status(200).json({ ok: true });
+      return res.status(200).json({ item: updated[0] });
     }
 
     // Delete TripItem
