@@ -733,17 +733,44 @@ export default async function handler(req, res) {
       const access = await getTripAccess(id);
       if (!access.canEdit) return res.status(access.canView ? 403 : 404).json({ error: access.canView ? 'Permission denied' : 'Trip not found' });
 
-      const { tripDayId, type, title, description, time, startTime, endTime, durationMinutes, locationName, notes, sortOrder } = req.body || {};
+      const { tripDayId, dayNumber: bodyDayNumber, sourceType, type, title, description, time, startTime, endTime, durationMinutes, locationName, address, latitude, longitude, notes, status, sortOrder } = req.body || {};
       if (!title) return res.status(400).json({ error: 'title is required' });
 
+      // Resolve dayNumber server-side — never trust client alone
+      let resolvedDayNumber = null;
+      let resolvedTripDayId = tripDayId || null;
+
+      if (tripDayId) {
+        const { rows: dayRows } = await pool.query(
+          `SELECT "dayNumber" FROM "TripDay" WHERE id = $1 AND "tripId" = $2`,
+          [tripDayId, id]
+        );
+        if (!dayRows.length) return res.status(400).json({ error: 'Missing dayNumber or invalid trip day' });
+        resolvedDayNumber = dayRows[0].dayNumber;
+      } else if (bodyDayNumber != null) {
+        const { rows: dayRows } = await pool.query(
+          `SELECT id, "dayNumber" FROM "TripDay" WHERE "tripId" = $1 AND "dayNumber" = $2`,
+          [id, Number(bodyDayNumber)]
+        );
+        if (!dayRows.length) return res.status(400).json({ error: 'Missing dayNumber or invalid trip day' });
+        resolvedTripDayId = dayRows[0].id;
+        resolvedDayNumber = dayRows[0].dayNumber;
+      } else {
+        return res.status(400).json({ error: 'Missing dayNumber or invalid trip day' });
+      }
+
       const { rows } = await pool.query(
-        `INSERT INTO "TripItem" (id, "tripId", "tripDayId", type, title, description, time, "startTime", "endTime", "durationMinutes", "locationName", notes, "sortOrder", "createdAt", "updatedAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+        `INSERT INTO "TripItem" (id, "tripId", "tripDayId", "dayNumber", "sourceType", type, title, description, time, "startTime", "endTime", "durationMinutes", "locationName", address, latitude, longitude, notes, status, "sortOrder", "createdAt", "updatedAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::float8, $15::float8, $16, $17, $18, NOW(), NOW())
          RETURNING id`,
-        [id, tripDayId || null, type || 'place', title, description || null,
+        [id, resolvedTripDayId, resolvedDayNumber, sourceType || null,
+         type || 'attraction', title, description || null,
          time || null, startTime || null, endTime || null,
          durationMinutes != null ? Number(durationMinutes) : null,
-         locationName || null, notes || null,
+         locationName || null, address || null,
+         latitude != null ? Number(latitude) : null,
+         longitude != null ? Number(longitude) : null,
+         notes || null, status || 'planned',
          sortOrder != null ? Number(sortOrder) : 0]
       );
       return res.status(200).json({ id: rows[0].id });
