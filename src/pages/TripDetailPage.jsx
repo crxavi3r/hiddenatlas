@@ -1351,7 +1351,13 @@ function DayBookingItem({ booking, onEdit, tripName, itineraryDayStops = [], can
   const meta = booking.metadata || {};
   const timeDisplay = booking.type === 'hotel'
     ? (meta.checkInDate ? `Check-in ${meta.checkInDate}` : null)
+    : booking.type === 'transfer'
+    ? (meta.pickupTime || booking.time || null)
     : booking.time || null;
+
+  const transferRoute = booking.type === 'transfer' && (meta.pickupLocation || meta.dropoffLocation)
+    ? [meta.pickupLocation, meta.dropoffLocation].filter(Boolean).join(' → ')
+    : null;
 
   return (
     <div style={{
@@ -1368,7 +1374,8 @@ function DayBookingItem({ booking, onEdit, tripName, itineraryDayStops = [], can
           {timeDisplay && <span style={{ fontSize: '11px', color: MUTED }}>{timeDisplay}</span>}
         </div>
         <p style={{ fontSize: '13.5px', fontWeight: '600', color: CHAR }}>{booking.title}</p>
-        {booking.locationName && <p style={{ fontSize: '12px', color: MUTED }}>{booking.locationName}</p>}
+        {transferRoute && <p style={{ fontSize: '12px', color: MUTED }}>{transferRoute}</p>}
+        {!transferRoute && booking.locationName && <p style={{ fontSize: '12px', color: MUTED }}>{booking.locationName}</p>}
         {booking.confirmationReference && (
           <p style={{ fontSize: '11px', fontFamily: 'monospace', color: TEAL, marginTop: '2px' }}>{booking.confirmationReference}</p>
         )}
@@ -2569,9 +2576,15 @@ export default function TripDetailPage() {
         };
         const res  = await api.post(`/api/trips?id=${id}&action=booking`, body);
         if (!res.ok) throw new Error('Save failed');
-        const { id: newId, dayNumber, tripDayId } = await res.json();
-        const newBooking = { id: newId, tripId: id, tripDayId: tripDayId || bookingCtx?.dayId || null, dayNumber: dayNumber || null, ...form, createdAt: new Date().toISOString() };
-        setWorkspace(w => ({ ...w, tripBookings: [...w.tripBookings, newBooking] }));
+        const { booking } = await res.json();
+        if (booking) {
+          // Use the real DB row so day association (tripDayId/dayNumber) is always correct
+          setWorkspace(w => ({ ...w, tripBookings: [...w.tripBookings, booking] }));
+        } else {
+          // Fallback: re-fetch workspace to sync state
+          const wsRes = await api.get(`/api/trips?id=${id}&action=workspace`);
+          if (wsRes.ok) setWorkspace(await wsRes.json());
+        }
       }
       setBookingCtx(null);
       setEditingBooking(null);

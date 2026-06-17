@@ -928,7 +928,7 @@ export default async function handler(req, res) {
       const access = await getTripAccess(id);
       if (!access.canEdit) return res.status(access.canView ? 403 : 404).json({ error: access.canView ? 'Permission denied' : 'Trip not found' });
 
-      const { tripItemId, type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata } = req.body || {};
+      const { tripItemId, tripDayId: reqTripDayId, type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata } = req.body || {};
       if (!title) return res.status(400).json({ error: 'title is required' });
 
       const meta = (metadata && typeof metadata === 'object') ? metadata : {};
@@ -936,25 +936,47 @@ export default async function handler(req, res) {
       const valErrs = validateBooking(bookingType, { date, time }, meta);
       if (valErrs.length) return res.status(400).json({ error: 'Validation failed', errors: valErrs });
 
-      // Resolve dayNumber from trip dates
-      const { rows: tripInfo } = await pool.query(
-        `SELECT "startDate", "endDate" FROM "Trip" WHERE id = $1`, [id]
-      );
-      const { rows: tripDayRows } = await pool.query(
-        `SELECT id, "dayNumber" FROM "TripDay" WHERE "tripId" = $1`, [id]
-      );
-      const startDate = tripInfo[0]?.startDate?.toISOString().slice(0, 10) || null;
-      const { dayNumber, tripDayId } = resolveBookingDay(date, startDate, tripDayRows);
+      // Resolve day — prefer explicit tripDayId supplied by the client (same approach as TripItem)
+      // This prevents timezone-based date off-by-one from losing the day association.
+      let resolvedDayNumber = null;
+      let resolvedTripDayId = null;
+
+      if (reqTripDayId) {
+        const { rows: dayRows } = await pool.query(
+          `SELECT "dayNumber" FROM "TripDay" WHERE id = $1 AND "tripId" = $2`,
+          [reqTripDayId, id]
+        );
+        if (dayRows.length) {
+          resolvedTripDayId = reqTripDayId;
+          resolvedDayNumber = dayRows[0].dayNumber;
+        }
+      }
+
+      if (!resolvedTripDayId) {
+        // Fall back to date-based resolution when no valid tripDayId was supplied
+        const { rows: tripInfo } = await pool.query(
+          `SELECT "startDate" FROM "Trip" WHERE id = $1`, [id]
+        );
+        const { rows: tripDayRows } = await pool.query(
+          `SELECT id, "dayNumber" FROM "TripDay" WHERE "tripId" = $1`, [id]
+        );
+        const startDate = tripInfo[0]?.startDate?.toISOString().slice(0, 10) || null;
+        const resolved = resolveBookingDay(date, startDate, tripDayRows);
+        resolvedDayNumber = resolved.dayNumber;
+        resolvedTripDayId = resolved.tripDayId;
+      }
 
       const { rows } = await pool.query(
         `INSERT INTO "TripBooking" (id, "tripId", "tripDayId", "tripItemId", "dayNumber", type, title, date, time, "locationName", provider, "confirmationReference", notes, url, metadata, "createdAt", "updatedAt")
          VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, NOW(), NOW())
-         RETURNING id, "dayNumber", "tripDayId"`,
-        [id, tripDayId, tripItemId || null, dayNumber, bookingType, title,
+         RETURNING id, "tripId", "tripDayId", "dayNumber", type, title, date, time,
+                   "locationName", provider, "confirmationReference", notes, url, metadata,
+                   "createdAt", "updatedAt"`,
+        [id, resolvedTripDayId, tripItemId || null, resolvedDayNumber, bookingType, title,
          date || null, time || null, locationName || null, provider || null,
          confirmationReference || null, notes || null, url || null, JSON.stringify(meta)]
       );
-      return res.status(200).json({ id: rows[0].id, dayNumber: rows[0].dayNumber, tripDayId: rows[0].tripDayId });
+      return res.status(200).json({ booking: rows[0] });
     }
 
     // Update TripBooking
