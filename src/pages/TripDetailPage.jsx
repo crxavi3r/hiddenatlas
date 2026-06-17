@@ -62,7 +62,7 @@ const TABS = [
 ];
 
 const ITEM_TYPES = [
-  { value: 'place',      label: 'Place to Visit' },
+  { value: 'attraction', label: 'Place to Visit' },
   { value: 'restaurant', label: 'Restaurant'     },
   { value: 'hotel',      label: 'Hotel / Stay'   },
   { value: 'transfer',   label: 'Transfer'       },
@@ -70,6 +70,8 @@ const ITEM_TYPES = [
   { value: 'event',      label: 'Event'          },
   { value: 'break',      label: 'Free Time'      },
   { value: 'note',       label: 'Note / Reminder'},
+  { value: 'booking',    label: 'Booking'        },
+  { value: 'other',      label: 'Other'          },
 ];
 
 const BOOKING_CATEGORIES = [
@@ -480,7 +482,7 @@ function PersonalOverviewModal({ workspace, open, onClose, onSave, saving }) {
 // AddItemModal — add custom item to a day
 // ─────────────────────────────────────────────
 function AddItemModal({ open, dayNumber, onClose, onSave, saving }) {
-  const EMPTY = { type: 'place', title: '', time: '', locationName: '', durationMinutes: '', notes: '' };
+  const EMPTY = { type: 'attraction', title: '', time: '', locationName: '', durationMinutes: '', notes: '' };
   const [form, setForm] = useState(EMPTY);
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
   function isDirty() { return form.title || form.locationName || form.notes || form.time; }

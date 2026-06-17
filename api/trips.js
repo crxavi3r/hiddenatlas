@@ -733,8 +733,14 @@ export default async function handler(req, res) {
       const access = await getTripAccess(id);
       if (!access.canEdit) return res.status(access.canView ? 403 : 404).json({ error: access.canView ? 'Permission denied' : 'Trip not found' });
 
-      const { tripDayId, dayNumber: bodyDayNumber, type, title, description, time, startTime, endTime, durationMinutes, locationName, address, latitude, longitude, notes, provider, url } = req.body || {};
+      const { tripDayId, dayNumber: bodyDayNumber, type: rawType, title, description, time, startTime, endTime, durationMinutes, locationName, address, latitude, longitude, notes, provider, url } = req.body || {};
       if (!title) return res.status(400).json({ error: 'title is required' });
+
+      const ITEM_TYPE_WHITELIST = ['attraction','restaurant','hotel','transfer','flight','event','note','break','booking','other'];
+      const LEGACY_TYPE_MAP = { place: 'attraction', place_to_visit: 'attraction', visit: 'attraction', activity: 'attraction' };
+      const normalizedType = LEGACY_TYPE_MAP[rawType] ?? rawType ?? 'attraction';
+      if (!ITEM_TYPE_WHITELIST.includes(normalizedType)) return res.status(400).json({ error: 'Invalid item type' });
+      const type = normalizedType;
 
       // Resolve dayNumber server-side — never trust client alone
       let resolvedDayNumber = null;
