@@ -214,18 +214,45 @@ function resolveBookingDay(bookingDateStr, startDateStr, tripDays) {
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+// Normalize time strings: strip seconds suffix (some browser inputs send HH:MM:SS)
+function normalizeTime(t) {
+  if (!t) return t;
+  const m = String(t).match(/^([01]\d|2[0-3]):([0-5]\d)/);
+  return m ? `${m[1]}:${m[2]}` : t;
+}
+
+const BOOKING_TYPE_WHITELIST = ['hotel','restaurant','experience','transfer','flight','event','other'];
+const BOOKING_TYPE_ALIAS = {
+  accommodation: 'hotel', hotels: 'hotel',
+  dining: 'restaurant', restaurants: 'restaurant',
+  activity: 'experience', experiences: 'experience', tour: 'experience', attraction: 'experience',
+  taxi: 'transfer', shuttle: 'transfer', 'car hire': 'transfer', rental: 'transfer',
+  flights: 'flight', plane: 'flight', airline: 'flight',
+  shows: 'event', events: 'event',
+};
+
+function normalizeBookingType(raw) {
+  if (!raw) return 'other';
+  const lower = String(raw).toLowerCase().trim();
+  if (BOOKING_TYPE_WHITELIST.includes(lower)) return lower;
+  return BOOKING_TYPE_ALIAS[lower] ?? null;
+}
+
 function validateBooking(type, body, meta) {
   const errs = [];
 
   if (body.date && !DATE_RE.test(body.date))
     errs.push('Invalid date format — use YYYY-MM-DD');
-  if (body.time && !TIME_RE.test(body.time))
+  const normTime = normalizeTime(body.time);
+  if (normTime && !TIME_RE.test(normTime))
     errs.push('Invalid time format — use HH:mm');
 
-  // All metadata time fields must be HH:mm
+  // All metadata time fields must be HH:mm (normalize seconds first)
   const metaTimeKeys = ['checkInTime','checkOutTime','departureTime','arrivalTime','pickupTime','endTime'];
   for (const k of metaTimeKeys) {
-    if (meta[k] && !TIME_RE.test(meta[k]))
+    const v = normalizeTime(meta[k]);
+    if (v) meta[k] = v; // mutate to normalized value so INSERT uses clean value
+    if (v && !TIME_RE.test(v))
       errs.push(`Invalid ${k} — use HH:mm`);
   }
   // All metadata date fields must be YYYY-MM-DD
@@ -931,9 +958,12 @@ export default async function handler(req, res) {
       const { tripItemId, tripDayId: reqTripDayId, type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata } = req.body || {};
       if (!title) return res.status(400).json({ error: 'title is required' });
 
+      const bookingType = normalizeBookingType(type);
+      if (!bookingType) return res.status(400).json({ error: 'Invalid booking type' });
+
       const meta = (metadata && typeof metadata === 'object') ? metadata : {};
-      const bookingType = type || 'other';
-      const valErrs = validateBooking(bookingType, { date, time }, meta);
+      const normalizedTime = normalizeTime(time);
+      const valErrs = validateBooking(bookingType, { date, time: normalizedTime }, meta);
       if (valErrs.length) return res.status(400).json({ error: 'Validation failed', errors: valErrs });
 
       // Resolve day — prefer explicit tripDayId supplied by the client (same approach as TripItem)
@@ -967,13 +997,13 @@ export default async function handler(req, res) {
       }
 
       const { rows } = await pool.query(
-        `INSERT INTO "TripBooking" (id, "tripId", "tripDayId", "tripItemId", "dayNumber", type, title, date, time, "locationName", provider, "confirmationReference", notes, url, metadata, "createdAt", "updatedAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, NOW(), NOW())
-         RETURNING id, "tripId", "tripDayId", "dayNumber", type, title, date, time,
+        `INSERT INTO "TripBooking" (id, "tripId", "tripDayId", "tripItemId", "dayNumber", type, status, title, date, time, "locationName", provider, "confirmationReference", notes, url, metadata, "createdAt", "updatedAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, NOW(), NOW())
+         RETURNING id, "tripId", "tripDayId", "dayNumber", type, status, title, date, time,
                    "locationName", provider, "confirmationReference", notes, url, metadata,
                    "createdAt", "updatedAt"`,
-        [id, resolvedTripDayId, tripItemId || null, resolvedDayNumber, bookingType, title,
-         date || null, time || null, locationName || null, provider || null,
+        [id, resolvedTripDayId, tripItemId || null, resolvedDayNumber, bookingType, 'planned', title,
+         date || null, normalizedTime || null, locationName || null, provider || null,
          confirmationReference || null, notes || null, url || null, JSON.stringify(meta)]
       );
       return res.status(200).json({ booking: rows[0] });
@@ -993,8 +1023,10 @@ export default async function handler(req, res) {
       const { type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata, latitude, longitude, dayNumber: explicitDayNumber, tripDayId: explicitTripDayId } = req.body || {};
 
       const meta = (metadata && typeof metadata === 'object') ? metadata : {};
-      const bookingType = type || bookingRows[0].currentType || 'other';
-      const valErrs = validateBooking(bookingType, { date, time }, meta);
+      const rawBookingType = type || bookingRows[0].currentType || 'other';
+      const bookingType = normalizeBookingType(rawBookingType) ?? 'other';
+      const normalizedTime = normalizeTime(time);
+      const valErrs = validateBooking(bookingType, { date, time: normalizedTime }, meta);
       if (valErrs.length) return res.status(400).json({ error: 'Validation failed', errors: valErrs });
 
       const { rows: tripDayRows } = await pool.query(

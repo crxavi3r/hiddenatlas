@@ -2575,21 +2575,19 @@ export default function TripDetailPage() {
           longitude: form.longitude || stopCtx?.longitude || null,
         };
         const res  = await api.post(`/api/trips?id=${id}&action=booking`, body);
-        if (!res.ok) throw new Error('Save failed');
-        const { booking } = await res.json();
-        if (booking) {
-          // Use the real DB row so day association (tripDayId/dayNumber) is always correct
-          setWorkspace(w => ({ ...w, tripBookings: [...w.tripBookings, booking] }));
-        } else {
-          // Fallback: re-fetch workspace to sync state
-          const wsRes = await api.get(`/api/trips?id=${id}&action=workspace`);
-          if (wsRes.ok) setWorkspace(await wsRes.json());
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Save failed');
         }
+        // Always re-fetch workspace to avoid pg Date serialization mismatches
+        // and confirm the booking is truly persisted before showing it
+        const wsRes = await api.get(`/api/trips?id=${id}&action=workspace`);
+        if (wsRes.ok) setWorkspace(await wsRes.json());
       }
       setBookingCtx(null);
       setEditingBooking(null);
-    } catch {
-      alert('Could not save booking. Please try again.');
+    } catch (err) {
+      alert(`Could not save booking: ${err.message || 'Please try again.'}`);
     } finally {
       setSavingBooking(false);
     }
