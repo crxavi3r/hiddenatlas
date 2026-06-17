@@ -346,6 +346,137 @@ function TripDetailsModal({ workspace, open, onClose, onSave, saving }) {
 }
 
 // ─────────────────────────────────────────────
+// PersonalOverviewModal — edit all personal trip fields
+// ─────────────────────────────────────────────
+function PersonalOverviewModal({ workspace, open, onClose, onSave, saving }) {
+  const { trip } = workspace;
+  const [form, setForm] = useState({});
+  const [highlightInput, setHighlightInput] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      setForm({
+        title:               trip.title               || '',
+        destination:         trip.destination         || '',
+        country:             trip.country             || '',
+        subtitle:            trip.subtitle            || '',
+        overview:            trip.overview            || '',
+        startDate:           trip.startDate ? trip.startDate.slice(0, 10) : '',
+        endDate:             trip.endDate   ? trip.endDate.slice(0, 10)   : '',
+        travellers:          trip.travellers           || '',
+        accommodationSummary: trip.accommodationSummary || '',
+        arrivalInfo:          trip.arrivalInfo          || '',
+        departureInfo:        trip.departureInfo        || '',
+        generalNotes:         trip.generalNotes         || '',
+        heroImage:            trip.heroImage            || '',
+        highlights:           Array.isArray(trip.highlights) ? [...trip.highlights] : [],
+      });
+      setHighlightInput('');
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function set(key, val) { setForm(f => ({ ...f, [key]: val })); }
+
+  function addHighlight() {
+    const h = highlightInput.trim();
+    if (!h) return;
+    setForm(f => ({ ...f, highlights: [...(f.highlights || []), h] }));
+    setHighlightInput('');
+  }
+
+  function removeHighlight(i) {
+    setForm(f => ({ ...f, highlights: f.highlights.filter((_, idx) => idx !== i) }));
+  }
+
+  function requestClose() {
+    if (!window.confirm('Discard changes?')) return;
+    onClose();
+  }
+
+  return (
+    <Modal open={open} onRequestClose={requestClose} title="Edit trip details" wide>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+        <FormField label="Trip Name *">
+          <input value={form.title || ''} onChange={e => set('title', e.target.value)} placeholder="My Summer Trip" style={inputStyle} autoFocus />
+        </FormField>
+        <FormField label="Destination *">
+          <input value={form.destination || ''} onChange={e => set('destination', e.target.value)} placeholder="Lisbon, Portugal" style={inputStyle} />
+        </FormField>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+        <FormField label="Country">
+          <input value={form.country || ''} onChange={e => set('country', e.target.value)} placeholder="Portugal" style={inputStyle} />
+        </FormField>
+        <FormField label="Number of travellers">
+          <input type="number" min="1" max="50" value={form.travellers || ''} onChange={e => set('travellers', e.target.value)} placeholder="e.g. 2" style={inputStyle} />
+        </FormField>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+        <FormField label="Start Date">
+          <input type="date" value={form.startDate || ''} onChange={e => set('startDate', e.target.value)} style={inputStyle} />
+        </FormField>
+        <FormField label="End Date">
+          <input type="date" value={form.endDate || ''} min={form.startDate || undefined} onChange={e => set('endDate', e.target.value)} style={inputStyle} />
+        </FormField>
+      </div>
+      <FormField label="Subtitle">
+        <input value={form.subtitle || ''} onChange={e => set('subtitle', e.target.value)} placeholder="A short tagline" style={inputStyle} />
+      </FormField>
+      <FormField label="Overview">
+        <textarea value={form.overview || ''} onChange={e => set('overview', e.target.value)} placeholder="Describe your trip…" rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
+      </FormField>
+      <FormField label="Cover image URL">
+        <input value={form.heroImage || ''} onChange={e => set('heroImage', e.target.value)} placeholder="https://…" style={inputStyle} />
+      </FormField>
+      <FormField label="Highlights">
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+          <input
+            value={highlightInput}
+            onChange={e => setHighlightInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addHighlight(); } }}
+            placeholder="Add a highlight and press Enter"
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button type="button" onClick={addHighlight} style={{ ...btnSecondary, padding: '10px 14px', flexShrink: 0 }}>
+            Add
+          </button>
+        </div>
+        {(form.highlights || []).length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {(form.highlights || []).map((h, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', background: LIGHT, borderRadius: '4px' }}>
+                <span style={{ flex: 1, fontSize: '13px', color: CHAR }}>{h}</span>
+                <button type="button" onClick={() => removeHighlight(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '2px' }}>
+                  <X size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </FormField>
+      <FormField label="Accommodation summary">
+        <input value={form.accommodationSummary || ''} onChange={e => set('accommodationSummary', e.target.value)} placeholder="e.g. Mix of boutique hotels" style={inputStyle} />
+      </FormField>
+      <FormField label="Arrival info">
+        <input value={form.arrivalInfo || ''} onChange={e => set('arrivalInfo', e.target.value)} placeholder="e.g. LIS–MAR, AF1234, 09:40" style={inputStyle} />
+      </FormField>
+      <FormField label="Departure info">
+        <input value={form.departureInfo || ''} onChange={e => set('departureInfo', e.target.value)} placeholder="e.g. MAR–LIS, AF1235, 17:20" style={inputStyle} />
+      </FormField>
+      <FormField label="General notes">
+        <textarea value={form.generalNotes || ''} onChange={e => set('generalNotes', e.target.value)} placeholder="Anything useful to remember…" rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
+      </FormField>
+      <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
+        <button style={btnSecondary} onClick={requestClose}>Cancel</button>
+        <button style={btnPrimary} onClick={() => onSave(form)} disabled={saving}>
+          {saving ? 'Saving...' : 'Save changes'}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// ─────────────────────────────────────────────
 // AddItemModal — add custom item to a day
 // ─────────────────────────────────────────────
 function AddItemModal({ open, dayNumber, onClose, onSave, saving }) {
@@ -1529,16 +1660,19 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
 // ─────────────────────────────────────────────
 // OverviewTab
 // ─────────────────────────────────────────────
-function OverviewTab({ workspace, onEditDetails }) {
+function OverviewTab({ workspace, onEditDetails, onEditPersonal }) {
   const isMobile = useIsMobile();
   const { trip, itinerary, tripNotes } = workspace;
+  const isPersonal = trip.tripType === 'personal';
   const content = parseContent(itinerary?.content);
-  const highlights = content?.summary?.highlights || [];
+  const highlights = (isPersonal
+    ? (Array.isArray(trip.highlights) ? trip.highlights : [])
+    : content?.summary?.highlights || []);
   const bestFor    = content?.tripFacts?.bestFor || content?.summary?.bestFor || [];
   const tags       = content?.tags || bestFor;
   const whySpecial = content?.summary?.whySpecial || '';
   const routeOverview = content?.route?.overview || content?.route?.description || '';
-  const description = itinerary?.description || trip.overview || '';
+  const description = trip.overview || itinerary?.description || '';
 
   const generalNotes = tripNotes?.filter(n => !n.tripDayId && !n.tripItemId) || [];
 
@@ -1550,6 +1684,24 @@ function OverviewTab({ workspace, onEditDetails }) {
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr minmax(260px, 300px)', gap: isMobile ? '28px' : '40px', alignItems: 'start' }}>
         {/* Left — editorial content */}
         <div>
+          {isPersonal && onEditPersonal && (
+            <div style={{ marginBottom: '28px' }}>
+              <button
+                onClick={onEditPersonal}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  padding: '9px 18px', border: `1px solid ${BORDER}`, borderRadius: '6px',
+                  background: 'transparent', fontSize: '13px', fontWeight: '600', color: MUTED,
+                  cursor: 'pointer', transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = TEAL; e.currentTarget.style.color = TEAL; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}
+              >
+                <Pencil size={13} /> Edit trip details
+              </button>
+            </div>
+          )}
+
           {description && (
             <section style={{ marginBottom: '40px' }}>
               <p style={{ fontSize: '16px', color: MUTED, lineHeight: '1.8' }}>{description}</p>
@@ -1980,6 +2132,51 @@ function BookingsTab({ workspace, onAddBooking, onDeleteBooking, onEditBooking, 
 // ─────────────────────────────────────────────
 function PdfTab({ workspace, onDownload, onDownloadPersonalised, downloadState, downloadPersonalisedState }) {
   const { trip, itinerary } = workspace;
+  const isPersonal = trip.tripType === 'personal';
+
+  if (isPersonal) {
+    return (
+      <div style={{ maxWidth: '680px', margin: '0 auto', padding: 'clamp(32px, 5vw, 56px) 24px' }}>
+        <h2 style={{ fontFamily: SERIF, fontSize: '26px', fontWeight: '600', color: CHAR, marginBottom: '8px' }}>
+          Download PDF
+        </h2>
+        <p style={{ fontSize: '15px', color: MUTED, lineHeight: '1.7', marginBottom: '36px' }}>
+          Export your personal trip as a PDF to keep offline or share with others.
+        </p>
+
+        <div style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: '12px', padding: '28px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{
+                display: 'inline-block', padding: '3px 9px', borderRadius: '3px',
+                background: '#F0ECE6', marginBottom: '10px',
+                fontSize: '9.5px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', color: '#7C6B5A',
+              }}>
+                Personal Trip
+              </div>
+              <p style={{ fontFamily: SERIF, fontSize: '18px', fontWeight: '600', color: CHAR, marginBottom: '6px' }}>
+                {trip.title || trip.destination}
+              </p>
+              <p style={{ fontSize: '13.5px', color: MUTED }}>
+                Includes your overview, day plan, items, bookings and notes.
+              </p>
+            </div>
+            <button
+              onClick={onDownloadPersonalised}
+              disabled={downloadPersonalisedState === 'downloading'}
+              style={{ ...btnPrimary, flexShrink: 0, background: '#7C6B5A', opacity: downloadPersonalisedState === 'downloading' ? 0.7 : 1 }}
+            >
+              <Download size={14} />
+              {downloadPersonalisedState === 'downloading' ? 'Preparing...' : 'Download'}
+            </button>
+          </div>
+          {downloadPersonalisedState === 'error' && (
+            <p style={{ fontSize: '12px', color: '#B04040', marginTop: '10px' }}>Download failed. Please try again.</p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: '680px', margin: '0 auto', padding: 'clamp(32px, 5vw, 56px) 24px' }}>
@@ -2058,6 +2255,10 @@ export default function TripDetailPage() {
   const [deleting, setDeleting]       = useState(false);
 
   const [showShare, setShowShare] = useState(false);
+
+  // Personal trip overview edit modal
+  const [showPersonalOverview, setShowPersonalOverview]     = useState(false);
+  const [savingPersonalOverview, setSavingPersonalOverview] = useState(false);
 
   // Modal states
   const [showDetails, setShowDetails]           = useState(false);
@@ -2219,6 +2420,36 @@ export default function TripDetailPage() {
       alert('Could not save details. Please try again.');
     } finally {
       setSavingDetails(false);
+    }
+  }
+
+  // ── Save personal trip overview (title, destination, overview, etc.) ─────
+  async function handleSavePersonalOverview(form) {
+    setSavingPersonalOverview(true);
+    try {
+      const payload = {
+        ...form,
+        travellers: form.travellers ? Number(form.travellers) : null,
+      };
+      const res = await api.post(`/api/trips?id=${id}&action=personal-overview`, payload);
+      if (!res.ok) throw new Error('Save failed');
+      // Recalculate durationDays / duration locally for optimistic update
+      let durationDays = null;
+      let duration = '';
+      if (form.startDate && form.endDate) {
+        const s = new Date(form.startDate + 'T00:00:00Z');
+        const e = new Date(form.endDate + 'T00:00:00Z');
+        const diff = Math.round((e.getTime() - s.getTime()) / 86400000) + 1;
+        if (diff > 0) { durationDays = diff; duration = diff === 1 ? '1 day' : `${diff} days`; }
+      }
+      const updated = { ...payload };
+      if (durationDays) { updated.durationDays = durationDays; updated.duration = duration; }
+      setWorkspace(w => ({ ...w, trip: { ...w.trip, ...updated } }));
+      setShowPersonalOverview(false);
+    } catch {
+      alert('Could not save trip details. Please try again.');
+    } finally {
+      setSavingPersonalOverview(false);
     }
   }
 
@@ -2409,10 +2640,11 @@ export default function TripDetailPage() {
 
   const { trip, itinerary, assets } = workspace;
   const access = workspace.access || { canView: true, canEdit: true, canManageSharing: true, role: 'owner' };
+  const isPersonalTrip = trip.tripType === 'personal';
   const heroImage = getHeroImage(trip, itinerary, assets);
-  const title     = itinerary?.title || trip.title || trip.destination;
-  const subtitle  = trip.subtitle || itinerary?.subtitle || '';
-  const destination = itinerary?.destination || trip.country || '';
+  const title     = isPersonalTrip ? (trip.title || trip.destination) : (itinerary?.title || trip.title || trip.destination);
+  const subtitle  = trip.subtitle || (!isPersonalTrip ? itinerary?.subtitle : '') || '';
+  const destination = isPersonalTrip ? (trip.destination || trip.country || '') : (itinerary?.destination || trip.country || '');
   const duration    = trip.duration || (itinerary?.durationDays ? `${itinerary.durationDays} days` : '');
 
   return (
@@ -2484,16 +2716,35 @@ export default function TripDetailPage() {
         {/* Hero content */}
         <div style={{ position: 'relative', zIndex: 10, padding: 'clamp(32px, 5vw, 56px) 24px 40px', maxWidth: '760px' }}>
           {/* Badge */}
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: '5px',
-            padding: '4px 10px', marginBottom: '14px',
-            background: 'rgba(201,169,110,0.2)', border: '1px solid rgba(201,169,110,0.4)',
-            borderRadius: '3px',
-          }}>
-            <span style={{ fontSize: '9.5px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: GOLD }}>
-              {access.role === 'owner' ? 'Personal trip copy' : access.role === 'edit' ? 'Shared with you · Can edit' : 'Shared with you · View only'}
-            </span>
-          </div>
+          {(() => {
+            const isPersonal = trip.tripType === 'personal';
+            const badgeText = isPersonal
+              ? 'Personal Trip'
+              : access.role === 'owner'
+                ? 'Personal trip copy'
+                : access.role === 'edit'
+                  ? 'Shared with you · Can edit'
+                  : 'Shared with you · View only';
+            const badgeBg = isPersonal
+              ? 'rgba(124,107,90,0.25)'
+              : 'rgba(201,169,110,0.2)';
+            const badgeBorder = isPersonal
+              ? '1px solid rgba(124,107,90,0.5)'
+              : '1px solid rgba(201,169,110,0.4)';
+            const badgeColor = isPersonal ? '#D4C4B0' : GOLD;
+            return (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                padding: '4px 10px', marginBottom: '14px',
+                background: badgeBg, border: badgeBorder,
+                borderRadius: '3px',
+              }}>
+                <span style={{ fontSize: '9.5px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: badgeColor }}>
+                  {badgeText}
+                </span>
+              </div>
+            );
+          })()}
 
           {/* Title */}
           <h1 style={{
@@ -2567,7 +2818,11 @@ export default function TripDetailPage() {
       {/* paddingBottom on desktop; on mobile CSS overrides to account for bottom nav + safe area */}
       <div style={{ paddingBottom: '100px' }}>
         {activeTab === 'overview' && (
-          <OverviewTab workspace={workspace} onEditDetails={() => setShowDetails(true)} />
+          <OverviewTab
+            workspace={workspace}
+            onEditDetails={() => setShowDetails(true)}
+            onEditPersonal={access.canEdit && trip.tripType === 'personal' ? () => setShowPersonalOverview(true) : null}
+          />
         )}
 
         {activeTab === 'days' && (
@@ -2651,6 +2906,16 @@ export default function TripDetailPage() {
           onClose={() => setShowDetails(false)}
           onSave={handleSaveDetails}
           saving={savingDetails}
+        />
+      )}
+
+      {showPersonalOverview && access.canEdit && trip.tripType === 'personal' && (
+        <PersonalOverviewModal
+          workspace={workspace}
+          open={showPersonalOverview}
+          onClose={() => setShowPersonalOverview(false)}
+          onSave={handleSavePersonalOverview}
+          saving={savingPersonalOverview}
         />
       )}
 

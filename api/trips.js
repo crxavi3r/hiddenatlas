@@ -485,6 +485,8 @@ export default async function handler(req, res) {
            t.id, t.title, t.destination, t.country, t.duration, t.overview,
            t.source, t."coverImage", t."heroImage", t."itinerarySlug", t."itineraryId",
            t."createdAt",
+           COALESCE(t."tripType", 'saved') AS "tripType",
+           t."createdFrom", t."isEditable",
            COUNT(d.id)::int AS "dayCount",
            COALESCE(
              t."heroImage",
@@ -507,6 +509,8 @@ export default async function handler(req, res) {
            t.id, t.title, t.destination, t.country, t.duration, t.overview,
            t.source, t."coverImage", t."heroImage", t."itinerarySlug", t."itineraryId",
            t."createdAt",
+           COALESCE(t."tripType", 'saved') AS "tripType",
+           t."createdFrom", t."isEditable",
            COUNT(d.id)::int AS "dayCount",
            COALESCE(
              t."heroImage",
@@ -541,6 +545,10 @@ export default async function handler(req, res) {
            source, "coverImage", subtitle, "heroImage",
            "startDate", "endDate", travellers,
            "accommodationSummary", "arrivalInfo", "departureInfo", "generalNotes",
+           COALESCE("tripType", 'saved') AS "tripType",
+           "createdFrom", "isEditable",
+           "pdfUrl", COALESCE("pdfStatus", 'idle') AS "pdfStatus",
+           "pdfGeneratedAt", "pdfError",
            "createdAt", "updatedAt"
          FROM "Trip"
          WHERE id = $1`,
@@ -1071,6 +1079,166 @@ export default async function handler(req, res) {
           ...metadata,
         },
       });
+
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── POST /api/trips?action=create-personal — create personal trip ─────
+    if (req.method === 'POST' && action === 'create-personal') {
+      const { title, destination, country, startDate, endDate, travellers, subtitle, overview } = req.body || {};
+
+      if (!title?.trim() || !destination?.trim()) {
+        return res.status(400).json({ error: 'title and destination are required' });
+      }
+
+      let durationDays = null;
+      let duration = '';
+      if (startDate && endDate) {
+        const s = new Date(startDate + 'T00:00:00Z');
+        const e = new Date(endDate + 'T00:00:00Z');
+        const diff = Math.round((e.getTime() - s.getTime()) / 86400000) + 1;
+        if (diff > 0 && diff <= 365) {
+          durationDays = diff;
+          duration = diff === 1 ? '1 day' : `${diff} days`;
+        }
+      }
+
+      const { rows: created } = await pool.query(
+        `INSERT INTO "Trip" (
+           id, "userId", title, destination, country, duration, "durationDays",
+           overview, highlights, hotels, experiences, source,
+           "tripType", "createdFrom", "isEditable",
+           subtitle, "startDate", "endDate", travellers,
+           "personalPdfConfig", "itinerarySnapshot", "pdfStatus", "createdAt"
+         )
+         VALUES (
+           gen_random_uuid(), $1, $2, $3, $4, $5, $6,
+           $7, '[]', '[]', '[]', 'MANUAL',
+           'personal', 'manual', true,
+           $8, $9, $10, $11,
+           '{}', '{}', 'idle', NOW()
+         )
+         RETURNING id`,
+        [
+          userId, title.trim(), destination.trim(), country || '',
+          duration, durationDays,
+          overview || '',
+          subtitle || null,
+          startDate || null, endDate || null,
+          travellers ? Number(travellers) : null,
+        ]
+      );
+
+      const tripId = created[0].id;
+
+      if (durationDays && durationDays > 0) {
+        for (let i = 0; i < durationDays; i++) {
+          await pool.query(
+            `INSERT INTO "TripDay" (id, "tripId", "dayNumber", title, description, "sortOrder", "isHidden", "resetToOriginal", "updatedAt")
+             VALUES (gen_random_uuid(), $1, $2, $3, '', $4, false, false, NOW())`,
+            [tripId, i + 1, `Day ${i + 1}`, i + 1]
+          );
+        }
+      }
+
+      await createTripEvent(pool, {
+        userId, tripId,
+        eventType: 'SAVED',
+        metadata: {
+          destination: destination.trim(),
+          title: title.trim(),
+          duration,
+          dayCount: durationDays || 0,
+          source: 'MANUAL',
+        },
+      });
+
+      return res.status(200).json({ id: tripId });
+    }
+
+    // ── POST /api/trips?id=&action=personal-overview — update personal trip fields ──
+    if (req.method === 'POST' && action === 'personal-overview' && id) {
+      const access = await getTripAccess(id);
+      if (!access.canEdit) return res.status(access.canView ? 403 : 404).json({ error: access.canView ? 'Permission denied' : 'Trip not found' });
+
+      const {
+        title, destination, country, overview, subtitle,
+        coverImage, heroImage, highlights,
+        startDate, endDate, travellers,
+        accommodationSummary, arrivalInfo, departureInfo, generalNotes,
+      } = req.body || {};
+
+      let durationDays = null;
+      let duration = null;
+      if (startDate && endDate) {
+        const s = new Date(startDate + 'T00:00:00Z');
+        const e = new Date(endDate + 'T00:00:00Z');
+        const diff = Math.round((e.getTime() - s.getTime()) / 86400000) + 1;
+        if (diff > 0 && diff <= 365) {
+          durationDays = diff;
+          duration = diff === 1 ? '1 day' : `${diff} days`;
+        }
+      }
+
+      await pool.query(
+        `UPDATE "Trip"
+         SET
+           title                 = COALESCE($1, title),
+           destination           = COALESCE($2, destination),
+           country               = COALESCE($3, country),
+           overview              = COALESCE($4, overview),
+           subtitle              = $5,
+           "coverImage"          = COALESCE($6, "coverImage"),
+           "heroImage"           = COALESCE($7, "heroImage"),
+           highlights            = COALESCE($8::jsonb, highlights),
+           "startDate"           = $9,
+           "endDate"             = $10,
+           travellers            = $11,
+           "accommodationSummary" = $12,
+           "arrivalInfo"         = $13,
+           "departureInfo"       = $14,
+           "generalNotes"        = $15,
+           "durationDays"        = COALESCE($16, "durationDays"),
+           duration              = COALESCE($17, duration),
+           "updatedAt"           = NOW()
+         WHERE id = $18`,
+        [
+          title || null, destination || null, country || null, overview || null,
+          subtitle || null,
+          coverImage || null, heroImage || null,
+          highlights ? JSON.stringify(highlights) : null,
+          startDate || null, endDate || null,
+          travellers != null ? Number(travellers) : null,
+          accommodationSummary || null,
+          arrivalInfo || null,
+          departureInfo || null,
+          generalNotes || null,
+          durationDays, duration, id,
+        ]
+      );
+
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── POST /api/trips?id=&action=pdf — update PDF status for personal trip ─
+    if (req.method === 'POST' && action === 'pdf' && id) {
+      const access = await getTripAccess(id);
+      if (!access.canEdit) return res.status(access.canView ? 403 : 404).json({ error: access.canView ? 'Permission denied' : 'Trip not found' });
+
+      const { pdfStatus, pdfUrl, pdfError } = req.body || {};
+      const allowed = ['idle', 'generating', 'ready', 'failed'];
+      if (!allowed.includes(pdfStatus)) return res.status(400).json({ error: 'Invalid pdfStatus' });
+
+      await pool.query(
+        `UPDATE "Trip"
+         SET "pdfStatus" = $1,
+             "pdfUrl" = COALESCE($2, "pdfUrl"),
+             "pdfError" = $3,
+             "pdfGeneratedAt" = CASE WHEN $1 = 'ready' THEN NOW() ELSE "pdfGeneratedAt" END,
+             "updatedAt" = NOW()
+         WHERE id = $4`,
+        [pdfStatus, pdfUrl || null, pdfError || null, id]
+      );
 
       return res.status(200).json({ ok: true });
     }

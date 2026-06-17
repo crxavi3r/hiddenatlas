@@ -11,9 +11,10 @@
 //   PREMIUM_JOURNEY — warm gold    (#C9A96E bg / white text):    paid, high-value
 
 export const TRIP_SOURCE = {
-  FREE_JOURNEY:    { label: 'Free',       bg: '#1B6B65', color: 'white'   },
-  AI_GENERATED:    { label: 'AI Planner', bg: '#1C1A16', color: 'white'   },
-  PREMIUM_JOURNEY: { label: 'Premium',    bg: '#C9A96E', color: 'white'   },
+  FREE_JOURNEY:    { label: 'Free',          bg: '#1B6B65', color: 'white'   },
+  AI_GENERATED:    { label: 'AI Planner',    bg: '#1C1A16', color: 'white'   },
+  PREMIUM_JOURNEY: { label: 'Premium',       bg: '#C9A96E', color: 'white'   },
+  MANUAL:          { label: 'Personal Trip', bg: '#7C6B5A', color: 'white'   },
 };
 
 // Returns the display config for a given source string.

@@ -280,6 +280,15 @@ model Trip {
   itinerarySnapshot    Json      @default("{}")
   lastSyncedAt         DateTime?
 
+  // ── Personal Trip Builder fields ───────────────
+  tripType       String    @default("saved")   // saved | purchased | personal | custom
+  createdFrom    String?                        // manual | itinerary | purchase | custom_request | ai
+  isEditable     Boolean   @default(true)
+  pdfUrl         String?
+  pdfStatus      String    @default("idle")    // idle | generating | ready | failed
+  pdfGeneratedAt DateTime?
+  pdfError       String?
+
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @default(now())  // updated via raw SQL
 

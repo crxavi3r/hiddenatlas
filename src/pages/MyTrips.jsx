@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowRight, Calendar, BookOpen, MapPin, Clock, Trash2, Sparkles, Download } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { ArrowRight, Calendar, BookOpen, MapPin, Clock, Trash2, Sparkles, Download, Plus, X } from 'lucide-react';
 import { useUser } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
 import { useSEO } from '../hooks/useSEO';
@@ -614,6 +614,410 @@ function CustomRequestCard({ request }) {
   );
 }
 
+// ── CreateTripModal ──────────────────────────────────────────────────────────
+function CreateTripModal({ open, onClose, onCreate }) {
+  const [form, setForm] = useState({
+    title: '', destination: '', country: '',
+    startDate: '', endDate: '', travellers: '',
+    subtitle: '', overview: '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const titleRef = useRef(null);
+
+  useEffect(() => {
+    if (open) {
+      setForm({ title: '', destination: '', country: '', startDate: '', endDate: '', travellers: '', subtitle: '', overview: '' });
+      setError('');
+      setSaving(false);
+      setTimeout(() => titleRef.current?.focus(), 80);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const esc = e => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', esc);
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', esc); document.body.style.overflow = ''; };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.title.trim()) { setError('Trip name is required.'); return; }
+    if (!form.destination.trim()) { setError('Destination is required.'); return; }
+    if (form.startDate && form.endDate && form.endDate < form.startDate) {
+      setError('End date must be on or after start date.'); return;
+    }
+    setError('');
+    setSaving(true);
+    try {
+      await onCreate({
+        title: form.title.trim(),
+        destination: form.destination.trim(),
+        country: form.country.trim(),
+        startDate: form.startDate || undefined,
+        endDate: form.endDate || undefined,
+        travellers: form.travellers ? Number(form.travellers) : undefined,
+        subtitle: form.subtitle.trim() || undefined,
+        overview: form.overview.trim() || undefined,
+      });
+    } catch (err) {
+      setError(err.message || 'Could not create trip. Please try again.');
+      setSaving(false);
+    }
+  }
+
+  const inputStyle = {
+    width: '100%', padding: '10px 13px',
+    border: '1px solid #E8E3DA', borderRadius: '6px',
+    fontSize: '14px', color: '#1C1A16', background: 'white',
+    outline: 'none', fontFamily: 'Inter, system-ui, sans-serif',
+    boxSizing: 'border-box',
+  };
+  const labelStyle = {
+    display: 'block', fontSize: '10.5px', fontWeight: '700',
+    letterSpacing: '1.8px', textTransform: 'uppercase',
+    color: '#1B6B65', marginBottom: '7px',
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1100,
+        background: 'rgba(28,26,22,0.55)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        padding: '0',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'white',
+          borderRadius: '16px 16px 0 0',
+          width: '100%', maxWidth: '540px',
+          maxHeight: '90vh', overflowY: 'auto',
+          padding: '28px 24px 40px',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+          <div>
+            <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '21px', fontWeight: '600', color: '#1C1A16', marginBottom: '4px' }}>
+              Plan a New Trip
+            </h3>
+            <p style={{ fontSize: '13px', color: '#8C8070' }}>Create a personal itinerary from scratch.</p>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#6B6156', marginTop: '2px' }}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={labelStyle}>Trip Name *</label>
+            <input
+              ref={titleRef}
+              style={inputStyle}
+              placeholder="e.g. Summer in Lisbon"
+              value={form.title}
+              onChange={e => set('title', e.target.value)}
+              disabled={saving}
+            />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={labelStyle}>Destination *</label>
+            <input
+              style={inputStyle}
+              placeholder="e.g. Lisbon, Portugal"
+              value={form.destination}
+              onChange={e => set('destination', e.target.value)}
+              disabled={saving}
+            />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+            <div>
+              <label style={labelStyle}>Country</label>
+              <input
+                style={inputStyle}
+                placeholder="e.g. Portugal"
+                value={form.country}
+                onChange={e => set('country', e.target.value)}
+                disabled={saving}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Travellers</label>
+              <input
+                style={inputStyle}
+                type="number" min="1" max="50"
+                placeholder="e.g. 2"
+                value={form.travellers}
+                onChange={e => set('travellers', e.target.value)}
+                disabled={saving}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+            <div>
+              <label style={labelStyle}>Start Date</label>
+              <input
+                style={inputStyle}
+                type="date"
+                value={form.startDate}
+                onChange={e => set('startDate', e.target.value)}
+                disabled={saving}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>End Date</label>
+              <input
+                style={inputStyle}
+                type="date"
+                value={form.endDate}
+                min={form.startDate || undefined}
+                onChange={e => set('endDate', e.target.value)}
+                disabled={saving}
+              />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={labelStyle}>Subtitle <span style={{ fontWeight: '400', textTransform: 'none', letterSpacing: 0 }}>(optional)</span></label>
+            <input
+              style={inputStyle}
+              placeholder="A short tagline for your trip"
+              value={form.subtitle}
+              onChange={e => set('subtitle', e.target.value)}
+              disabled={saving}
+            />
+          </div>
+
+          <div style={{ marginBottom: '24px' }}>
+            <label style={labelStyle}>Overview <span style={{ fontWeight: '400', textTransform: 'none', letterSpacing: 0 }}>(optional)</span></label>
+            <textarea
+              style={{ ...inputStyle, minHeight: '80px', resize: 'vertical' }}
+              placeholder="Describe your trip…"
+              value={form.overview}
+              onChange={e => set('overview', e.target.value)}
+              disabled={saving}
+            />
+          </div>
+
+          {error && (
+            <p style={{ fontSize: '13px', color: '#B04040', marginBottom: '14px', lineHeight: '1.5' }}>{error}</p>
+          )}
+
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              style={{
+                padding: '11px 20px', borderRadius: '6px',
+                background: 'transparent', border: '1px solid #D4CCBF',
+                fontSize: '13px', fontWeight: '600', color: '#4A433A',
+                cursor: saving ? 'default' : 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              style={{
+                padding: '11px 24px', borderRadius: '6px',
+                background: saving ? '#9CC9C5' : '#1B6B65',
+                border: 'none', fontSize: '13px', fontWeight: '600', color: 'white',
+                cursor: saving ? 'default' : 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+              }}
+            >
+              {saving ? 'Creating…' : <><Plus size={14} /> Create Trip</>}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── PersonalTripCard ─────────────────────────────────────────────────────────
+function PersonalTripCard({ trip, onDelete }) {
+  const [hovered, setHovered] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const coverUrl = trip.resolvedCoverImage || trip.heroImage || trip.coverImage || null;
+  const durationStr = trip.duration || (trip.durationDays ? `${trip.durationDays} days` : null);
+
+  function openConfirm(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    setConfirmOpen(true);
+  }
+
+  const handleCancel = useCallback(() => setConfirmOpen(false), []);
+
+  async function handleConfirmDelete() {
+    setDeleting(true);
+    try {
+      await onDelete(trip.id);
+      setConfirmOpen(false);
+    } catch {
+      setDeleting(false);
+      setConfirmOpen(false);
+    }
+  }
+
+  return (
+    <>
+      {confirmOpen && (
+        <DeleteConfirmModal
+          destination={trip.title || trip.destination}
+          onConfirm={handleConfirmDelete}
+          onCancel={handleCancel}
+          deleting={deleting}
+        />
+      )}
+      <Link
+        to={`/my-trips/${trip.id}`}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          background: 'white', borderRadius: '10px',
+          border: '1px solid #E8E3DA', textDecoration: 'none',
+          overflow: 'hidden',
+          boxShadow: hovered ? '0 20px 60px rgba(28,26,22,0.12)' : '0 2px 16px rgba(28,26,22,0.05)',
+          transform: hovered ? 'translateY(-4px)' : 'translateY(0)',
+          transition: 'box-shadow 0.3s ease, transform 0.3s ease',
+          display: 'flex', flexDirection: 'column',
+          opacity: deleting ? 0.5 : 1,
+        }}
+      >
+        {/* Cover / gradient banner */}
+        <div style={{ position: 'relative', height: '160px', overflow: 'hidden', flexShrink: 0 }}>
+          {coverUrl ? (
+            <img
+              src={coverUrl}
+              alt={trip.destination}
+              style={{
+                width: '100%', height: '100%', objectFit: 'cover',
+                transform: hovered ? 'scale(1.05)' : 'scale(1)',
+                transition: 'transform 0.5s ease',
+              }}
+              onError={e => { e.currentTarget.style.display = 'none'; }}
+            />
+          ) : (
+            <div style={{
+              width: '100%', height: '100%',
+              background: 'linear-gradient(135deg, #4A3728 0%, #7C6B5A 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <span style={{
+                fontFamily: "'Playfair Display', Georgia, serif",
+                fontSize: 'clamp(18px, 3vw, 24px)',
+                fontWeight: '600',
+                color: 'rgba(255,255,255,0.45)',
+                letterSpacing: '0.5px',
+                textAlign: 'center',
+                padding: '0 20px',
+              }}>
+                {trip.destination}
+              </span>
+            </div>
+          )}
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(28,26,22,0.45) 0%, transparent 55%)' }} />
+
+          {/* Personal Trip badge */}
+          <div style={{
+            position: 'absolute', top: '12px', left: '14px',
+            padding: '4px 10px', borderRadius: '3px',
+            fontSize: '9.5px', fontWeight: '700', letterSpacing: '0.8px',
+            textTransform: 'uppercase', background: '#7C6B5A', color: 'white',
+          }}>
+            Personal Trip
+          </div>
+
+          {/* Delete button */}
+          <button
+            onClick={openConfirm}
+            disabled={deleting}
+            title="Delete trip"
+            style={{
+              position: 'absolute', top: '10px', right: '10px',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: '30px', height: '30px',
+              background: 'rgba(28,26,22,0.4)',
+              border: 'none', borderRadius: '50%',
+              color: 'rgba(255,255,255,0.65)', cursor: deleting ? 'default' : 'pointer',
+              transition: 'all 0.15s',
+              backdropFilter: 'blur(4px)',
+            }}
+            onMouseEnter={e => { if (!deleting) { e.currentTarget.style.background = 'rgba(192,57,43,0.8)'; e.currentTarget.style.color = 'white'; }}}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(28,26,22,0.4)'; e.currentTarget.style.color = 'rgba(255,255,255,0.65)'; }}
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div style={{ padding: '18px 20px 16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+          <h3 style={{
+            fontFamily: "'Playfair Display', Georgia, serif",
+            fontSize: '18px', fontWeight: '600', color: '#1C1A16',
+            lineHeight: '1.3', marginBottom: '4px',
+          }}>
+            {trip.title || trip.destination}
+          </h3>
+          {trip.title && trip.title !== trip.destination && (
+            <p style={{ fontSize: '12px', color: '#9C9488', marginBottom: '6px' }}>{trip.destination}</p>
+          )}
+          <div style={{ display: 'flex', gap: '14px', marginBottom: '10px', flexWrap: 'wrap' }}>
+            {trip.country && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#8C8070' }}>
+                <MapPin size={10} strokeWidth={2} />
+                {trip.country}
+              </span>
+            )}
+            {durationStr && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#8C8070' }}>
+                <Clock size={10} strokeWidth={2} />
+                {durationStr}
+              </span>
+            )}
+          </div>
+          {trip.overview && (
+            <p style={{ fontSize: '13px', color: '#6B6156', lineHeight: '1.6', marginBottom: '12px', flex: 1 }}>
+              {trip.overview.length > 100 ? trip.overview.slice(0, 100) + '…' : trip.overview}
+            </p>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: '#B5AA99', marginBottom: '14px' }}>
+            <Calendar size={11} strokeWidth={2} />
+            Created {formatDate(trip.createdAt)}
+          </div>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            padding: '11px 16px', background: '#7C6B5A', color: 'white',
+            borderRadius: '4px', fontSize: '12.5px', fontWeight: '600',
+            letterSpacing: '0.4px', textTransform: 'uppercase',
+            justifyContent: 'center',
+          }}>
+            <BookOpen size={13} /> Open Trip
+          </div>
+        </div>
+      </Link>
+    </>
+  );
+}
+
 // Returns first name → first word of full name → null (triggers "Your trips" fallback)
 function resolveFirstName(user) {
   if (user.firstName?.trim()) return user.firstName.trim();
@@ -626,12 +1030,14 @@ export default function MyTrips() {
   useSEO({ title: 'My Trips', noindex: true });
   const { isLoaded, isSignedIn, user } = useUser();
   const api = useApi();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [aiTrips, setAiTrips] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [customRequests, setCustomRequests] = useState([]);
   const [status, setStatus] = useState('loading');
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Success banner — shown after returning from custom planning checkout
   const [showSuccess, setShowSuccess] = useState(searchParams.get('success') === 'true');
@@ -674,6 +1080,17 @@ export default function MyTrips() {
     setAiTrips(prev => prev.filter(t => t.id !== tripId));
   }
 
+  async function handleCreateTrip(form) {
+    const res = await api.post('/api/trips?action=create-personal', form);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Could not create trip');
+    }
+    const { id } = await res.json();
+    setShowCreateModal(false);
+    navigate(`/my-trips/${id}`);
+  }
+
   useEffect(() => {
     if (!isLoaded) return;
     if (!isSignedIn) { setStatus('unauthenticated'); return; }
@@ -706,7 +1123,8 @@ export default function MyTrips() {
 
   const purchasedSlugs = new Set(purchases.map(p => p.slug).filter(Boolean));
   const allSavedTrips = aiTrips.filter(t => !t.itinerarySlug || !purchasedSlugs.has(t.itinerarySlug));
-  const ownedSavedTrips = allSavedTrips.filter(t => !t.isShared);
+  const personalTrips = allSavedTrips.filter(t => t.tripType === 'personal' && !t.isShared);
+  const ownedSavedTrips = allSavedTrips.filter(t => t.tripType !== 'personal' && !t.isShared);
   const sharedTrips = allSavedTrips.filter(t => t.isShared);
   const totalCount = allSavedTrips.length + purchases.length + customRequests.length;
 
@@ -715,25 +1133,50 @@ export default function MyTrips() {
 
       {/* Hero */}
       <section style={{ background: '#F4F1EC', padding: 'clamp(48px, 7vw, 88px) 24px', borderBottom: '1px solid #E8E3DA' }}>
-        <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
-          <span style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '2px', textTransform: 'uppercase', color: '#1B6B65', display: 'block', marginBottom: '14px' }}>
-            My Library
-          </span>
-          {(() => {
-            const name = isSignedIn ? resolveFirstName(user) : null;
-            return (
-              <>
-                <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 'clamp(30px, 4vw, 46px)', fontWeight: '600', color: '#1C1A16', lineHeight: '1.15', marginBottom: '10px' }}>
-                  {name ? `${name}'s trips` : 'Your trips'}
-                </h1>
-                <p style={{ fontSize: '15px', color: '#8C8070', lineHeight: '1.7' }}>
-                  Your personal travel library
-                </p>
-              </>
-            );
-          })()}
+        <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: '20px' }}>
+          <div>
+            <span style={{ fontSize: '11px', fontWeight: '600', letterSpacing: '2px', textTransform: 'uppercase', color: '#1B6B65', display: 'block', marginBottom: '14px' }}>
+              My Library
+            </span>
+            {(() => {
+              const name = isSignedIn ? resolveFirstName(user) : null;
+              return (
+                <>
+                  <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 'clamp(30px, 4vw, 46px)', fontWeight: '600', color: '#1C1A16', lineHeight: '1.15', marginBottom: '10px' }}>
+                    {name ? `${name}'s trips` : 'Your trips'}
+                  </h1>
+                  <p style={{ fontSize: '15px', color: '#8C8070', lineHeight: '1.7' }}>
+                    Your personal travel library
+                  </p>
+                </>
+              );
+            })()}
+          </div>
+          {isSignedIn && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '7px',
+                padding: '13px 22px', background: '#1B6B65', color: 'white',
+                border: 'none', borderRadius: '6px',
+                fontSize: '13.5px', fontWeight: '600', letterSpacing: '0.3px',
+                cursor: 'pointer', transition: 'background 0.15s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#155A55'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#1B6B65'; }}
+            >
+              <Plus size={15} /> Create Trip
+            </button>
+          )}
         </div>
       </section>
+
+      <CreateTripModal
+        open={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreate={handleCreateTrip}
+      />
 
       {/* Success banner — shown after returning from custom planning checkout */}
       {showSuccess && (
@@ -808,11 +1251,55 @@ export default function MyTrips() {
                     No trips yet.
                   </p>
                   <p style={{ fontSize: '15px', color: '#6B6156', marginBottom: '28px', lineHeight: '1.7' }}>
-                    Start exploring itineraries and build your personal travel library.
+                    Create your own itinerary or save one from the catalogue.
                   </p>
-                  <Link to="/itineraries" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '13px 26px', background: '#1B6B65', color: 'white', borderRadius: '4px', fontSize: '13.5px', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none' }}>
-                    Browse Itineraries <ArrowRight size={14} />
-                  </Link>
+                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => setShowCreateModal(true)}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '7px',
+                        padding: '13px 24px', background: '#1B6B65', color: 'white',
+                        border: 'none', borderRadius: '4px', fontSize: '13.5px', fontWeight: '600',
+                        letterSpacing: '0.5px', textTransform: 'uppercase', cursor: 'pointer',
+                      }}
+                    >
+                      <Plus size={14} /> Create Trip
+                    </button>
+                    <Link to="/itineraries" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '13px 26px', background: 'transparent', color: '#1B6B65', border: '1px solid #1B6B65', borderRadius: '4px', fontSize: '13.5px', fontWeight: '600', letterSpacing: '0.5px', textTransform: 'uppercase', textDecoration: 'none' }}>
+                      Browse Itineraries <ArrowRight size={14} />
+                    </Link>
+                  </div>
+                </div>
+              )}
+
+              {/* Personal Trips section */}
+              {personalTrips.length > 0 && (
+                <div style={{ marginBottom: '60px' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
+                      <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '22px', fontWeight: '600', color: '#1C1A16' }}>
+                        My Itineraries
+                      </h2>
+                      <span style={{ fontSize: '13px', color: '#9C9488' }}>{personalTrips.length}</span>
+                    </div>
+                    <button
+                      onClick={() => setShowCreateModal(true)}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '6px',
+                        padding: '8px 16px', background: 'transparent', color: '#1B6B65',
+                        border: '1px solid #1B6B65', borderRadius: '4px',
+                        fontSize: '12.5px', fontWeight: '600', cursor: 'pointer',
+                        transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#1B6B65'; e.currentTarget.style.color = 'white'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#1B6B65'; }}
+                    >
+                      <Plus size={13} /> New Trip
+                    </button>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '28px' }}>
+                    {personalTrips.map(trip => <PersonalTripCard key={trip.id} trip={trip} onDelete={handleDeleteTrip} />)}
+                  </div>
                 </div>
               )}
 
