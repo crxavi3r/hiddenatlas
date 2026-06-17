@@ -787,26 +787,47 @@ export default async function handler(req, res) {
          )
          VALUES (
            gen_random_uuid(), $1, $2, $3,
-           'custom', null, null,
            $4, $5, $6,
-           $7, $7, $8, $9,
-           $10, $11, $12::float8, $13::float8,
-           $14, $15, $16,
-           'planned', false, false, $17, '{}',
+           $7, $8, $9,
+           $10, $10, $11, $12,
+           $13, $14, $15::float8, $16::float8,
+           $17, $18, $19,
+           $20, $21::boolean, $22::boolean, $23, $24::jsonb,
            NOW(), NOW()
          )
-         RETURNING id`,
-        [id, resolvedTripDayId, resolvedDayNumber,
-         type || 'attraction', title, description || null,
-         resolvedStartTime, endTime || null,
-         durationMinutes != null ? Number(durationMinutes) : null,
-         locationName || null, address || null,
-         latitude != null ? Number(latitude) : null,
-         longitude != null ? Number(longitude) : null,
-         notes || null, provider || null, url || null,
-         nextSortOrder]
+         RETURNING id, "tripId", "tripDayId", "dayNumber", type, title, description,
+                   time, "startTime", "endTime", "durationMinutes",
+                   "locationName", address, latitude, longitude,
+                   notes, provider, url, status, "isHidden", "isLocked",
+                   "sortOrder", metadata, "createdAt", "updatedAt"`,
+        [
+          id,                     // $1  tripId
+          resolvedTripDayId,      // $2  tripDayId
+          resolvedDayNumber,      // $3  dayNumber
+          'custom',               // $4  sourceType
+          null,                   // $5  sourceKey
+          null,                   // $6  sourceTitle
+          type,                   // $7  type
+          title,                  // $8  title
+          description || null,    // $9  description
+          resolvedStartTime,      // $10 time + startTime (same value for both columns)
+          endTime || null,        // $11 endTime
+          durationMinutes != null ? Number(durationMinutes) : null, // $12
+          locationName || null,   // $13 locationName
+          address || null,        // $14 address
+          latitude != null ? Number(latitude) : null,   // $15
+          longitude != null ? Number(longitude) : null, // $16
+          notes || null,          // $17 notes
+          provider || null,       // $18 provider
+          url || null,            // $19 url
+          'planned',              // $20 status
+          false,                  // $21 isHidden
+          false,                  // $22 isLocked
+          nextSortOrder,          // $23 sortOrder
+          JSON.stringify({}),     // $24 metadata
+        ]
       );
-      return res.status(200).json({ id: rows[0].id });
+      return res.status(200).json({ item: rows[0] });
     }
 
     // Update TripItem

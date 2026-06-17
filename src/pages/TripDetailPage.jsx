@@ -2463,9 +2463,15 @@ export default function TripDetailPage() {
       const body = { ...form, tripDayId: addItemCtx.dayId };
       const res  = await api.post(`/api/trips?id=${id}&action=item`, body);
       if (!res.ok) throw new Error('Save failed');
-      const { id: newId } = await res.json();
-      const newItem = { id: newId, tripId: id, tripDayId: addItemCtx.dayId, ...form, status: 'planned', isHidden: false, sortOrder: 0, createdAt: new Date().toISOString() };
-      setWorkspace(w => ({ ...w, tripItems: [...w.tripItems, newItem] }));
+      const { item } = await res.json();
+      if (item) {
+        // Use the real DB row returned from the INSERT so state matches DB exactly
+        setWorkspace(w => ({ ...w, tripItems: [...w.tripItems, item] }));
+      } else {
+        // Fallback: re-fetch full workspace to sync state
+        const wsRes = await api.get(`/api/trips?id=${id}&action=workspace`);
+        if (wsRes.ok) setWorkspace(await wsRes.json());
+      }
       setAddItemCtx(null);
     } catch {
       alert('Could not add item. Please try again.');
