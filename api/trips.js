@@ -733,7 +733,7 @@ export default async function handler(req, res) {
       const access = await getTripAccess(id);
       if (!access.canEdit) return res.status(access.canView ? 403 : 404).json({ error: access.canView ? 'Permission denied' : 'Trip not found' });
 
-      const { tripDayId, dayNumber: bodyDayNumber, sourceType, type, title, description, time, startTime, endTime, durationMinutes, locationName, address, latitude, longitude, notes, status, sortOrder } = req.body || {};
+      const { tripDayId, dayNumber: bodyDayNumber, type, title, description, time, startTime, endTime, durationMinutes, locationName, address, latitude, longitude, notes, provider, url } = req.body || {};
       if (!title) return res.status(400).json({ error: 'title is required' });
 
       // Resolve dayNumber server-side — never trust client alone
@@ -759,19 +759,46 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Missing dayNumber or invalid trip day' });
       }
 
+      // Auto-compute next sortOrder for the day
+      const { rows: orderRows } = await pool.query(
+        `SELECT COALESCE(MAX("sortOrder"), -1) + 1 AS next FROM "TripItem" WHERE "tripDayId" = $1`,
+        [resolvedTripDayId]
+      );
+      const nextSortOrder = orderRows[0].next;
+
+      const resolvedStartTime = time || startTime || null;
+
       const { rows } = await pool.query(
-        `INSERT INTO "TripItem" (id, "tripId", "tripDayId", "dayNumber", "sourceType", type, title, description, time, "startTime", "endTime", "durationMinutes", "locationName", address, latitude, longitude, notes, status, "sortOrder", "createdAt", "updatedAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::float8, $15::float8, $16, $17, $18, NOW(), NOW())
+        `INSERT INTO "TripItem" (
+           id, "tripId", "tripDayId", "dayNumber",
+           "sourceType", "sourceKey", "sourceTitle",
+           type, title, description,
+           time, "startTime", "endTime", "durationMinutes",
+           "locationName", address, latitude, longitude,
+           notes, provider, url,
+           status, "isHidden", "isLocked", "sortOrder", metadata,
+           "createdAt", "updatedAt"
+         )
+         VALUES (
+           gen_random_uuid(), $1, $2, $3,
+           'custom', null, null,
+           $4, $5, $6,
+           $7, $7, $8, $9,
+           $10, $11, $12::float8, $13::float8,
+           $14, $15, $16,
+           'planned', false, false, $17, '{}',
+           NOW(), NOW()
+         )
          RETURNING id`,
-        [id, resolvedTripDayId, resolvedDayNumber, sourceType || null,
+        [id, resolvedTripDayId, resolvedDayNumber,
          type || 'attraction', title, description || null,
-         time || null, startTime || null, endTime || null,
+         resolvedStartTime, endTime || null,
          durationMinutes != null ? Number(durationMinutes) : null,
          locationName || null, address || null,
          latitude != null ? Number(latitude) : null,
          longitude != null ? Number(longitude) : null,
-         notes || null, status || 'planned',
-         sortOrder != null ? Number(sortOrder) : 0]
+         notes || null, provider || null, url || null,
+         nextSortOrder]
       );
       return res.status(200).json({ id: rows[0].id });
     }
