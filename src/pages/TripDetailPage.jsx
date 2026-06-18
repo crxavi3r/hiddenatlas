@@ -1107,7 +1107,7 @@ function formatDuration(minutes) {
   return `${h}h ${m}m`;
 }
 
-function ItemCard({ item, onDelete, onEdit, canEdit = true }) {
+function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, tripName = '', itineraryDayStops = [], canEdit = true }) {
   const color = TYPE_COLORS[item.type] || MUTED;
   const typeLabel = ITEM_TYPES.find(t => t.value === item.type)?.label || item.type;
   const timeDisplay = formatItemTime(item);
@@ -1149,6 +1149,27 @@ function ItemCard({ item, onDelete, onEdit, canEdit = true }) {
         )}
         {item.notes && (
           <p style={{ fontSize: '13px', color: MUTED, marginTop: '5px', lineHeight: '1.5' }}>{item.notes}</p>
+        )}
+        {linkedBookings.length > 0 && (
+          <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {linkedBookings.map(b => (
+              <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 10px', background: '#F4F0E8', borderRadius: '5px', fontSize: '12.5px' }}>
+                <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: CAT_COLORS[b.type] || MUTED, flexShrink: 0 }} />
+                <span style={{ color: CHAR, fontWeight: '500', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {b.time && <span style={{ color: MUTED, marginRight: '5px' }}>{b.time}</span>}
+                  {b.title}
+                  {b.confirmationReference && <span style={{ color: '#8C7A60', marginLeft: '6px', fontFamily: 'monospace', fontSize: '11px' }}>#{b.confirmationReference}</span>}
+                </span>
+                <CalendarDropdown booking={b} tripName={tripName} itineraryDayStops={itineraryDayStops} />
+                {canEdit && onEditBooking && (
+                  <button type="button" onClick={() => onEditBooking(b)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '1px', flexShrink: 0 }}>
+                    <Pencil size={11} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </div>
       {canEdit && (
@@ -1338,12 +1359,16 @@ const CAT_COLORS = {
   flight: '#4A2D7D', transfer: '#7D5A2D', event: '#2D7D4A', other: MUTED,
 };
 
-function BookingCard({ booking, onDelete, onEdit, itineraryDayStops, tripName, canEdit = true }) {
+function BookingCard({ booking, onDelete, onEdit, itineraryDayStops, tripItems = [], tripName, canEdit = true }) {
   const color = CAT_COLORS[booking.type] || MUTED;
   const catLabel = BOOKING_CATEGORIES.find(c => c.value === booking.type)?.label || booking.type;
   const linkedStop = booking.metadata?.itineraryDayStopId
     ? (itineraryDayStops || []).find(s => s.id === booking.metadata.itineraryDayStopId)
     : null;
+  const linkedItem = !linkedStop && booking.tripItemId
+    ? (tripItems || []).find(i => i.id === booking.tripItemId)
+    : null;
+  const linkedPlace = linkedStop || linkedItem;
 
   return (
     <div style={{
@@ -1374,9 +1399,9 @@ function BookingCard({ booking, onDelete, onEdit, itineraryDayStops, tripName, c
             )}
           </div>
           <p style={{ fontSize: '15px', fontWeight: '600', color: CHAR, marginBottom: '4px' }}>{booking.title}</p>
-          {linkedStop && (
+          {linkedPlace && (
             <p style={{ fontSize: '11.5px', color: TEAL, fontWeight: '500', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <MapPin size={10} /> {linkedStop.title}
+              <MapPin size={10} /> {linkedPlace.title}
             </p>
           )}
           {(booking.locationName || booking.provider) && (
@@ -1510,14 +1535,19 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
     setLastHidden(null);
   }
 
-  // Split bookings: linked to a visible stop vs day-level only (or stop is hidden)
+  // Split bookings: linked to a visible itinerary stop, linked to a TripItem, or day-level only
   const stopBookings = {};
+  const itemBookings = {};
   const dayOnlyBookings = [];
   dayBookings.forEach(b => {
     const sid = b.metadata?.itineraryDayStopId;
-    // Only group under stop if stop is visible (not hidden)
+    const iid = b.tripItemId;
     if (sid && visibleStops.some(s => s.id === sid)) {
+      // Grouped under its itinerary stop (highest priority)
       (stopBookings[sid] = stopBookings[sid] || []).push(b);
+    } else if (iid) {
+      // Grouped under its user-added TripItem
+      (itemBookings[iid] = itemBookings[iid] || []).push(b);
     } else {
       dayOnlyBookings.push(b);
     }
@@ -1687,10 +1717,22 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
 
             {img && <img src={img} alt={title} style={{ width: '100%', maxWidth: '460px', height: '200px', objectFit: 'cover', borderRadius: '8px', marginBottom: '16px' }} />}
 
-            {/* User items */}
+            {/* User items — with any bookings linked to that item rendered underneath */}
             {dayItems.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                {dayItems.map(item => <ItemCard key={item.id} item={item} onDelete={onDeleteItem} onEdit={onEditItem} canEdit={canEdit} />)}
+                {dayItems.map(item => (
+                  <ItemCard
+                    key={item.id}
+                    item={item}
+                    linkedBookings={itemBookings[item.id] || []}
+                    onDelete={onDeleteItem}
+                    onEdit={onEditItem}
+                    onEditBooking={onEditBooking}
+                    tripName={tripName}
+                    itineraryDayStops={itinDayStops}
+                    canEdit={canEdit}
+                  />
+                ))}
               </div>
             )}
 
@@ -2159,7 +2201,7 @@ function NotesTab({ workspace, onAddNote, onDeleteNote, onEditNote, canEdit = tr
 // BookingsTab
 // ─────────────────────────────────────────────
 function BookingsTab({ workspace, onAddBooking, onDeleteBooking, onEditBooking, canEdit = true }) {
-  const { tripBookings, trip, itineraryDayStops = [] } = workspace;
+  const { tripBookings, trip, itineraryDayStops = [], tripItems = [] } = workspace;
   const tripName = trip?.title || trip?.destination || '';
   const startDate = trip?.startDate ? trip.startDate.slice(0, 10) : null;
 
@@ -2204,7 +2246,7 @@ function BookingsTab({ workspace, onAddBooking, onDeleteBooking, onEditBooking, 
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {sorted.map(b => (
-          <BookingCard key={b.id} booking={b} onDelete={onDeleteBooking} onEdit={onEditBooking} itineraryDayStops={itineraryDayStops} tripName={tripName} canEdit={canEdit} />
+          <BookingCard key={b.id} booking={b} onDelete={onDeleteBooking} onEdit={onEditBooking} itineraryDayStops={itineraryDayStops} tripItems={tripItems} tripName={tripName} canEdit={canEdit} />
         ))}
       </div>
     </div>
@@ -2649,23 +2691,9 @@ export default function TripDetailPage() {
         // Update existing booking
         const res = await api.post(`/api/trips?action=booking&bookingId=${editingBooking.id}`, form);
         if (!res.ok) throw new Error('Update failed');
-        const data = await res.json();
-        setWorkspace(w => ({
-          ...w,
-          tripBookings: w.tripBookings.map(b => {
-            if (b.id !== editingBooking.id) return b;
-            return {
-              ...b,
-              ...form,
-              // Use confirmed DB values from RETURNING clause — not just optimistic form state
-              dayNumber:   data.dayNumber   ?? form.dayNumber   ?? b.dayNumber,
-              tripDayId:   data.tripDayId   ?? form.tripDayId   ?? b.tripDayId,
-              tripItemId:  data.tripItemId  ?? form.tripItemId  ?? b.tripItemId,
-              // Prefer the DB-returned metadata (what was actually persisted)
-              metadata:    data.metadata    ?? form.metadata    ?? b.metadata,
-            };
-          }),
-        }));
+        // Re-fetch workspace to get the authoritative DB state (avoids date/type serialisation mismatches)
+        const wsRes = await api.get(`/api/trips?id=${id}&action=workspace`);
+        if (wsRes.ok) setWorkspace(await wsRes.json());
       } else {
         // Create new booking
         // If coming from a stop, copy coordinates if the booking form didn't override them

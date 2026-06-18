@@ -1106,7 +1106,10 @@ export default async function handler(req, res) {
              longitude = COALESCE($15::float8, longitude),
              "updatedAt" = NOW()
          WHERE id = $13
-         RETURNING id, "dayNumber", "tripDayId", "tripItemId", metadata, latitude, longitude`,
+         RETURNING id, "tripId", "tripDayId", "tripItemId", "dayNumber", type, status, title,
+                   date, time, "locationName", address, latitude, longitude,
+                   provider, "confirmationReference", notes, url,
+                   "attachmentUrl", metadata, "createdAt", "updatedAt"`,
         [type || null, title || null, date || null, normalizedTime || null,
          locationName || null, provider || null, confirmationReference || null,
          notes || null, url || null, JSON.stringify(meta), dayNumber, tripDayId, bookingId,
@@ -1115,8 +1118,7 @@ export default async function handler(req, res) {
          resolvedTripItemId !== undefined,  // $16: whether to update tripItemId
          resolvedTripItemId ?? null]        // $17: the new value (or null to clear)
       );
-      const saved = updated[0] || {};
-      return res.status(200).json({ ok: true, dayNumber: saved.dayNumber, tripDayId: saved.tripDayId, tripItemId: saved.tripItemId, metadata: saved.metadata });
+      return res.status(200).json({ booking: updated[0] || null });
     }
 
     // Remap all bookings for a trip when startDate changes
