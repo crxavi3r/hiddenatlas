@@ -68,7 +68,12 @@ async function crmCall(getToken, action, payload = {}) {
     body: JSON.stringify({ action, payload }),
   });
   const json = await res.json();
-  if (!json.success) throw new Error(json.error?.message || 'Request failed');
+  if (!json.success) {
+    const err = new Error(json.error?.message || 'Request failed');
+    if (json.error?.requestId) err.requestId = json.error.requestId;
+    if (json.error?.code) err.errorCode = json.error.code;
+    throw err;
+  }
   return json.data;
 }
 
@@ -286,8 +291,12 @@ export default function CreatorLeadDetailPage() {
       showToast('Marked as sent');
       load();
     } catch (e) {
-      const isDbError = /DB error|42P18|indeterminate|could not determine/i.test(e.message);
-      showToast(isDbError ? 'Could not mark message as sent. Please try again.' : e.message, 'error');
+      const isRawDbError = /DB error|42P18|indeterminate|could not determine/i.test(e.message);
+      const displayMsg = isRawDbError
+        ? 'Could not mark message as sent. Please try again.'
+        : (e.message || 'Could not mark message as sent. Please try again.');
+      const ref = e.requestId ? ` [ref: ${e.requestId}]` : '';
+      showToast(displayMsg + ref, 'error');
     }
   }
 

@@ -133,18 +133,27 @@ async function _handler(req, res) {
     // All CRM actions: POST /api/admin with body { action: "namespace.verb", payload: {...} }
     if (req.method === 'POST' && typeof (req.body ?? {}).action === 'string' && req.body.action.includes('.')) {
       const { action: crmAction, payload = {} } = req.body;
-      console.log(`[api/admin] CRM action=${crmAction}`);
+      const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      console.log(`[api/admin] CRM action=${crmAction} requestId=${requestId} user=${adminCtx.userId ?? 'unknown'}`);
       try {
         const data = await dispatchCrmAction(pool, crmAction, payload, adminCtx);
-        return res.json({ success: true, data });
+        return res.json({ success: true, data, requestId });
       } catch (err) {
-        console.error(`[api/admin] CRM action=${crmAction} FAILED stage=${err.stage ?? 'unknown'}:`, err.message);
-        if (err.stack) console.error(err.stack);
+        console.error(`[api/admin] CRM FAILED requestId=${requestId} action=${crmAction}`, {
+          name: err.name,
+          message: err.message,
+          code: err.code,
+          pgCode: err.code,
+          stage: err.stage,
+          isUserFacing: err.isUserFacing,
+        });
+        if (err.stack) console.error(`[api/admin] stack requestId=${requestId}:`, err.stack);
         const isClient = err.status != null && err.status < 500;
         // pg error codes: 22P02 = invalid_text_representation, 23502 = not_null_violation,
-        // 23503 = foreign_key_violation, 23505 = unique_violation, 42703 = undefined_column
+        // 23503 = foreign_key_violation, 23505 = unique_violation, 42703 = undefined_column, 42P18 = indeterminate_datatype
         const isPgError = typeof err.code === 'string' && /^[0-9]/.test(err.code);
         const isTransparent = isClient
+          || err.isUserFacing          // explicit user-facing errors from action handlers
           || err.message?.includes('does not exist')
           || err.code === 'PROVIDER_ERROR'
           || err.code === 'PROVIDER_NOT_CONFIGURED'
@@ -157,7 +166,7 @@ async function _handler(req, res) {
           : 'Internal error — see server logs';
         return res.status(err.status ?? 500).json({
           success: false,
-          error: { message: userMsg, code: err.code ?? 'INTERNAL_ERROR', stage: err.stage ?? null },
+          error: { message: userMsg, code: err.code ?? 'INTERNAL_ERROR', stage: err.stage ?? null, requestId },
         });
       }
     }
@@ -3873,13 +3882,16 @@ async function crmMarkSent(pool, msgId, ctx) {
   const senderId = (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null);
 
   console.log('[crmMarkSent] start', {
+    msgId,
     leadId: msg.leadId,
     hasMessageBody: Boolean(msg.body || msg.personalizedBody),
     hasTemplateId: Boolean(msg.templateId),
+    currentMsgStatus: msg.status,
+    senderId: senderId ? '[set]' : '[null]',
   });
 
-  // Fix: avoid metadata column (not in schema) and cast $2::text so Postgres can
-  // determine the parameter type even when senderId is null.
+  // Cast $2::text explicitly so Postgres can resolve the parameter type even
+  // when senderId is null (avoids 42P18 indeterminate_datatype errors).
   try {
     await pool.query(`
       UPDATE "CreatorLeadMessage"
@@ -3889,13 +3901,22 @@ async function crmMarkSent(pool, msgId, ctx) {
           "updatedAt" = NOW()
       WHERE id = $1
     `, [msgId, senderId]);
-  } catch (err) {
-    console.error('[crmMarkSent] message update failed:', err.code, err.message);
+  } catch (dbErr) {
+    console.error('[crmMarkSent] message UPDATE failed', {
+      pgCode: dbErr.code,
+      pgMessage: dbErr.message,
+      pgDetail: dbErr.detail,
+      pgHint: dbErr.hint,
+      pgPosition: dbErr.position,
+      msgId,
+    });
     throw Object.assign(
       new Error('Could not mark message as sent. Please try again.'),
-      { status: 500 }
+      { status: 500, isUserFacing: true }
     );
   }
+
+  console.log('[crmMarkSent] message updated, starting side effects for leadId=', msg.leadId);
 
   try {
     const { rows: leadRows } = await pool.query(`
@@ -3909,11 +3930,7 @@ async function crmMarkSent(pool, msgId, ctx) {
       RETURNING status
     `, [msg.leadId]);
 
-    const newLeadStatus = leadRows[0]?.status;
-    console.log('[crmMarkSent] lead status update', {
-      leadId: msg.leadId,
-      newLeadStatus,
-    });
+    console.log('[crmMarkSent] lead status now', leadRows[0]?.status ?? '(no row returned)');
 
     await pool.query(`
       INSERT INTO "CreatorLeadActivity"
@@ -3936,7 +3953,10 @@ async function crmMarkSent(pool, msgId, ctx) {
       `, [msg.leadId, dueAt.toISOString(), senderId]);
     }
   } catch (err) {
-    console.warn('[crmMarkSent] post-update side effects failed:', err.message);
+    console.warn('[crmMarkSent] post-update side effects failed', {
+      pgCode: err.code,
+      message: err.message,
+    });
   }
 
   return { ok: true };
