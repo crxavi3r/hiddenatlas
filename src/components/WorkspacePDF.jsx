@@ -508,17 +508,19 @@ export function WorkspacePDF({ trip, itinerary, tripDays, tripItems, tripNotes, 
                   const timePart = item.startTime && item.endTime ? `${item.startTime} → ${item.endTime}` : item.time || '';
                   const durPart  = item.durationMinutes ? formatDuration(item.durationMinutes) : '';
                   return (
-                    <View key={item.id} style={[S.itemRow, { marginBottom: 8 }]}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={S.itemTitle}>{item.title}</Text>
-                        {(timePart || durPart || item.locationName) && (
-                          <Text style={S.itemMeta}>{[timePart, durPart, item.locationName].filter(Boolean).join(' · ')}</Text>
-                        )}
-                        {item.notes && <Text style={[S.itemMeta, { marginTop: 2 }]}>{item.notes}</Text>}
-                      </View>
+                    <View key={item.id} style={{ marginBottom: 10 }}>
                       {item.imageUrl && (
-                        <Image src={item.imageUrl} style={{ width: 64, height: 48, borderRadius: 4, marginLeft: 8, flexShrink: 0 }} />
+                        <Image src={item.imageUrl} style={{ width: '100%', height: 130, borderRadius: 5, marginBottom: 6, objectFit: 'cover' }} />
                       )}
+                      <View style={[S.itemRow, { marginBottom: 0 }]}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={S.itemTitle}>{item.title}</Text>
+                          {(timePart || durPart || item.locationName) && (
+                            <Text style={S.itemMeta}>{[timePart, durPart, item.locationName].filter(Boolean).join(' · ')}</Text>
+                          )}
+                          {item.notes && <Text style={[S.itemMeta, { marginTop: 2 }]}>{item.notes}</Text>}
+                        </View>
+                      </View>
                     </View>
                   );
                 })}

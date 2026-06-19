@@ -1210,99 +1210,198 @@ function formatDuration(minutes) {
   return `${h}h ${m}m`;
 }
 
+// ─────────────────────────────────────────────
+// ItemImageLightbox
+// ─────────────────────────────────────────────
+function ItemImageLightbox({ item, onClose, canEdit, onEdit }) {
+  const typeLabel = ITEM_TYPES.find(t => t.value === item.type)?.label || item.type;
+  const color = TYPE_COLORS[item.type] || MUTED;
+
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
+  }, [onClose]);
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.92)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+      onClick={onClose}
+    >
+      <div style={{ position: 'relative', maxWidth: '820px', width: '100%' }} onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} style={{ position: 'absolute', top: '-46px', right: 0, background: 'none', border: 'none', cursor: 'pointer', color: 'white', padding: '8px', lineHeight: 1 }}>
+          <X size={22} />
+        </button>
+        <img
+          src={item.imageUrl}
+          alt={item.imageAlt || item.title}
+          style={{ width: '100%', maxHeight: '72vh', objectFit: 'contain', borderRadius: '8px', display: 'block' }}
+        />
+        <div style={{ paddingTop: '14px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
+          <div>
+            <span style={{ display: 'block', fontSize: '10px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', color, marginBottom: '5px' }}>
+              {typeLabel}
+            </span>
+            <p style={{ color: 'white', fontWeight: '600', fontSize: '16px', fontFamily: "'Playfair Display', Georgia, serif" }}>
+              {item.title}
+            </p>
+          </div>
+          {canEdit && onEdit && (
+            <button
+              onClick={() => { onClose(); onEdit(item); }}
+              style={{ flexShrink: 0, padding: '8px 18px', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: '6px', color: 'white', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+            >
+              Edit photo
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, tripName = '', itineraryDayStops = [], canEdit = true }) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [imgHovered, setImgHovered] = useState(false);
+  const isMobile = useIsMobile();
+
   const color = TYPE_COLORS[item.type] || MUTED;
   const typeLabel = ITEM_TYPES.find(t => t.value === item.type)?.label || item.type;
   const timeDisplay = formatItemTime(item);
   const durationDisplay = formatDuration(item.durationMinutes);
   const metaParts = [timeDisplay, durationDisplay, item.locationName].filter(Boolean);
+  const hasImage = !!item.imageUrl;
 
   function handleDelete() {
     if (window.confirm(`Remove "${item.title}"?`)) onDelete(item.id);
   }
 
-  return (
-    <div style={{
-      display: 'flex', gap: '12px', alignItems: 'flex-start',
-      padding: '14px 16px', background: 'white',
-      border: `1px solid ${BORDER}`, borderRadius: '8px',
-      borderLeft: `3px solid ${color}`,
-    }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
-          <span style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', color }}>
-            {typeLabel}
+  const cardContent = (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
+        <span style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', color }}>
+          {typeLabel}
+        </span>
+        {item.status && item.status !== 'planned' && (
+          <span style={{
+            fontSize: '9.5px', fontWeight: '700', letterSpacing: '0.8px',
+            textTransform: 'uppercase', padding: '2px 6px',
+            borderRadius: '3px', background: item.status === 'done' ? '#EFF6EF' : '#F4F1EC',
+            color: item.status === 'done' ? '#4A8F4A' : MUTED,
+          }}>
+            {item.status}
           </span>
-          {item.status && item.status !== 'planned' && (
-            <span style={{
-              fontSize: '9.5px', fontWeight: '700', letterSpacing: '0.8px',
-              textTransform: 'uppercase', padding: '2px 6px',
-              borderRadius: '3px', background: item.status === 'done' ? '#EFF6EF' : '#F4F1EC',
-              color: item.status === 'done' ? '#4A8F4A' : MUTED,
-            }}>
-              {item.status}
-            </span>
-          )}
-        </div>
-        <p style={{ fontSize: '14px', fontWeight: '600', color: CHAR, marginBottom: metaParts.length ? '4px' : 0 }}>
-          {item.title}
-        </p>
-        {metaParts.length > 0 && (
-          <p style={{ fontSize: '12.5px', color: MUTED }}>{metaParts.join(' · ')}</p>
-        )}
-        {item.notes && (
-          <p style={{ fontSize: '13px', color: MUTED, marginTop: '5px', lineHeight: '1.5' }}>{item.notes}</p>
-        )}
-        {linkedBookings.length > 0 && (
-          <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {linkedBookings.map(b => (
-              <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 10px', background: '#F4F0E8', borderRadius: '5px', fontSize: '12.5px' }}>
-                <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: CAT_COLORS[b.type] || MUTED, flexShrink: 0 }} />
-                <span style={{ color: CHAR, fontWeight: '500', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {b.time && <span style={{ color: MUTED, marginRight: '5px' }}>{b.time}</span>}
-                  {b.title}
-                  {b.confirmationReference && <span style={{ color: '#8C7A60', marginLeft: '6px', fontFamily: 'monospace', fontSize: '11px' }}>#{b.confirmationReference}</span>}
-                </span>
-                <CalendarDropdown booking={b} tripName={tripName} itineraryDayStops={itineraryDayStops} />
-                {canEdit && onEditBooking && (
-                  <button type="button" onClick={() => onEditBooking(b)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '1px', flexShrink: 0 }}>
-                    <Pencil size={11} />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
         )}
       </div>
-      {item.imageUrl && (
-        <img
-          src={item.imageUrl}
-          alt={item.imageAlt || item.title}
-          style={{ width: '72px', height: '54px', objectFit: 'cover', borderRadius: '5px', flexShrink: 0, border: `1px solid ${BORDER}` }}
-        />
+      <p style={{ fontSize: '14px', fontWeight: '600', color: CHAR, marginBottom: metaParts.length ? '4px' : 0 }}>
+        {item.title}
+      </p>
+      {metaParts.length > 0 && (
+        <p style={{ fontSize: '12.5px', color: MUTED }}>{metaParts.join(' · ')}</p>
       )}
-      {canEdit && (
-        <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-          {onEdit && (
-            <button
-              onClick={() => onEdit(item)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '2px' }}
-              title="Edit item"
-            >
-              <Pencil size={13} />
-            </button>
-          )}
-          <button
-            onClick={handleDelete}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C8BFB5', padding: '2px' }}
-            title="Remove item"
-          >
-            <X size={14} />
-          </button>
+      {item.notes && (
+        <p style={{ fontSize: '13px', color: MUTED, marginTop: '5px', lineHeight: '1.5' }}>{item.notes}</p>
+      )}
+      {linkedBookings.length > 0 && (
+        <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {linkedBookings.map(b => (
+            <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 10px', background: '#F4F0E8', borderRadius: '5px', fontSize: '12.5px' }}>
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: CAT_COLORS[b.type] || MUTED, flexShrink: 0 }} />
+              <span style={{ color: CHAR, fontWeight: '500', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {b.time && <span style={{ color: MUTED, marginRight: '5px' }}>{b.time}</span>}
+                {b.title}
+                {b.confirmationReference && <span style={{ color: '#8C7A60', marginLeft: '6px', fontFamily: 'monospace', fontSize: '11px' }}>#{b.confirmationReference}</span>}
+              </span>
+              <CalendarDropdown booking={b} tripName={tripName} itineraryDayStops={itineraryDayStops} />
+              {canEdit && onEditBooking && (
+                <button type="button" onClick={() => onEditBooking(b)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '1px', flexShrink: 0 }}>
+                  <Pencil size={11} />
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       )}
+    </>
+  );
+
+  const actionButtons = canEdit && (
+    <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+      {onEdit && (
+        <button onClick={() => onEdit(item)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED, padding: '2px' }} title="Edit item">
+          <Pencil size={13} />
+        </button>
+      )}
+      <button onClick={handleDelete} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C8BFB5', padding: '2px' }} title="Remove item">
+        <X size={14} />
+      </button>
     </div>
+  );
+
+  // ── No image: original horizontal layout ──────────────────────
+  if (!hasImage) {
+    return (
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', padding: '14px 16px', background: 'white', border: `1px solid ${BORDER}`, borderRadius: '8px', borderLeft: `3px solid ${color}` }}>
+        <div style={{ flex: 1, minWidth: 0 }}>{cardContent}</div>
+        {actionButtons}
+      </div>
+    );
+  }
+
+  // ── With image, mobile: image banner on top ───────────────────
+  if (isMobile) {
+    return (
+      <>
+        <div style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: '8px', borderLeft: `3px solid ${color}`, overflow: 'hidden' }}>
+          <div style={{ position: 'relative', paddingBottom: '56.25%', cursor: 'pointer' }} onClick={() => setLightboxOpen(true)}>
+            <img
+              src={item.imageUrl}
+              alt={item.imageAlt || item.title}
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              onError={e => { e.currentTarget.parentElement.style.display = 'none'; }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', padding: '14px 16px' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>{cardContent}</div>
+            {actionButtons}
+          </div>
+        </div>
+        {lightboxOpen && <ItemImageLightbox item={item} onClose={() => setLightboxOpen(false)} canEdit={canEdit} onEdit={onEdit} />}
+      </>
+    );
+  }
+
+  // ── With image, desktop: image panel on right ─────────────────
+  return (
+    <>
+      <div style={{ display: 'flex', background: 'white', border: `1px solid ${BORDER}`, borderRadius: '8px', borderLeft: `3px solid ${color}`, overflow: 'hidden' }}>
+        <div style={{ flex: 1, display: 'flex', gap: '12px', alignItems: 'flex-start', padding: '14px 16px', minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>{cardContent}</div>
+          {actionButtons}
+        </div>
+        <div
+          style={{ width: '140px', flexShrink: 0, position: 'relative', cursor: 'pointer' }}
+          onMouseEnter={() => setImgHovered(true)}
+          onMouseLeave={() => setImgHovered(false)}
+          onClick={() => setLightboxOpen(true)}
+        >
+          <img
+            src={item.imageUrl}
+            alt={item.imageAlt || item.title}
+            style={{ width: '100%', height: '100%', minHeight: '90px', objectFit: 'cover', display: 'block' }}
+            onError={e => { e.currentTarget.parentElement.style.display = 'none'; }}
+          />
+          {imgHovered && (
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.32)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ color: 'white', fontSize: '10px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase' }}>View photo</span>
+            </div>
+          )}
+        </div>
+      </div>
+      {lightboxOpen && <ItemImageLightbox item={item} onClose={() => setLightboxOpen(false)} canEdit={canEdit} onEdit={onEdit} />}
+    </>
   );
 }
 
