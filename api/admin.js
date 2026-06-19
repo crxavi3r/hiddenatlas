@@ -1796,73 +1796,145 @@ async function dispatchCrmAction(pool, action, payload, ctx) {
 async function debugMetaDiscovery(payload, ctx) {
   if (!ctx.isAdmin) throw Object.assign(new Error('Admin only'), { status: 403 });
 
-  const version   = process.env.META_GRAPH_API_VERSION || 'v25.0';
-  const accountId = process.env.META_INSTAGRAM_ACCOUNT_ID;
-  const pageTok   = process.env.META_PAGE_ACCESS_TOKEN;
-  const graphTok  = process.env.META_GRAPH_ACCESS_TOKEN;
-  const igTok     = process.env.META_INSTAGRAM_ACCESS_TOKEN;
-  const token     = pageTok || graphTok || igTok;
-  const tokenVar  = pageTok ? 'META_PAGE_ACCESS_TOKEN'
-                  : graphTok ? 'META_GRAPH_ACCESS_TOKEN'
-                  : igTok ? 'META_INSTAGRAM_ACCESS_TOKEN'
-                  : null;
+  const version    = process.env.META_GRAPH_API_VERSION || 'v25.0';
+  const accountId  = process.env.META_INSTAGRAM_ACCOUNT_ID;
+  const pageTok    = process.env.META_PAGE_ACCESS_TOKEN;
+  const graphTok   = process.env.META_GRAPH_ACCESS_TOKEN;
+  const igTok      = process.env.META_INSTAGRAM_ACCESS_TOKEN;
+  const token      = pageTok || graphTok || igTok;
+  const tokenSource = pageTok ? 'META_PAGE_ACCESS_TOKEN'
+                   : graphTok ? 'META_GRAPH_ACCESS_TOKEN'
+                   : igTok    ? 'META_INSTAGRAM_ACCESS_TOKEN'
+                   : '(none)';
 
-  const envInfo = {
-    NODE_ENV:                         process.env.NODE_ENV ?? null,
-    VERCEL_ENV:                       process.env.VERCEL_ENV ?? null,
-    VERCEL_URL:                       process.env.VERCEL_URL ?? null,
-    VERCEL_GIT_COMMIT_SHA:            (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 8) || null,
-    'META_INSTAGRAM_ACCOUNT_ID':      accountId ?? null,
-    'META_PAGE_ACCESS_TOKEN exists':  Boolean(pageTok),
-    'META_GRAPH_ACCESS_TOKEN exists': Boolean(graphTok),
-    tokenSourceSelected:              tokenVar ?? '(none — no token env var found)',
-    tokenLength:                      token?.length ?? 0,
-    tokenPrefix:                      token ? token.slice(0, 8) : null,
-    tokenSuffix:                      token ? token.slice(-4)   : null,
-    graphEndpoint:                    `graph.facebook.com/${version}`,
+  const maskedAccountId = accountId
+    ? (accountId.length > 8 ? `${accountId.slice(0, 4)}...${accountId.slice(-4)}` : accountId)
+    : null;
+
+  const targetUsername = (payload?.username || '').trim().replace(/^@/, '') || 'travelstoriesfrommyworld';
+
+  const diag = {
+    graphApiVersion:            version,
+    runtimeEnv:                 process.env.VERCEL_ENV || process.env.NODE_ENV || 'unknown',
+    commitSha:                  (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 8) || null,
+    accountIdPresent:           Boolean(accountId),
+    maskedAccountId,
+    accountIdLength:            accountId?.length ?? 0,
+    tokenPresent:               Boolean(token),
+    tokenSource,
+    tokenPrefix:                token ? token.slice(0, 8) : null,
+    targetUsername,
+    baseAccountTestStatus:      'skipped',
+    baseAccountTestResponse:    null,
+    baseAccountTestError:       null,
+    baseAccountRequestPath:     null,
+    businessDiscoveryTestStatus: 'skipped',
+    businessDiscoveryResponse:  null,
+    businessDiscoveryError:     null,
+    businessDiscoveryRequestPath: null,
+    diagnosis:                  null,
   };
 
   if (!token || !accountId) {
-    return { ok: false, envInfo, error: 'Token or accountId missing — see envInfo above' };
+    const missing = [!accountId && 'META_INSTAGRAM_ACCOUNT_ID', !token && 'META_PAGE_ACCESS_TOKEN'].filter(Boolean);
+    diag.diagnosis = `Missing env vars: ${missing.join(', ')}. Set these in Vercel and redeploy.`;
+    console.warn('[MetaDiscovery] debugMetaDiscovery — missing config:', { missing });
+    return { ok: false, ...diag };
   }
 
   const BASE = `https://graph.facebook.com/${version}`;
 
-  // Test 1: GET /me (verifies token is valid at all)
-  let meTest = null;
+  // Test A: GET /{accountId}?fields=id,username,name,followers_count,media_count
+  // Verifies the token has access to this specific IG Business Account node.
+  const baseFields   = 'id,username,name,followers_count,media_count';
+  const basePath     = `/${version}/${accountId}?fields=${encodeURIComponent(baseFields)}`;
+  diag.baseAccountRequestPath = `graph.facebook.com${basePath}`;
   try {
-    const url = `${BASE}/me?fields=id,name&access_token=${encodeURIComponent(token)}`;
-    const r   = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-    const d   = await r.json();
-    meTest = d.error
-      ? { ok: false, httpStatus: r.status, errorCode: d.error.code, errorSubcode: d.error.error_subcode, errorMsg: d.error.message }
-      : { ok: true,  httpStatus: r.status, id: d.id, name: d.name };
+    const r = await fetch(`${BASE}/${accountId}?fields=${encodeURIComponent(baseFields)}&access_token=${token}`,
+      { signal: AbortSignal.timeout(10_000) });
+    const d = await r.json();
+    if (d.error) {
+      diag.baseAccountTestStatus = 'fail';
+      diag.baseAccountTestError  = { code: d.error.code, subcode: d.error.error_subcode ?? null, message: d.error.message };
+      diag.diagnosis = `Base Instagram account test failed (code ${d.error.code}). Check META_INSTAGRAM_ACCOUNT_ID (${maskedAccountId}) and that the token has access to this account.`;
+    } else {
+      diag.baseAccountTestStatus   = 'pass';
+      diag.baseAccountTestResponse = {
+        id:              d.id             ?? null,
+        username:        d.username       ?? null,
+        name:            d.name           ?? null,
+        followers_count: d.followers_count ?? null,
+        media_count:     d.media_count    ?? null,
+      };
+    }
   } catch (e) {
-    meTest = { ok: false, threw: e.message };
+    diag.baseAccountTestStatus = 'fail';
+    diag.baseAccountTestError  = { code: null, subcode: null, message: e.message };
+    diag.diagnosis = `Base account fetch threw: ${e.message}`;
   }
 
-  // Test 2: Business Discovery for a known public profile
-  const testUsername = payload?.username || 'rotasdabruna';
-  const fieldset = 'id,username,name,biography,followers_count,media_count,profile_picture_url,website';
-  let discoveryTest = null;
+  // Test B: Business Discovery for targetUsername
+  const discoveryFieldset = 'id,username,name,profile_picture_url,followers_count,media_count,biography,website';
+  const discoveryFields   = `business_discovery.username(${targetUsername}){${discoveryFieldset}}`;
+  const discoveryPath     = `/${version}/${accountId}?fields=${encodeURIComponent(discoveryFields)}`;
+  diag.businessDiscoveryRequestPath = `graph.facebook.com${discoveryPath}`;
   try {
-    const fields    = `business_discovery.username(${testUsername}){${fieldset}}`;
-    const safeUrl   = `${BASE}/${accountId}?fields=${encodeURIComponent(fields)}`;
-    const fullUrl   = `${safeUrl}&access_token=${encodeURIComponent(token)}`;
-    const r         = await fetch(fullUrl, { signal: AbortSignal.timeout(15_000) });
-    const d         = await r.json();
-    discoveryTest = d.error
-      ? { ok: false, httpStatus: r.status, errorCode: d.error.code, errorSubcode: d.error.error_subcode, errorMsg: d.error.message, endpointWithoutToken: safeUrl }
-      : { ok: true,  httpStatus: r.status, profile: d?.[accountId]?.business_discovery ?? d?.business_discovery ?? d, endpointWithoutToken: safeUrl };
+    const r = await fetch(`${BASE}/${accountId}?fields=${encodeURIComponent(discoveryFields)}&access_token=${token}`,
+      { signal: AbortSignal.timeout(15_000) });
+    const d = await r.json();
+    if (d.error) {
+      diag.businessDiscoveryTestStatus = 'fail';
+      diag.businessDiscoveryError      = { code: d.error.code, subcode: d.error.error_subcode ?? null, message: d.error.message };
+      if (!diag.diagnosis) {
+        diag.diagnosis = diag.baseAccountTestStatus === 'pass'
+          ? `Base account OK but Business Discovery failed for @${targetUsername} (code ${d.error.code}). Profile may not be a Business/Creator account, or token is missing instagram_business_basic permission.`
+          : `Business Discovery also failed (code ${d.error.code}).`;
+      }
+    } else {
+      const profile = d.business_discovery;
+      diag.businessDiscoveryTestStatus = profile ? 'pass' : 'fail';
+      if (profile) {
+        diag.businessDiscoveryResponse = {
+          username:        profile.username        ?? null,
+          name:            profile.name            ?? null,
+          followers_count: profile.followers_count ?? null,
+          media_count:     profile.media_count     ?? null,
+          website:         profile.website         ?? null,
+          biography:       profile.biography       ?? null,
+          profile_picture_url: profile.profile_picture_url ?? null,
+        };
+      } else {
+        diag.businessDiscoveryError = { code: null, subcode: null, message: 'business_discovery key absent in response' };
+        if (!diag.diagnosis) diag.diagnosis = `Business Discovery response missing for @${targetUsername}. Profile may not be eligible.`;
+      }
+    }
   } catch (e) {
-    discoveryTest = { ok: false, threw: e.message };
+    diag.businessDiscoveryTestStatus = 'fail';
+    diag.businessDiscoveryError      = { code: null, subcode: null, message: e.message };
+    if (!diag.diagnosis) diag.diagnosis = `Business Discovery fetch threw: ${e.message}`;
   }
 
-  console.info('[MetaDiscovery] debugMetaDiscovery result:', {
-    envInfo, meTest, discoveryTest: { ...discoveryTest, profile: discoveryTest?.ok ? '(see response)' : undefined },
+  const ok = diag.baseAccountTestStatus === 'pass' && diag.businessDiscoveryTestStatus === 'pass';
+  if (!diag.diagnosis) {
+    diag.diagnosis = ok
+      ? `Both tests passed. @${targetUsername} is reachable via Business Discovery.`
+      : 'One or more tests failed — see individual test results above.';
+  }
+
+  console.info('[MetaDiscovery] debugMetaDiscovery:', {
+    runtimeEnv:                  diag.runtimeEnv,
+    maskedAccountId,
+    accountIdLength:             diag.accountIdLength,
+    tokenSource,
+    tokenPresent:                Boolean(token),
+    targetUsername,
+    baseAccountTestStatus:       diag.baseAccountTestStatus,
+    businessDiscoveryTestStatus: diag.businessDiscoveryTestStatus,
+    baseAccountTestError:        diag.baseAccountTestError,
+    businessDiscoveryError:      diag.businessDiscoveryError,
   });
 
-  return { ok: meTest?.ok && discoveryTest?.ok, envInfo, meTest, discoveryTest };
+  return { ok, ...diag };
 }
 
 async function crmDashboard(pool) {
@@ -2087,16 +2159,24 @@ async function crmRefreshInstagram(pool, body, ctx) {
   // discovery token is for the HiddenAtlas business account (META_INSTAGRAM_ACCOUNT_ID).
   const conn = getMetaDiscoveryConnection();
 
-  console.info('[MetaDiscovery] CRM refresh request:', {
-    igBusinessAccountId: conn.accountId ?? null,
-    tokenSource:         conn.status === 'OK' ? 'env' : 'none',
-    tokenTail:           conn.tokenTail ?? null,
-    graphEndpoint:       conn.status === 'OK' ? `graph.facebook.com/${conn.version}` : null,
-    usernameToDiscover:  lead.username,
+  const maskedAccountId = conn.accountId
+    ? (conn.accountId.length > 8 ? `${conn.accountId.slice(0, 4)}...${conn.accountId.slice(-4)}` : conn.accountId)
+    : null;
+
+  console.info('[MetaDiscovery] Retry enrichment — start:', {
     leadId:              id,
+    username:            lead.username,
+    maskedAccountId,
+    accountIdPresent:    Boolean(conn.accountId),
+    tokenSource:         conn.tokenVar ?? conn.status,
+    tokenPresent:        conn.status === 'OK',
+    tokenPrefix:         conn.status === 'OK' && conn.token ? conn.token.slice(0, 8) : null,
+    graphApiVersion:     conn.version ?? null,
+    runtimeEnv:          process.env.VERCEL_ENV || process.env.NODE_ENV || 'unknown',
   });
 
   if (conn.status === 'NOT_CONFIGURED') {
+    console.warn('[MetaDiscovery] Retry enrichment — not configured:', { missing: conn.missing });
     return {
       refreshed: false, configError: true, missing: conn.missing,
       error: `Meta Discovery not configured. Set: ${conn.missing.join(', ')}`,
@@ -2112,15 +2192,17 @@ async function crmRefreshInstagram(pool, body, ctx) {
     const isServerTokenExpired = v.errorCategory === 'token';
     const isProfileError       = v.errorCategory === 'profile_not_found';
 
-    console.warn('[MetaDiscovery] Business Discovery failed:', {
-      usernameToDiscover:  lead.username,
-      igBusinessAccountId: conn.accountId,
-      tokenSource:         'env',
+    console.warn('[MetaDiscovery] Retry enrichment — discovery failed:', {
+      leadId:              id,
+      username:            lead.username,
+      maskedAccountId,
+      graphApiVersion:     conn.version,
       metaErrorCode:       v.metaCode        ?? null,
       metaErrorSubcode:    v.metaSubcode      ?? null,
       metaErrorType:       v.metaType         ?? null,
       metaErrorMessage:    v.metaRawMessage   ?? null,
       errorCategory:       v.errorCategory    ?? null,
+      enrichmentStatus:    'failed',
       isServerTokenExpired,
       isProfileError,
     });
@@ -2138,12 +2220,17 @@ async function crmRefreshInstagram(pool, body, ctx) {
     };
   }
 
-  console.info('[MetaDiscovery] Business Discovery success:', {
-    igBusinessAccountId: conn.accountId,
-    tokenSource:         'env',
-    usernameToDiscover:  lead.username,
-    followersCount:      v.followersCount,
-    postsCount:          v.postsCount,
+  console.info('[MetaDiscovery] Retry enrichment — success:', {
+    leadId:          id,
+    username:        lead.username,
+    maskedAccountId,
+    graphApiVersion: conn.version,
+    followersCount:  v.followersCount,
+    postsCount:      v.postsCount,
+    hasAvatar:       Boolean(v.avatarUrl),
+    hasBio:          Boolean(v.bio),
+    hasWebsite:      Boolean(v.website),
+    enrichmentStatus: 'success',
   });
 
   const now = new Date().toISOString();

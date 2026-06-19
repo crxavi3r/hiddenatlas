@@ -737,32 +737,69 @@ export default function CreatorLeadDetailPage() {
                     {debuggingMeta ? 'Testing Meta connection…' : 'Debug Meta connection'}
                   </button>
                   {metaDebugResult && (
-                    <div style={{ marginTop: '8px', background: metaDebugResult.ok ? '#F0F8F1' : '#FDECEA', border: `1px solid ${metaDebugResult.ok ? '#C0DDD0' : '#F5C6C0'}`, borderRadius: '6px', padding: '8px 10px' }}>
-                      <p style={{ margin: '0 0 4px', fontSize: '11.5px', fontWeight: '600', color: metaDebugResult.ok ? '#2E8B57' : '#C0392B' }}>
-                        {metaDebugResult.ok ? 'Meta connection OK' : 'Meta connection failed'}
+                    <div style={{ marginTop: '8px', background: '#F8F6F2', border: `1px solid ${metaDebugResult.ok ? '#C0DDD0' : '#E8D9B8'}`, borderRadius: '6px', padding: '10px 12px', fontSize: '11.5px' }}>
+                      <p style={{ margin: '0 0 8px', fontWeight: '700', color: metaDebugResult.ok ? '#2E8B57' : '#7A5C1E' }}>
+                        {metaDebugResult.ok ? '✓ Meta connection OK — both tests passed' : '✗ Meta connection issue detected'}
                       </p>
-                      {metaDebugResult.envInfo && (
-                        <div style={{ fontSize: '11px', color: '#4A433A', fontFamily: 'monospace', lineHeight: '1.6' }}>
-                          <div>Account ID: <strong>{metaDebugResult.envInfo['META_INSTAGRAM_ACCOUNT_ID'] || '(not set)'}</strong></div>
-                          <div>Token source: {metaDebugResult.envInfo.tokenSourceSelected || '(none)'}</div>
-                          <div>Token length: {metaDebugResult.envInfo.tokenLength || 0}</div>
-                          <div>Token prefix: {metaDebugResult.envInfo.tokenPrefix || '—'}</div>
+
+                      {/* Config row */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px', fontFamily: 'monospace', fontSize: '11px', color: '#4A433A', marginBottom: '8px' }}>
+                        <div>Env: <strong>{metaDebugResult.runtimeEnv || '—'}</strong></div>
+                        <div>API: <strong>{metaDebugResult.graphApiVersion || '—'}</strong></div>
+                        <div>Account ID: <strong style={{ color: metaDebugResult.accountIdPresent ? '#1C1A16' : '#C0392B' }}>{metaDebugResult.maskedAccountId || '(not set)'}</strong> <span style={{ color: '#8C8070' }}>({metaDebugResult.accountIdLength} chars)</span></div>
+                        <div>Token source: <strong style={{ color: metaDebugResult.tokenPresent ? '#1C1A16' : '#C0392B' }}>{metaDebugResult.tokenSource || '(none)'}</strong></div>
+                        <div>Token prefix: <strong>{metaDebugResult.tokenPrefix || '—'}</strong></div>
+                        <div>Target: <strong>@{metaDebugResult.targetUsername || '—'}</strong></div>
+                      </div>
+
+                      {/* Test A */}
+                      <div style={{ marginBottom: '6px', padding: '6px 8px', borderRadius: '4px', background: metaDebugResult.baseAccountTestStatus === 'pass' ? '#EFF6F5' : metaDebugResult.baseAccountTestStatus === 'fail' ? '#FDECEA' : '#F4F1EC' }}>
+                        <div style={{ fontWeight: '600', color: metaDebugResult.baseAccountTestStatus === 'pass' ? '#2E8B57' : metaDebugResult.baseAccountTestStatus === 'fail' ? '#C0392B' : '#8C8070' }}>
+                          Test A — Base account: {metaDebugResult.baseAccountTestStatus}
+                        </div>
+                        {metaDebugResult.baseAccountRequestPath && (
+                          <div style={{ fontFamily: 'monospace', fontSize: '10.5px', color: '#8C8070', marginTop: '2px', wordBreak: 'break-all' }}>GET {metaDebugResult.baseAccountRequestPath}</div>
+                        )}
+                        {metaDebugResult.baseAccountTestResponse && (
+                          <div style={{ fontFamily: 'monospace', fontSize: '10.5px', color: '#4A433A', marginTop: '3px' }}>
+                            id: {metaDebugResult.baseAccountTestResponse.id} · @{metaDebugResult.baseAccountTestResponse.username} · {metaDebugResult.baseAccountTestResponse.followers_count?.toLocaleString()} followers · {metaDebugResult.baseAccountTestResponse.media_count} posts
+                          </div>
+                        )}
+                        {metaDebugResult.baseAccountTestError && (
+                          <div style={{ color: '#C0392B', fontSize: '10.5px', marginTop: '2px' }}>
+                            code {metaDebugResult.baseAccountTestError.code}{metaDebugResult.baseAccountTestError.subcode ? `/${metaDebugResult.baseAccountTestError.subcode}` : ''}: {metaDebugResult.baseAccountTestError.message}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Test B */}
+                      <div style={{ marginBottom: '8px', padding: '6px 8px', borderRadius: '4px', background: metaDebugResult.businessDiscoveryTestStatus === 'pass' ? '#EFF6F5' : metaDebugResult.businessDiscoveryTestStatus === 'fail' ? '#FDECEA' : '#F4F1EC' }}>
+                        <div style={{ fontWeight: '600', color: metaDebugResult.businessDiscoveryTestStatus === 'pass' ? '#2E8B57' : metaDebugResult.businessDiscoveryTestStatus === 'fail' ? '#C0392B' : '#8C8070' }}>
+                          Test B — Business Discovery: {metaDebugResult.businessDiscoveryTestStatus}
+                        </div>
+                        {metaDebugResult.businessDiscoveryRequestPath && (
+                          <div style={{ fontFamily: 'monospace', fontSize: '10.5px', color: '#8C8070', marginTop: '2px', wordBreak: 'break-all' }}>GET {metaDebugResult.businessDiscoveryRequestPath}</div>
+                        )}
+                        {metaDebugResult.businessDiscoveryResponse && (
+                          <div style={{ fontFamily: 'monospace', fontSize: '10.5px', color: '#4A433A', marginTop: '3px' }}>
+                            @{metaDebugResult.businessDiscoveryResponse.username} · {metaDebugResult.businessDiscoveryResponse.followers_count?.toLocaleString()} followers · {metaDebugResult.businessDiscoveryResponse.media_count} posts{metaDebugResult.businessDiscoveryResponse.website ? ` · ${metaDebugResult.businessDiscoveryResponse.website}` : ''}
+                          </div>
+                        )}
+                        {metaDebugResult.businessDiscoveryError && (
+                          <div style={{ color: '#C0392B', fontSize: '10.5px', marginTop: '2px' }}>
+                            code {metaDebugResult.businessDiscoveryError.code}{metaDebugResult.businessDiscoveryError.subcode ? `/${metaDebugResult.businessDiscoveryError.subcode}` : ''}: {metaDebugResult.businessDiscoveryError.message}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Diagnosis */}
+                      {metaDebugResult.diagnosis && (
+                        <div style={{ fontSize: '11px', color: metaDebugResult.ok ? '#2E8B57' : '#7A5C1E', fontStyle: 'italic', marginBottom: '6px' }}>
+                          {metaDebugResult.diagnosis}
                         </div>
                       )}
-                      {metaDebugResult.meTest && (
-                        <div style={{ marginTop: '4px', fontSize: '11px', color: '#4A433A' }}>
-                          /me test: {metaDebugResult.meTest.ok ? `OK (id: ${metaDebugResult.meTest.id})` : `FAILED — code ${metaDebugResult.meTest.errorCode}: ${metaDebugResult.meTest.errorMsg}`}
-                        </div>
-                      )}
-                      {metaDebugResult.discoveryTest && (
-                        <div style={{ fontSize: '11px', color: '#4A433A' }}>
-                          Business Discovery test: {metaDebugResult.discoveryTest.ok ? `OK — profile found` : `FAILED — code ${metaDebugResult.discoveryTest.errorCode}: ${metaDebugResult.discoveryTest.errorMsg}`}
-                        </div>
-                      )}
-                      {metaDebugResult.error && (
-                        <div style={{ fontSize: '11px', color: '#C0392B' }}>{metaDebugResult.error}</div>
-                      )}
-                      <button onClick={() => setMetaDebugResult(null)} style={{ marginTop: '6px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '11px', color: '#8C8070', padding: 0 }}>
+
+                      <button onClick={() => setMetaDebugResult(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '11px', color: '#8C8070', padding: 0 }}>
                         Dismiss
                       </button>
                     </div>
