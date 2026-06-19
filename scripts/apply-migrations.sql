@@ -106,6 +106,10 @@ ALTER TABLE "Itinerary"
   ADD COLUMN IF NOT EXISTS "variant"  TEXT,
   ADD COLUMN IF NOT EXISTS "parentId" TEXT;
 
+-- ── 5. imageUrl + imageAlt on TripItem ──────────────────────────────────────
+ALTER TABLE "TripItem" ADD COLUMN IF NOT EXISTS "imageUrl" TEXT;
+ALTER TABLE "TripItem" ADD COLUMN IF NOT EXISTS "imageAlt" TEXT;
+
 -- ── Verify ───────────────────────────────────────────────────────────────────
 SELECT 'ItineraryAsset' AS "table",
        COUNT(*)::text   AS "rows"

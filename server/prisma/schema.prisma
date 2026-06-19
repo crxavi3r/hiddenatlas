@@ -365,6 +365,8 @@ model TripItem {
   isLocked        Boolean  @default(false)
   sortOrder       Int      @default(0)
   metadata        Json     @default("{}")
+  imageUrl        String?
+  imageAlt        String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @default(now())  // updated via raw SQL
   time            String?  // compatibility display field

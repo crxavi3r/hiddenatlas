@@ -483,8 +483,9 @@ function PersonalOverviewModal({ workspace, open, onClose, onSave, saving }) {
 // ─────────────────────────────────────────────
 function ItemModal({ open, dayNumber, editItem, onClose, onSave, saving }) {
   const isEdit = !!editItem;
-  const EMPTY = { type: 'attraction', title: '', time: '', locationName: '', durationMinutes: '', notes: '' };
+  const EMPTY = { type: 'attraction', title: '', time: '', locationName: '', durationMinutes: '', notes: '', imageUrl: null, imageAlt: '', imageFile: null, imagePreview: null };
   const [form, setForm] = useState(EMPTY);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (open) {
@@ -495,6 +496,10 @@ function ItemModal({ open, dayNumber, editItem, onClose, onSave, saving }) {
         locationName:    editItem.locationName    || '',
         durationMinutes: editItem.durationMinutes != null ? String(editItem.durationMinutes) : '',
         notes:           editItem.notes           || '',
+        imageUrl:        editItem.imageUrl        || null,
+        imageAlt:        editItem.imageAlt        || '',
+        imageFile:       null,
+        imagePreview:    null,
       } : EMPTY);
     }
   }, [open, editItem]);
@@ -505,6 +510,21 @@ function ItemModal({ open, dayNumber, editItem, onClose, onSave, saving }) {
     if (!isEdit && isDirty() && !window.confirm('Discard changes?')) return;
     onClose();
   }
+
+  function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { alert('Image must be smaller than 5 MB.'); return; }
+    const preview = URL.createObjectURL(file);
+    setForm(f => ({ ...f, imageFile: file, imagePreview: preview, imageUrl: null }));
+    e.target.value = '';
+  }
+
+  function handleRemoveImage() {
+    setForm(f => ({ ...f, imageFile: null, imagePreview: null, imageUrl: null, imageAlt: '' }));
+  }
+
+  const previewSrc = form.imagePreview || form.imageUrl;
 
   return (
     <Modal open={open} onRequestClose={requestClose} title={isEdit ? 'Edit item' : `Add to Day ${dayNumber || ''}`}>
@@ -529,6 +549,31 @@ function ItemModal({ open, dayNumber, editItem, onClose, onSave, saving }) {
       </FormField>
       <FormField label="Notes (optional)">
         <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Any details..." rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
+      </FormField>
+      <FormField label="Photo (optional)">
+        <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileSelect} />
+        {previewSrc ? (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+            <img src={previewSrc} alt={form.imageAlt || form.title || 'Preview'} style={{ width: '96px', height: '72px', objectFit: 'cover', borderRadius: '6px', border: `1px solid ${BORDER}`, flexShrink: 0 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <button type="button" onClick={() => fileInputRef.current?.click()} style={{ ...btnSecondary, padding: '5px 12px', fontSize: '12px' }}>Change</button>
+              <button type="button" onClick={handleRemoveImage} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', color: MUTED, textAlign: 'left', padding: 0 }}>Remove</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" onClick={() => fileInputRef.current?.click()} style={{ ...btnSecondary, padding: '7px 14px', fontSize: '13px' }}>
+            Upload photo
+          </button>
+        )}
+        {previewSrc && (
+          <input
+            type="text"
+            value={form.imageAlt}
+            onChange={e => set('imageAlt', e.target.value)}
+            placeholder={form.title || 'Describe the photo'}
+            style={{ ...inputStyle, marginTop: '8px' }}
+          />
+        )}
       </FormField>
       <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
         <button style={btnSecondary} onClick={requestClose}>Cancel</button>
@@ -1172,6 +1217,13 @@ function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, 
           </div>
         )}
       </div>
+      {item.imageUrl && (
+        <img
+          src={item.imageUrl}
+          alt={item.imageAlt || item.title}
+          style={{ width: '72px', height: '54px', objectFit: 'cover', borderRadius: '5px', flexShrink: 0, border: `1px solid ${BORDER}` }}
+        />
+      )}
       {canEdit && (
         <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
           {onEdit && (
@@ -2580,12 +2632,33 @@ export default function TripDetailPage() {
     }
   }
 
+  // ── Upload TripItem image ─────────────────────────────────────
+  async function uploadItemImage(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async e => {
+        try {
+          const base64Data = e.target.result.split(',')[1];
+          const res = await api.post(`/api/trip-item-upload?tripId=${id}`, { base64Data, filename: file.name });
+          if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Upload failed'); }
+          const { url } = await res.json();
+          resolve(url);
+        } catch (err) { reject(err); }
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
   // ── Create TripItem ───────────────────────────────────────────
   async function handleSaveItem(form) {
     if (!addItemCtx) return;
     setSavingItem(true);
     try {
-      const body = { ...form, tripDayId: addItemCtx.dayId };
+      let imageUrl = form.imageUrl || null;
+      if (form.imageFile) imageUrl = await uploadItemImage(form.imageFile);
+      const { imageFile: _f, imagePreview: _p, ...rest } = form;
+      const body = { ...rest, imageUrl, imageAlt: form.imageAlt || null, tripDayId: addItemCtx.dayId };
       const res  = await api.post(`/api/trips?id=${id}&action=item`, body);
       if (!res.ok) throw new Error('Save failed');
       const { item } = await res.json();
@@ -2598,8 +2671,8 @@ export default function TripDetailPage() {
         if (wsRes.ok) setWorkspace(await wsRes.json());
       }
       setAddItemCtx(null);
-    } catch {
-      alert('Could not add item. Please try again.');
+    } catch (err) {
+      alert(`Could not add item: ${err.message || 'Please try again.'}`);
     } finally {
       setSavingItem(false);
     }
@@ -2610,7 +2683,11 @@ export default function TripDetailPage() {
     if (!editingItem) return;
     setSavingItem(true);
     try {
-      const res = await api.post(`/api/trips?action=item&itemId=${editingItem.id}`, form);
+      let imageUrl = form.imageUrl !== undefined ? (form.imageUrl || null) : undefined;
+      if (form.imageFile) imageUrl = await uploadItemImage(form.imageFile);
+      const { imageFile: _f, imagePreview: _p, ...rest } = form;
+      const body = { ...rest, imageUrl, imageAlt: form.imageAlt || null };
+      const res = await api.post(`/api/trips?action=item&itemId=${editingItem.id}`, body);
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || 'Update failed');

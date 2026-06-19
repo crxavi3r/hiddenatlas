@@ -629,6 +629,7 @@ export default async function handler(req, res) {
                 time, "startTime", "endTime", "durationMinutes", "locationName", address,
                 latitude, longitude, notes, "bookingReference", provider, url,
                 status, "isHidden", "isLocked", "sortOrder", metadata,
+                "imageUrl", "imageAlt",
                 "createdAt", "updatedAt"
          FROM "TripItem"
          WHERE "tripId" = $1 AND "isHidden" = false
@@ -760,7 +761,7 @@ export default async function handler(req, res) {
       const access = await getTripAccess(id);
       if (!access.canEdit) return res.status(access.canView ? 403 : 404).json({ error: access.canView ? 'Permission denied' : 'Trip not found' });
 
-      const { tripDayId, dayNumber: bodyDayNumber, type: rawType, title, description, time, startTime, endTime, durationMinutes, locationName, address, latitude, longitude, notes, provider, url } = req.body || {};
+      const { tripDayId, dayNumber: bodyDayNumber, type: rawType, title, description, time, startTime, endTime, durationMinutes, locationName, address, latitude, longitude, notes, provider, url, imageUrl, imageAlt } = req.body || {};
       if (!title) return res.status(400).json({ error: 'title is required' });
 
       const ITEM_TYPE_WHITELIST = ['attraction','restaurant','hotel','transfer','flight','event','note','break','booking','other'];
@@ -810,6 +811,7 @@ export default async function handler(req, res) {
            "locationName", address, latitude, longitude,
            notes, provider, url,
            status, "isHidden", "isLocked", "sortOrder", metadata,
+           "imageUrl", "imageAlt",
            "createdAt", "updatedAt"
          )
          VALUES (
@@ -820,13 +822,14 @@ export default async function handler(req, res) {
            $13, $14, $15::float8, $16::float8,
            $17, $18, $19,
            $20, $21::boolean, $22::boolean, $23, $24::jsonb,
+           $25, $26,
            NOW(), NOW()
          )
          RETURNING id, "tripId", "tripDayId", "dayNumber", type, title, description,
                    time, "startTime", "endTime", "durationMinutes",
                    "locationName", address, latitude, longitude,
                    notes, provider, url, status, "isHidden", "isLocked",
-                   "sortOrder", metadata, "createdAt", "updatedAt"`,
+                   "sortOrder", metadata, "imageUrl", "imageAlt", "createdAt", "updatedAt"`,
         [
           id,                     // $1  tripId
           resolvedTripDayId,      // $2  tripDayId
@@ -852,6 +855,8 @@ export default async function handler(req, res) {
           false,                  // $22 isLocked
           nextSortOrder,          // $23 sortOrder
           JSON.stringify({}),     // $24 metadata
+          imageUrl || null,       // $25 imageUrl
+          imageAlt || null,       // $26 imageAlt
         ]
       );
       return res.status(200).json({ item: rows[0] });
@@ -866,7 +871,7 @@ export default async function handler(req, res) {
       const itemAccess = await getTripAccess(itemRows[0].tripId);
       if (!itemAccess.canEdit) return res.status(403).json({ error: 'Permission denied' });
 
-      const { type: rawType, title, description, time, startTime, endTime, durationMinutes, locationName, address, notes, url, provider, bookingReference, status, sortOrder, latitude, longitude } = req.body || {};
+      const { type: rawType, title, description, time, startTime, endTime, durationMinutes, locationName, address, notes, url, provider, bookingReference, status, sortOrder, latitude, longitude, imageUrl: rawImageUrl, imageAlt: rawImageAlt } = req.body || {};
 
       // Normalize and whitelist type
       const ITEM_TYPE_WHITELIST = ['attraction','restaurant','hotel','transfer','flight','event','note','break','booking','other'];
@@ -878,6 +883,9 @@ export default async function handler(req, res) {
         if (!normalizedType) return res.status(400).json({ error: 'Invalid item type' });
       }
 
+      const hasImageUrl = rawImageUrl !== undefined;
+      const hasImageAlt = rawImageAlt !== undefined;
+
       const { rows: updated } = await pool.query(
         `UPDATE "TripItem"
          SET type = COALESCE($1, type), title = COALESCE($2, title),
@@ -888,13 +896,15 @@ export default async function handler(req, res) {
              "sortOrder" = COALESCE($15, "sortOrder"),
              latitude = COALESCE($17::float8, latitude),
              longitude = COALESCE($18::float8, longitude),
+             "imageUrl" = CASE WHEN $19::boolean THEN $20 ELSE "imageUrl" END,
+             "imageAlt" = CASE WHEN $21::boolean THEN $22 ELSE "imageAlt" END,
              "updatedAt" = NOW()
          WHERE id = $16
          RETURNING id, "tripId", "tripDayId", "dayNumber", type, title, description,
                    time, "startTime", "endTime", "durationMinutes",
                    "locationName", address, latitude, longitude,
                    notes, provider, url, status, "isHidden", "isLocked",
-                   "sortOrder", metadata, "createdAt", "updatedAt"`,
+                   "sortOrder", metadata, "imageUrl", "imageAlt", "createdAt", "updatedAt"`,
         [normalizedType, title || null, description || null, time || null,
          startTime || null, endTime || null,
          durationMinutes != null ? Number(durationMinutes) : null,
@@ -904,7 +914,11 @@ export default async function handler(req, res) {
          status || null, sortOrder != null ? Number(sortOrder) : null,
          itemId,
          latitude != null ? Number(latitude) : null,
-         longitude != null ? Number(longitude) : null]
+         longitude != null ? Number(longitude) : null,
+         hasImageUrl,                                     // $19
+         hasImageUrl ? (rawImageUrl || null) : null,     // $20
+         hasImageAlt,                                     // $21
+         hasImageAlt ? (rawImageAlt || null) : null]     // $22
       );
       return res.status(200).json({ item: updated[0] });
     }

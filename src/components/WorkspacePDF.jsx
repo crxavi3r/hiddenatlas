@@ -1,5 +1,5 @@
 // WorkspacePDF — personalised trip guide using HiddenAtlas design language
-import { Document, Page, Text, View, StyleSheet, Svg, Rect, Path, Circle, G } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, Svg, Rect, Path, Circle, G, Image } from '@react-pdf/renderer';
 import { buildRouteMapLayout, detectOutlierStops } from '../utils/routeMapLayout';
 
 const TEAL = '#1B6B65';
@@ -509,13 +509,16 @@ export function WorkspacePDF({ trip, itinerary, tripDays, tripItems, tripNotes, 
                   const durPart  = item.durationMinutes ? formatDuration(item.durationMinutes) : '';
                   return (
                     <View key={item.id} style={[S.itemRow, { marginBottom: 8 }]}>
-                      <View>
+                      <View style={{ flex: 1 }}>
                         <Text style={S.itemTitle}>{item.title}</Text>
                         {(timePart || durPart || item.locationName) && (
                           <Text style={S.itemMeta}>{[timePart, durPart, item.locationName].filter(Boolean).join(' · ')}</Text>
                         )}
                         {item.notes && <Text style={[S.itemMeta, { marginTop: 2 }]}>{item.notes}</Text>}
                       </View>
+                      {item.imageUrl && (
+                        <Image src={item.imageUrl} style={{ width: 64, height: 48, borderRadius: 4, marginLeft: 8, flexShrink: 0 }} />
+                      )}
                     </View>
                   );
                 })}
