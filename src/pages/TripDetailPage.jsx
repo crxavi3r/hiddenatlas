@@ -2639,7 +2639,7 @@ export default function TripDetailPage() {
       reader.onload = async e => {
         try {
           const base64Data = e.target.result.split(',')[1];
-          const res = await api.post(`/api/trip-item-upload?tripId=${id}`, { base64Data, filename: file.name });
+          const res = await api.post(`/api/trips?id=${id}&action=item-image-upload`, { base64Data, filename: file.name });
           if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Upload failed'); }
           const { url } = await res.json();
           resolve(url);

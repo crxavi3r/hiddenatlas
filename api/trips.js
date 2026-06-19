@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { randomBytes } from 'crypto';
+import { put as blobPut } from '@vercel/blob';
 import { createTripEvent } from './_lib/audit.js';
 import { verifyAuth } from './_lib/verifyAuth.js';
 
@@ -1564,6 +1565,36 @@ export default async function handler(req, res) {
       });
 
       return res.status(200).json({ id: tripId });
+    }
+
+    // ── POST /api/trips?id=&action=item-image-upload — upload image for TripItem ─
+    if (req.method === 'POST' && action === 'item-image-upload' && id) {
+      const access = await getTripAccess(id);
+      if (!access.canEdit) return res.status(access.canView ? 403 : 404).json({ error: access.canView ? 'Permission denied' : 'Trip not found' });
+
+      const ALLOWED_IMAGE_TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif' };
+      const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+      const { base64Data, filename } = req.body || {};
+      if (!base64Data || !filename) return res.status(400).json({ error: 'base64Data and filename are required' });
+
+      const ext = (filename.split('.').pop() || '').toLowerCase();
+      const contentType = ALLOWED_IMAGE_TYPES[ext];
+      if (!contentType) return res.status(400).json({ error: 'Unsupported file type. Use jpg, png, webp, gif, or avif.' });
+
+      const fileBuffer = Buffer.from(base64Data, 'base64');
+      if (fileBuffer.length > MAX_IMAGE_BYTES) return res.status(400).json({ error: 'Image must be smaller than 5 MB.' });
+
+      const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const blobPath = `trips/${id}/items/${Date.now()}-${safeName}`;
+      const blob = await blobPut(blobPath, fileBuffer, {
+        access: 'public',
+        contentType,
+        addRandomSuffix: false,
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+      });
+
+      return res.status(200).json({ url: blob.url });
     }
 
     // ── GET /api/trips?action=shares-list&id=<tripId> — list shares (owner) ──
