@@ -285,7 +285,10 @@ export default function CreatorLeadDetailPage() {
       await crmCall(getToken, 'messages.markSent', { msgId: msg.id });
       showToast('Marked as sent');
       load();
-    } catch (e) { showToast(e.message, 'error'); }
+    } catch (e) {
+      const isDbError = /DB error|42P18|indeterminate|could not determine/i.test(e.message);
+      showToast(isDbError ? 'Could not mark message as sent. Please try again.' : e.message, 'error');
+    }
   }
 
   async function handleRefreshInstagram() {

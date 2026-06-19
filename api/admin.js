@@ -3871,49 +3871,68 @@ async function crmMarkSent(pool, msgId, ctx) {
   const msg = msgRows[0];
 
   const senderId = (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null);
-  await pool.query(`
-    UPDATE "CreatorLeadMessage"
-    SET status = 'sent',
-        "sentAt" = NOW(),
-        metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(
-          'deliveryMode', 'manual',
-          'sentManually', true,
-          'sentManuallyById', $2,
-          'sentManuallyAt', NOW()::text
-        ),
-        "updatedAt" = NOW()
-    WHERE id = $1
-  `, [msgId, senderId]);
 
+  console.log('[crmMarkSent] start', {
+    leadId: msg.leadId,
+    hasMessageBody: Boolean(msg.body || msg.personalizedBody),
+    hasTemplateId: Boolean(msg.templateId),
+  });
+
+  // Fix: avoid metadata column (not in schema) and cast $2::text so Postgres can
+  // determine the parameter type even when senderId is null.
   try {
     await pool.query(`
+      UPDATE "CreatorLeadMessage"
+      SET status = 'sent',
+          "sentAt" = NOW(),
+          "sentById" = $2::text,
+          "updatedAt" = NOW()
+      WHERE id = $1
+    `, [msgId, senderId]);
+  } catch (err) {
+    console.error('[crmMarkSent] message update failed:', err.code, err.message);
+    throw Object.assign(
+      new Error('Could not mark message as sent. Please try again.'),
+      { status: 500 }
+    );
+  }
+
+  try {
+    const { rows: leadRows } = await pool.query(`
       UPDATE "CreatorLead"
       SET "lastContactedAt" = NOW(), "updatedAt" = NOW(),
           status = CASE
-            WHEN status IN ('identified','qualified','message_prepared') THEN 'contacted'
+            WHEN status IN ('identified', 'new', 'qualified', 'message_prepared') THEN 'contacted'
             ELSE status
           END
       WHERE id = $1
+      RETURNING status
     `, [msg.leadId]);
+
+    const newLeadStatus = leadRows[0]?.status;
+    console.log('[crmMarkSent] lead status update', {
+      leadId: msg.leadId,
+      newLeadStatus,
+    });
 
     await pool.query(`
       INSERT INTO "CreatorLeadActivity"
-        (id, "leadId", type, body, metadata, "createdById", "createdAt")
-      VALUES (gen_random_uuid(), $1, 'message_sent', 'Message marked as sent manually', '{}'::jsonb, $2, NOW())
+        (id, "leadId", type, content, metadata, "createdById", "createdAt")
+      VALUES (gen_random_uuid(), $1, 'message_sent', 'Message marked as sent manually', '{}'::jsonb, $2::text, NOW())
     `, [msg.leadId, senderId]);
 
     const dueAt = new Date(Date.now() + 6 * 24 * 60 * 60 * 1000);
     const { rows: existingTasks } = await pool.query(`
       SELECT id FROM "CreatorLeadTask"
-      WHERE "leadId" = $1 AND status = 'open' AND "dueAt" > NOW()
+      WHERE "leadId" = $1 AND status = 'pending' AND "dueAt" > NOW()
       LIMIT 1
     `, [msg.leadId]);
 
     if (!existingTasks.length) {
       await pool.query(`
         INSERT INTO "CreatorLeadTask"
-          (id, "leadId", title, "dueAt", status, type, "createdById", "createdAt", "updatedAt")
-        VALUES (gen_random_uuid(), $1, 'Follow up on message', $2, 'open', 'follow_up', $3, NOW(), NOW())
+          (id, "leadId", title, "dueAt", status, "createdById", "createdAt", "updatedAt")
+        VALUES (gen_random_uuid(), $1, 'Follow up on message', $2::timestamptz, 'pending', $3::text, NOW(), NOW())
       `, [msg.leadId, dueAt.toISOString(), senderId]);
     }
   } catch (err) {
