@@ -348,7 +348,7 @@ function TripDetailsModal({ workspace, open, onClose, onSave, saving }) {
 }
 
 // ─────────────────────────────────────────────
-// PersonalOverviewModal — edit all personal trip fields
+// EditTripModal — single unified modal for editing all personal trip fields
 // ─────────────────────────────────────────────
 function PersonalOverviewModal({ workspace, tripId, open, onClose, onSave, saving }) {
   const { trip } = workspace;
@@ -358,6 +358,7 @@ function PersonalOverviewModal({ workspace, tripId, open, onClose, onSave, savin
   const [highlightInput, setHighlightInput] = useState('');
   const [coverUploading, setCoverUploading] = useState(false);
   const [coverError, setCoverError] = useState('');
+  const [validationError, setValidationError] = useState('');
 
   useEffect(() => {
     if (open) {
@@ -379,6 +380,7 @@ function PersonalOverviewModal({ workspace, tripId, open, onClose, onSave, savin
       });
       setHighlightInput('');
       setCoverError('');
+      setValidationError('');
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -393,6 +395,21 @@ function PersonalOverviewModal({ workspace, tripId, open, onClose, onSave, savin
 
   function removeHighlight(i) {
     setForm(f => ({ ...f, highlights: f.highlights.filter((_, idx) => idx !== i) }));
+  }
+
+  function validate() {
+    if (!form.title?.trim()) return 'Trip name is required.';
+    if (!form.destination?.trim()) return 'Destination is required.';
+    if (form.travellers && (Number(form.travellers) < 1 || !Number.isFinite(Number(form.travellers)))) return 'Number of travellers must be a positive number.';
+    if (form.startDate && form.endDate && form.startDate > form.endDate) return 'Start date cannot be after end date.';
+    return null;
+  }
+
+  function handleSave() {
+    const err = validate();
+    if (err) { setValidationError(err); return; }
+    setValidationError('');
+    onSave(form);
   }
 
   function requestClose() {
@@ -425,10 +442,25 @@ function PersonalOverviewModal({ workspace, tripId, open, onClose, onSave, savin
     }
   }
 
+  // Section divider used throughout the form
+  function SectionDivider({ label }) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '20px 0 4px' }}>
+        <span style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '1.4px', textTransform: 'uppercase', color: MUTED, whiteSpace: 'nowrap' }}>
+          {label}
+        </span>
+        <div style={{ flex: 1, height: '1px', background: BORDER }} />
+      </div>
+    );
+  }
+
   return (
-    <Modal open={open} onRequestClose={requestClose} title="Edit trip details" wide>
+    <Modal open={open} onRequestClose={requestClose} title="Edit trip" wide>
+
+      {/* ── Basics ─────────────────────────────────────────────── */}
+      <SectionDivider label="Basics" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-        <FormField label="Trip Name *">
+        <FormField label="Trip name *">
           <input value={form.title || ''} onChange={e => set('title', e.target.value)} placeholder="My Summer Trip" style={inputStyle} autoFocus />
         </FormField>
         <FormField label="Destination *">
@@ -443,50 +475,25 @@ function PersonalOverviewModal({ workspace, tripId, open, onClose, onSave, savin
           <input type="number" min="1" max="50" value={form.travellers || ''} onChange={e => set('travellers', e.target.value)} placeholder="e.g. 2" style={inputStyle} />
         </FormField>
       </div>
+      <FormField label="Subtitle">
+        <input value={form.subtitle || ''} onChange={e => set('subtitle', e.target.value)} placeholder="A short tagline for your trip" style={inputStyle} />
+      </FormField>
+
+      {/* ── Dates ──────────────────────────────────────────────── */}
+      <SectionDivider label="Dates" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-        <FormField label="Start Date">
+        <FormField label="Start date">
           <input type="date" value={form.startDate || ''} onChange={e => set('startDate', e.target.value)} style={inputStyle} />
         </FormField>
-        <FormField label="End Date">
+        <FormField label="End date">
           <input type="date" value={form.endDate || ''} min={form.startDate || undefined} onChange={e => set('endDate', e.target.value)} style={inputStyle} />
         </FormField>
       </div>
-      <FormField label="Subtitle">
-        <input value={form.subtitle || ''} onChange={e => set('subtitle', e.target.value)} placeholder="A short tagline" style={inputStyle} />
-      </FormField>
+
+      {/* ── Overview ───────────────────────────────────────────── */}
+      <SectionDivider label="Overview" />
       <FormField label="Overview">
         <textarea value={form.overview || ''} onChange={e => set('overview', e.target.value)} placeholder="Describe your trip…" rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
-      </FormField>
-      <FormField label="Cover image">
-        <input ref={coverInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleCoverFileSelect} disabled={coverUploading} />
-        {form.heroImage ? (
-          <div>
-            <div style={{ position: 'relative', marginBottom: '10px' }}>
-              <img
-                src={form.heroImage}
-                alt="Cover preview"
-                style={{ width: '100%', maxHeight: '160px', objectFit: 'cover', borderRadius: '8px', border: `1px solid ${BORDER}`, display: 'block' }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button type="button" onClick={() => coverInputRef.current?.click()} disabled={coverUploading} style={{ ...btnSecondary, padding: '7px 14px', fontSize: '13px' }}>
-                {coverUploading ? 'Uploading…' : 'Change image'}
-              </button>
-              <button type="button" onClick={() => { setForm(f => ({ ...f, heroImage: null })); setCoverError(''); }} disabled={coverUploading}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: MUTED, padding: 0 }}>
-                Remove
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button type="button" onClick={() => coverInputRef.current?.click()} disabled={coverUploading} style={{ ...btnSecondary, padding: '7px 14px', fontSize: '13px' }}>
-              {coverUploading ? 'Uploading…' : 'Upload image'}
-            </button>
-            {coverUploading && <span style={{ fontSize: '13px', color: MUTED }}>Please wait…</span>}
-          </div>
-        )}
-        {coverError && <p style={{ fontSize: '12px', color: '#B04040', marginTop: '6px' }}>{coverError}</p>}
       </FormField>
       <FormField label="Highlights">
         <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
@@ -497,9 +504,7 @@ function PersonalOverviewModal({ workspace, tripId, open, onClose, onSave, savin
             placeholder="Add a highlight and press Enter"
             style={{ ...inputStyle, flex: 1 }}
           />
-          <button type="button" onClick={addHighlight} style={{ ...btnSecondary, padding: '10px 14px', flexShrink: 0 }}>
-            Add
-          </button>
+          <button type="button" onClick={addHighlight} style={{ ...btnSecondary, padding: '10px 14px', flexShrink: 0 }}>Add</button>
         </div>
         {(form.highlights || []).length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -514,22 +519,63 @@ function PersonalOverviewModal({ workspace, tripId, open, onClose, onSave, savin
           </div>
         )}
       </FormField>
+
+      {/* ── Logistics ──────────────────────────────────────────── */}
+      <SectionDivider label="Logistics" />
       <FormField label="Accommodation summary">
-        <input value={form.accommodationSummary || ''} onChange={e => set('accommodationSummary', e.target.value)} placeholder="e.g. Mix of boutique hotels" style={inputStyle} />
+        <input value={form.accommodationSummary || ''} onChange={e => set('accommodationSummary', e.target.value)} placeholder="e.g. Mix of boutique hotels and riads" style={inputStyle} />
       </FormField>
-      <FormField label="Arrival info">
-        <input value={form.arrivalInfo || ''} onChange={e => set('arrivalInfo', e.target.value)} placeholder="e.g. LIS–MAR, AF1234, 09:40" style={inputStyle} />
-      </FormField>
-      <FormField label="Departure info">
-        <input value={form.departureInfo || ''} onChange={e => set('departureInfo', e.target.value)} placeholder="e.g. MAR–LIS, AF1235, 17:20" style={inputStyle} />
-      </FormField>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+        <FormField label="Arrival info">
+          <input value={form.arrivalInfo || ''} onChange={e => set('arrivalInfo', e.target.value)} placeholder="e.g. LIS→MAR, AF1234, 09:40" style={inputStyle} />
+        </FormField>
+        <FormField label="Departure info">
+          <input value={form.departureInfo || ''} onChange={e => set('departureInfo', e.target.value)} placeholder="e.g. MAR→LIS, AF1235, 17:20" style={inputStyle} />
+        </FormField>
+      </div>
       <FormField label="General notes">
         <textarea value={form.generalNotes || ''} onChange={e => set('generalNotes', e.target.value)} placeholder="Anything useful to remember…" rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
       </FormField>
-      <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
+
+      {/* ── Cover image ────────────────────────────────────────── */}
+      <SectionDivider label="Cover image" />
+      <FormField label="">
+        <input ref={coverInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleCoverFileSelect} disabled={coverUploading} />
+        {form.heroImage ? (
+          <div>
+            <div style={{ marginBottom: '10px' }}>
+              <img src={form.heroImage} alt="Cover preview" style={{ width: '100%', maxHeight: '160px', objectFit: 'cover', borderRadius: '8px', border: `1px solid ${BORDER}`, display: 'block' }} />
+            </div>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button type="button" onClick={() => coverInputRef.current?.click()} disabled={coverUploading} style={{ ...btnSecondary, padding: '7px 14px', fontSize: '13px' }}>
+                {coverUploading ? 'Uploading…' : 'Change image'}
+              </button>
+              <button type="button" onClick={() => { setForm(f => ({ ...f, heroImage: null })); setCoverError(''); }} disabled={coverUploading} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: MUTED, padding: 0 }}>
+                Remove
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button type="button" onClick={() => coverInputRef.current?.click()} disabled={coverUploading} style={{ ...btnSecondary, padding: '7px 14px', fontSize: '13px' }}>
+              {coverUploading ? 'Uploading…' : 'Upload image'}
+            </button>
+            {coverUploading && <span style={{ fontSize: '13px', color: MUTED }}>Please wait…</span>}
+          </div>
+        )}
+        {coverError && <p style={{ fontSize: '12px', color: '#B04040', marginTop: '6px' }}>{coverError}</p>}
+      </FormField>
+
+      {/* ── Footer ─────────────────────────────────────────────── */}
+      {validationError && (
+        <p style={{ fontSize: '13px', color: '#B04040', marginTop: '12px', padding: '10px 12px', background: '#FDF0F0', borderRadius: '6px' }}>
+          {validationError}
+        </p>
+      )}
+      <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
         <button style={btnSecondary} onClick={requestClose}>Cancel</button>
-        <button style={btnPrimary} onClick={() => onSave(form)} disabled={saving}>
-          {saving ? 'Saving...' : 'Save changes'}
+        <button style={btnPrimary} onClick={handleSave} disabled={saving || coverUploading}>
+          {saving ? 'Saving…' : 'Save trip'}
         </button>
       </div>
     </Modal>
@@ -1267,6 +1313,16 @@ function ItemImageLightbox({ item, onClose, canEdit, onEdit }) {
   );
 }
 
+// Image sizing rules:
+//   compact  — all types except 'event', notes < 200 chars → desktop 180×110px, mobile 160px
+//   editorial — type 'event' OR notes ≥ 200 chars           → desktop 180×200px, mobile 210px
+const EDITORIAL_TYPES = new Set(['event']);
+const IMG_W = 180;
+const IMG_H_COMPACT  = 110;
+const IMG_H_EDITORIAL = 200;
+const MOBILE_H_COMPACT  = 160;
+const MOBILE_H_EDITORIAL = 210;
+
 function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, tripName = '', itineraryDayStops = [], canEdit = true }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [imgHovered, setImgHovered] = useState(false);
@@ -1280,7 +1336,10 @@ function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, 
   const metaParts = [timeDisplay, durationDisplay, item.locationName].filter(Boolean);
   const hasImage = !!item.imageUrl;
   const notes = item.notes || '';
-  // "Read more" threshold: ~4 lines × ~45 chars
+  const isEditorial = EDITORIAL_TYPES.has(item.type) || notes.length >= 200;
+  const imgH      = isEditorial ? IMG_H_EDITORIAL   : IMG_H_COMPACT;
+  const mobileImgH = isEditorial ? MOBILE_H_EDITORIAL : MOBILE_H_COMPACT;
+  // "Read more" on mobile when notes are long
   const notesLong = notes.length > 180;
 
   function handleDelete() {
@@ -1356,9 +1415,9 @@ function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, 
     return (
       <>
         <div style={{ background: 'white', border: `1px solid ${BORDER}`, borderRadius: '8px', borderLeft: `3px solid ${color}`, overflow: 'hidden' }}>
-          {/* Image: 160px fixed height, full width, clickable */}
+          {/* Deterministic height per editorial tier — no auto/intrinsic sizing */}
           <div
-            style={{ height: '160px', overflow: 'hidden', cursor: 'pointer' }}
+            style={{ height: `${mobileImgH}px`, overflow: 'hidden', cursor: 'pointer', flexShrink: 0 }}
             onClick={() => setLightboxOpen(true)}
           >
             <img
@@ -1396,14 +1455,15 @@ function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, 
     );
   }
 
-  // ── With image, desktop: image panel on right, content-driven height ──
-  // Image container uses minHeight:80px so it always shows something useful,
-  // but the card height is driven by content (no forced minimum on the card itself).
+  // ── With image, desktop: absolutely-positioned image panel ────
+  // Absolute positioning fully decouples image height from content height.
+  // minHeight on the card guarantees the image always renders at exactly imgH px.
+  // Content area uses paddingRight to avoid overlapping the image column.
   return (
     <>
-      <div style={{ display: 'flex', background: 'white', border: `1px solid ${BORDER}`, borderRadius: '8px', borderLeft: `3px solid ${color}`, overflow: 'hidden' }}>
-        {/* Content + actions */}
-        <div style={{ flex: 1, display: 'flex', gap: '8px', alignItems: 'flex-start', padding: '12px 14px', minWidth: 0 }}>
+      <div style={{ position: 'relative', background: 'white', border: `1px solid ${BORDER}`, borderRadius: '8px', borderLeft: `3px solid ${color}`, minHeight: `${imgH}px`, overflow: 'hidden' }}>
+        {/* Content — right padding reserves space for the image column */}
+        <div style={{ padding: `12px ${IMG_W + 14}px 12px 16px`, display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             {badgeRow}
             <p style={{ fontSize: '14px', fontWeight: '600', color: CHAR, marginBottom: metaParts.length ? '4px' : 0 }}>{item.title}</p>
@@ -1413,9 +1473,9 @@ function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, 
           </div>
           {actionButtons}
         </div>
-        {/* Image panel: 160px wide, stretches to card height, min 80px so it always shows usefully */}
+        {/* Image: fixed width + height, position absolute so it never affects card height */}
         <div
-          style={{ width: '160px', minHeight: '80px', flexShrink: 0, overflow: 'hidden', cursor: 'pointer', position: 'relative' }}
+          style={{ position: 'absolute', right: 0, top: 0, width: `${IMG_W}px`, height: `${imgH}px`, overflow: 'hidden', cursor: 'pointer' }}
           onMouseEnter={() => setImgHovered(true)}
           onMouseLeave={() => setImgHovered(false)}
           onClick={() => setLightboxOpen(true)}
@@ -2027,7 +2087,7 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
 // ─────────────────────────────────────────────
 // OverviewTab
 // ─────────────────────────────────────────────
-function OverviewTab({ workspace, onEditDetails, onEditPersonal }) {
+function OverviewTab({ workspace, onEditDetails }) {
   const isMobile = useIsMobile();
   const { trip, itinerary, tripNotes } = workspace;
   const isPersonal = trip.tripType === 'personal';
@@ -2051,24 +2111,6 @@ function OverviewTab({ workspace, onEditDetails, onEditPersonal }) {
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr minmax(260px, 300px)', gap: isMobile ? '28px' : '40px', alignItems: 'start' }}>
         {/* Left — editorial content */}
         <div>
-          {isPersonal && onEditPersonal && (
-            <div style={{ marginBottom: '28px' }}>
-              <button
-                onClick={onEditPersonal}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '6px',
-                  padding: '9px 18px', border: `1px solid ${BORDER}`, borderRadius: '6px',
-                  background: 'transparent', fontSize: '13px', fontWeight: '600', color: MUTED,
-                  cursor: 'pointer', transition: 'all 0.15s',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = TEAL; e.currentTarget.style.color = TEAL; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}
-              >
-                <Pencil size={13} /> Edit trip details
-              </button>
-            </div>
-          )}
-
           {description && (
             <section style={{ marginBottom: '40px' }}>
               <p style={{ fontSize: '16px', color: MUTED, lineHeight: '1.8' }}>{description}</p>
@@ -2792,9 +2834,10 @@ export default function TripDetailPage() {
     }
   }
 
-  // ── Save personal trip overview (title, destination, overview, etc.) ─────
+  // ── Save all personal trip fields (unified handler for the single Edit trip modal) ─────
   async function handleSavePersonalOverview(form) {
     setSavingPersonalOverview(true);
+    const prevStartDate = workspace?.trip?.startDate ? workspace.trip.startDate.slice(0, 10) : '';
     try {
       const payload = {
         ...form,
@@ -2815,6 +2858,20 @@ export default function TripDetailPage() {
       if (durationDays) { updated.durationDays = durationDays; updated.duration = duration; }
       setWorkspace(w => ({ ...w, trip: { ...w.trip, ...updated } }));
       setShowPersonalOverview(false);
+      // Remap bookings if start date changed (fire-and-forget; reload workspace if any were remapped)
+      if (form.startDate && form.startDate !== prevStartDate) {
+        api.post(`/api/trips?id=${id}&action=remap-bookings`, {})
+          .then(r => r.json())
+          .then(data => {
+            if (data.remapped > 0) {
+              api.get(`/api/trips?id=${id}&action=workspace`)
+                .then(r => r.json())
+                .then(ws => setWorkspace(ws))
+                .catch(() => {});
+            }
+          })
+          .catch(() => {});
+      }
     } catch {
       alert('Could not save trip details. Please try again.');
     } finally {
@@ -3212,7 +3269,7 @@ export default function TripDetailPage() {
 
             {access.canEdit && (
               <button
-                onClick={() => setShowDetails(true)}
+                onClick={() => trip.tripType === 'personal' ? setShowPersonalOverview(true) : setShowDetails(true)}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '6px',
                   padding: '7px 16px', background: GOLD,
@@ -3221,7 +3278,7 @@ export default function TripDetailPage() {
                 }}
               >
                 <Pencil size={12} />
-                {(trip.startDate || trip.travellers) ? 'Edit details' : 'Add trip details'}
+                Edit trip
               </button>
             )}
           </div>
@@ -3237,8 +3294,8 @@ export default function TripDetailPage() {
         {activeTab === 'overview' && (
           <OverviewTab
             workspace={workspace}
-            onEditDetails={() => setShowDetails(true)}
-            onEditPersonal={access.canEdit && trip.tripType === 'personal' ? () => setShowPersonalOverview(true) : null}
+            onEditDetails={access.canEdit ? () => (trip.tripType === 'personal' ? setShowPersonalOverview(true) : setShowDetails(true)) : null}
+            onEditPersonal={null}
           />
         )}
 
