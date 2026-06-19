@@ -350,10 +350,14 @@ function TripDetailsModal({ workspace, open, onClose, onSave, saving }) {
 // ─────────────────────────────────────────────
 // PersonalOverviewModal — edit all personal trip fields
 // ─────────────────────────────────────────────
-function PersonalOverviewModal({ workspace, open, onClose, onSave, saving }) {
+function PersonalOverviewModal({ workspace, tripId, open, onClose, onSave, saving }) {
   const { trip } = workspace;
+  const api = useApi();
+  const coverInputRef = useRef(null);
   const [form, setForm] = useState({});
   const [highlightInput, setHighlightInput] = useState('');
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [coverError, setCoverError] = useState('');
 
   useEffect(() => {
     if (open) {
@@ -370,10 +374,11 @@ function PersonalOverviewModal({ workspace, open, onClose, onSave, saving }) {
         arrivalInfo:          trip.arrivalInfo          || '',
         departureInfo:        trip.departureInfo        || '',
         generalNotes:         trip.generalNotes         || '',
-        heroImage:            trip.heroImage            || '',
+        heroImage:            trip.heroImage            || null,
         highlights:           Array.isArray(trip.highlights) ? [...trip.highlights] : [],
       });
       setHighlightInput('');
+      setCoverError('');
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -393,6 +398,31 @@ function PersonalOverviewModal({ workspace, open, onClose, onSave, saving }) {
   function requestClose() {
     if (!window.confirm('Discard changes?')) return;
     onClose();
+  }
+
+  async function handleCoverFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) { setCoverError('Image must be smaller than 8 MB.'); return; }
+    setCoverError('');
+    setCoverUploading(true);
+    e.target.value = '';
+    try {
+      const base64Data = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = ev => res(ev.target.result.split(',')[1]);
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      });
+      const resp = await api.post(`/api/trips?id=${tripId}&action=cover-image-upload`, { base64Data, filename: file.name });
+      if (!resp.ok) { const d = await resp.json().catch(() => ({})); throw new Error(d.error || 'Upload failed'); }
+      const { url } = await resp.json();
+      setForm(f => ({ ...f, heroImage: url }));
+    } catch (err) {
+      setCoverError(err.message || 'Upload failed. Please try again.');
+    } finally {
+      setCoverUploading(false);
+    }
   }
 
   return (
@@ -427,8 +457,36 @@ function PersonalOverviewModal({ workspace, open, onClose, onSave, saving }) {
       <FormField label="Overview">
         <textarea value={form.overview || ''} onChange={e => set('overview', e.target.value)} placeholder="Describe your trip…" rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
       </FormField>
-      <FormField label="Cover image URL">
-        <input value={form.heroImage || ''} onChange={e => set('heroImage', e.target.value)} placeholder="https://…" style={inputStyle} />
+      <FormField label="Cover image">
+        <input ref={coverInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleCoverFileSelect} disabled={coverUploading} />
+        {form.heroImage ? (
+          <div>
+            <div style={{ position: 'relative', marginBottom: '10px' }}>
+              <img
+                src={form.heroImage}
+                alt="Cover preview"
+                style={{ width: '100%', maxHeight: '160px', objectFit: 'cover', borderRadius: '8px', border: `1px solid ${BORDER}`, display: 'block' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button type="button" onClick={() => coverInputRef.current?.click()} disabled={coverUploading} style={{ ...btnSecondary, padding: '7px 14px', fontSize: '13px' }}>
+                {coverUploading ? 'Uploading…' : 'Change image'}
+              </button>
+              <button type="button" onClick={() => { setForm(f => ({ ...f, heroImage: null })); setCoverError(''); }} disabled={coverUploading}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: MUTED, padding: 0 }}>
+                Remove
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button type="button" onClick={() => coverInputRef.current?.click()} disabled={coverUploading} style={{ ...btnSecondary, padding: '7px 14px', fontSize: '13px' }}>
+              {coverUploading ? 'Uploading…' : 'Upload image'}
+            </button>
+            {coverUploading && <span style={{ fontSize: '13px', color: MUTED }}>Please wait…</span>}
+          </div>
+        )}
+        {coverError && <p style={{ fontSize: '12px', color: '#B04040', marginTop: '6px' }}>{coverError}</p>}
       </FormField>
       <FormField label="Highlights">
         <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
@@ -3140,6 +3198,7 @@ export default function TripDetailPage() {
       {showPersonalOverview && access.canEdit && trip.tripType === 'personal' && (
         <PersonalOverviewModal
           workspace={workspace}
+          tripId={id}
           open={showPersonalOverview}
           onClose={() => setShowPersonalOverview(false)}
           onSave={handleSavePersonalOverview}
