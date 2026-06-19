@@ -3890,12 +3890,12 @@ async function crmMarkSent(pool, msgId, ctx) {
     senderId: senderId ? '[set]' : '[null]',
   });
 
-  // Cast $2::text explicitly so Postgres can resolve the parameter type even
-  // when senderId is null (avoids 42P18 indeterminate_datatype errors).
+  // 'sent_manual' is the schema-valid status value (not 'sent').
+  // $2::text lets Postgres resolve the parameter type even when senderId is null.
   try {
     await pool.query(`
       UPDATE "CreatorLeadMessage"
-      SET status = 'sent',
+      SET status = 'sent_manual',
           "sentAt" = NOW(),
           "sentById" = $2::text,
           "updatedAt" = NOW()
@@ -3907,8 +3907,10 @@ async function crmMarkSent(pool, msgId, ctx) {
       pgMessage: dbErr.message,
       pgDetail: dbErr.detail,
       pgHint: dbErr.hint,
+      pgConstraint: dbErr.constraint,
       pgPosition: dbErr.position,
       msgId,
+      leadId: msg.leadId,
     });
     throw Object.assign(
       new Error('Could not mark message as sent. Please try again.'),
@@ -3916,27 +3918,50 @@ async function crmMarkSent(pool, msgId, ctx) {
     );
   }
 
-  console.log('[crmMarkSent] message updated, starting side effects for leadId=', msg.leadId);
+  console.log('[crmMarkSent] message updated OK, updating lead leadId=', msg.leadId);
 
   try {
-    const { rows: leadRows } = await pool.query(`
-      UPDATE "CreatorLead"
-      SET "lastContactedAt" = NOW(), "updatedAt" = NOW(),
-          status = CASE
-            WHEN status IN ('identified', 'new', 'qualified', 'message_prepared') THEN 'contacted'
-            ELSE status
-          END
-      WHERE id = $1
-      RETURNING status
+    // Capture before/after status in one round-trip via CTE.
+    // Only advance to 'contacted' from early-funnel statuses; never downgrade.
+    const { rows: statusRows } = await pool.query(`
+      WITH before AS (
+        SELECT status FROM "CreatorLead" WHERE id = $1
+      ), updated AS (
+        UPDATE "CreatorLead"
+        SET "lastContactedAt" = NOW(),
+            "updatedAt"       = NOW(),
+            status = CASE
+              WHEN status IN ('identified', 'qualified', 'message_prepared') THEN 'contacted'
+              ELSE status
+            END
+        WHERE id = $1
+        RETURNING status
+      )
+      SELECT before.status AS "fromStatus", updated.status AS "toStatus"
+      FROM before, updated
     `, [msg.leadId]);
 
-    console.log('[crmMarkSent] lead status now', leadRows[0]?.status ?? '(no row returned)');
+    const fromStatus = statusRows[0]?.fromStatus ?? 'unknown';
+    const toStatus   = statusRows[0]?.toStatus   ?? 'unknown';
+    console.log('[crmMarkSent] lead status', { fromStatus, toStatus, leadId: msg.leadId });
 
+    // All jsonb_build_object parameters explicitly cast to avoid 42P18 on NULLs.
     await pool.query(`
       INSERT INTO "CreatorLeadActivity"
         (id, "leadId", type, content, metadata, "createdById", "createdAt")
-      VALUES (gen_random_uuid(), $1, 'message_sent', 'Message marked as sent manually', '{}'::jsonb, $2::text, NOW())
-    `, [msg.leadId, senderId]);
+      VALUES (
+        gen_random_uuid(), $1::text, 'message',
+        'Instagram DM marked as sent manually',
+        jsonb_build_object(
+          'messageId',     $2::text,
+          'messageStatus', 'sent_manual',
+          'channel',       'instagram',
+          'fromStatus',    $3::text,
+          'toStatus',      $4::text
+        ),
+        $5::text, NOW()
+      )
+    `, [msg.leadId, msgId, fromStatus, toStatus, senderId]);
 
     const dueAt = new Date(Date.now() + 6 * 24 * 60 * 60 * 1000);
     const { rows: existingTasks } = await pool.query(`
@@ -3949,7 +3974,7 @@ async function crmMarkSent(pool, msgId, ctx) {
       await pool.query(`
         INSERT INTO "CreatorLeadTask"
           (id, "leadId", title, "dueAt", status, "createdById", "createdAt", "updatedAt")
-        VALUES (gen_random_uuid(), $1, 'Follow up on message', $2::timestamptz, 'pending', $3::text, NOW(), NOW())
+        VALUES (gen_random_uuid(), $1::text, 'Follow up on Instagram DM', $2::timestamptz, 'pending', $3::text, NOW(), NOW())
       `, [msg.leadId, dueAt.toISOString(), senderId]);
     }
   } catch (err) {
