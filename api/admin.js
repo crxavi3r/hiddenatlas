@@ -2148,8 +2148,10 @@ async function crmRefreshInstagram(pool, body, ctx) {
 
   const now = new Date().toISOString();
   const currentAiAnalysis = (typeof lead.aiAnalysis === 'object' && lead.aiAnalysis) ? lead.aiAnalysis : {};
+  const cleanedAnalysis = { ...currentAiAnalysis };
+  delete cleanedAnalysis.enrichmentWarning;
   const newAiAnalysis = JSON.stringify({
-    ...currentAiAnalysis,
+    ...cleanedAnalysis,
     lastInstagramRefresh: {
       refreshedAt: now,
       followersCount: v.followersCount,

@@ -171,6 +171,8 @@ export default function CreatorLeadDetailPage() {
   const [igProfileError, setIgProfileError] = useState(false);
   const [igReconnectSlug, setIgReconnectSlug] = useState(null);
   const [reconnecting, setReconnecting]     = useState(false);
+  const [debuggingMeta, setDebuggingMeta]   = useState(false);
+  const [metaDebugResult, setMetaDebugResult] = useState(null);
   const [avatarModal, setAvatarModal] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -290,6 +292,7 @@ export default function CreatorLeadDetailPage() {
     setRefreshingIg(true);
     setIgRefreshError(null);
     setIgProfileError(false);
+    setIgTokenExpired(false);
     try {
       const result = await crmCall(getToken, 'leads.refreshInstagram', { id });
       if (result.configError) {
@@ -344,6 +347,19 @@ export default function CreatorLeadDetailPage() {
       else navigate('/admin/creators');
     } finally {
       setReconnecting(false);
+    }
+  }
+
+  async function handleDebugMeta() {
+    setDebuggingMeta(true);
+    setMetaDebugResult(null);
+    try {
+      const result = await crmCall(getToken, 'debug.metaDiscovery', { username: data?.lead?.username || 'travelstoriesfrommyworld' });
+      setMetaDebugResult(result);
+    } catch (e) {
+      setMetaDebugResult({ ok: false, error: e.message });
+    } finally {
+      setDebuggingMeta(false);
     }
   }
 
@@ -603,14 +619,12 @@ export default function CreatorLeadDetailPage() {
                     )}
                   </h3>
                   <div style={{ display: 'flex', gap: '6px' }}>
-                    {!igTokenExpired && !igProfileError && (
-                      <button onClick={handleRefreshInstagram} disabled={refreshingIg}
-                        title="Re-fetch latest data from Instagram via Meta API"
-                        style={{ ...S.btnSecondary, fontSize: '11.5px', padding: '5px 10px', color: refreshingIg ? '#B5AA99' : '#1B6B65' }}>
-                        <RefreshCw size={11} style={{ animation: refreshingIg ? 'spin 1s linear infinite' : 'none' }} />
-                        {refreshingIg ? 'Refreshing…' : 'Refresh'}
-                      </button>
-                    )}
+                    <button onClick={handleRefreshInstagram} disabled={refreshingIg}
+                      title="Re-fetch latest data from Instagram via Meta API"
+                      style={{ ...S.btnSecondary, fontSize: '11.5px', padding: '5px 10px', color: refreshingIg ? '#B5AA99' : '#1B6B65' }}>
+                      <RefreshCw size={11} style={{ animation: refreshingIg ? 'spin 1s linear infinite' : 'none' }} />
+                      {refreshingIg ? 'Refreshing…' : (igTokenExpired || igProfileError) ? 'Retry' : 'Refresh'}
+                    </button>
                     {instagramUrl && (
                       <a href={instagramUrl} target="_blank" rel="noopener noreferrer"
                         style={{ ...S.btnSecondary, textDecoration: 'none', fontSize: '11.5px', padding: '5px 10px', color: '#E1306C', borderColor: '#F5C6C0' }}>
@@ -624,13 +638,13 @@ export default function CreatorLeadDetailPage() {
                   <div style={{ background: '#FBF8F1', border: '1px solid #E8D9B8', borderRadius: '6px', padding: '10px 12px', marginBottom: '12px' }}>
                     <p style={{ margin: 0, fontSize: '12.5px', fontWeight: '600', color: '#7A5C1E' }}>Meta OAuth error (code 190)</p>
                     <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#7A5C1E', lineHeight: '1.5' }}>
-                      This can mean the server token is expired, OR this specific account is not accessible via Business Discovery.
-                      If other accounts enrich successfully, the token is likely fine — this profile may be private or not a Business/Creator account.
+                      The server token may be expired, OR this specific account is not accessible via Business Discovery.
+                      If other accounts enrich successfully, the token is fine — this profile may be private or not a Business/Creator account.
                       If all enrichments fail, check{' '}
                       <code style={{ background: '#F4EDD8', padding: '1px 4px', borderRadius: '3px', fontSize: '11px' }}>META_PAGE_ACCESS_TOKEN</code>{' '}
                       and{' '}
                       <code style={{ background: '#F4EDD8', padding: '1px 4px', borderRadius: '3px', fontSize: '11px' }}>META_INSTAGRAM_ACCOUNT_ID</code>{' '}
-                      in Vercel, then redeploy. Lead data and manual edits are safe.
+                      in Vercel, then redeploy. Lead data and manual edits are safe. Use the <strong>Retry</strong> button above to try again.
                     </p>
                     <div style={{ marginTop: '8px' }}>
                       <button onClick={() => { setIgTokenExpired(false); setIgRefreshError(null); }}
@@ -641,11 +655,11 @@ export default function CreatorLeadDetailPage() {
                   </div>
                 )}
 
-                {!igTokenExpired && igProfileError && (
+                {igProfileError && (
                   <div style={{ background: '#FBF8F1', border: '1px solid #DDD0BC', borderRadius: '6px', padding: '10px 12px', marginBottom: '12px' }}>
                     <p style={{ margin: 0, fontSize: '12.5px', fontWeight: '600', color: '#6B5B3E' }}>Profile not available for enrichment</p>
                     <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6B5B3E', lineHeight: '1.5' }}>
-                      Instagram profile could not be enriched. The account may not be a Business or Creator account, may be private, or may not be available via Meta Business Discovery. Lead data and manual edits are safe.
+                      The account may not be a Business or Creator account, may be private, or may not be accessible via Meta Business Discovery. Lead data and manual edits are safe. Use <strong>Retry</strong> above to try again.
                     </p>
                     <div style={{ marginTop: '8px' }}>
                       <button onClick={() => setIgProfileError(false)}
@@ -656,7 +670,7 @@ export default function CreatorLeadDetailPage() {
                   </div>
                 )}
 
-                {!igTokenExpired && !igProfileError && igRefreshError && (
+                {igRefreshError && (
                   <div style={{ background: '#FDECEA', border: '1px solid #F5C6C0', borderRadius: '6px', padding: '8px 12px', marginBottom: '12px', fontSize: '12px', color: '#C0392B' }}>
                     {igRefreshError}
                     <button onClick={() => setIgRefreshError(null)} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#C0392B', padding: 0 }}>
@@ -715,6 +729,45 @@ export default function CreatorLeadDetailPage() {
                     Last Instagram refresh: {fmtDate(lastRefreshedAt, true)}
                   </p>
                 )}
+
+                <div style={{ marginTop: '12px', borderTop: '1px solid #F4F1EC', paddingTop: '10px' }}>
+                  <button onClick={handleDebugMeta} disabled={debuggingMeta}
+                    style={{ ...S.btnSecondary, fontSize: '11px', padding: '4px 10px', color: '#8C8070' }}>
+                    <RefreshCw size={10} style={{ animation: debuggingMeta ? 'spin 1s linear infinite' : 'none' }} />
+                    {debuggingMeta ? 'Testing Meta connection…' : 'Debug Meta connection'}
+                  </button>
+                  {metaDebugResult && (
+                    <div style={{ marginTop: '8px', background: metaDebugResult.ok ? '#F0F8F1' : '#FDECEA', border: `1px solid ${metaDebugResult.ok ? '#C0DDD0' : '#F5C6C0'}`, borderRadius: '6px', padding: '8px 10px' }}>
+                      <p style={{ margin: '0 0 4px', fontSize: '11.5px', fontWeight: '600', color: metaDebugResult.ok ? '#2E8B57' : '#C0392B' }}>
+                        {metaDebugResult.ok ? 'Meta connection OK' : 'Meta connection failed'}
+                      </p>
+                      {metaDebugResult.envInfo && (
+                        <div style={{ fontSize: '11px', color: '#4A433A', fontFamily: 'monospace', lineHeight: '1.6' }}>
+                          <div>Account ID: <strong>{metaDebugResult.envInfo['META_INSTAGRAM_ACCOUNT_ID'] || '(not set)'}</strong></div>
+                          <div>Token source: {metaDebugResult.envInfo.tokenSourceSelected || '(none)'}</div>
+                          <div>Token length: {metaDebugResult.envInfo.tokenLength || 0}</div>
+                          <div>Token prefix: {metaDebugResult.envInfo.tokenPrefix || '—'}</div>
+                        </div>
+                      )}
+                      {metaDebugResult.meTest && (
+                        <div style={{ marginTop: '4px', fontSize: '11px', color: '#4A433A' }}>
+                          /me test: {metaDebugResult.meTest.ok ? `OK (id: ${metaDebugResult.meTest.id})` : `FAILED — code ${metaDebugResult.meTest.errorCode}: ${metaDebugResult.meTest.errorMsg}`}
+                        </div>
+                      )}
+                      {metaDebugResult.discoveryTest && (
+                        <div style={{ fontSize: '11px', color: '#4A433A' }}>
+                          Business Discovery test: {metaDebugResult.discoveryTest.ok ? `OK — profile found` : `FAILED — code ${metaDebugResult.discoveryTest.errorCode}: ${metaDebugResult.discoveryTest.errorMsg}`}
+                        </div>
+                      )}
+                      {metaDebugResult.error && (
+                        <div style={{ fontSize: '11px', color: '#C0392B' }}>{metaDebugResult.error}</div>
+                      )}
+                      <button onClick={() => setMetaDebugResult(null)} style={{ marginTop: '6px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '11px', color: '#8C8070', padding: 0 }}>
+                        Dismiss
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
