@@ -236,7 +236,7 @@ export default function FromMyTripsModal({ getToken, onClose, onSuccess }) {
             </p>
             <p style={{ fontSize: '11.5px', color: '#8C8070', marginTop: '2px' }}>
               {screen === 'list' || screen === 'loading'
-                ? 'Select a personal trip to turn into a CMS itinerary'
+                ? 'Select one of your custom itineraries created from scratch.'
                 : 'Review what will be created before confirming'}
             </p>
           </div>
@@ -318,10 +318,10 @@ export default function FromMyTripsModal({ getToken, onClose, onSuccess }) {
                     fontFamily: "'Playfair Display', Georgia, serif",
                     fontSize: '17px', fontWeight: '600', color: '#1C1A16', marginBottom: '8px',
                   }}>
-                    No personal trips available
+                    No custom itineraries available
                   </p>
                   <p style={{ fontSize: '13px', color: '#8C8070', lineHeight: '1.6', marginBottom: '20px', maxWidth: '340px', margin: '0 auto 20px' }}>
-                    Create and plan a trip in My Trips before turning it into a CMS itinerary.
+                    Create an itinerary from scratch in My Itineraries before turning it into a CMS itinerary.
                   </p>
                   <a
                     href="/my-trips"
@@ -335,7 +335,7 @@ export default function FromMyTripsModal({ getToken, onClose, onSuccess }) {
                     }}
                   >
                     <ExternalLink size={13} />
-                    Open My Trips
+                    Open My Itineraries
                   </a>
                 </div>
               )}

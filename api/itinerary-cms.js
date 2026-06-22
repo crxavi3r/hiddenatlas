@@ -3751,7 +3751,14 @@ async function handleMyTripsForImport(pool, ctx) {
   if (!userId) throw Object.assign(new Error('User ID not found'), { status: 401 });
 
   const { rows } = await pool.query(`
-    WITH trip_place_stats AS (
+    eligible_trips AS (
+      SELECT id FROM "Trip"
+      WHERE "userId" = $1
+        AND "tripType" = 'personal'
+        AND "itineraryId" IS NULL
+        AND ("itinerarySlug" IS NULL OR "itinerarySlug" = '')
+    ),
+    trip_place_stats AS (
       SELECT
         ti."tripId",
         COUNT(CASE
@@ -3763,13 +3770,13 @@ async function handleMyTripsForImport(pool, ctx) {
            AND ti.type NOT IN ('flight', 'transfer', 'note', 'break')
            AND NOT ti."isHidden" THEN 1 END)::int AS item_image_count
       FROM "TripItem" ti
-      WHERE ti."tripId" IN (SELECT id FROM "Trip" WHERE "userId" = $1)
+      WHERE ti."tripId" IN (SELECT id FROM eligible_trips)
       GROUP BY ti."tripId"
     ),
     trip_day_stats AS (
       SELECT td."tripId", COUNT(*)::int AS day_count
       FROM "TripDay" td
-      WHERE td."tripId" IN (SELECT id FROM "Trip" WHERE "userId" = $1)
+      WHERE td."tripId" IN (SELECT id FROM eligible_trips)
         AND NOT td."isHidden"
       GROUP BY td."tripId"
     ),
@@ -3781,7 +3788,7 @@ async function handleMyTripsForImport(pool, ctx) {
         i.status AS cms_status,
         i.slug   AS cms_slug
       FROM "Itinerary" i
-      WHERE i."sourceTripId" IN (SELECT id FROM "Trip" WHERE "userId" = $1)
+      WHERE i."sourceTripId" IN (SELECT id FROM eligible_trips)
       ORDER BY i."sourceTripId", i."createdAt" DESC
     )
     SELECT
@@ -3796,7 +3803,7 @@ async function handleMyTripsForImport(pool, ctx) {
     LEFT JOIN trip_place_stats ps ON ps."tripId" = t.id
     LEFT JOIN trip_day_stats   ds ON ds."tripId" = t.id
     LEFT JOIN latest_cms       lc ON lc."sourceTripId" = t.id
-    WHERE t."userId" = $1
+    WHERE t.id IN (SELECT id FROM eligible_trips)
     ORDER BY t."updatedAt" DESC
   `, [userId]);
 
@@ -3844,6 +3851,22 @@ async function handleCreateFromTrip(pool, body, ctx) {
   if (trip.userId !== ctx.userId) {
     throw Object.assign(
       new Error('You can only create CMS itineraries from trips you own'),
+      { status: 403 }
+    );
+  }
+
+  // Eligibility: only personal trips created from scratch (not Saved Trips or CMS-derived trips)
+  const isEligible =
+    trip.tripType === 'personal' &&
+    trip.itineraryId == null &&
+    (trip.itinerarySlug == null || trip.itinerarySlug === '');
+
+  if (!isEligible) {
+    throw Object.assign(
+      new Error(
+        'Only custom itineraries created from scratch in My Itineraries are eligible. ' +
+        'Saved Trips and itineraries derived from HiddenAtlas itineraries cannot be published as CMS itineraries.'
+      ),
       { status: 403 }
     );
   }
