@@ -3751,33 +3751,17 @@ async function handleMyTripsForImport(pool, ctx) {
   if (!userId) throw Object.assign(new Error('User ID not found'), { status: 401 });
 
   const { rows } = await pool.query(`
-    eligible_trips AS (
-      SELECT id FROM "Trip"
-      WHERE "userId" = $1
-        AND "tripType" = 'personal'
-        AND "itineraryId" IS NULL
-        AND ("itinerarySlug" IS NULL OR "itinerarySlug" = '')
-    ),
-    trip_place_stats AS (
-      SELECT
-        ti."tripId",
-        COUNT(CASE
-          WHEN ti.type NOT IN ('flight', 'transfer', 'note', 'break')
-           AND (ti."bookingReference" IS NULL OR ti."bookingReference" = '')
-           AND NOT ti."isHidden" THEN 1 END)::int AS eligible_place_count,
-        COUNT(CASE
-          WHEN ti."imageUrl" IS NOT NULL AND ti."imageUrl" != ''
-           AND ti.type NOT IN ('flight', 'transfer', 'note', 'break')
-           AND NOT ti."isHidden" THEN 1 END)::int AS item_image_count
-      FROM "TripItem" ti
-      WHERE ti."tripId" IN (SELECT id FROM eligible_trips)
-      GROUP BY ti."tripId"
-    ),
-    trip_day_stats AS (
+    WITH trip_day_stats AS (
       SELECT td."tripId", COUNT(*)::int AS day_count
       FROM "TripDay" td
-      WHERE td."tripId" IN (SELECT id FROM eligible_trips)
-        AND NOT td."isHidden"
+      WHERE td."tripId" IN (
+        SELECT id FROM "Trip"
+        WHERE "userId" = $1
+          AND "tripType" = 'personal'
+          AND "createdFrom" = 'manual'
+          AND "itineraryId" IS NULL
+      )
+      AND NOT td."isHidden"
       GROUP BY td."tripId"
     ),
     latest_cms AS (
@@ -3788,40 +3772,41 @@ async function handleMyTripsForImport(pool, ctx) {
         i.status AS cms_status,
         i.slug   AS cms_slug
       FROM "Itinerary" i
-      WHERE i."sourceTripId" IN (SELECT id FROM eligible_trips)
-      ORDER BY i."sourceTripId", i."createdAt" DESC
+      WHERE i."sourceType" = 'my_trip'
+        AND i."sourceTripId" IN (
+          SELECT id FROM "Trip"
+          WHERE "userId" = $1
+            AND "tripType" = 'personal'
+            AND "createdFrom" = 'manual'
+            AND "itineraryId" IS NULL
+        )
+      ORDER BY i."sourceTripId", i."importedAt" DESC
     )
     SELECT
-      t.id, t.title, t.destination, t.country, t."durationDays",
-      t."coverImage", t."heroImage", t."startDate", t."endDate",
-      t."updatedAt", t."createdAt",
-      COALESCE(ds.day_count,            0) AS day_count,
-      COALESCE(ps.eligible_place_count, 0) AS eligible_place_count,
-      COALESCE(ps.item_image_count,     0) AS item_image_count,
+      t.id, t.title, t.destination, t."durationDays",
+      t."coverImage", t."heroImage",
+      t."updatedAt",
+      COALESCE(ds.day_count, 0) AS day_count,
       lc.cms_id, lc.cms_title, lc.cms_status, lc.cms_slug
     FROM "Trip" t
-    LEFT JOIN trip_place_stats ps ON ps."tripId" = t.id
-    LEFT JOIN trip_day_stats   ds ON ds."tripId" = t.id
-    LEFT JOIN latest_cms       lc ON lc."sourceTripId" = t.id
-    WHERE t.id IN (SELECT id FROM eligible_trips)
+    LEFT JOIN trip_day_stats ds ON ds."tripId" = t.id
+    LEFT JOIN latest_cms     lc ON lc."sourceTripId" = t.id
+    WHERE t."userId" = $1
+      AND t."tripType" = 'personal'
+      AND t."createdFrom" = 'manual'
+      AND t."itineraryId" IS NULL
     ORDER BY t."updatedAt" DESC
   `, [userId]);
 
   return {
     trips: rows.map(r => ({
-      id:                 r.id,
-      title:              r.title,
-      destination:        r.destination,
-      country:            r.country,
-      durationDays:       r.durationDays,
-      coverImage:         r.heroImage || r.coverImage || null,
-      startDate:          r.startDate,
-      endDate:            r.endDate,
-      updatedAt:          r.updatedAt,
-      createdAt:          r.createdAt,
-      dayCount:           r.day_count,
-      eligiblePlaceCount: r.eligible_place_count,
-      imageCount:         ((r.heroImage || r.coverImage) ? 1 : 0) + r.item_image_count,
+      id:          r.id,
+      title:       r.title,
+      destination: r.destination,
+      durationDays: r.durationDays,
+      coverImage:  r.coverImage || r.heroImage || null,
+      updatedAt:   r.updatedAt,
+      dayCount:    r.day_count,
       existingCms: r.cms_id ? {
         id:     r.cms_id,
         title:  r.cms_title,
@@ -3841,40 +3826,34 @@ async function handleCreateFromTrip(pool, body, ctx) {
   if (!tripId) throw Object.assign(new Error('tripId is required'), { status: 400 });
   if (!ctx.userId) throw Object.assign(new Error('Unauthorized'), { status: 401 });
 
-  // Validate trip ownership — shared-only trips are not eligible
+  // Fetch trip — all eligibility conditions in one query; returns nothing if any condition fails
   const { rows: tripRows } = await pool.query(
-    `SELECT * FROM "Trip" WHERE id = $1 LIMIT 1`, [tripId]
+    `SELECT * FROM "Trip"
+     WHERE id = $1
+       AND "userId" = $2
+       AND "tripType" = 'personal'
+       AND "createdFrom" = 'manual'
+       AND "itineraryId" IS NULL
+     LIMIT 1`,
+    [tripId, ctx.userId]
   );
-  if (!tripRows.length) throw Object.assign(new Error('Trip not found'), { status: 404 });
-  const trip = tripRows[0];
-
-  if (trip.userId !== ctx.userId) {
-    throw Object.assign(
-      new Error('You can only create CMS itineraries from trips you own'),
-      { status: 403 }
-    );
-  }
-
-  // Eligibility: only personal trips created from scratch (not Saved Trips or CMS-derived trips)
-  const isEligible =
-    trip.tripType === 'personal' &&
-    trip.itineraryId == null &&
-    (trip.itinerarySlug == null || trip.itinerarySlug === '');
-
-  if (!isEligible) {
+  if (!tripRows.length) {
     throw Object.assign(
       new Error(
-        'Only custom itineraries created from scratch in My Itineraries are eligible. ' +
-        'Saved Trips and itineraries derived from HiddenAtlas itineraries cannot be published as CMS itineraries.'
+        'Trip not found or not eligible. Only custom itineraries created from scratch ' +
+        'in My Itineraries can be used. Saved Trips and HiddenAtlas-derived trips are not eligible.'
       ),
       { status: 403 }
     );
   }
+  const trip = tripRows[0];
 
   // Duplicate detection
   const { rows: dupRows } = await pool.query(
     `SELECT id, title, status, slug FROM "Itinerary"
-     WHERE "sourceTripId" = $1 ORDER BY "createdAt" DESC LIMIT 1`,
+     WHERE "sourceType" = 'my_trip'
+       AND "sourceTripId" = $1
+     ORDER BY "importedAt" DESC LIMIT 1`,
     [tripId]
   );
   if (dupRows.length && !forceCreate) {
