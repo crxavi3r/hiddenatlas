@@ -4,7 +4,7 @@ import { useAuth } from '@clerk/clerk-react';
 import { useUserCtx } from '../../lib/useUserCtx';
 import {
   ArrowLeft, Save, Globe, EyeOff, Eye, Plus, Trash2, ChevronDown, ChevronUp,
-  Wand2, Image as ImageIcon, Clock, Check, User, Upload, FileText, ExternalLink, Edit2, X, Loader2, MapPin,
+  Wand2, Image as ImageIcon, Clock, Check, User, Upload, FileText, ExternalLink, Edit2, X, Loader2, MapPin, RotateCcw,
 } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { resolveCoverImage } from '../../lib/resolveCoverImage';
@@ -1192,6 +1192,8 @@ export default function ItineraryCMSEditorPage() {
   const [pricingOptions, setPricingOptions] = useState([]);    // loaded from ITINERARY_PRICING_OPTIONS
   const [trimConfirm,    setTrimConfirm]    = useState(null);  // { targetCount, daysToRemove }
   const [slugOverride,   setSlugOverride]   = useState(false); // admin: unlocked slug editing
+  const [syncingTrip,    setSyncingTrip]    = useState(false);
+  const [syncTripMsg,    setSyncTripMsg]    = useState(null);
 
   // Day stops state (structured per-day stops, separate from JSON content)
   const [dayStops, setDayStops] = useState([]);
@@ -1752,6 +1754,40 @@ export default function ItineraryCMSEditorPage() {
       alert(`Days synced from static data (${newDays.length} days). Review the Days tab, then click Save to persist.`);
     } catch (e) {
       alert(`Failed to sync: ${e.message}`);
+    }
+  }
+
+  // ── Sync stops + day content from the source My Trip ─────────────────────────
+  async function handleSyncFromMyTrip() {
+    const targetId = savedId.current || (isNew ? null : id);
+    if (!targetId) return;
+    if (!window.confirm(
+      'Replace all places/stops for this draft with the current data from the source My Trip?\n\n' +
+      'Day titles and descriptions will also be updated from the source trip.\n\n' +
+      'This cannot be undone — any manually edited stops will be removed.'
+    )) return;
+
+    setSyncingTrip(true);
+    setSyncTripMsg(null);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/itinerary-cms?action=rebuild-trip-stops&id=${targetId}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      const count = json.stopsSaved ?? 0;
+      setSyncTripMsg(`${count} place${count !== 1 ? 's' : ''} synced from My Trip.`);
+      // Reload day stops so the Days tab reflects the new data immediately
+      await loadDayStops(targetId);
+      // Also reload the full itinerary so updated day titles/descriptions are reflected
+      await load();
+    } catch (e) {
+      setSyncTripMsg(`Sync failed: ${e.message}`);
+    } finally {
+      setSyncingTrip(false);
     }
   }
 
@@ -2663,11 +2699,37 @@ export default function ItineraryCMSEditorPage() {
             </button>
           )}
 
-          {/* Sync days from static source — only for non-custom itineraries */}
-          {form.type !== 'custom' && !isNew && (
+          {/* Sync days from static source — only for non-custom itineraries that are not My Trip imports */}
+          {form.type !== 'custom' && !isNew && form.sourceType !== 'my_trip' && (
             <button onClick={saving ? undefined : handleSyncDaysFromStatic} disabled={saving} style={{ ...btnSecondary, opacity: saving ? 0.5 : 1, cursor: saving ? 'default' : 'pointer' }} title="Reset all day content from src/data/itineraries.js">
               <Check size={12} /> Sync days
             </button>
+          )}
+
+          {/* Sync from My Trip — only for my_trip draft itineraries */}
+          {form.sourceType === 'my_trip' && !isNew && form.status === 'draft' && (
+            <>
+              <button
+                onClick={(syncingTrip || saving) ? undefined : handleSyncFromMyTrip}
+                disabled={syncingTrip || saving}
+                style={{ ...btnSecondary, opacity: (syncingTrip || saving) ? 0.5 : 1, cursor: (syncingTrip || saving) ? 'default' : 'pointer' }}
+                title="Rebuild places and day content from the source My Trip"
+              >
+                {syncingTrip
+                  ? <><Loader2 size={12} style={{ animation: 'spin 0.9s linear infinite' }} /> Syncing…</>
+                  : <><RotateCcw size={12} /> Sync from My Trip</>
+                }
+              </button>
+              {syncTripMsg && (
+                <span style={{
+                  fontSize: '11.5px', fontWeight: '500',
+                  color: syncTripMsg.startsWith('Sync failed') ? '#C0392B' : '#1B6B65',
+                  padding: '0 4px',
+                }}>
+                  {syncTripMsg}
+                </span>
+              )}
+            </>
           )}
 
           {isPendingReview ? (

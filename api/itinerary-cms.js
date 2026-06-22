@@ -151,7 +151,8 @@ export default async function handler(req, res) {
       if (action === 'migration-status')  { adminOnly(); return res.json(await handleMigrationStatus(pool)); }
       if (action === 'upload-pdf-token')  { await assertOwnership(pool, id, ctx); return res.json(await handleUploadPDFToken(pool, id)); }
       if (action === 'import-csv-template') return res.json(handleImportCsvTemplate());
-      if (action === 'day-stops')         { await assertOwnership(pool, id, ctx); return res.json(await handleListDayStops(pool, id)); }
+      if (action === 'day-stops')             { await assertOwnership(pool, id, ctx); return res.json(await handleListDayStops(pool, id)); }
+      if (action === 'diagnose-trip-import') { await assertOwnership(pool, id, ctx); return res.json(await handleDiagnoseTripImport(pool, id)); }
       if (action === 'review-queue')      { adminOnly(); return res.json(await handleReviewQueue(pool, req.query.status || 'pending_review')); }
       if (action === 'review-detail')     { adminOnly(); return res.json(await handleReviewDetail(pool, id)); }
       if (action === 'my-trips-for-import') return res.json(await handleMyTripsForImport(pool, ctx));
@@ -4147,6 +4148,14 @@ async function handleRebuildTripStops(pool, itineraryId, ctx) {
   }
   const trip = tripRows[0];
 
+  // Fetch source days and items
+  const { rows: tripDays } = await pool.query(
+    `SELECT * FROM "TripDay"
+     WHERE "tripId" = $1 AND NOT "isHidden"
+     ORDER BY "dayNumber" ASC`,
+    [trip.id]
+  );
+
   const { rows: tripItems } = await pool.query(
     `SELECT id, "tripId", "tripDayId", "dayNumber", title, description, type,
             "locationName", address, latitude, longitude,
@@ -4158,10 +4167,41 @@ async function handleRebuildTripStops(pool, itineraryId, ctx) {
     [trip.id]
   );
 
+  console.log(
+    `[rebuild-trip-stops] sourceTripId=${trip.id} sourceDaysCount=${tripDays.length}` +
+    ` sourceItemsCount=${tripItems.length} targetItineraryId=${itineraryId}`
+  );
+
+  if (tripItems.length === 0) {
+    return { ok: true, deleted: 0, stopsSaved: 0, skippedItems: 0, warning: 'Source trip has no visible items.' };
+  }
+
+  // Build updated content.days from source TripDay records
+  const updatedDays = tripDays.map(day => ({
+    dayNumber:   day.dayNumber,
+    title:       (day.titleOverride || '').trim() || (day.title || '').trim() || `Day ${day.dayNumber}`,
+    description: (day.descriptionOverride || '').trim() || (day.description || '').trim() || '',
+    highlights:  [],
+    insiderTip:  '',
+    imageUrl:    null,
+  }));
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
+    // Refresh content.days with real titles from source TripDays
+    if (updatedDays.length > 0) {
+      await client.query(
+        `UPDATE "Itinerary"
+         SET content = jsonb_set(content, '{days}', $1::jsonb, true),
+             "updatedAt" = NOW()
+         WHERE id = $2`,
+        [JSON.stringify(updatedDays), itineraryId]
+      );
+    }
+
+    // Delete existing imported stops and recreate from TripItems
     const { rowCount: deleted } = await client.query(
       `DELETE FROM "ItineraryDayStop" WHERE "itineraryId" = $1`,
       [itineraryId]
@@ -4175,14 +4215,21 @@ async function handleRebuildTripStops(pool, itineraryId, ctx) {
       stopsSaved++;
     }
 
+    if (stopsSaved === 0 && tripItems.length > 0) {
+      await client.query('ROLLBACK');
+      throw Object.assign(
+        new Error('The source trip contains places but they could not be copied to the CMS itinerary.'),
+        { status: 500 }
+      );
+    }
+
     await client.query('COMMIT');
 
     console.log(
-      `[rebuild-trip-stops] itineraryId=${itineraryId} sourceTripId=${trip.id}` +
-      ` sourceItemsCount=${tripItems.length} deletedStopsCount=${deleted}` +
-      ` insertedStopsCount=${stopsSaved} skippedItemsCount=${skippedItems}`
+      `[rebuild-trip-stops] transactionCommitted=true insertedStopsCount=${stopsSaved}` +
+      ` skippedItemsCount=${skippedItems} deletedStopsCount=${deleted}`
     );
-    return { ok: true, deleted, stopsSaved, skippedItems };
+    return { ok: true, deleted, stopsSaved, skippedItems, daysUpdated: updatedDays.length };
 
   } catch (err) {
     await client.query('ROLLBACK');
@@ -4190,4 +4237,68 @@ async function handleRebuildTripStops(pool, itineraryId, ctx) {
   } finally {
     client.release();
   }
+}
+
+// ── Diagnostic: inspect source data for a my_trip CMS draft ──────────────────
+// Returns raw counts and rows — no writes. Used for debugging the import state.
+async function handleDiagnoseTripImport(pool, itineraryId) {
+  const { rows: itRows } = await pool.query(
+    `SELECT id, title, status, "sourceType", "sourceTripId", "importedAt", "importedByUserId"
+     FROM "Itinerary" WHERE id = $1 LIMIT 1`,
+    [itineraryId]
+  );
+  if (!itRows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+  const it = itRows[0];
+
+  let tripDays = [], tripItems = [], cmsStops = [], sourceTrip = null;
+
+  if (it.sourceTripId) {
+    const { rows: tripRows } = await pool.query(
+      `SELECT id, "userId", "tripType", "createdFrom", "itineraryId", title
+       FROM "Trip" WHERE id = $1 LIMIT 1`,
+      [it.sourceTripId]
+    );
+    sourceTrip = tripRows[0] || null;
+
+    const { rows: days } = await pool.query(
+      `SELECT id, "dayNumber", title, "titleOverride", "isHidden"
+       FROM "TripDay" WHERE "tripId" = $1 ORDER BY "dayNumber"`,
+      [it.sourceTripId]
+    );
+    tripDays = days;
+
+    const { rows: items } = await pool.query(
+      `SELECT id, "dayNumber", "tripDayId", title, type, "isHidden",
+              "locationName", latitude, longitude, "sortOrder"
+       FROM "TripItem" WHERE "tripId" = $1
+       ORDER BY "dayNumber", "sortOrder", "createdAt"`,
+      [it.sourceTripId]
+    );
+    tripItems = items;
+  }
+
+  const { rows: stops } = await pool.query(
+    `SELECT id, "dayNumber", title, type, "locationName", "sortOrder"
+     FROM "ItineraryDayStop" WHERE "itineraryId" = $1
+     ORDER BY "dayNumber", "sortOrder"`,
+    [itineraryId]
+  );
+  cmsStops = stops;
+
+  const visibleItems = tripItems.filter(i => !i.isHidden);
+  const itemTypes    = [...new Set(tripItems.map(i => i.type))];
+
+  return {
+    itinerary:         { id: it.id, title: it.title, status: it.status, sourceType: it.sourceType, sourceTripId: it.sourceTripId, importedAt: it.importedAt },
+    sourceTrip:        sourceTrip ? { id: sourceTrip.id, userId: sourceTrip.userId, tripType: sourceTrip.tripType, createdFrom: sourceTrip.createdFrom, itineraryId: sourceTrip.itineraryId } : null,
+    sourceDaysCount:   tripDays.length,
+    tripItemsTotal:    tripItems.length,
+    tripItemsVisible:  visibleItems.length,
+    tripItemTypes:     itemTypes,
+    cmsStopsCount:     cmsStops.length,
+    canonicalSource:   tripItems.length > 0 ? 'trip_items' : 'none',
+    tripDays,
+    tripItems,
+    cmsStops,
+  };
 }
