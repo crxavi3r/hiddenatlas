@@ -1771,18 +1771,18 @@ export default function ItineraryCMSEditorPage() {
     setSyncTripMsg(null);
     try {
       const token = await getToken();
-      const res = await fetch(`/api/itinerary-cms?action=rebuild-trip-stops&id=${targetId}`, {
+      const res = await fetch(`/api/itinerary-cms?action=sync-my-trip&id=${targetId}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
       const json = await res.json();
-      if (json.error) throw new Error(json.error);
+      if (!res.ok || json.error) throw new Error(json.error || `Server error ${res.status}`);
+      // Replace day stops state directly from server response — do not preserve old empty array
+      setDayStops(json.stops || []);
       const count = json.stopsSaved ?? 0;
       setSyncTripMsg(`${count} place${count !== 1 ? 's' : ''} synced from My Trip.`);
-      // Reload day stops so the Days tab reflects the new data immediately
-      await loadDayStops(targetId);
-      // Also reload the full itinerary so updated day titles/descriptions are reflected
+      // Reload full itinerary so updated day titles/descriptions are reflected in the editor
       await load();
     } catch (e) {
       setSyncTripMsg(`Sync failed: ${e.message}`);

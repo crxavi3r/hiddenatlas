@@ -210,6 +210,7 @@ export default async function handler(req, res) {
       if (action === 'geocode-missing-stops')    { await assertOwnership(pool, id, ctx); return res.json(await handleGeocodeMissingStops(pool, id)); }
       if (action === 'create-from-trip')    return res.json(await handleCreateFromTrip(pool, body, ctx));
       if (action === 'rebuild-trip-stops') { await assertOwnership(pool, id, ctx); return res.json(await handleRebuildTripStops(pool, id, ctx)); }
+      if (action === 'sync-my-trip')       { await assertOwnership(pool, id, ctx); return res.json(await handleSyncMyTripToCms(pool, id, ctx)); }
       return res.status(400).json({ error: 'Unknown POST action' });
     }
   } catch (err) {
@@ -4301,4 +4302,201 @@ async function handleDiagnoseTripImport(pool, itineraryId) {
     tripItems,
     cmsStops,
   };
+}
+
+// ── Sync My Trip → CMS itinerary (days + stops) ───────────────────────────────
+// Single transaction: update content.days, delete existing imported stops,
+// INSERT INTO ItineraryDayStop ... SELECT FROM TripItem.
+// Returns { ok, stopsSaved, resultingStopsCount, stops }.
+async function handleSyncMyTripToCms(pool, itineraryId, ctx) {
+  if (!ctx.userId) throw Object.assign(new Error('Unauthorized'), { status: 401 });
+
+  // 1. Load and verify the target itinerary
+  const { rows: itRows } = await pool.query(
+    `SELECT id, title, status, "sourceType", "sourceTripId"
+     FROM "Itinerary" WHERE id = $1 LIMIT 1`,
+    [itineraryId]
+  );
+  if (!itRows.length) throw Object.assign(new Error('Not found'), { status: 404 });
+  const it = itRows[0];
+
+  if (it.sourceType !== 'my_trip' || !it.sourceTripId) {
+    throw Object.assign(new Error('This itinerary was not created from My Trips.'), { status: 400 });
+  }
+  if (it.status !== 'draft') {
+    throw Object.assign(new Error('Only draft itineraries can be synced from My Trips.'), { status: 400 });
+  }
+
+  // 2. Verify the source trip — ownership + eligibility in one query
+  const { rows: tripRows } = await pool.query(
+    `SELECT id FROM "Trip"
+     WHERE id = $1
+       AND "userId" = $2
+       AND "tripType" = 'personal'
+       AND "createdFrom" = 'manual'
+       AND "itineraryId" IS NULL
+     LIMIT 1`,
+    [it.sourceTripId, ctx.userId]
+  );
+  if (!tripRows.length) {
+    throw Object.assign(new Error('Source trip not found or not eligible.'), { status: 403 });
+  }
+  const sourceTripId = tripRows[0].id;
+
+  // 3. Count source items before the transaction (for hard validation)
+  const { rows: countRows } = await pool.query(
+    `SELECT COUNT(*) AS n FROM "TripItem"
+     WHERE "tripId" = $1 AND "isHidden" = false AND "type" != 'note'`,
+    [sourceTripId]
+  );
+  const sourceItemsCount = parseInt(countRows[0].n, 10);
+
+  // 4. Build updated content.days from source TripDay records
+  const { rows: tripDays } = await pool.query(
+    `SELECT "dayNumber", title, "titleOverride", description, "descriptionOverride"
+     FROM "TripDay"
+     WHERE "tripId" = $1 AND NOT "isHidden"
+     ORDER BY "dayNumber" ASC`,
+    [sourceTripId]
+  );
+  const updatedDays = tripDays.map(d => ({
+    dayNumber:   d.dayNumber,
+    title:       (d.titleOverride || '').trim() || (d.title || '').trim() || `Day ${d.dayNumber}`,
+    description: (d.descriptionOverride || '').trim() || (d.description || '').trim() || '',
+    highlights:  [],
+    insiderTip:  '',
+    imageUrl:    null,
+  }));
+
+  console.log(
+    `[sync-my-trip] sourceTripId=${sourceTripId} targetItineraryId=${itineraryId}` +
+    ` sourceItemsCount=${sourceItemsCount} sourceDaysCount=${tripDays.length}`
+  );
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 5. Refresh content.days
+    if (updatedDays.length > 0) {
+      await client.query(
+        `UPDATE "Itinerary"
+         SET content = jsonb_set(content, '{days}', $1::jsonb, true), "updatedAt" = NOW()
+         WHERE id = $2`,
+        [JSON.stringify(updatedDays), itineraryId]
+      );
+    }
+
+    // 6. Delete existing imported stops for this itinerary only
+    await client.query(
+      `DELETE FROM "ItineraryDayStop" WHERE "itineraryId" = $1`,
+      [itineraryId]
+    );
+
+    // 7. INSERT INTO ... SELECT — one row per eligible TripItem, no JavaScript loop
+    const { rows: insertedRows } = await client.query(
+      `INSERT INTO "ItineraryDayStop" (
+         id, "itineraryId", "dayNumber", title, description, type,
+         "locationName", address, latitude, longitude,
+         "suggestedTime", "durationMinutes", "sortOrder",
+         "isOptional", "isMajorStop", "showOnMap", "bookingRecommended",
+         "bookingUrl", notes, metadata, "createdAt", "updatedAt"
+       )
+       SELECT
+         gen_random_uuid()::text,
+         $1,
+         ti."dayNumber",
+         ti."title",
+         COALESCE(ti."description", ''),
+         CASE ti."type"
+           WHEN 'attraction'     THEN 'attraction'
+           WHEN 'place'          THEN 'attraction'
+           WHEN 'itinerary_item' THEN 'attraction'
+           WHEN 'museum'         THEN 'museum'
+           WHEN 'restaurant'     THEN 'restaurant'
+           WHEN 'hotel'          THEN 'hotel'
+           WHEN 'winery'         THEN 'winery'
+           WHEN 'viewpoint'      THEN 'viewpoint'
+           WHEN 'beach'          THEN 'beach'
+           WHEN 'walk'           THEN 'walk'
+           WHEN 'experience'     THEN 'experience'
+           WHEN 'activity'       THEN 'experience'
+           WHEN 'event'          THEN 'experience'
+           WHEN 'booking'        THEN 'experience'
+           WHEN 'transfer'       THEN 'transfer'
+           WHEN 'flight'         THEN 'transfer'
+           WHEN 'break'          THEN 'free_time'
+           ELSE                       'other'
+         END,
+         ti."locationName",
+         ti."address",
+         ti."latitude",
+         ti."longitude",
+         COALESCE(NULLIF(TRIM(COALESCE(ti."startTime", '')), ''), NULLIF(TRIM(COALESCE(ti."time", '')), '')),
+         ti."durationMinutes",
+         ti."sortOrder",
+         false,
+         false,
+         (ti."latitude" IS NOT NULL OR ti."longitude" IS NOT NULL
+          OR (ti."locationName" IS NOT NULL AND ti."locationName" <> '')),
+         false,
+         NULL,
+         NULL,
+         jsonb_build_object(
+           'sourceType',       'my_trip',
+           'sourceTripId',     $2,
+           'sourceTripItemId', ti."id"
+         ),
+         NOW(),
+         NOW()
+       FROM "TripItem" ti
+       WHERE ti."tripId" = $2
+         AND ti."isHidden" = false
+         AND ti."type" != 'note'
+       ORDER BY ti."dayNumber" ASC, ti."sortOrder" ASC, ti."createdAt" ASC
+       RETURNING
+         id, "itineraryId", "dayNumber", title, description, type,
+         "locationName", address, latitude, longitude,
+         "suggestedTime", "durationMinutes", "sortOrder",
+         "isOptional", "isMajorStop", "showOnMap",
+         "bookingRecommended", "bookingUrl", notes, metadata,
+         "createdAt", "updatedAt"`,
+      [itineraryId, sourceTripId]
+    );
+
+    const insertedStopsCount = insertedRows.length;
+
+    // 8. Hard validation — roll back if source had items but nothing was inserted
+    if (sourceItemsCount > 0 && insertedStopsCount === 0) {
+      await client.query('ROLLBACK');
+      throw Object.assign(
+        new Error('The source trip contains places, but no CMS stops were created.'),
+        { status: 500 }
+      );
+    }
+
+    // 9. Verify final count in DB
+    const { rows: verifyRows } = await client.query(
+      `SELECT COUNT(*) AS n FROM "ItineraryDayStop" WHERE "itineraryId" = $1`,
+      [itineraryId]
+    );
+    const resultingStopsCount = parseInt(verifyRows[0].n, 10);
+
+    await client.query('COMMIT');
+
+    console.log(
+      `[sync-my-trip] transactionCommitted=true` +
+      ` sourceTripId=${sourceTripId} targetItineraryId=${itineraryId}` +
+      ` sourceItemsCount=${sourceItemsCount} insertedStopsCount=${insertedStopsCount}` +
+      ` resultingStopsCount=${resultingStopsCount}`
+    );
+
+    return { ok: true, stopsSaved: insertedStopsCount, resultingStopsCount, daysUpdated: updatedDays.length, stops: insertedRows };
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
