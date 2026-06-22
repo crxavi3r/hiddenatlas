@@ -4179,7 +4179,7 @@ async function handleRebuildTripStops(pool, itineraryId, ctx) {
 
   // Build updated content.days from source TripDay records
   const updatedDays = tripDays.map(day => ({
-    dayNumber:   day.dayNumber,
+    day:         day.dayNumber,
     title:       (day.titleOverride || '').trim() || (day.title || '').trim() || `Day ${day.dayNumber}`,
     description: (day.descriptionOverride || '').trim() || (day.description || '').trim() || '',
     highlights:  [],
@@ -4360,7 +4360,7 @@ async function handleSyncMyTripToCms(pool, itineraryId, ctx) {
     [sourceTripId]
   );
   const updatedDays = tripDays.map(d => ({
-    dayNumber:   d.dayNumber,
+    day:         d.dayNumber,
     title:       (d.titleOverride || '').trim() || (d.title || '').trim() || `Day ${d.dayNumber}`,
     description: (d.descriptionOverride || '').trim() || (d.description || '').trim() || '',
     highlights:  [],

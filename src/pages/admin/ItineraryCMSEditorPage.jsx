@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
 import { useUserCtx } from '../../lib/useUserCtx';
@@ -4259,6 +4259,17 @@ function DaysTab({ c, addDay, updateDay, deleteDay, moveDay, assets, onUpload, d
   const route    = computeRoute(days);
   const hasDuration = !!(durationDays && parseInt(durationDays, 10) > 0);
 
+  // Index stops by day number so we can look them up without a per-render filter scan.
+  // Handles both the legacy `dayNumber:` key (from trip-import) and the canonical `day:` key.
+  const stopsByDay = useMemo(() => {
+    return (dayStops || []).reduce((acc, stop) => {
+      const n = Number(stop.dayNumber);
+      if (!acc[n]) acc[n] = [];
+      acc[n].push(stop);
+      return acc;
+    }, {});
+  }, [dayStops]);
+
   return (
     <div>
       {/* Route preview header */}
@@ -4293,21 +4304,27 @@ function DaysTab({ c, addDay, updateDay, deleteDay, moveDay, assets, onUpload, d
         </div>
       )}
 
-      {days.map((day, i) => (
-        <DayCard
-          key={i} day={day} index={i} total={days.length}
-          onChange={updated => updateDay(i, updated)}
-          onDelete={() => deleteDay(i)}
-          onMove={(idx, dir) => moveDay(idx, dir)}
-          assets={assets}
-          resolvedDayImage={dayImages?.[day.day] || ''}
-          onUpload={onUpload}
-          dayStops={(dayStops || []).filter(s => s.dayNumber === day.day)}
-          itineraryId={itineraryId}
-          onStopsRefresh={onStopsRefresh}
-          getToken={getToken}
-        />
-      ))}
+      {days.map((day, i) => {
+        // Support both `day.day` (canonical CMS format) and `day.dayNumber` (trip-import legacy key).
+        const currentDayNumber = Number(day.dayNumber ?? day.day ?? i + 1);
+        // Normalise the day object so DayCard always reads day.day correctly.
+        const normDay = day.day === currentDayNumber ? day : { ...day, day: currentDayNumber };
+        return (
+          <DayCard
+            key={i} day={normDay} index={i} total={days.length}
+            onChange={updated => updateDay(i, updated)}
+            onDelete={() => deleteDay(i)}
+            onMove={(idx, dir) => moveDay(idx, dir)}
+            assets={assets}
+            resolvedDayImage={dayImages?.[currentDayNumber] || ''}
+            onUpload={onUpload}
+            dayStops={stopsByDay[currentDayNumber] ?? []}
+            itineraryId={itineraryId}
+            onStopsRefresh={onStopsRefresh}
+            getToken={getToken}
+          />
+        );
+      })}
     </div>
   );
 }
