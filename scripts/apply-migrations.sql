@@ -110,6 +110,20 @@ ALTER TABLE "Itinerary"
 ALTER TABLE "TripItem" ADD COLUMN IF NOT EXISTS "imageUrl" TEXT;
 ALTER TABLE "TripItem" ADD COLUMN IF NOT EXISTS "imageAlt" TEXT;
 
+-- ── 6. Source tracking for "Create from My Trips" ───────────────────────────
+-- Tracks which personal My Trip was used to create a CMS itinerary.
+-- sourceType:       'my_trip' when created via the From My Trips flow (null otherwise)
+-- sourceTripId:     FK to Trip.id — the originating personal trip
+-- importedAt:       timestamp of the import operation
+-- importedByUserId: FK to User.id — which admin/designer triggered the import
+ALTER TABLE "Itinerary"
+  ADD COLUMN IF NOT EXISTS "sourceType"       TEXT,
+  ADD COLUMN IF NOT EXISTS "sourceTripId"     TEXT,
+  ADD COLUMN IF NOT EXISTS "importedAt"       TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS "importedByUserId" TEXT;
+
+CREATE INDEX IF NOT EXISTS "Itinerary_sourceTripId_idx" ON "Itinerary"("sourceTripId");
+
 -- ── Verify ───────────────────────────────────────────────────────────────────
 SELECT 'ItineraryAsset' AS "table",
        COUNT(*)::text   AS "rows"

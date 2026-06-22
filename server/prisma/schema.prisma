@@ -103,6 +103,13 @@ model Itinerary {
 
   pricingPlanId     String?                    // FK to DesignerPricingPlan.id — null for default pricing
 
+  // ── My Trips import source tracking ─────────────────────────────────────────
+  // Set when the itinerary was created via the "From My Trips" flow (migration 20260622000000).
+  sourceType        String?   // 'my_trip' | null
+  sourceTripId      String?   // FK to Trip.id — the originating personal trip
+  importedAt        DateTime? // when the import was performed
+  importedByUserId  String?   // FK to User.id — who triggered the import
+
   // ── Publication review workflow ─────────────
   // Columns added manually (migration 20260611000000).
   // status flow: draft → pending_review → published | rejected

@@ -1166,6 +1166,8 @@ export default function ItineraryCMSEditorPage() {
     rejectionReason: null,
     reviewedAt: null,
     submittedForReviewAt: null,
+    // My Trips import tracking
+    sourceType: null,
   });
   const [allCreators, setAllCreators] = useState([]);  // for creator selector
 
@@ -1262,6 +1264,7 @@ export default function ItineraryCMSEditorPage() {
         rejectionReason: it.rejectionReason || null,
         reviewedAt: it.reviewedAt || null,
         submittedForReviewAt: it.submittedForReviewAt || null,
+        sourceType: it.sourceType || null,
       });
       savedId.current = it.id;
       slugRef.current = it.slug || '';
@@ -2726,6 +2729,21 @@ export default function ItineraryCMSEditorPage() {
               Edit the itinerary to address the feedback, then click "Submit for review" again.
             </p>
           )}
+        </div>
+      )}
+
+      {/* ── My Trips import banner — shown when itinerary was created from a personal trip ── */}
+      {form.sourceType === 'my_trip' && (
+        <div style={{
+          margin: isMobile ? '12px 0' : '0 32px 0',
+          padding: '13px 16px',
+          background: '#EFF6F5', border: '1px solid #A8D5D0', borderRadius: '6px',
+          fontSize: '13px', color: '#1B6B65', lineHeight: '1.55',
+        }}>
+          <p style={{ fontWeight: '600', marginBottom: '3px' }}>This itinerary was created from My Trips.</p>
+          <p style={{ fontSize: '12.5px', color: '#2A7A74' }}>
+            Review the content, images and public information before submitting it for publication.
+          </p>
         </div>
       )}
 

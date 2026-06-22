@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@clerk/clerk-react';
-import { Plus, RefreshCw, Eye, Edit2, Copy, Trash2, Globe, EyeOff, Instagram, X, ChevronLeft, ChevronRight, ExternalLink, Upload } from 'lucide-react';
+import { Plus, RefreshCw, Eye, Edit2, Copy, Trash2, Globe, EyeOff, Instagram, X, ChevronLeft, ChevronRight, ExternalLink, Upload, ChevronDown, FileText, Layers } from 'lucide-react';
 import { itineraries as STATIC_ITINERARIES } from '../../data/itineraries';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { resolveCoverImage } from '../../lib/resolveCoverImage';
 import { useUserCtx } from '../../lib/useUserCtx.jsx';
 import ImportItineraryModal from './ImportItineraryModal.jsx';
+import FromMyTripsModal from './FromMyTripsModal.jsx';
 
 // ── Shared style tokens ───────────────────────────────────────────────────────
 const card = { background: 'white', borderRadius: '10px', border: '1px solid #E8E3DA' };
@@ -797,8 +798,12 @@ export default function ItinerariesCMSPage() {
   const [typeFilter,     setTypeFilter]     = useState('all');   // all | free | premium | custom
   const [creatorFilter,  setCreatorFilter]  = useState('');      // creator id or ''
   const [allCreators,    setAllCreators]    = useState([]);      // for filter dropdown
-  const [instagramModal,  setInstagramModal]  = useState(null);    // itinerary | null
-  const [showImportModal, setShowImportModal] = useState(false);
+  const [instagramModal,    setInstagramModal]    = useState(null);    // itinerary | null
+  const [showImportModal,   setShowImportModal]   = useState(false);
+  const [showFromMyTrips,   setShowFromMyTrips]   = useState(false);
+  const [newDropdownOpen,   setNewDropdownOpen]   = useState(false);
+  const [successMsg,        setSuccessMsg]        = useState(null);
+  const newDropdownRef = useRef(null);
 
   // An itinerary is deletable if: admin (always), or designer owns it and it's a draft.
   function canDelete(it) {
@@ -838,6 +843,28 @@ export default function ItinerariesCMSPage() {
   }, [getToken, isAdmin]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Close "New itinerary" dropdown when clicking outside
+  useEffect(() => {
+    if (!newDropdownOpen) return;
+    function onClickOutside(e) {
+      if (newDropdownRef.current && !newDropdownRef.current.contains(e.target)) {
+        setNewDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [newDropdownOpen]);
+
+  function handleFromMyTripsSuccess(itineraryId, warnings) {
+    setShowFromMyTrips(false);
+    const msg = warnings?.length
+      ? `CMS itinerary created. ${warnings.length} image(s) could not be copied.`
+      : 'CMS itinerary created from your trip.';
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(null), 6000);
+    navigate(`/admin/itineraries/${itineraryId}`);
+  }
 
   async function handleSeed() {
     if (!window.confirm(`Import ${STATIC_ITINERARIES.length} itineraries from static data?\nExisting records with the same slug will be overwritten.`)) return;
@@ -1036,6 +1063,14 @@ export default function ItinerariesCMSPage() {
         />
       )}
 
+      {showFromMyTrips && (
+        <FromMyTripsModal
+          getToken={getToken}
+          onClose={() => setShowFromMyTrips(false)}
+          onSuccess={handleFromMyTripsSuccess}
+        />
+      )}
+
       {deleteError && (
         <div style={{
           position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
@@ -1044,6 +1079,17 @@ export default function ItinerariesCMSPage() {
           maxWidth: '420px', textAlign: 'center', lineHeight: '1.5',
         }}>
           {deleteError}
+        </div>
+      )}
+
+      {successMsg && (
+        <div style={{
+          position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
+          background: '#1B6B65', color: 'white', padding: '12px 20px', borderRadius: '8px',
+          fontSize: '13px', zIndex: 700, boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+          maxWidth: '440px', textAlign: 'center', lineHeight: '1.5',
+        }}>
+          {successMsg}
         </div>
       )}
 
@@ -1101,13 +1147,64 @@ export default function ItinerariesCMSPage() {
             <Upload size={13} />
             Import Itinerary
           </button>
-          <button
-            onClick={() => navigate('/admin/itineraries/new')}
-            style={{ ...btnPrimary, display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Plus size={13} />
-            New itinerary
-          </button>
+          {/* New itinerary dropdown */}
+          <div ref={newDropdownRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setNewDropdownOpen(v => !v)}
+              style={{ ...btnPrimary, display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Plus size={13} />
+              New itinerary
+              <ChevronDown size={12} style={{ marginLeft: '2px' }} />
+            </button>
+            {newDropdownOpen && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 600,
+                background: 'white', borderRadius: '8px', border: '1px solid #E8E3DA',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.12)', minWidth: '220px', overflow: 'hidden',
+              }}>
+                <button
+                  onClick={() => { setNewDropdownOpen(false); navigate('/admin/itineraries/new'); }}
+                  style={{
+                    display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 14px',
+                    background: 'none', border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left',
+                    borderBottom: '1px solid #F4F1EC',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#FAFAF8'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
+                >
+                  <FileText size={15} color="#6B6156" style={{ flexShrink: 0, marginTop: '1px' }} />
+                  <div>
+                    <p style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16', marginBottom: '2px' }}>
+                      Blank itinerary
+                    </p>
+                    <p style={{ fontSize: '11.5px', color: '#8C8070', lineHeight: '1.4' }}>
+                      Start with an empty itinerary
+                    </p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => { setNewDropdownOpen(false); setShowFromMyTrips(true); }}
+                  style={{
+                    display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 14px',
+                    background: 'none', border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#FAFAF8'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
+                >
+                  <Layers size={15} color="#1B6B65" style={{ flexShrink: 0, marginTop: '1px' }} />
+                  <div>
+                    <p style={{ fontSize: '13px', fontWeight: '600', color: '#1C1A16', marginBottom: '2px' }}>
+                      From My Trips
+                    </p>
+                    <p style={{ fontSize: '11.5px', color: '#8C8070', lineHeight: '1.4' }}>
+                      Turn one of your personal trips into a CMS itinerary
+                    </p>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

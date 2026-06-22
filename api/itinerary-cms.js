@@ -154,6 +154,7 @@ export default async function handler(req, res) {
       if (action === 'day-stops')         { await assertOwnership(pool, id, ctx); return res.json(await handleListDayStops(pool, id)); }
       if (action === 'review-queue')      { adminOnly(); return res.json(await handleReviewQueue(pool, req.query.status || 'pending_review')); }
       if (action === 'review-detail')     { adminOnly(); return res.json(await handleReviewDetail(pool, id)); }
+      if (action === 'my-trips-for-import') return res.json(await handleMyTripsForImport(pool, ctx));
       return res.status(400).json({ error: 'Unknown GET action' });
     }
 
@@ -206,6 +207,7 @@ export default async function handler(req, res) {
       if (action === 'geocode-stop')             { await assertOwnership(pool, id, ctx); return res.json(await handleGeocodeStop(pool, id, body)); }
       if (action === 'apply-geocode-candidate')  { await assertOwnership(pool, id, ctx); return res.json(await handleApplyGeocodeCandidate(pool, id, body)); }
       if (action === 'geocode-missing-stops')    { await assertOwnership(pool, id, ctx); return res.json(await handleGeocodeMissingStops(pool, id)); }
+      if (action === 'create-from-trip') return res.json(await handleCreateFromTrip(pool, body, ctx));
       return res.status(400).json({ error: 'Unknown POST action' });
     }
   } catch (err) {
@@ -3736,4 +3738,330 @@ function handleImportCsvTemplate() {
     '"","","","","","","","","","","","","","","","","","","","","2","Alberobello and the Valle d\'Itria","Drive south through the Valle d\'Itria to Alberobello, home to over 1,500 trulli houses. Explore the Rione Monti district.","Rione Monti trulli|Locorotondo walls|Valle d\'Itria overlook","Visit early morning before tour groups arrive","","Masseria Torre Coccaro","Masseria Hotel","A historic working farm converted into a boutique retreat surrounded by olive groves","",""',
   ].join('\n');
   return { csv };
+}
+
+// ── List My Trips eligible for CMS import ────────────────────────────────────
+// Returns all Trips owned (not just shared) by the authenticated user, with:
+//   - dayCount: non-hidden TripDay rows
+//   - eligiblePlaceCount: TripItems that would be copied (excludes bookings, private types)
+//   - imageCount: cover image + item images
+//   - existingCms: most recent CMS itinerary created from this trip (if any)
+async function handleMyTripsForImport(pool, ctx) {
+  const { userId } = ctx;
+  if (!userId) throw Object.assign(new Error('User ID not found'), { status: 401 });
+
+  const { rows } = await pool.query(`
+    WITH trip_place_stats AS (
+      SELECT
+        ti."tripId",
+        COUNT(CASE
+          WHEN ti.type NOT IN ('flight', 'transfer', 'note', 'break')
+           AND (ti."bookingReference" IS NULL OR ti."bookingReference" = '')
+           AND NOT ti."isHidden" THEN 1 END)::int AS eligible_place_count,
+        COUNT(CASE
+          WHEN ti."imageUrl" IS NOT NULL AND ti."imageUrl" != ''
+           AND ti.type NOT IN ('flight', 'transfer', 'note', 'break')
+           AND NOT ti."isHidden" THEN 1 END)::int AS item_image_count
+      FROM "TripItem" ti
+      WHERE ti."tripId" IN (SELECT id FROM "Trip" WHERE "userId" = $1)
+      GROUP BY ti."tripId"
+    ),
+    trip_day_stats AS (
+      SELECT td."tripId", COUNT(*)::int AS day_count
+      FROM "TripDay" td
+      WHERE td."tripId" IN (SELECT id FROM "Trip" WHERE "userId" = $1)
+        AND NOT td."isHidden"
+      GROUP BY td."tripId"
+    ),
+    latest_cms AS (
+      SELECT DISTINCT ON (i."sourceTripId")
+        i."sourceTripId",
+        i.id     AS cms_id,
+        i.title  AS cms_title,
+        i.status AS cms_status,
+        i.slug   AS cms_slug
+      FROM "Itinerary" i
+      WHERE i."sourceTripId" IN (SELECT id FROM "Trip" WHERE "userId" = $1)
+      ORDER BY i."sourceTripId", i."createdAt" DESC
+    )
+    SELECT
+      t.id, t.title, t.destination, t.country, t."durationDays",
+      t."coverImage", t."heroImage", t."startDate", t."endDate",
+      t."updatedAt", t."createdAt",
+      COALESCE(ds.day_count,            0) AS day_count,
+      COALESCE(ps.eligible_place_count, 0) AS eligible_place_count,
+      COALESCE(ps.item_image_count,     0) AS item_image_count,
+      lc.cms_id, lc.cms_title, lc.cms_status, lc.cms_slug
+    FROM "Trip" t
+    LEFT JOIN trip_place_stats ps ON ps."tripId" = t.id
+    LEFT JOIN trip_day_stats   ds ON ds."tripId" = t.id
+    LEFT JOIN latest_cms       lc ON lc."sourceTripId" = t.id
+    WHERE t."userId" = $1
+    ORDER BY t."updatedAt" DESC
+  `, [userId]);
+
+  return {
+    trips: rows.map(r => ({
+      id:                 r.id,
+      title:              r.title,
+      destination:        r.destination,
+      country:            r.country,
+      durationDays:       r.durationDays,
+      coverImage:         r.heroImage || r.coverImage || null,
+      startDate:          r.startDate,
+      endDate:            r.endDate,
+      updatedAt:          r.updatedAt,
+      createdAt:          r.createdAt,
+      dayCount:           r.day_count,
+      eligiblePlaceCount: r.eligible_place_count,
+      imageCount:         ((r.heroImage || r.coverImage) ? 1 : 0) + r.item_image_count,
+      existingCms: r.cms_id ? {
+        id:     r.cms_id,
+        title:  r.cms_title,
+        status: r.cms_status,
+        slug:   r.cms_slug,
+      } : null,
+    })),
+  };
+}
+
+// ── Create a CMS itinerary from a personal My Trip ────────────────────────────
+// Only the trip owner can use this action. The source trip is never modified.
+// Returns { itinerary, warnings } or { duplicate: true, existing: {...} } when
+// the same source trip has already been used and forceCreate is not set.
+async function handleCreateFromTrip(pool, body, ctx) {
+  const { tripId, forceCreate = false } = body;
+  if (!tripId) throw Object.assign(new Error('tripId is required'), { status: 400 });
+  if (!ctx.userId) throw Object.assign(new Error('Unauthorized'), { status: 401 });
+
+  // Validate trip ownership — shared-only trips are not eligible
+  const { rows: tripRows } = await pool.query(
+    `SELECT * FROM "Trip" WHERE id = $1 LIMIT 1`, [tripId]
+  );
+  if (!tripRows.length) throw Object.assign(new Error('Trip not found'), { status: 404 });
+  const trip = tripRows[0];
+
+  if (trip.userId !== ctx.userId) {
+    throw Object.assign(
+      new Error('You can only create CMS itineraries from trips you own'),
+      { status: 403 }
+    );
+  }
+
+  // Duplicate detection
+  const { rows: dupRows } = await pool.query(
+    `SELECT id, title, status, slug FROM "Itinerary"
+     WHERE "sourceTripId" = $1 ORDER BY "createdAt" DESC LIMIT 1`,
+    [tripId]
+  );
+  if (dupRows.length && !forceCreate) {
+    return { duplicate: true, existing: dupRows[0] };
+  }
+
+  // Fetch non-hidden trip days in order
+  const { rows: tripDays } = await pool.query(
+    `SELECT * FROM "TripDay"
+     WHERE "tripId" = $1 AND NOT "isHidden"
+     ORDER BY "dayNumber" ASC`,
+    [tripId]
+  );
+
+  // Fetch eligible trip items — exclude bookings and non-place types
+  const { rows: tripItems } = await pool.query(
+    `SELECT * FROM "TripItem"
+     WHERE "tripId" = $1
+       AND NOT "isHidden"
+       AND type NOT IN ('flight', 'transfer', 'note', 'break')
+       AND ("bookingReference" IS NULL OR "bookingReference" = '')
+     ORDER BY "dayNumber" ASC, "sortOrder" ASC`,
+    [tripId]
+  );
+
+  // ── Build CMS content from trip data ────────────────────────────────────────
+  const highlights = Array.isArray(trip.highlights)
+    ? trip.highlights.filter(h => typeof h === 'string' && h.trim())
+    : [];
+
+  const hotels = Array.isArray(trip.hotels)
+    ? trip.hotels.slice(0, 3).map(h =>
+        typeof h === 'object' && h !== null
+          ? { name: h.name || '', type: h.type || '', note: h.note || '' }
+          : { name: String(h || ''), type: '', note: '' }
+      )
+    : [];
+
+  const days = tripDays.map(day => ({
+    dayNumber:   day.dayNumber,
+    title:       day.titleOverride || day.title || `Day ${day.dayNumber}`,
+    description: day.descriptionOverride || day.description || '',
+    highlights:  [],
+    insiderTip:  '',
+    imageUrl:    null,
+  }));
+
+  const coverImage = trip.heroImage || trip.coverImage || '';
+
+  const content = {
+    hero: {
+      title:      trip.title    || '',
+      subtitle:   trip.subtitle || '',
+      tagline:    '',
+      coverImage,
+    },
+    summary: {
+      shortDescription: trip.overview || '',
+      whySpecial:       '',
+      routeOverview:    '',
+      highlights,
+      included:         [],
+    },
+    tripFacts: {
+      groupSize:  '',
+      difficulty: 'Balanced',
+      bestFor:    [],
+      category:   '',
+    },
+    days,
+    sections: {
+      hotels,
+      practicalNotes: trip.generalNotes || '',
+      faq: [],
+    },
+    pdfConfig: { showRouteMap: true, showHotels: true },
+    seo:       { metaTitle: '', metaDescription: '' },
+    routeMap:  { stops: [], imageUrl: '', alt: '', caption: '' },
+  };
+
+  // Generate unique slug
+  const baseSlug = slugify(trip.title || 'untitled');
+  let slug = baseSlug;
+  for (let attempt = 1; attempt <= 50; attempt++) {
+    const candidate = attempt === 1 ? slug : `${baseSlug}-${attempt}`;
+    const { rows: found } = await pool.query(
+      `SELECT id FROM "Itinerary" WHERE slug = $1 LIMIT 1`, [candidate]
+    );
+    if (!found.length) { slug = candidate; break; }
+    if (attempt === 50) slug = `${baseSlug}-${Date.now()}`;
+  }
+
+  // Creator assignment: non-admins are forced to their own creator profile
+  const creatorId = ctx.isAdmin ? (ctx.creatorId || null) : ctx.creatorId;
+  const durationDays = trip.durationDays || tripDays.length || null;
+
+  // Insert the new CMS itinerary
+  const { rows: newRows } = await pool.query(
+    `INSERT INTO "Itinerary"
+       (id, title, subtitle, slug, destination, country, region, "durationDays",
+        "accessType", price, "coverImage", description,
+        type, "isPrivate", "isCollection", status, "isPublished",
+        content, "schemaVersion", "updatedAt",
+        creator_id,
+        "sourceType", "sourceTripId", "importedAt", "importedByUserId")
+     VALUES (
+       gen_random_uuid()::text,
+       $1,$2,$3,$4,$5,'',$6,
+       'free',0,$7,$8,
+       'free',false,false,'draft',false,
+       $9::jsonb,1,NOW(),
+       $10,
+       'my_trip',$11,NOW(),$12
+     )
+     RETURNING *`,
+    [
+      trip.title    || 'Untitled Itinerary',
+      trip.subtitle || '',
+      slug,
+      trip.destination || '',
+      trip.country || '',
+      durationDays,
+      coverImage,
+      trip.overview || '',
+      JSON.stringify(content),
+      creatorId,
+      tripId,
+      ctx.userId,
+    ]
+  );
+  const itinerary = newRows[0];
+  const warnings = [];
+
+  // ── Copy eligible TripItems as ItineraryDayStop records ─────────────────────
+  const STOP_TYPE_MAP = {
+    place:          'attraction',
+    restaurant:     'restaurant',
+    hotel:          'hotel',
+    event:          'experience',
+    itinerary_item: 'attraction',
+    winery:         'winery',
+    viewpoint:      'viewpoint',
+    beach:          'beach',
+    museum:         'museum',
+    experience:     'experience',
+    attraction:     'attraction',
+    activity:       'experience',
+  };
+
+  let stopsSaved = 0;
+  for (const item of tripItems) {
+    const stopType = STOP_TYPE_MAP[item.type] || 'attraction';
+    try {
+      await pool.query(
+        `INSERT INTO "ItineraryDayStop"
+           (id, "itineraryId", "dayNumber", title, description, type,
+            "locationName", address, latitude, longitude,
+            "suggestedTime", "durationMinutes", "sortOrder",
+            "showOnMap", metadata, "createdAt", "updatedAt")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7,
+                 $8, $9, $10, $11, $12, true, '{}', NOW(), NOW())`,
+        [
+          itinerary.id,
+          item.dayNumber || 1,
+          item.title     || '',
+          item.description || '',
+          stopType,
+          item.locationName || '',
+          item.address      || '',
+          item.latitude  != null ? parseFloat(item.latitude)  : null,
+          item.longitude != null ? parseFloat(item.longitude) : null,
+          item.startTime || null,
+          item.durationMinutes != null ? parseInt(item.durationMinutes, 10) : null,
+          item.sortOrder || 0,
+        ]
+      );
+      stopsSaved++;
+    } catch (err) {
+      warnings.push(`Could not copy place "${item.title}": ${err.message}`);
+    }
+  }
+
+  // ── Copy images as ItineraryAsset records (URL reference, no binary download) ─
+  if (coverImage) {
+    try {
+      await pool.query(
+        `INSERT INTO "ItineraryAsset"
+           (id, "itineraryId", "assetType", url, alt, "sortOrder", source, active, "createdAt")
+         VALUES (gen_random_uuid()::text, $1, 'hero', $2, $3, 0, 'manual', true, NOW())`,
+        [itinerary.id, coverImage, `${trip.title} cover`]
+      );
+    } catch (err) {
+      warnings.push(`Could not save cover image: ${err.message}`);
+    }
+  }
+
+  for (const item of tripItems) {
+    if (!item.imageUrl) continue;
+    try {
+      await pool.query(
+        `INSERT INTO "ItineraryAsset"
+           (id, "itineraryId", "assetType", url, alt, "dayNumber", "sortOrder", source, active, "createdAt")
+         VALUES (gen_random_uuid()::text, $1, 'gallery', $2, $3, $4, $5, 'manual', true, NOW())`,
+        [itinerary.id, item.imageUrl, item.imageAlt || item.title || '', item.dayNumber || null, item.sortOrder || 0]
+      );
+    } catch {
+      // Non-fatal — item image is optional
+    }
+  }
+
+  console.log(`[create-from-trip] created "${itinerary.title}" (${itinerary.id}) from trip ${tripId}; ${stopsSaved} stops; ${warnings.length} warnings`);
+  return { itinerary, warnings, stopsSaved };
 }
