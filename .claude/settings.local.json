@@ -159,7 +159,10 @@
       "Bash(sed -n '1990,2000p' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/api/admin.js)",
       "Bash(sed -n '2300,2310p' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/api/admin.js)",
       "Bash(sed -n '2520,2530p' /Users/cristianoxavier/Documents/Projects/HiddenAtlas/api/admin.js)",
-      "Bash(node_modules/.bin/vite build *)"
+      "Bash(node_modules/.bin/vite build *)",
+      "Bash(awk '/TripDetailPage|^\\\\/.*trips\\\\.js/,/^\\\\//')",
+      "Bash(awk '/TripDetailPage/,/^$/')",
+      "Bash(awk '/TripDetailPage/,0')"
     ]
   }
 }

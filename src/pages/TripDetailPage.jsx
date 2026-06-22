@@ -4,7 +4,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Calendar, Clock, Users, MapPin, Download, Pencil, Trash2,
   Plus, X, Map, FileText, Bookmark, BookOpen, Check, Star, ChevronRight,
-  ChevronDown, RotateCcw, CalendarPlus, ExternalLink, Copy, Share2,
+  ChevronDown, RotateCcw, CalendarPlus, ExternalLink, Copy, Share2, Navigation,
 } from 'lucide-react';
 import { useAuth } from '@clerk/clerk-react';
 import { useApi } from '../lib/api';
@@ -140,6 +140,59 @@ function calcDayNumber(bookingDateStr, startDateStr) {
   const start   = new Date(startDateStr.slice(0, 10)   + 'T00:00:00Z');
   const diff = Math.round((booking.getTime() - start.getTime()) / 86400000);
   return diff < 0 ? null : diff + 1;
+}
+
+// ─────────────────────────────────────────────
+// Navigation helpers
+// ─────────────────────────────────────────────
+function buildGoogleMapsUrl(item, tripDestination) {
+  if (item.latitude != null && item.longitude != null) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${item.latitude},${item.longitude}`;
+  }
+  const addr = item.address || item.locationName;
+  if (addr) return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`;
+  const name = item.title || item.name;
+  if (name) return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(tripDestination ? `${name}, ${tripDestination}` : name)}`;
+  return null;
+}
+
+function buildWazeUrl(item, tripDestination) {
+  if (item.latitude != null && item.longitude != null) {
+    return `https://www.waze.com/ul?ll=${item.latitude},${item.longitude}&navigate=yes`;
+  }
+  const addr = item.address || item.locationName;
+  if (addr) return `https://www.waze.com/ul?q=${encodeURIComponent(addr)}&navigate=yes`;
+  const name = item.title || item.name;
+  if (name) return `https://www.waze.com/ul?q=${encodeURIComponent(tripDestination ? `${name}, ${tripDestination}` : name)}&navigate=yes`;
+  return null;
+}
+
+function hasNavData(item) {
+  return (item.latitude != null && item.longitude != null) || !!(item.address || item.locationName || item.title || item.name);
+}
+
+// Item/booking types where navigation makes no sense
+const NAV_SKIP_ITEM_TYPES    = new Set(['flight', 'note']);
+const NAV_SKIP_BOOKING_TYPES = new Set(['flight']);
+
+// Try the native app deep link; fall back to the web URL if the app is not installed.
+function openNav(isMobile, deepLink, webUrl) {
+  if (!webUrl) return;
+  if (isMobile && deepLink) {
+    const a = document.createElement('a');
+    a.href = deepLink;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    const timer = setTimeout(() => {
+      if (!document.hidden) window.open(webUrl, '_blank', 'noopener,noreferrer');
+    }, 1500);
+    document.addEventListener('visibilitychange', function h() {
+      if (document.hidden) { clearTimeout(timer); document.removeEventListener('visibilitychange', h); }
+    });
+  } else {
+    window.open(webUrl, '_blank', 'noopener,noreferrer');
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -1323,7 +1376,7 @@ const IMG_H_EDITORIAL = 200;
 const MOBILE_H_COMPACT  = 160;
 const MOBILE_H_EDITORIAL = 210;
 
-function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, tripName = '', itineraryDayStops = [], canEdit = true }) {
+function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, tripName = '', itineraryDayStops = [], tripDestination = '', canEdit = true }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [imgHovered, setImgHovered] = useState(false);
   const [notesExpanded, setNotesExpanded] = useState(false);
@@ -1394,6 +1447,10 @@ function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, 
     </div>
   );
 
+  const goAction = !NAV_SKIP_ITEM_TYPES.has(item.type) && hasNavData(item)
+    ? <GoToPlaceAction item={item} tripDestination={tripDestination} />
+    : null;
+
   // ── No image: compact original layout ────────────────────────
   if (!hasImage) {
     return (
@@ -1404,6 +1461,7 @@ function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, 
           {metaParts.length > 0 && <p style={{ fontSize: '12.5px', color: MUTED }}>{metaParts.join(' · ')}</p>}
           {notes && <p style={{ fontSize: '13px', color: MUTED, marginTop: '5px', lineHeight: '1.5' }}>{notes}</p>}
           {bookingChips}
+          {goAction}
         </div>
         {actionButtons}
       </div>
@@ -1446,6 +1504,7 @@ function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, 
                 </>
               )}
               {bookingChips}
+              {goAction}
             </div>
             {actionButtons}
           </div>
@@ -1470,6 +1529,7 @@ function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, 
             {metaParts.length > 0 && <p style={{ fontSize: '12.5px', color: MUTED }}>{metaParts.join(' · ')}</p>}
             {notes && <p style={{ fontSize: '13px', color: MUTED, marginTop: '5px', lineHeight: '1.5' }}>{notes}</p>}
             {bookingChips}
+            {goAction}
           </div>
           {actionButtons}
         </div>
@@ -1654,6 +1714,123 @@ function CalendarDropdown({ booking, tripName, itineraryDayStops = [] }) {
 }
 
 // ─────────────────────────────────────────────
+// GoToPlaceAction — navigation quick-action on place cards
+// ─────────────────────────────────────────────
+function GoToPlaceAction({ item, tripDestination = '' }) {
+  const [open, setOpen] = useState(false);
+  const ref             = useRef(null);
+  const isMobile        = useIsMobile();
+
+  const gUrl = buildGoogleMapsUrl(item, tripDestination);
+  const wUrl = buildWazeUrl(item, tripDestination);
+
+  useEffect(() => {
+    if (!open) return;
+    function outside(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', outside);
+    return () => document.removeEventListener('mousedown', outside);
+  }, [open]);
+
+  if (!gUrl && !wUrl) return null;
+
+  function handleGoogle() {
+    const deep = (item.latitude != null && item.longitude != null)
+      ? `comgooglemaps://?daddr=${item.latitude},${item.longitude}` : null;
+    openNav(isMobile, deep, gUrl);
+    setOpen(false);
+  }
+
+  function handleWaze() {
+    const deep = (item.latitude != null && item.longitude != null)
+      ? `waze://?ll=${item.latitude},${item.longitude}&navigate=yes` : null;
+    openNav(isMobile, deep, wUrl);
+    setOpen(false);
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block', marginTop: '8px' }}>
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: '4px',
+          background: 'none', border: `1px solid ${BORDER}`, borderRadius: '5px',
+          padding: '4px 9px', cursor: 'pointer', fontSize: '11.5px', fontWeight: '600',
+          color: TEAL, transition: 'all 0.15s', lineHeight: '1.5',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = TEAL; e.currentTarget.style.background = '#EFF6F5'; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.background = 'none'; }}
+      >
+        <Navigation size={11} style={{ flexShrink: 0 }} />
+        Go
+      </button>
+
+      {open && isMobile && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(28,26,22,0.45)', display: 'flex', alignItems: 'flex-end' }}
+          onClick={() => setOpen(false)}
+        >
+          <div
+            style={{ width: '100%', background: 'white', borderRadius: '16px 16px 0 0', padding: '12px 20px 36px' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ width: '32px', height: '4px', borderRadius: '2px', background: BORDER, margin: '0 auto 18px' }} />
+            <p style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '1.5px', textTransform: 'uppercase', color: MUTED, marginBottom: '14px', textAlign: 'center' }}>
+              Navigate
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {gUrl && (
+                <button type="button" onClick={handleGoogle}
+                  style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '15px 16px', background: LIGHT, border: `1px solid ${BORDER}`, borderRadius: '8px', fontSize: '15px', fontWeight: '600', color: CHAR, cursor: 'pointer', width: '100%', minHeight: '52px' }}>
+                  <Navigation size={17} color={TEAL} />
+                  Google Maps
+                </button>
+              )}
+              {wUrl && (
+                <button type="button" onClick={handleWaze}
+                  style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '15px 16px', background: LIGHT, border: `1px solid ${BORDER}`, borderRadius: '8px', fontSize: '15px', fontWeight: '600', color: CHAR, cursor: 'pointer', width: '100%', minHeight: '52px' }}>
+                  <Navigation size={17} color='#C97C3A' />
+                  Waze
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {open && !isMobile && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 200,
+          background: 'white', border: `1px solid ${BORDER}`, borderRadius: '8px',
+          padding: '6px', boxShadow: '0 4px 16px rgba(28,26,22,0.12)', minWidth: '158px',
+        }}>
+          {gUrl && (
+            <button type="button" onClick={handleGoogle}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '9px 12px', background: 'none', border: 'none', borderRadius: '5px', fontSize: '13px', fontWeight: '600', color: CHAR, cursor: 'pointer', textAlign: 'left' }}
+              onMouseEnter={e => e.currentTarget.style.background = LIGHT}
+              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+            >
+              <Navigation size={13} color={TEAL} style={{ flexShrink: 0 }} />
+              Google Maps
+            </button>
+          )}
+          {wUrl && (
+            <button type="button" onClick={handleWaze}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '9px 12px', background: 'none', border: 'none', borderRadius: '5px', fontSize: '13px', fontWeight: '600', color: CHAR, cursor: 'pointer', textAlign: 'left' }}
+              onMouseEnter={e => e.currentTarget.style.background = LIGHT}
+              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+            >
+              <Navigation size={13} color='#C97C3A' style={{ flexShrink: 0 }} />
+              Waze
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
 // BookingCard
 // ─────────────────────────────────────────────
 const CAT_COLORS = {
@@ -1746,7 +1923,7 @@ function BookingCard({ booking, onDelete, onEdit, itineraryDayStops, tripItems =
 // ─────────────────────────────────────────────
 // DayBookingItem — booking displayed inside a day
 // ─────────────────────────────────────────────
-function DayBookingItem({ booking, onEdit, tripName, itineraryDayStops = [], canEdit = true }) {
+function DayBookingItem({ booking, onEdit, tripName, itineraryDayStops = [], tripDestination = '', canEdit = true }) {
   const color = CAT_COLORS[booking.type] || MUTED;
   const catLabel = BOOKING_CATEGORIES.find(c => c.value === booking.type)?.label || booking.type;
   const meta = booking.metadata || {};
@@ -1759,6 +1936,8 @@ function DayBookingItem({ booking, onEdit, tripName, itineraryDayStops = [], can
   const transferRoute = booking.type === 'transfer' && (meta.pickupLocation || meta.dropoffLocation)
     ? [meta.pickupLocation, meta.dropoffLocation].filter(Boolean).join(' → ')
     : null;
+
+  const showGo = !NAV_SKIP_BOOKING_TYPES.has(booking.type) && hasNavData(booking);
 
   return (
     <div style={{
@@ -1780,6 +1959,7 @@ function DayBookingItem({ booking, onEdit, tripName, itineraryDayStops = [], can
         {booking.confirmationReference && (
           <p style={{ fontSize: '11px', fontFamily: 'monospace', color: TEAL, marginTop: '2px' }}>{booking.confirmationReference}</p>
         )}
+        {showGo && <GoToPlaceAction item={booking} tripDestination={tripDestination} />}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
         <CalendarDropdown booking={booking} tripName={tripName} itineraryDayStops={itineraryDayStops} />
@@ -1797,7 +1977,7 @@ function DayBookingItem({ booking, onEdit, tripName, itineraryDayStops = [], can
 // DaySection — one full day in the timeline
 // ─────────────────────────────────────────────
 
-function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditItem, onEditBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, hiddenStopIds = [], tripName = '', canEdit = true }) {
+function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditItem, onEditBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, hiddenStopIds = [], tripName = '', tripDestination = '', canEdit = true }) {
   const [expanded,     setExpanded]     = useState(true);
   const [confirmHide,  setConfirmHide]  = useState(null);  // stop object pending confirmation
   const [lastHidden,   setLastHidden]   = useState(null);  // { stopId, stopTitle } for undo
@@ -1939,6 +2119,10 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
                               ))}
                             </div>
                           )}
+                          {/* Go action — navigate to this stop */}
+                          {hasNavData(stop) && (
+                            <GoToPlaceAction item={stop} tripDestination={tripDestination} />
+                          )}
                           {/* Stop actions */}
                           {canEdit && (
                             <div style={{ display: 'flex', gap: '12px', marginTop: '4px', flexWrap: 'wrap' }}>
@@ -2032,6 +2216,7 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
                     onEditBooking={onEditBooking}
                     tripName={tripName}
                     itineraryDayStops={itinDayStops}
+                    tripDestination={tripDestination}
                     canEdit={canEdit}
                   />
                 ))}
@@ -2041,7 +2226,7 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
             {/* Day-level bookings not linked to a specific stop */}
             {dayOnlyBookings.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                {dayOnlyBookings.map(b => <DayBookingItem key={b.id} booking={b} onEdit={onEditBooking} tripName={tripName} itineraryDayStops={itinDayStops} canEdit={canEdit} />)}
+                {dayOnlyBookings.map(b => <DayBookingItem key={b.id} booking={b} onEdit={onEditBooking} tripName={tripName} itineraryDayStops={itinDayStops} tripDestination={tripDestination} canEdit={canEdit} />)}
               </div>
             )}
 
@@ -2274,7 +2459,8 @@ function OverviewTab({ workspace, onEditDetails }) {
 // ─────────────────────────────────────────────
 function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, onDeleteItem, onEditItem, onEditBooking, canEdit = true }) {
   const { itinerary, tripDays, tripItems, tripNotes, tripBookings, assets, itineraryDayStops = [], hiddenStopIds = [], trip } = workspace;
-  const tripName = trip?.title || trip?.destination || '';
+  const tripName        = trip?.title || trip?.destination || '';
+  const tripDestination = trip?.destination || '';
   const content = parseContent(itinerary?.content);
   const itinDays = (content?.days || []).map(normalizeDay);
 
@@ -2326,6 +2512,7 @@ function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFr
               onEditItem={onEditItem}
               onEditBooking={onEditBooking}
               tripName={tripName}
+              tripDestination={tripDestination}
               canEdit={canEdit}
             />
           );
@@ -2339,7 +2526,7 @@ function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFr
 // MapTab
 // ─────────────────────────────────────────────
 function MapTab({ workspace, onRefresh }) {
-  const { itinerary, trip, tripItems = [], tripBookings = [], itineraryDayStops = [], hiddenStopIds = [] } = workspace;
+  const { itinerary, trip, tripItems = [], tripBookings = [], tripDays = [], itineraryDayStops = [], hiddenStopIds = [] } = workspace;
   const slug    = itinerary?.slug;
   const content = parseContent(itinerary?.content);
 
@@ -2384,6 +2571,7 @@ function MapTab({ workspace, onRefresh }) {
             itineraryStops={effectiveItinStops}
             tripItems={tripItems}
             tripBookings={tripBookings}
+            tripDays={tripDays}
             trip={trip}
             onRefresh={onRefresh}
           />

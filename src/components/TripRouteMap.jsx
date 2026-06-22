@@ -6,15 +6,18 @@
  *   2. TripItem records with coordinates (user-added places — blue markers)
  *   3. TripBooking records with coordinates (confirmed bookings — amber markers)
  *
+ * Markers display sequential visit-order numbers that mirror the Day by Day view.
+ *
  * Props:
  *   itineraryStops  — transformed ItineraryDayStop records with lat/lng
  *   tripItems       — raw TripItem records from workspace
  *   tripBookings    — raw TripBooking records from workspace
+ *   tripDays        — raw TripDay records (for correct day ordering)
  *   trip            — Trip record (used for country context when geocoding)
  *   getToken        — () => Promise<string> — Clerk token for API saves
  *   onRefresh       — () => void — reload workspace after coordinate save
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -30,7 +33,6 @@ const SERIF  = "'Playfair Display', Georgia, serif";
 const DAY_PALETTE = ['#1B6B65','#7B5EA7','#C97C3A','#2E86AB','#8B6513','#4A7C59','#9B3535','#5B8DB8','#7A6E00','#2A4B6F'];
 const dayColor = d => DAY_PALETTE[((d ?? 1) - 1) % DAY_PALETTE.length];
 
-// Item type → display label
 const ITEM_TYPE_LABELS = {
   place: 'Place', restaurant: 'Restaurant', hotel: 'Hotel', activity: 'Activity',
   experience: 'Experience', transport: 'Transport', note: 'Note', other: 'Other',
@@ -56,6 +58,7 @@ function injectCSS() {
   cssInjected = true;
   const s = document.createElement('style');
   s.textContent = `
+    .ha-num-marker { display:flex; align-items:center; justify-content:center; border-radius:50%; color:white; font-weight:700; font-family:Inter,system-ui,sans-serif; box-sizing:border-box; line-height:1; }
     .ha-trip-tip { font-family: Inter, system-ui, sans-serif; font-size: 11px; font-weight: 600;
                    padding: 3px 8px; border-radius: 4px; border: 1px solid #E8E3DA;
                    color: ${CHAR}; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
@@ -85,16 +88,126 @@ function buildItemQuery(item, trip) {
   return ctx ? `${loc}, ${ctx}` : loc;
 }
 
-export default function TripRouteMap({ itineraryStops = [], tripItems = [], tripBookings = [], trip, onRefresh }) {
+// Returns the visit-ordered array of all trip locations, mirroring the Day by Day view order.
+// Per-day order: itinerary stops (by sortOrder) → user items (by sortOrder) → day-only bookings.
+// Bookings linked to a stop/item are interleaved right after their parent.
+// Only items with valid lat/lng receive a sequenceNumber; others get sequenceNumber: null.
+function getOrderedTripLocations({ itineraryStops, tripItems, tripBookings, tripDays, activeDay }) {
+  const sortedDays = [...(tripDays || [])].sort((a, b) => (a.sortOrder || a.dayNumber) - (b.sortOrder || b.dayNumber));
+  const days = activeDay ? sortedDays.filter(d => d.dayNumber === activeDay) : sortedDays;
+
+  // Fallback: no tripDays provided — flatten using dayNumber alone
+  if (!days.length) {
+    const itin  = activeDay ? itineraryStops.filter(s => s.dayNumber === activeDay) : itineraryStops;
+    const items = (activeDay ? tripItems.filter(i => i.dayNumber === activeDay) : tripItems)
+      .filter(i => !i.isHidden).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    const books = activeDay ? tripBookings.filter(b => b.dayNumber === activeDay) : tripBookings;
+    let seq = 0;
+    return [
+      ...itin.map(s  => ({ ...s, _kind: 'itin' })),
+      ...items.map(i => ({ ...i, _kind: 'item' })),
+      ...books.map(b => ({ ...b, _kind: 'booking' })),
+    ].map(x => ({ ...x, sequenceNumber: (x.latitude != null && x.longitude != null) ? ++seq : null }));
+  }
+
+  const result = [];
+
+  for (const tripDay of days) {
+    const dn = tripDay.dayNumber;
+
+    // Itinerary stops for this day (already pre-sorted by MapTab via dayNumber+sortOrder)
+    const dayStops = itineraryStops.filter(s => s.dayNumber === dn);
+
+    // User items for this day, sorted by sortOrder
+    const dayItems = tripItems
+      .filter(i => i.tripDayId === tripDay.id && !i.isHidden)
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
+    // All bookings for this day
+    const dayBookings = tripBookings.filter(b =>
+      b.tripDayId === tripDay.id || (!b.tripDayId && b.dayNumber === dn),
+    );
+
+    // Split bookings: linked to a stop, linked to an item, or free-floating day-level
+    const stopBookMap = {};
+    const itemBookMap = {};
+    const dayOnlyBooks = [];
+    dayBookings.forEach(b => {
+      const sid = b.metadata?.itineraryDayStopId;
+      const iid = b.tripItemId;
+      if (sid && dayStops.some(s => s.id === sid)) {
+        (stopBookMap[sid] = stopBookMap[sid] || []).push(b);
+      } else if (iid) {
+        (itemBookMap[iid] = itemBookMap[iid] || []).push(b);
+      } else {
+        dayOnlyBooks.push(b);
+      }
+    });
+
+    for (const stop of dayStops) {
+      result.push({ ...stop, _kind: 'itin' });
+      for (const b of (stopBookMap[stop.id] || [])) result.push({ ...b, _kind: 'booking', dayNumber: dn });
+    }
+
+    for (const item of dayItems) {
+      result.push({ ...item, _kind: 'item' });
+      for (const b of (itemBookMap[item.id] || [])) result.push({ ...b, _kind: 'booking', dayNumber: dn });
+    }
+
+    [...dayOnlyBooks]
+      .sort((a, b) => ((a.date || a.createdAt || '') < (b.date || b.createdAt || '') ? -1 : 1))
+      .forEach(b => result.push({ ...b, _kind: 'booking', dayNumber: dn }));
+  }
+
+  let seq = 0;
+  return result.map(x => ({ ...x, sequenceNumber: (x.latitude != null && x.longitude != null) ? ++seq : null }));
+}
+
+// Slightly offset markers that share the same grid cell so all remain accessible.
+function offsetDuplicates(items) {
+  const counts = {};
+  return items.map(item => {
+    if (item.latitude == null || item.longitude == null) return item;
+    const key = `${item.latitude.toFixed(4)},${item.longitude.toFixed(4)}`;
+    const idx  = counts[key] ?? 0;
+    counts[key] = idx + 1;
+    if (idx === 0) return item;
+    const angle = (idx * 60 * Math.PI) / 180;
+    const d     = 0.0003;
+    return { ...item, latitude: item.latitude + d * Math.sin(angle), longitude: item.longitude + d * Math.cos(angle) };
+  });
+}
+
+// Build a numbered circular Leaflet divIcon.
+function makeNumberedIcon(seqNum, fillColor, edgeColor, isSelected, isMajor) {
+  const base   = isMajor ? 26 : 22;
+  const size   = isSelected ? base + 4 : base;
+  const fSize  = seqNum >= 100 ? '8px' : seqNum >= 10 ? '9px' : '10px';
+  const bw     = isSelected ? '2.5px' : '2px';
+  const shadow = isSelected
+    ? '0 0 0 3px rgba(28,26,22,0.18),0 3px 10px rgba(0,0,0,0.35)'
+    : '0 2px 4px rgba(0,0,0,0.22)';
+  const bc = isSelected ? CHAR : edgeColor;
+
+  return L.divIcon({
+    className: '',
+    html: `<div class="ha-num-marker" style="width:${size}px;height:${size}px;background:${fillColor};border:${bw} solid ${bc};font-size:${fSize};box-shadow:${shadow};">${seqNum}</div>`,
+    iconSize:      [size, size],
+    iconAnchor:    [Math.floor(size / 2), Math.floor(size / 2)],
+    tooltipAnchor: [0, -(Math.ceil(size / 2) + 4)],
+  });
+}
+
+export default function TripRouteMap({ itineraryStops = [], tripItems = [], tripBookings = [], tripDays = [], trip, onRefresh }) {
   const { getToken } = useAuth();
   const mapDivRef  = useRef(null);
   const mapRef     = useRef(null);
   const markersRef = useRef({});
   const polyRef    = useRef(null);
   const [mapReady,     setMapReady]     = useState(false);
-  const [selected,     setSelected]     = useState(null);  // { item, itemType }
+  const [selected,     setSelected]     = useState(null);   // { item, itemType }
   const [activeDay,    setActiveDay]    = useState(null);
-  const [geocodingIds, setGeocodingIds] = useState({});    // { id: 'loading'|'done'|'error' }
+  const [geocodingIds, setGeocodingIds] = useState({});     // id → 'loading'|'done'|'error'
   const [isMobile,     setIsMobile]     = useState(false);
 
   useEffect(() => {
@@ -104,12 +217,32 @@ export default function TripRouteMap({ itineraryStops = [], tripItems = [], trip
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  // Categorise stops
-  const validItin  = itineraryStops.filter(s => s.latitude != null && s.longitude != null);
-  const validItems = tripItems.filter(i => i.latitude != null && i.longitude != null && i.isHidden !== true);
-  const validBooks = tripBookings.filter(b => b.latitude != null && b.longitude != null);
+  // Ordered locations matching Day by Day view — recomputed on every day filter change
+  const orderedLocations = useMemo(
+    () => getOrderedTripLocations({ itineraryStops, tripItems, tripBookings, tripDays, activeDay }),
+    [itineraryStops, tripItems, tripBookings, tripDays, activeDay],
+  );
 
-  // Items/bookings that have a location but no coords (show in "Needs location" section)
+  // Visible on map (valid lat/lng), with duplicate-coordinate offset applied
+  const visibleLocations = useMemo(
+    () => offsetDuplicates(orderedLocations.filter(l => l.latitude != null && l.longitude != null)),
+    [orderedLocations],
+  );
+
+  // Itinerary stops only — used for the route polyline
+  const polylinePoints = useMemo(
+    () => [...visibleLocations.filter(l => l._kind === 'itin')].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [visibleLocations],
+  );
+
+  // Day filter pill options (all unique day numbers across all layers)
+  const allDays = useMemo(() => [...new Set([
+    ...itineraryStops.filter(s => s.dayNumber).map(s => s.dayNumber),
+    ...tripItems.filter(i => i.dayNumber && !i.isHidden).map(i => i.dayNumber),
+    ...tripBookings.filter(b => b.dayNumber).map(b => b.dayNumber),
+  ])].sort((a, b) => a - b), [itineraryStops, tripItems, tripBookings]);
+
+  // Items/bookings that have a location name but no coordinates ("Needs location" section)
   const missingItems = [
     ...tripItems.filter(i => (i.locationName || i.address) && !i.latitude && i.isHidden !== true)
                 .map(i => ({ ...i, _kind: 'item' })),
@@ -117,23 +250,12 @@ export default function TripRouteMap({ itineraryStops = [], tripItems = [], trip
                    .map(b => ({ ...b, _kind: 'booking' })),
   ];
 
-  const allDays = [...new Set([
-    ...validItin.filter(s => s.dayNumber).map(s => s.dayNumber),
-    ...validItems.filter(i => i.dayNumber).map(i => i.dayNumber),
-    ...validBooks.filter(b => b.dayNumber).map(b => b.dayNumber),
-  ])].sort((a, b) => a - b);
+  const hasMap   = visibleLocations.length > 0;
+  const stopsKey = visibleLocations.map(l =>
+    `${l.id}:${l.latitude?.toFixed(6)}:${l.longitude?.toFixed(6)}:${l.sequenceNumber}`,
+  ).join('|');
 
-  const filtered = {
-    itin:  activeDay ? validItin.filter(s => s.dayNumber === activeDay)  : validItin,
-    items: activeDay ? validItems.filter(i => i.dayNumber === activeDay) : validItems,
-    books: activeDay ? validBooks.filter(b => b.dayNumber === activeDay) : validBooks,
-  };
-  const allFiltered = [...filtered.itin, ...filtered.items, ...filtered.books];
-
-  const stopsKey = allFiltered.map(s => `${s.id}:${s.latitude}:${s.longitude}`).join('|');
-  const hasMap   = allFiltered.length > 0;
-
-  // Init Leaflet
+  // Init Leaflet once
   useEffect(() => {
     if (!mapDivRef.current || mapRef.current) return;
     injectCSS();
@@ -148,84 +270,93 @@ export default function TripRouteMap({ itineraryStops = [], tripItems = [], trip
     return () => { map.remove(); mapRef.current = null; setMapReady(false); };
   }, []); // init once
 
-  // Rebuild markers + polyline
+  // Rebuild all markers + polyline whenever visible data or day filter changes
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
+
     Object.values(markersRef.current).forEach(m => m.remove());
     markersRef.current = {};
     if (polyRef.current) { polyRef.current.remove(); polyRef.current = null; }
     if (!hasMap) return;
 
     // Route polyline — itinerary stops only
-    if (filtered.itin.length >= 2) {
-      const sorted = [...filtered.itin].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-      const color  = activeDay ? dayColor(activeDay) : TEAL;
-      polyRef.current = L.polyline(sorted.map(s => [s.latitude, s.longitude]), {
+    if (polylinePoints.length >= 2) {
+      const color = activeDay ? dayColor(activeDay) : TEAL;
+      polyRef.current = L.polyline(polylinePoints.map(s => [s.latitude, s.longitude]), {
         color, weight: 2, opacity: 0.55, dashArray: '8,5',
       }).addTo(map);
     }
 
-    const addMarker = (item, fillColor, edgeColor, isMajor, label) => {
-      const isSelected = selected && selected.item.id === item.id;
-      const marker = L.circleMarker([item.latitude, item.longitude], {
-        radius:      isMajor ? 9 : (fillColor === ITEM_C || fillColor === BOOK_C ? 7 : 5.5),
-        fillColor,
-        color:       isSelected ? CHAR : edgeColor,
-        weight:      isSelected ? 2.5 : (isMajor ? 1.8 : 1.5),
-        fillOpacity: isSelected ? 1 : 0.88,
-        opacity:     1,
-      }).addTo(map);
-      marker.bindTooltip(label, {
-        permanent:  isMajor,
-        direction:  'top',
-        offset:     [0, isMajor ? -11 : -8],
-        className:  isMajor ? 'ha-trip-major' : 'ha-trip-tip',
-        opacity:    0.97,
-      });
+    // Numbered markers for every visible location
+    visibleLocations.forEach(loc => {
+      const isSelected = selected?.item.id === loc.id;
+      const kind    = loc._kind;
+      const isMajor = loc.type === 'major' || loc.isMajorStop;
+
+      let fillColor, edgeColor;
+      if (kind === 'item') {
+        fillColor = ITEM_C; edgeColor = '#2A5F7A';
+      } else if (kind === 'booking') {
+        fillColor = BOOK_C; edgeColor = '#8A4A18';
+      } else {
+        fillColor = isMajor ? GOLD : TEAL;
+        edgeColor = isMajor ? '#9A7430' : '#1B4540';
+      }
+
+      const icon   = makeNumberedIcon(loc.sequenceNumber, fillColor, edgeColor, isSelected, isMajor);
+      const marker = L.marker([loc.latitude, loc.longitude], { icon }).addTo(map);
+
+      const label = loc.name || loc.title || '';
+      if (label) {
+        marker.bindTooltip(label, {
+          permanent:  isMajor,
+          direction:  'top',
+          offset:     [0, -(Math.ceil((isMajor ? 26 : 22) / 2) + 4)],
+          className:  isMajor ? 'ha-trip-major' : 'ha-trip-tip',
+          opacity:    0.97,
+        });
+      }
+
       marker.on('click', e => {
         L.DomEvent.stopPropagation(e);
-        setSelected(prev => prev?.item.id === item.id ? null : { item, itemType: item._type });
+        setSelected(prev => prev?.item.id === loc.id ? null : { item: loc, itemType: loc._kind });
       });
-      markersRef.current[item.id] = marker;
-    };
 
-    // Itinerary stops
-    filtered.itin.forEach(s => {
-      const isMajor = s.type === 'major' || s.isMajorStop;
-      addMarker({ ...s, _type: 'itin' }, isMajor ? GOLD : TEAL, isMajor ? '#9A7430' : '#1B4540', isMajor, s.name);
-    });
-    // TripItems
-    filtered.items.forEach(i => {
-      addMarker({ ...i, _type: 'item' }, ITEM_C, '#2A5F7A', false, i.title);
-    });
-    // TripBookings
-    filtered.books.forEach(b => {
-      addMarker({ ...b, _type: 'booking' }, BOOK_C, '#8A4A18', false, b.title);
+      markersRef.current[loc.id] = marker;
     });
 
-    if (allFiltered.length > 0) {
-      const bounds = L.latLngBounds(allFiltered.map(s => [s.latitude, s.longitude]));
+    if (visibleLocations.length > 0) {
+      const bounds = L.latLngBounds(visibleLocations.map(l => [l.latitude, l.longitude]));
       if (bounds.isValid()) map.fitBounds(bounds, { padding: [48, 48], maxZoom: 13, animate: true });
     }
   }, [mapReady, stopsKey, activeDay]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Update selected marker styling
+  // Update selected marker icon without a full rebuild
   useEffect(() => {
     if (!mapReady) return;
-    allFiltered.forEach(item => {
-      const marker = markersRef.current[item.id];
+    visibleLocations.forEach(loc => {
+      const marker = markersRef.current[loc.id];
       if (!marker) return;
-      const isSelected = selected?.item.id === item.id;
-      const isMajor    = item.type === 'major' || item.isMajorStop;
-      const kind       = item._type || (filtered.items.includes(item) ? 'item' : filtered.books.includes(item) ? 'booking' : 'itin');
-      const fc = kind === 'item' ? ITEM_C : kind === 'booking' ? BOOK_C : (isMajor ? GOLD : TEAL);
-      const ec = kind === 'item' ? '#2A5F7A' : kind === 'booking' ? '#8A4A18' : (isMajor ? '#9A7430' : '#1B4540');
-      marker.setRadius(isSelected ? 11 : (isMajor ? 9 : (kind !== 'itin' ? 7 : 5.5)));
-      marker.setStyle({ fillColor: fc, color: isSelected ? CHAR : ec, weight: isSelected ? 2.5 : (isMajor ? 1.8 : 1.5), fillOpacity: isSelected ? 1 : 0.88 });
+      const isSelected = selected?.item.id === loc.id;
+      const kind    = loc._kind;
+      const isMajor = loc.type === 'major' || loc.isMajorStop;
+
+      let fillColor, edgeColor;
+      if (kind === 'item') {
+        fillColor = ITEM_C; edgeColor = '#2A5F7A';
+      } else if (kind === 'booking') {
+        fillColor = BOOK_C; edgeColor = '#8A4A18';
+      } else {
+        fillColor = isMajor ? GOLD : TEAL;
+        edgeColor = isMajor ? '#9A7430' : '#1B4540';
+      }
+
+      marker.setIcon(makeNumberedIcon(loc.sequenceNumber, fillColor, edgeColor, isSelected, isMajor));
+
       if (isSelected && mapRef.current) {
-        mapRef.current.flyTo([item.latitude, item.longitude], Math.max(mapRef.current.getZoom(), 11), { animate: true, duration: 0.4 });
-        marker.openTooltip();
+        mapRef.current.flyTo([loc.latitude, loc.longitude], Math.max(mapRef.current.getZoom(), 11), { animate: true, duration: 0.4 });
+        if (marker.getTooltip()) marker.openTooltip();
       }
     });
   }, [selected, mapReady]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -239,7 +370,7 @@ export default function TripRouteMap({ itineraryStops = [], tripItems = [], trip
       if (!query.trim()) throw new Error('No location text');
       const resp = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=3`,
-        { headers: { 'User-Agent': 'HiddenAtlas/1.0 (hiddenatlas.travel)', 'Accept-Language': 'en' } }
+        { headers: { 'User-Agent': 'HiddenAtlas/1.0 (hiddenatlas.travel)', 'Accept-Language': 'en' } },
       );
       const results = await resp.json();
       if (!results?.length) throw new Error('Not found');
@@ -262,8 +393,21 @@ export default function TripRouteMap({ itineraryStops = [], tripItems = [], trip
 
   function handleDayChange(d) { setActiveDay(d); setSelected(null); }
 
-  const sel = selected?.item;
+  const sel     = selected?.item;
   const selKind = selected?.itemType;
+
+  const hasItinMajor = visibleLocations.some(l => l._kind === 'itin' && (l.type === 'major' || l.isMajorStop));
+  const hasItinStop  = visibleLocations.some(l => l._kind === 'itin' && !(l.type === 'major' || l.isMajorStop));
+  const hasItems     = visibleLocations.some(l => l._kind === 'item');
+  const hasBookings  = visibleLocations.some(l => l._kind === 'booking');
+
+  // Legend dot shared style
+  const legendDot = (bg, border) => ({
+    width: '14px', height: '14px', borderRadius: '50%', background: bg,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    border: `1.5px solid ${border}`, fontSize: '7px', fontWeight: '700', color: 'white',
+    flexShrink: 0,
+  });
 
   return (
     <div style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
@@ -287,24 +431,29 @@ export default function TripRouteMap({ itineraryStops = [], tripItems = [], trip
 
       {/* Map legend */}
       <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginTop: '8px' }}>
-        {validItin.length > 0 && (
-          <>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: MUTED }}>
-              <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: GOLD, display: 'inline-block', border: '1.5px solid #9A7430' }} /> Major stop
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: MUTED }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: TEAL, display: 'inline-block', border: '1.5px solid #1B4540' }} /> Route stop
-            </span>
-          </>
-        )}
-        {validItems.length > 0 && (
+        {hasItinMajor && (
           <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: MUTED }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: ITEM_C, display: 'inline-block', border: '1.5px solid #2A5F7A' }} /> Your places
+            <span style={legendDot(GOLD, '#9A7430')}>1</span> Major stop
           </span>
         )}
-        {validBooks.length > 0 && (
+        {hasItinStop && (
           <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: MUTED }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: BOOK_C, display: 'inline-block', border: '1.5px solid #8A4A18' }} /> Bookings
+            <span style={legendDot(TEAL, '#1B4540')}>2</span> Route stop
+          </span>
+        )}
+        {!hasItinMajor && !hasItinStop && itineraryStops.length > 0 && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: MUTED }}>
+            <span style={legendDot(TEAL, '#1B4540')}>1</span> Itinerary stop
+          </span>
+        )}
+        {hasItems && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: MUTED }}>
+            <span style={legendDot(ITEM_C, '#2A5F7A')}>3</span> Your places
+          </span>
+        )}
+        {hasBookings && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: MUTED }}>
+            <span style={legendDot(BOOK_C, '#8A4A18')}>4</span> Bookings
           </span>
         )}
       </div>
@@ -318,7 +467,7 @@ export default function TripRouteMap({ itineraryStops = [], tripItems = [], trip
           display: 'flex', gap: '14px', alignItems: 'flex-start',
         }}>
           <div style={{
-            width: '9px', height: '9px', borderRadius: '50%', flexShrink: 0, marginTop: '6px',
+            width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0, marginTop: '6px',
             background: selKind === 'item' ? ITEM_C : selKind === 'booking' ? BOOK_C : ((sel.type === 'major' || sel.isMajorStop) ? GOLD : TEAL),
           }} />
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -326,40 +475,46 @@ export default function TripRouteMap({ itineraryStops = [], tripItems = [], trip
               <h4 style={{ fontFamily: SERIF, fontSize: '17px', fontWeight: '600', color: CHAR, margin: 0, lineHeight: '1.3' }}>
                 {sel.name || sel.title}
               </h4>
-              {sel.dayNumber && (
-                <span style={{ fontSize: '10.5px', fontWeight: '600', letterSpacing: '0.7px', color: TEAL, background: '#EFF6F5', padding: '3px 9px', borderRadius: '12px', flexShrink: 0, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-                  Day {sel.dayNumber}
-                </span>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                {sel.sequenceNumber && (
+                  <span style={{
+                    fontSize: '10px', fontWeight: '700', color: 'white',
+                    background: selKind === 'item' ? ITEM_C : selKind === 'booking' ? BOOK_C : ((sel.type === 'major' || sel.isMajorStop) ? GOLD : TEAL),
+                    padding: '2px 7px', borderRadius: '10px',
+                  }}>
+                    #{sel.sequenceNumber}
+                  </span>
+                )}
+                {sel.dayNumber && (
+                  <span style={{ fontSize: '10.5px', fontWeight: '600', letterSpacing: '0.7px', color: TEAL, background: '#EFF6F5', padding: '3px 9px', borderRadius: '12px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                    Day {sel.dayNumber}
+                  </span>
+                )}
+              </div>
             </div>
 
-            {/* Type label */}
             {(selKind === 'item' || selKind === 'booking') && (
               <p style={{ fontSize: '11.5px', color: MUTED, margin: '0 0 6px', fontWeight: '500' }}>
                 {selKind === 'item' ? (ITEM_TYPE_LABELS[sel.type] || sel.type) : (BOOKING_TYPE_LABELS[sel.type] || 'Booking')}
               </p>
             )}
 
-            {/* Description / notes */}
             {(sel.description || sel.notes) && (
               <p style={{ fontSize: '13.5px', color: MUTED, lineHeight: '1.65', margin: '0 0 8px' }}>
                 {sel.description || sel.notes}
               </p>
             )}
 
-            {/* Time */}
             {(sel.startTime || sel.time) && (
               <p style={{ fontSize: '12.5px', color: MUTED, margin: '0 0 4px' }}>
                 {sel.startTime || sel.time}{sel.endTime ? ` – ${sel.endTime}` : ''}
               </p>
             )}
 
-            {/* Location name */}
             {sel.locationName && (
               <p style={{ fontSize: '12.5px', color: MUTED, margin: '0 0 4px' }}>{sel.locationName}</p>
             )}
 
-            {/* Booking-specific: provider + reference */}
             {selKind === 'booking' && sel.provider && (
               <p style={{ fontSize: '12px', color: MUTED, margin: '0 0 4px' }}>
                 {sel.provider}{sel.confirmationReference ? ` · Ref: ${sel.confirmationReference}` : ''}

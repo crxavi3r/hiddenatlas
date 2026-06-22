@@ -2580,11 +2580,11 @@ async function crmListTemplates(pool, platform, language) {
   const conditions = ['"isActive" = true'];
   const params = [];
   let p = 1;
-  if (platform) { conditions.push(`platform = $${p++}`); params.push(platform); }
+  if (platform) { conditions.push(`channel = $${p++}`); params.push(platform); }
   if (language) { conditions.push(`language = $${p++}`); params.push(language); }
   const where = `WHERE ${conditions.join(' AND ')}`;
   const { rows } = await pool.query(`SELECT * FROM "CreatorMessageTemplate" ${where} ORDER BY name`, params);
-  return { templates: rows };
+  return { templates: rows.map(r => ({ ...r, platform: r.channel })) };
 }
 
 async function crmCreateRun(pool, body, ctx) {
@@ -3724,7 +3724,7 @@ async function crmCreateTemplate(pool, body, ctx) {
 
   const { rows } = await pool.query(`
     INSERT INTO "CreatorMessageTemplate"
-      (id, name, platform, language, subject, body, variables, "isActive", "createdById", "createdAt", "updatedAt")
+      (id, name, channel, language, subject, body, variables, "isActive", "createdById", "createdAt", "updatedAt")
     VALUES
       (gen_random_uuid(), $1, $2, $3, $4, $5, $6::jsonb, true, $7, NOW(), NOW())
     RETURNING *
@@ -3734,7 +3734,7 @@ async function crmCreateTemplate(pool, body, ctx) {
     JSON.stringify(Array.isArray(variables) ? variables : []),
     (ctx.userId && !ctx.userId.startsWith('user_') ? ctx.userId : null),
   ]);
-  return { template: rows[0] };
+  return { template: { ...rows[0], platform: rows[0].channel } };
 }
 
 async function crmUpdateTemplate(pool, id, body) {
@@ -3746,7 +3746,7 @@ async function crmUpdateTemplate(pool, id, body) {
   let p = 1;
 
   if (name !== undefined)      { sets.push(`name = $${p++}`); params.push(name); }
-  if (platform !== undefined)  { sets.push(`platform = $${p++}`); params.push(platform); }
+  if (platform !== undefined)  { sets.push(`channel = $${p++}`); params.push(platform); }
   if (language !== undefined)  { sets.push(`language = $${p++}`); params.push(language); }
   if (subject !== undefined)   { sets.push(`subject = $${p++}`); params.push(subject); }
   if (bodyText !== undefined)  { sets.push(`body = $${p++}`); params.push(bodyText); }
@@ -3762,7 +3762,7 @@ async function crmUpdateTemplate(pool, id, body) {
     params
   );
   if (!rows.length) throw Object.assign(new Error('Not found'), { status: 404 });
-  return { template: rows[0] };
+  return { template: { ...rows[0], platform: rows[0].channel } };
 }
 
 function crmPersonalizeTemplate(templateBody, lead) {
@@ -3797,7 +3797,7 @@ async function crmGenerateMessage(pool, leadId, body) {
     template = tmplRows[0] || null;
   } else {
     const { rows: tmplRows } = await pool.query(
-      `SELECT * FROM "CreatorMessageTemplate" WHERE "isActive" = true AND platform = $1 ORDER BY "createdAt" LIMIT 1`,
+      `SELECT * FROM "CreatorMessageTemplate" WHERE "isActive" = true AND channel = $1 ORDER BY "createdAt" LIMIT 1`,
       [lead.platform || 'instagram']
     );
     template = tmplRows[0] || null;
