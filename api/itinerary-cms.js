@@ -207,7 +207,8 @@ export default async function handler(req, res) {
       if (action === 'geocode-stop')             { await assertOwnership(pool, id, ctx); return res.json(await handleGeocodeStop(pool, id, body)); }
       if (action === 'apply-geocode-candidate')  { await assertOwnership(pool, id, ctx); return res.json(await handleApplyGeocodeCandidate(pool, id, body)); }
       if (action === 'geocode-missing-stops')    { await assertOwnership(pool, id, ctx); return res.json(await handleGeocodeMissingStops(pool, id)); }
-      if (action === 'create-from-trip') return res.json(await handleCreateFromTrip(pool, body, ctx));
+      if (action === 'create-from-trip')    return res.json(await handleCreateFromTrip(pool, body, ctx));
+      if (action === 'rebuild-trip-stops') { await assertOwnership(pool, id, ctx); return res.json(await handleRebuildTripStops(pool, id, ctx)); }
       return res.status(400).json({ error: 'Unknown POST action' });
     }
   } catch (err) {
@@ -3817,16 +3818,95 @@ async function handleMyTripsForImport(pool, ctx) {
   };
 }
 
+// ── Shared type-mapping constants ─────────────────────────────────────────────
+const TRIP_ITEM_VALID_STOP_TYPES = new Set([
+  'attraction','restaurant','hotel','winery','viewpoint','beach',
+  'museum','transfer','experience','walk','free_time','other',
+]);
+const TRIP_ITEM_TYPE_MAP = {
+  attraction:     'attraction',
+  place:          'attraction',
+  itinerary_item: 'attraction',
+  museum:         'museum',
+  restaurant:     'restaurant',
+  hotel:          'hotel',
+  winery:         'winery',
+  viewpoint:      'viewpoint',
+  beach:          'beach',
+  walk:           'walk',
+  experience:     'experience',
+  activity:       'experience',
+  event:          'experience',
+  booking:        'experience',
+  transfer:       'transfer',
+  flight:         'transfer',
+  break:          'free_time',
+  note:           'other',
+  other:          'other',
+};
+const REUSABLE_STOP_URL_TYPES = new Set([
+  'restaurant','attraction','hotel','winery','experience','museum','viewpoint','beach','walk',
+]);
+
+// Convert a TripItem row into ItineraryDayStop INSERT parameters.
+// Returns null when the item should be skipped entirely.
+function tripItemToStopParams(item, itineraryId, sourceTripId) {
+  const rawType = (item.type || '').toLowerCase();
+  // Skip empty personal notes — no location, no title, nothing reusable
+  if (rawType === 'note' && !item.title?.trim() && !item.locationName && item.latitude == null) {
+    return null;
+  }
+  const stopType = TRIP_ITEM_TYPE_MAP[rawType]
+    || (TRIP_ITEM_VALID_STOP_TYPES.has(rawType) ? rawType : 'other');
+  const suggestedTime = item.startTime?.trim() || item.time?.trim() || null;
+  const showOnMap = !!(item.latitude != null || item.longitude != null || item.locationName);
+  const bookingUrl  = REUSABLE_STOP_URL_TYPES.has(stopType) && item.url ? item.url : null;
+  const metadata    = JSON.stringify({
+    sourceType:      'my_trip',
+    sourceTripId,
+    sourceTripItemId: item.id,
+  });
+  return [
+    itineraryId,
+    item.dayNumber ?? 1,
+    item.title       || '',
+    item.description || '',
+    stopType,
+    item.locationName || '',
+    item.address      || '',
+    item.latitude  != null ? parseFloat(item.latitude)  : null,
+    item.longitude != null ? parseFloat(item.longitude) : null,
+    suggestedTime,
+    item.durationMinutes != null ? parseInt(item.durationMinutes, 10) : null,
+    item.sortOrder ?? 0,
+    showOnMap,
+    bookingUrl,
+    metadata,
+  ];
+}
+
+const INSERT_STOP_SQL = `
+  INSERT INTO "ItineraryDayStop"
+    (id, "itineraryId", "dayNumber", title, description, type,
+     "locationName", address, latitude, longitude,
+     "suggestedTime", "durationMinutes", "sortOrder",
+     "isOptional", "isMajorStop", "showOnMap", "bookingRecommended",
+     "bookingUrl", notes, metadata, "createdAt", "updatedAt")
+  VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7,
+          $8, $9, $10, $11, $12,
+          false, false, $13, false,
+          $14, NULL, $15::jsonb, NOW(), NOW())`;
+
 // ── Create a CMS itinerary from a personal My Trip ────────────────────────────
 // Only the trip owner can use this action. The source trip is never modified.
-// Returns { itinerary, warnings } or { duplicate: true, existing: {...} } when
-// the same source trip has already been used and forceCreate is not set.
+// Returns { itinerary, stopsSaved } or { duplicate: true, existing: {...} } when
+// the same source trip has already been imported and forceCreate is not set.
 async function handleCreateFromTrip(pool, body, ctx) {
   const { tripId, forceCreate = false } = body;
   if (!tripId) throw Object.assign(new Error('tripId is required'), { status: 400 });
   if (!ctx.userId) throw Object.assign(new Error('Unauthorized'), { status: 401 });
 
-  // Fetch trip — all eligibility conditions in one query; returns nothing if any condition fails
+  // Single query enforcing ownership + all eligibility conditions
   const { rows: tripRows } = await pool.query(
     `SELECT * FROM "Trip"
      WHERE id = $1
@@ -3848,11 +3928,10 @@ async function handleCreateFromTrip(pool, body, ctx) {
   }
   const trip = tripRows[0];
 
-  // Duplicate detection
+  // Duplicate detection — separate query on Itinerary table
   const { rows: dupRows } = await pool.query(
     `SELECT id, title, status, slug FROM "Itinerary"
-     WHERE "sourceType" = 'my_trip'
-       AND "sourceTripId" = $1
+     WHERE "sourceType" = 'my_trip' AND "sourceTripId" = $1
      ORDER BY "importedAt" DESC LIMIT 1`,
     [tripId]
   );
@@ -3860,7 +3939,7 @@ async function handleCreateFromTrip(pool, body, ctx) {
     return { duplicate: true, existing: dupRows[0] };
   }
 
-  // Fetch non-hidden trip days in order
+  // Fetch non-hidden trip days
   const { rows: tripDays } = await pool.query(
     `SELECT * FROM "TripDay"
      WHERE "tripId" = $1 AND NOT "isHidden"
@@ -3868,18 +3947,30 @@ async function handleCreateFromTrip(pool, body, ctx) {
     [tripId]
   );
 
-  // Fetch eligible trip items — exclude bookings and non-place types
+  // Fetch all visible TripItems — no type filter; mapping is applied per-item below
   const { rows: tripItems } = await pool.query(
-    `SELECT * FROM "TripItem"
-     WHERE "tripId" = $1
-       AND NOT "isHidden"
-       AND type NOT IN ('flight', 'transfer', 'note', 'break')
-       AND ("bookingReference" IS NULL OR "bookingReference" = '')
-     ORDER BY "dayNumber" ASC, "sortOrder" ASC`,
+    `SELECT id, "tripId", "tripDayId", "dayNumber", title, description, type,
+            "locationName", address, latitude, longitude,
+            "startTime", time, "endTime", "durationMinutes",
+            "sortOrder", url, "imageUrl", "imageAlt", metadata
+     FROM "TripItem"
+     WHERE "tripId" = $1 AND "isHidden" = false
+     ORDER BY "dayNumber" ASC, "sortOrder" ASC, "createdAt" ASC`,
     [tripId]
   );
 
-  // ── Build CMS content from trip data ────────────────────────────────────────
+  // Validate: every item dayNumber must match a real TripDay
+  const validDayNums = new Set(tripDays.map(d => d.dayNumber));
+  for (const item of tripItems) {
+    if (item.dayNumber != null && !validDayNums.has(item.dayNumber)) {
+      throw Object.assign(
+        new Error(`TripItem "${item.title}" (id: ${item.id}) references day ${item.dayNumber} which does not exist in the source trip.`),
+        { status: 400 }
+      );
+    }
+  }
+
+  // Build JSONB content (days use real titles from TripDay)
   const highlights = Array.isArray(trip.highlights)
     ? trip.highlights.filter(h => typeof h === 'string' && h.trim())
     : [];
@@ -3894,47 +3985,26 @@ async function handleCreateFromTrip(pool, body, ctx) {
 
   const days = tripDays.map(day => ({
     dayNumber:   day.dayNumber,
-    title:       day.titleOverride || day.title || `Day ${day.dayNumber}`,
-    description: day.descriptionOverride || day.description || '',
+    title:       (day.titleOverride || '').trim() || (day.title || '').trim() || `Day ${day.dayNumber}`,
+    description: (day.descriptionOverride || '').trim() || (day.description || '').trim() || '',
     highlights:  [],
     insiderTip:  '',
     imageUrl:    null,
   }));
 
   const coverImage = trip.heroImage || trip.coverImage || '';
-
   const content = {
-    hero: {
-      title:      trip.title    || '',
-      subtitle:   trip.subtitle || '',
-      tagline:    '',
-      coverImage,
-    },
-    summary: {
-      shortDescription: trip.overview || '',
-      whySpecial:       '',
-      routeOverview:    '',
-      highlights,
-      included:         [],
-    },
-    tripFacts: {
-      groupSize:  '',
-      difficulty: 'Balanced',
-      bestFor:    [],
-      category:   '',
-    },
+    hero:      { title: trip.title || '', subtitle: trip.subtitle || '', tagline: '', coverImage },
+    summary:   { shortDescription: trip.overview || '', whySpecial: '', routeOverview: '', highlights, included: [] },
+    tripFacts: { groupSize: '', difficulty: 'Balanced', bestFor: [], category: '' },
     days,
-    sections: {
-      hotels,
-      practicalNotes: trip.generalNotes || '',
-      faq: [],
-    },
+    sections:  { hotels, practicalNotes: trip.generalNotes || '', faq: [] },
     pdfConfig: { showRouteMap: true, showHotels: true },
     seo:       { metaTitle: '', metaDescription: '' },
     routeMap:  { stops: [], imageUrl: '', alt: '', caption: '' },
   };
 
-  // Generate unique slug
+  // Slug: checked outside the transaction (read-only, low-frequency)
   const baseSlug = slugify(trip.title || 'untitled');
   let slug = baseSlug;
   for (let attempt = 1; attempt <= 50; attempt++) {
@@ -3946,124 +4016,178 @@ async function handleCreateFromTrip(pool, body, ctx) {
     if (attempt === 50) slug = `${baseSlug}-${Date.now()}`;
   }
 
-  // Creator assignment: non-admins are forced to their own creator profile
-  const creatorId = ctx.isAdmin ? (ctx.creatorId || null) : ctx.creatorId;
+  const creatorId  = ctx.isAdmin ? (ctx.creatorId || null) : ctx.creatorId;
   const durationDays = trip.durationDays || tripDays.length || null;
 
-  // Insert the new CMS itinerary
-  const { rows: newRows } = await pool.query(
-    `INSERT INTO "Itinerary"
-       (id, title, subtitle, slug, destination, country, region, "durationDays",
-        "accessType", price, "coverImage", description,
-        type, "isPrivate", "isCollection", status, "isPublished",
-        content, "schemaVersion", "updatedAt",
-        creator_id,
-        "sourceType", "sourceTripId", "importedAt", "importedByUserId")
-     VALUES (
-       gen_random_uuid()::text,
-       $1,$2,$3,$4,$5,'',$6,
-       'free',0,$7,$8,
-       'free',false,false,'draft',false,
-       $9::jsonb,1,NOW(),
-       $10,
-       'my_trip',$11,NOW(),$12
-     )
-     RETURNING *`,
-    [
-      trip.title    || 'Untitled Itinerary',
-      trip.subtitle || '',
-      slug,
-      trip.destination || '',
-      trip.country || '',
-      durationDays,
-      coverImage,
-      trip.overview || '',
-      JSON.stringify(content),
-      creatorId,
-      tripId,
-      ctx.userId,
-    ]
-  );
-  const itinerary = newRows[0];
-  const warnings = [];
+  // All writes are atomic
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  // ── Copy eligible TripItems as ItineraryDayStop records ─────────────────────
-  const STOP_TYPE_MAP = {
-    place:          'attraction',
-    restaurant:     'restaurant',
-    hotel:          'hotel',
-    event:          'experience',
-    itinerary_item: 'attraction',
-    winery:         'winery',
-    viewpoint:      'viewpoint',
-    beach:          'beach',
-    museum:         'museum',
-    experience:     'experience',
-    attraction:     'attraction',
-    activity:       'experience',
-  };
+    const { rows: newRows } = await client.query(
+      `INSERT INTO "Itinerary"
+         (id, title, subtitle, slug, destination, country, region, "durationDays",
+          "accessType", price, "coverImage", description,
+          type, "isPrivate", "isCollection", status, "isPublished",
+          content, "schemaVersion", "updatedAt",
+          creator_id,
+          "sourceType", "sourceTripId", "importedAt", "importedByUserId")
+       VALUES (
+         gen_random_uuid()::text,
+         $1,$2,$3,$4,$5,'',$6,
+         'free',0,$7,$8,
+         'free',false,false,'draft',false,
+         $9::jsonb,1,NOW(),
+         $10,
+         'my_trip',$11,NOW(),$12
+       )
+       RETURNING *`,
+      [
+        trip.title    || 'Untitled Itinerary',
+        trip.subtitle || '',
+        slug,
+        trip.destination || '',
+        trip.country || '',
+        durationDays,
+        coverImage,
+        trip.overview || '',
+        JSON.stringify(content),
+        creatorId,
+        tripId,
+        ctx.userId,
+      ]
+    );
+    const itinerary = newRows[0];
 
-  let stopsSaved = 0;
-  for (const item of tripItems) {
-    const stopType = STOP_TYPE_MAP[item.type] || 'attraction';
-    try {
-      await pool.query(
-        `INSERT INTO "ItineraryDayStop"
-           (id, "itineraryId", "dayNumber", title, description, type,
-            "locationName", address, latitude, longitude,
-            "suggestedTime", "durationMinutes", "sortOrder",
-            "showOnMap", metadata, "createdAt", "updatedAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7,
-                 $8, $9, $10, $11, $12, true, '{}', NOW(), NOW())`,
-        [
-          itinerary.id,
-          item.dayNumber || 1,
-          item.title     || '',
-          item.description || '',
-          stopType,
-          item.locationName || '',
-          item.address      || '',
-          item.latitude  != null ? parseFloat(item.latitude)  : null,
-          item.longitude != null ? parseFloat(item.longitude) : null,
-          item.startTime || null,
-          item.durationMinutes != null ? parseInt(item.durationMinutes, 10) : null,
-          item.sortOrder || 0,
-        ]
-      );
+    // Insert ItineraryDayStop for every eligible TripItem
+    let stopsSaved = 0, skippedItems = 0;
+    for (const item of tripItems) {
+      const params = tripItemToStopParams(item, itinerary.id, tripId);
+      if (!params) { skippedItems++; continue; }
+      await client.query(INSERT_STOP_SQL, params);
       stopsSaved++;
-    } catch (err) {
-      warnings.push(`Could not copy place "${item.title}": ${err.message}`);
     }
-  }
 
-  // ── Copy images as ItineraryAsset records (URL reference, no binary download) ─
-  if (coverImage) {
-    try {
-      await pool.query(
+    // Cover image asset
+    if (coverImage) {
+      await client.query(
         `INSERT INTO "ItineraryAsset"
            (id, "itineraryId", "assetType", url, alt, "sortOrder", source, active, "createdAt")
-         VALUES (gen_random_uuid()::text, $1, 'hero', $2, $3, 0, 'manual', true, NOW())`,
+         VALUES (gen_random_uuid()::text, $1, 'hero', $2, $3, 0, 'my_trip', true, NOW())`,
         [itinerary.id, coverImage, `${trip.title} cover`]
       );
-    } catch (err) {
-      warnings.push(`Could not save cover image: ${err.message}`);
     }
-  }
 
-  for (const item of tripItems) {
-    if (!item.imageUrl) continue;
-    try {
-      await pool.query(
+    // Per-item image assets
+    for (const item of tripItems) {
+      if (!item.imageUrl) continue;
+      await client.query(
         `INSERT INTO "ItineraryAsset"
            (id, "itineraryId", "assetType", url, alt, "dayNumber", "sortOrder", source, active, "createdAt")
-         VALUES (gen_random_uuid()::text, $1, 'gallery', $2, $3, $4, $5, 'manual', true, NOW())`,
-        [itinerary.id, item.imageUrl, item.imageAlt || item.title || '', item.dayNumber || null, item.sortOrder || 0]
+         VALUES (gen_random_uuid()::text, $1, 'gallery', $2, $3, $4, $5, 'my_trip', true, NOW())`,
+        [itinerary.id, item.imageUrl, item.imageAlt || item.title || '', item.dayNumber ?? null, item.sortOrder ?? 0]
       );
-    } catch {
-      // Non-fatal — item image is optional
     }
+
+    await client.query('COMMIT');
+
+    console.log(
+      `[create-from-trip] itineraryId=${itinerary.id} sourceTripId=${tripId}` +
+      ` sourceDaysCount=${tripDays.length} sourceItemsCount=${tripItems.length}` +
+      ` insertedStopsCount=${stopsSaved} skippedItemsCount=${skippedItems}`
+    );
+    return { itinerary, warnings: [], stopsSaved };
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ── Rebuild stops for an existing My Trip CMS draft ───────────────────────────
+// Safe to call multiple times — deletes and recreates all stops inside a
+// transaction. Only works on draft itineraries with sourceType = 'my_trip'.
+async function handleRebuildTripStops(pool, itineraryId, ctx) {
+  if (!ctx.userId) throw Object.assign(new Error('Unauthorized'), { status: 401 });
+
+  // Load itinerary and verify preconditions
+  const { rows: itRows } = await pool.query(
+    `SELECT id, title, status, "sourceType", "sourceTripId"
+     FROM "Itinerary" WHERE id = $1 LIMIT 1`,
+    [itineraryId]
+  );
+  if (!itRows.length) throw Object.assign(new Error('Itinerary not found'), { status: 404 });
+  const it = itRows[0];
+
+  if (it.sourceType !== 'my_trip' || !it.sourceTripId) {
+    throw Object.assign(new Error('This itinerary was not created from My Trips.'), { status: 400 });
+  }
+  if (it.status !== 'draft') {
+    throw Object.assign(new Error('Only draft itineraries can have their stops rebuilt.'), { status: 400 });
   }
 
-  console.log(`[create-from-trip] created "${itinerary.title}" (${itinerary.id}) from trip ${tripId}; ${stopsSaved} stops; ${warnings.length} warnings`);
-  return { itinerary, warnings, stopsSaved };
+  // Verify source trip is still owned by current user and still eligible
+  const { rows: tripRows } = await pool.query(
+    `SELECT * FROM "Trip"
+     WHERE id = $1
+       AND "userId" = $2
+       AND "tripType" = 'personal'
+       AND "createdFrom" = 'manual'
+       AND "itineraryId" IS NULL
+     LIMIT 1`,
+    [it.sourceTripId, ctx.userId]
+  );
+  if (!tripRows.length) {
+    throw Object.assign(
+      new Error('Source trip not found or not eligible.'),
+      { status: 403 }
+    );
+  }
+  const trip = tripRows[0];
+
+  const { rows: tripItems } = await pool.query(
+    `SELECT id, "tripId", "tripDayId", "dayNumber", title, description, type,
+            "locationName", address, latitude, longitude,
+            "startTime", time, "endTime", "durationMinutes",
+            "sortOrder", url, "imageUrl", "imageAlt", metadata
+     FROM "TripItem"
+     WHERE "tripId" = $1 AND "isHidden" = false
+     ORDER BY "dayNumber" ASC, "sortOrder" ASC, "createdAt" ASC`,
+    [trip.id]
+  );
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rowCount: deleted } = await client.query(
+      `DELETE FROM "ItineraryDayStop" WHERE "itineraryId" = $1`,
+      [itineraryId]
+    );
+
+    let stopsSaved = 0, skippedItems = 0;
+    for (const item of tripItems) {
+      const params = tripItemToStopParams(item, itineraryId, trip.id);
+      if (!params) { skippedItems++; continue; }
+      await client.query(INSERT_STOP_SQL, params);
+      stopsSaved++;
+    }
+
+    await client.query('COMMIT');
+
+    console.log(
+      `[rebuild-trip-stops] itineraryId=${itineraryId} sourceTripId=${trip.id}` +
+      ` sourceItemsCount=${tripItems.length} deletedStopsCount=${deleted}` +
+      ` insertedStopsCount=${stopsSaved} skippedItemsCount=${skippedItems}`
+    );
+    return { ok: true, deleted, stopsSaved, skippedItems };
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
