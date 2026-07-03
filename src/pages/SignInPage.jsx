@@ -48,19 +48,27 @@ export default function SignInPage() {
     setError('');
     setMfaCode('');
     setMfaFactor(factor);
-    if (factor.strategy === 'phone_code' && factor.phoneNumberId) {
-      setLoading(true);
-      try {
+    await prepareCodeFactor(factor);
+    setStep('mfa');
+  }
+
+  async function prepareCodeFactor(factor) {
+    const needsPrepare =
+      (factor.strategy === 'phone_code' && factor.phoneNumberId) ||
+      (factor.strategy === 'email_code' && factor.emailAddressId);
+    if (!needsPrepare) return;
+    setLoading(true);
+    try {
+      if (factor.strategy === 'phone_code') {
         await signIn.prepareSecondFactor({ strategy: 'phone_code', phoneNumberId: factor.phoneNumberId });
-      } catch (err) {
-        setError('Não foi possível enviar o código. Tenta novamente.');
-        setLoading(false);
-        return;
+      } else {
+        await signIn.prepareSecondFactor({ strategy: 'email_code', emailAddressId: factor.emailAddressId });
       }
+    } catch (err) {
+      setError('Não foi possível enviar o código. Tenta novamente.');
+    } finally {
       setLoading(false);
     }
-    if (fromPick) setStep('mfa');
-    else setStep('mfa');
   }
 
   function useBackupCode() {
@@ -190,14 +198,17 @@ export default function SignInPage() {
   const mfaHint = {
     totp: 'Introduz o código de 6 dígitos da tua app de autenticação (Google Authenticator, Authy, etc.).',
     phone_code: 'Enviámos um código de verificação para o teu número de telemóvel.',
+    email_code: 'Enviámos um código de verificação para o teu email.',
     backup_code: 'Introduz um dos teus códigos de recuperação.',
   }[strategy] ?? 'Introduz o código de autenticação para continuar.';
   const mfaPlaceholder = strategy === 'backup_code' ? 'xxxxx-xxxxx' : '000000';
   const mfaInputMode = strategy === 'backup_code' ? 'text' : 'numeric';
+  const canResend = strategy === 'phone_code' || strategy === 'email_code';
 
   const STRATEGY_LABELS = {
     totp: 'App de autenticação',
     phone_code: 'Código por SMS',
+    email_code: 'Código por email',
   };
 
   // ─── render ──────────────────────────────────────────────────────────────────
@@ -333,6 +344,16 @@ export default function SignInPage() {
 
             {/* ── fallback options ── */}
             <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              {/* Resend for email/SMS */}
+              {canResend && (
+                <button
+                  onClick={async () => { setError(''); await prepareCodeFactor(mfaFactor); }}
+                  disabled={loading}
+                  style={linkBtnStyle}
+                >
+                  {loading ? 'A enviar…' : 'Reenviar código'}
+                </button>
+              )}
               {/* Back to picker if came from multi-option flow */}
               {mfaOptions.length > 1 && strategy !== 'backup_code' && (
                 <button onClick={() => { setError(''); setStep('mfa-pick'); }} style={linkBtnStyle}>
@@ -348,7 +369,7 @@ export default function SignInPage() {
               {/* No backup available — contact admin message */}
               {!hasBackup && strategy !== 'backup_code' && (
                 <p style={{ fontSize: '12px', color: '#9A8E82', textAlign: 'center', margin: 0 }}>
-                  Sem acesso à app? Contacta o administrador.
+                  Sem acesso? Contacta o administrador.
                 </p>
               )}
             </div>
