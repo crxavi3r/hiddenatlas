@@ -1927,8 +1927,11 @@ function DayBookingItem({ booking, onEdit, tripName, itineraryDayStops = [], tri
   const color = CAT_COLORS[booking.type] || MUTED;
   const catLabel = BOOKING_CATEGORIES.find(c => c.value === booking.type)?.label || booking.type;
   const meta = booking.metadata || {};
+
   const timeDisplay = booking.type === 'hotel'
-    ? (meta.checkInDate ? `Check-in ${meta.checkInDate}` : null)
+    ? (meta.checkInDate
+      ? `Check-in ${meta.checkInDate}${meta.checkInTime ? ` · ${meta.checkInTime}` : ''}`
+      : null)
     : booking.type === 'transfer'
     ? (meta.pickupTime || booking.time || null)
     : booking.time || null;
@@ -1939,23 +1942,29 @@ function DayBookingItem({ booking, onEdit, tripName, itineraryDayStops = [], tri
 
   const showGo = !NAV_SKIP_BOOKING_TYPES.has(booking.type) && hasNavData(booking);
 
+  // Hotel card uses a slightly more prominent layout to distinguish accommodation from activities
+  const isHotel = booking.type === 'hotel';
+
   return (
     <div style={{
       display: 'flex', gap: '10px', alignItems: 'flex-start',
-      padding: '10px 14px', background: 'white',
+      padding: isHotel ? '12px 14px' : '10px 14px', background: 'white',
       border: `1px solid ${BORDER}`, borderRadius: '8px',
       borderLeft: `3px solid ${color}`,
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
           <span style={{ fontSize: '9.5px', fontWeight: '700', letterSpacing: '1px', textTransform: 'uppercase', color, background: `${color}12`, padding: '2px 6px', borderRadius: '3px' }}>
             {catLabel}
           </span>
           {timeDisplay && <span style={{ fontSize: '11px', color: MUTED }}>{timeDisplay}</span>}
         </div>
-        <p style={{ fontSize: '13.5px', fontWeight: '600', color: CHAR }}>{booking.title}</p>
+        <p style={{ fontSize: isHotel ? '14px' : '13.5px', fontWeight: '600', color: CHAR }}>{booking.title}</p>
         {transferRoute && <p style={{ fontSize: '12px', color: MUTED }}>{transferRoute}</p>}
         {!transferRoute && booking.locationName && <p style={{ fontSize: '12px', color: MUTED }}>{booking.locationName}</p>}
+        {!transferRoute && booking.address && booking.address !== booking.locationName && (
+          <p style={{ fontSize: '12px', color: MUTED }}>{booking.address}</p>
+        )}
         {booking.confirmationReference && (
           <p style={{ fontSize: '11px', fontFamily: 'monospace', color: TEAL, marginTop: '2px' }}>{booking.confirmationReference}</p>
         )}
@@ -2203,32 +2212,67 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
 
             {img && <img src={img} alt={title} style={{ width: '100%', maxWidth: '460px', height: '200px', objectFit: 'cover', borderRadius: '8px', marginBottom: '16px' }} />}
 
-            {/* User items — with any bookings linked to that item rendered underneath */}
-            {dayItems.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                {dayItems.map(item => (
-                  <ItemCard
-                    key={item.id}
-                    item={item}
-                    linkedBookings={itemBookings[item.id] || []}
-                    onDelete={onDeleteItem}
-                    onEdit={onEditItem}
-                    onEditBooking={onEditBooking}
-                    tripName={tripName}
-                    itineraryDayStops={itinDayStops}
-                    tripDestination={tripDestination}
-                    canEdit={canEdit}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Day-level bookings not linked to a specific stop */}
-            {dayOnlyBookings.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
-                {dayOnlyBookings.map(b => <DayBookingItem key={b.id} booking={b} onEdit={onEditBooking} tripName={tripName} itineraryDayStops={itinDayStops} tripDestination={tripDestination} canEdit={canEdit} />)}
-              </div>
-            )}
+            {/* Combined timeline: user items + day-level bookings, sorted chronologically.
+                Hotel bookings appear on their check-in day (set by date field on the server)
+                and are ordered by check-in time among other timed entries.
+                Items/bookings with no explicit time sort last, preserving sortOrder order. */}
+            {(dayItems.length > 0 || dayOnlyBookings.length > 0) && (() => {
+              // Effective time key for chronological sorting (HH:MM string or null)
+              function sortTime(entry) {
+                if (entry._timelineKind === 'booking') {
+                  const m = entry.metadata || {};
+                  if (entry.type === 'hotel') return m.checkInTime || null;
+                  if (entry.type === 'flight') return m.departureTime || entry.time || null;
+                  if (entry.type === 'transfer') return m.pickupTime || entry.time || null;
+                  return entry.time || null;
+                }
+                return entry.startTime || entry.time || null;
+              }
+              const timeline = [
+                ...dayItems.map(i => ({ ...i, _timelineKind: 'item' })),
+                ...dayOnlyBookings.map(b => ({ ...b, _timelineKind: 'booking' })),
+              ].sort((a, b) => {
+                const ta = sortTime(a), tb = sortTime(b);
+                // Timed entries sort before untimed; among timed entries sort by time string
+                if (ta && tb) return ta < tb ? -1 : ta > tb ? 1 : 0;
+                if (ta && !tb) return -1;
+                if (!ta && tb) return 1;
+                // Both untimed: items before bookings, then by sortOrder
+                if (a._timelineKind !== b._timelineKind)
+                  return a._timelineKind === 'item' ? -1 : 1;
+                return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+              });
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                  {timeline.map(entry =>
+                    entry._timelineKind === 'item' ? (
+                      <ItemCard
+                        key={entry.id}
+                        item={entry}
+                        linkedBookings={itemBookings[entry.id] || []}
+                        onDelete={onDeleteItem}
+                        onEdit={onEditItem}
+                        onEditBooking={onEditBooking}
+                        tripName={tripName}
+                        itineraryDayStops={itinDayStops}
+                        tripDestination={tripDestination}
+                        canEdit={canEdit}
+                      />
+                    ) : (
+                      <DayBookingItem
+                        key={entry.id}
+                        booking={entry}
+                        onEdit={onEditBooking}
+                        tripName={tripName}
+                        itineraryDayStops={itinDayStops}
+                        tripDestination={tripDestination}
+                        canEdit={canEdit}
+                      />
+                    )
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Day notes */}
             {dayNotes.length > 0 && (

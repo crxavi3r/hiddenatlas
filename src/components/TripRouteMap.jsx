@@ -81,20 +81,40 @@ function injectCSS() {
   document.head.appendChild(s);
 }
 
-// Build a geocoding query from an item's location data + trip context
+// Build a geocoding query from an item's location data + trip context.
+// _fallbackLocation carries address from a linked booking when the item itself has no address.
 function buildItemQuery(item, trip) {
-  const loc = (item.locationName || item.address || item.title || '').trim();
+  const loc = (item.locationName || item.address || item._fallbackLocation || item.title || item.name || '').trim();
   const ctx = [trip?.destination, trip?.country].filter(Boolean).join(', ');
   return ctx ? `${loc}, ${ctx}` : loc;
 }
 
 // Returns the visit-ordered array of all trip locations, mirroring the Day by Day view order.
-// Per-day order: itinerary stops (by sortOrder) → user items (by sortOrder) → day-only bookings.
-// Bookings linked to a stop/item are interleaved right after their parent.
-// Only items with valid lat/lng receive a sequenceNumber; others get sequenceNumber: null.
+// Normalisation rule: bookings linked to a stop (via metadata.itineraryDayStopId) or to a
+// TripItem (via tripItemId) are NOT independent map locations — they are merged into their
+// parent entity. This prevents duplicate markers for event + booking pairs.
+// The booking data is attached as _linkedBookings on the parent entry.
+// If the parent has no coords but a linked booking does, the booking's coords are used as fallback.
 function getOrderedTripLocations({ itineraryStops, tripItems, tripBookings, tripDays, activeDay }) {
   const sortedDays = [...(tripDays || [])].sort((a, b) => (a.sortOrder || a.dayNumber) - (b.sortOrder || b.dayNumber));
   const days = activeDay ? sortedDays.filter(d => d.dayNumber === activeDay) : sortedDays;
+
+  // Helper: build booking aggregation maps for a set of bookings and stops
+  function buildBookMaps(books, stops) {
+    const stopBookMap = {}, itemBookMap = {}, freeBooks = [];
+    books.forEach(b => {
+      const sid = b.metadata?.itineraryDayStopId;
+      const iid = b.tripItemId;
+      if (sid && stops.some(s => s.id === sid)) {
+        (stopBookMap[sid] = stopBookMap[sid] || []).push(b);
+      } else if (iid) {
+        (itemBookMap[iid] = itemBookMap[iid] || []).push(b);
+      } else {
+        freeBooks.push(b);
+      }
+    });
+    return { stopBookMap, itemBookMap, freeBooks };
+  }
 
   // Fallback: no tripDays provided — flatten using dayNumber alone
   if (!days.length) {
@@ -102,11 +122,22 @@ function getOrderedTripLocations({ itineraryStops, tripItems, tripBookings, trip
     const items = (activeDay ? tripItems.filter(i => i.dayNumber === activeDay) : tripItems)
       .filter(i => !i.isHidden).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
     const books = activeDay ? tripBookings.filter(b => b.dayNumber === activeDay) : tripBookings;
+    const { stopBookMap, itemBookMap, freeBooks } = buildBookMaps(books, itin);
     let seq = 0;
     return [
-      ...itin.map(s  => ({ ...s, _kind: 'itin' })),
-      ...items.map(i => ({ ...i, _kind: 'item' })),
-      ...books.map(b => ({ ...b, _kind: 'booking' })),
+      ...itin.map(s => {
+        const linked = stopBookMap[s.id] || [];
+        const lat = s.latitude ?? linked.find(b => b.latitude != null)?.latitude ?? null;
+        const lng = s.longitude ?? linked.find(b => b.longitude != null)?.longitude ?? null;
+        return { ...s, _kind: 'itin', latitude: lat, longitude: lng, _linkedBookings: linked };
+      }),
+      ...items.map(i => {
+        const linked = itemBookMap[i.id] || [];
+        const lat = i.latitude ?? linked.find(b => b.latitude != null)?.latitude ?? null;
+        const lng = i.longitude ?? linked.find(b => b.longitude != null)?.longitude ?? null;
+        return { ...i, _kind: 'item', latitude: lat, longitude: lng, _linkedBookings: linked };
+      }),
+      ...freeBooks.map(b => ({ ...b, _kind: 'booking' })),
     ].map(x => ({ ...x, sequenceNumber: (x.latitude != null && x.longitude != null) ? ++seq : null }));
   }
 
@@ -128,30 +159,24 @@ function getOrderedTripLocations({ itineraryStops, tripItems, tripBookings, trip
       b.tripDayId === tripDay.id || (!b.tripDayId && b.dayNumber === dn),
     );
 
-    // Split bookings: linked to a stop, linked to an item, or free-floating day-level
-    const stopBookMap = {};
-    const itemBookMap = {};
-    const dayOnlyBooks = [];
-    dayBookings.forEach(b => {
-      const sid = b.metadata?.itineraryDayStopId;
-      const iid = b.tripItemId;
-      if (sid && dayStops.some(s => s.id === sid)) {
-        (stopBookMap[sid] = stopBookMap[sid] || []).push(b);
-      } else if (iid) {
-        (itemBookMap[iid] = itemBookMap[iid] || []).push(b);
-      } else {
-        dayOnlyBooks.push(b);
-      }
-    });
+    const { stopBookMap, itemBookMap, freeBooks: dayOnlyBooks } = buildBookMaps(dayBookings, dayStops);
 
     for (const stop of dayStops) {
-      result.push({ ...stop, _kind: 'itin' });
-      for (const b of (stopBookMap[stop.id] || [])) result.push({ ...b, _kind: 'booking', dayNumber: dn });
+      const linked = stopBookMap[stop.id] || [];
+      // Use booking coords as fallback when the stop itself has no coordinates
+      const lat = stop.latitude ?? linked.find(b => b.latitude != null)?.latitude ?? null;
+      const lng = stop.longitude ?? linked.find(b => b.longitude != null)?.longitude ?? null;
+      result.push({ ...stop, _kind: 'itin', latitude: lat, longitude: lng, _linkedBookings: linked });
+      // Linked bookings are merged into the stop — no separate markers
     }
 
     for (const item of dayItems) {
-      result.push({ ...item, _kind: 'item' });
-      for (const b of (itemBookMap[item.id] || [])) result.push({ ...b, _kind: 'booking', dayNumber: dn });
+      const linked = itemBookMap[item.id] || [];
+      // Use booking coords as fallback when the item itself has no coordinates
+      const lat = item.latitude ?? linked.find(b => b.latitude != null)?.latitude ?? null;
+      const lng = item.longitude ?? linked.find(b => b.longitude != null)?.longitude ?? null;
+      result.push({ ...item, _kind: 'item', latitude: lat, longitude: lng, _linkedBookings: linked });
+      // Linked bookings are merged into the item — no separate markers
     }
 
     [...dayOnlyBooks]
@@ -242,12 +267,32 @@ export default function TripRouteMap({ itineraryStops = [], tripItems = [], trip
     ...tripBookings.filter(b => b.dayNumber).map(b => b.dayNumber),
   ])].sort((a, b) => a - b), [itineraryStops, tripItems, tripBookings]);
 
-  // Items/bookings that have a location name but no coordinates ("Needs location" section)
+  // Bookings linked to a stop or item are aggregated into their parent entity on the map.
+  // They must not create independent "Needs location" entries — that would duplicate the parent.
+  const linkedBookingIds = new Set(
+    tripBookings
+      .filter(b => b.tripItemId || b.metadata?.itineraryDayStopId)
+      .map(b => b.id),
+  );
+
+  // Items/bookings that have a location name but no coordinates ("Needs location" section).
+  // When a TripItem has no coords but a linked booking has address info, attach it as
+  // _fallbackLocation so geocoding uses the more specific address.
   const missingItems = [
-    ...tripItems.filter(i => (i.locationName || i.address) && !i.latitude && i.isHidden !== true)
-                .map(i => ({ ...i, _kind: 'item' })),
-    ...tripBookings.filter(b => (b.locationName || b.address) && !b.latitude)
-                   .map(b => ({ ...b, _kind: 'booking' })),
+    ...tripItems
+      .filter(i => (i.locationName || i.address) && !i.latitude && i.isHidden !== true)
+      .map(i => {
+        const linkedBook = tripBookings.find(b => b.tripItemId === i.id && (b.locationName || b.address));
+        return {
+          ...i,
+          _kind: 'item',
+          _fallbackLocation: linkedBook ? (linkedBook.locationName || linkedBook.address) : null,
+        };
+      }),
+    // Only free-floating bookings (not linked to any stop or item) appear independently
+    ...tripBookings
+      .filter(b => !linkedBookingIds.has(b.id) && (b.locationName || b.address) && !b.latitude)
+      .map(b => ({ ...b, _kind: 'booking' })),
   ];
 
   const hasMap   = visibleLocations.length > 0;
@@ -458,6 +503,15 @@ export default function TripRouteMap({ itineraryStops = [], tripItems = [], trip
         )}
       </div>
 
+      {/* Location count summary — counts normalised physical locations, not raw records */}
+      {(visibleLocations.length > 0 || missingItems.length > 0) && (
+        <p style={{ fontSize: '11.5px', color: MUTED, marginTop: '5px' }}>
+          {visibleLocations.length > 0 && `${visibleLocations.length} location${visibleLocations.length !== 1 ? 's' : ''} on map`}
+          {visibleLocations.length > 0 && missingItems.length > 0 && ' · '}
+          {missingItems.length > 0 && `${missingItems.length} needs location`}
+        </p>
+      )}
+
       {/* Selected item details card */}
       {sel && (
         <div style={{
@@ -519,6 +573,35 @@ export default function TripRouteMap({ itineraryStops = [], tripItems = [], trip
               <p style={{ fontSize: '12px', color: MUTED, margin: '0 0 4px' }}>
                 {sel.provider}{sel.confirmationReference ? ` · Ref: ${sel.confirmationReference}` : ''}
               </p>
+            )}
+
+            {/* Linked bookings — shown when a stop/item has associated booking data */}
+            {sel._linkedBookings?.length > 0 && (
+              <div style={{ marginTop: '8px', borderTop: '1px solid #F0EBE3', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                {sel._linkedBookings.map(b => {
+                  const bMeta = b.metadata || {};
+                  const bTime = b.type === 'hotel'
+                    ? (bMeta.checkInDate ? `Check-in ${bMeta.checkInDate}${bMeta.checkInTime ? ` ${bMeta.checkInTime}` : ''}` : null)
+                    : (b.time || null);
+                  return (
+                    <div key={b.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '12px', color: MUTED }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: BOOK_C, flexShrink: 0, marginTop: '4px' }} />
+                      <span style={{ flex: 1 }}>
+                        {bTime && <span style={{ marginRight: '4px' }}>{bTime} ·</span>}
+                        <span style={{ fontWeight: '600', color: CHAR }}>{b.title}</span>
+                        {b.provider && <span style={{ marginLeft: '4px' }}>({b.provider})</span>}
+                        {b.confirmationReference && (
+                          <span style={{ marginLeft: '5px', fontFamily: 'monospace', fontSize: '11px', color: TEAL }}>#{b.confirmationReference}</span>
+                        )}
+                        {b.url && (
+                          <a href={b.url} target="_blank" rel="noopener noreferrer"
+                            style={{ marginLeft: '6px', color: TEAL, fontSize: '11px' }}>↗</a>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
           <button type="button" onClick={() => setSelected(null)}
