@@ -800,17 +800,20 @@ export default function TripRouteMap({ itineraryStops = [], tripItems = [], trip
   const sel     = selected?.item;
   const selKind = selected?.itemType;
 
-  const hasItinMajor = visibleLocations.some(l => l._kind === 'itin' && (l.type === 'major' || l.isMajorStop));
-  const hasItinStop  = visibleLocations.some(l => l._kind === 'itin' && !(l.type === 'major' || l.isMajorStop));
-  const hasItems     = visibleLocations.some(l => l._kind === 'item');
-  const hasBookings  = visibleLocations.some(l => l._kind === 'booking');
+  const itinMajorCount = visibleLocations.filter(l => l._kind === 'itin' && (l.type === 'major' || l.isMajorStop)).length;
+  const itinStopCount  = visibleLocations.filter(l => l._kind === 'itin' && !(l.type === 'major' || l.isMajorStop)).length;
+  const itemsCount     = visibleLocations.filter(l => l._kind === 'item').length;
+  const bookingsCount  = visibleLocations.filter(l => l._kind === 'booking').length;
 
-  // Legend dot shared style
+  const hasItinMajor = itinMajorCount > 0;
+  const hasItinStop  = itinStopCount > 0;
+  const hasItems     = itemsCount > 0;
+  const hasBookings  = bookingsCount > 0;
+
+  // Legend dot shared style — plain color swatch, no number (pin numbers stay on the map itself)
   const legendDot = (bg, border) => ({
-    width: '14px', height: '14px', borderRadius: '50%', background: bg,
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    border: `1.5px solid ${border}`, fontSize: '7px', fontWeight: '700', color: 'white',
-    flexShrink: 0,
+    width: '12px', height: '12px', borderRadius: '50%', background: bg,
+    border: `1.5px solid ${border}`, flexShrink: 0,
   });
 
   return (
@@ -837,27 +840,27 @@ export default function TripRouteMap({ itineraryStops = [], tripItems = [], trip
       <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginTop: '8px' }}>
         {hasItinMajor && (
           <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: MUTED }}>
-            <span style={legendDot(GOLD, '#9A7430')}>1</span> Major stop
+            <span style={legendDot(GOLD, '#9A7430')} /> Major stop ({itinMajorCount})
           </span>
         )}
         {hasItinStop && (
           <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: MUTED }}>
-            <span style={legendDot(TEAL, '#1B4540')}>2</span> Route stop
+            <span style={legendDot(TEAL, '#1B4540')} /> Route stop ({itinStopCount})
           </span>
         )}
         {!hasItinMajor && !hasItinStop && itineraryStops.length > 0 && (
           <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: MUTED }}>
-            <span style={legendDot(TEAL, '#1B4540')}>1</span> Itinerary stop
+            <span style={legendDot(TEAL, '#1B4540')} /> Itinerary stop
           </span>
         )}
         {hasItems && (
           <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: MUTED }}>
-            <span style={legendDot(ITEM_C, '#2A5F7A')}>3</span> Your places
+            <span style={legendDot(ITEM_C, '#2A5F7A')} /> Your places ({itemsCount})
           </span>
         )}
         {hasBookings && (
           <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', color: MUTED }}>
-            <span style={legendDot(BOOK_C, '#8A4A18')}>4</span> Bookings
+            <span style={legendDot(BOOK_C, '#8A4A18')} /> Bookings ({bookingsCount})
           </span>
         )}
       </div>
