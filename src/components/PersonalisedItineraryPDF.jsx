@@ -7,7 +7,7 @@ import {
   Svg, Polygon,
 } from '@react-pdf/renderer';
 import {
-  partitionDayContent, parseNoteBulletSections, linkifyText,
+  partitionDayContent, parseNoteBulletSections, linkifyText, isUrlLike, contextualLinkLabel,
 } from '../utils/tripPdfData';
 
 // ── Colour tokens (mirrors ItineraryPDF) ─────────────────────────────────────
@@ -27,8 +27,7 @@ const C = {
 };
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
-const ACTIVITY_IMG_W = 130;
-const ACTIVITY_MIN_H = 84;
+const ACTIVITY_IMG_W = 130; // ~27% of the usable card width — within the requested 25-30%
 
 const s = StyleSheet.create({
   // ── Cover ──────────────────────────────────────────────────────────────────
@@ -165,10 +164,12 @@ const s = StyleSheet.create({
   addedTitle: { fontFamily: 'Helvetica-Bold', fontSize: 10, color: C.charcoal, marginBottom: 2 },
   addedMeta:  { fontFamily: 'Helvetica', fontSize: 9, color: C.muted, lineHeight: 1.5 },
 
-  // Consolidated activity card (stop/item + its booking, image right when available)
+  // Consolidated activity card (stop/item + its booking, image top-right when
+  // available). No breakInside/fixed height here — a long card is allowed to
+  // flow across physical pages (see the wrap={false} units inside it instead).
   activityCard: {
     borderWidth: 0.75, borderColor: C.border, borderRadius: 4,
-    backgroundColor: C.white, marginBottom: 8, breakInside: 'avoid', overflow: 'hidden',
+    backgroundColor: C.white, marginBottom: 8,
   },
   activityCardBody:  { paddingHorizontal: 12, paddingVertical: 9 },
   activityBadge:     { fontFamily: 'Helvetica-Bold', fontSize: 6.5, letterSpacing: 1.5, color: C.teal, marginBottom: 3 },
@@ -178,7 +179,6 @@ const s = StyleSheet.create({
     borderRadius: 2, alignSelf: 'flex-start', marginBottom: 4,
   },
   activityTimePillText: { fontFamily: 'Helvetica-Bold', fontSize: 7.5, color: C.tealDark },
-  activityImg: { position: 'absolute', top: 0, bottom: 0, right: 0, objectFit: 'cover' },
 
   // Note box
   noteBox:     { backgroundColor: '#FFFBF2', borderLeftWidth: 2, borderLeftColor: C.gold, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 6, breakInside: 'avoid' },
@@ -279,35 +279,43 @@ function formatDurationMinutes(mins) {
   return rem ? `${h}h ${rem}min` : `${h}h`;
 }
 
-// Renders text with any "#"-prefixed lines turned into a bulleted list (and,
-// when present, the plain line right before them as the block's heading) —
-// used for booking.notes instead of a raw text dump.
+// Renders text with any "#"-prefixed lines turned into a bulleted list, plain
+// paragraph lines rendered as wrapped text, and headings (lines ending in
+// ":") as their own labelled sub-block — used for booking.notes instead of a
+// raw text dump. Each heading + its body is one `wrap={false}` unit so a
+// section is never split mid-line, while different sections may still land
+// on different physical pages when a card is taller than one page.
 function BulletedNotes({ text }) {
   if (!text) return null;
   const { intro, sections } = parseNoteBulletSections(text);
   return (
     <>
-      {intro ? <Text style={s.fieldValue}>{intro}</Text> : null}
-      {sections.map((sec, i) => (
-        <View key={i} style={{ marginTop: i === 0 && !intro ? 0 : 2 }}>
-          {sec.heading ? <Text style={s.bulletHeading}>{sec.heading}:</Text> : null}
-          {sec.items.map((item, j) => (
-            <View key={j} style={s.bulletRow}>
-              <View style={s.bulletDot} />
-              <Text style={s.bulletText}>{item}</Text>
-            </View>
-          ))}
-        </View>
-      ))}
+      {intro ? <LinkifiedText text={intro} textStyle={s.fieldValue} linkStyle={s.noteLink} /> : null}
+      {sections.map((sec, i) => {
+        const bodyText = sec.paragraphs.join(' ');
+        const linkLabel = bodyText ? contextualLinkLabel(sec.heading, bodyText) : null;
+        return (
+          <View key={i} style={{ marginTop: i === 0 && !intro ? 0 : 6 }} wrap={false}>
+            {sec.heading ? <Text style={s.bulletHeading}>{sec.heading}</Text> : null}
+            {bodyText ? <LinkifiedText text={bodyText} textStyle={s.fieldValue} linkStyle={s.noteLink} labelOverride={linkLabel} /> : null}
+            {sec.items.map((item, j) => (
+              <View key={j} style={s.bulletRow}>
+                <View style={s.bulletDot} />
+                <Text style={s.bulletText}>{item}</Text>
+              </View>
+            ))}
+          </View>
+        );
+      })}
     </>
   );
 }
 
 // Renders linkified text as inline runs — plain text stays as-is, URLs become
 // short clickable labels via <Link> instead of printing the raw address.
-function LinkifiedText({ text, textStyle, linkStyle }) {
+function LinkifiedText({ text, textStyle, linkStyle, labelOverride }) {
   if (!text) return null;
-  const parts = linkifyText(text);
+  const parts = linkifyText(text, labelOverride);
   if (!parts.some(p => p.type === 'link')) return <Text style={textStyle}>{text}</Text>;
   return (
     <Text style={textStyle}>
@@ -316,6 +324,37 @@ function LinkifiedText({ text, textStyle, linkStyle }) {
         : <Text key={i}>{part.value}</Text>
       )}
     </Text>
+  );
+}
+
+// One labelled field row. When `value` is itself a URL, renders a short
+// context-aware clickable label instead of the raw address so it can never
+// overflow the card's width.
+function FieldRow({ label, value, fieldKey }) {
+  if (!value) return null;
+  return (
+    <View style={s.fieldRow} wrap={false}>
+      <Text style={s.fieldLabel}>{label}</Text>
+      {isUrlLike(value)
+        ? <Link src={value.trim()} style={[s.fieldValue, s.noteLink]}>{contextualLinkLabel(fieldKey || label, value)}</Link>
+        : <Text style={s.fieldValue}>{value}</Text>}
+    </View>
+  );
+}
+
+// Contact field: `provider` is the visible label (business name/handle),
+// `url` (if present) is the tap target. When there's no url, contact is
+// just plain text (e.g. "melgacoww.pt") — nothing to make clickable.
+function ContactField({ provider, url }) {
+  if (!provider && !url) return null;
+  const label = provider && !isUrlLike(provider) ? provider : contextualLinkLabel('contact', url || provider);
+  return (
+    <View style={s.fieldRow} wrap={false}>
+      <Text style={s.fieldLabel}>Contact</Text>
+      {url
+        ? <Link src={url} style={[s.fieldValue, s.noteLink]}>{label}</Link>
+        : <Text style={s.fieldValue}>{provider}</Text>}
+    </View>
   );
 }
 
@@ -333,67 +372,52 @@ function BookingCard({ booking, trip }) {
   const meetingPoint = booking.locationName || booking.address || null;
 
   return (
-    <View style={s.bookingCard} wrap={false}>
-      <View style={s.bookingTypePill}>
+    <View style={s.bookingCard}>
+      <View style={s.bookingTypePill} wrap={false}>
         <Text style={s.bookingTypePillText}>{(booking.type || 'BOOKING').toUpperCase()}</Text>
       </View>
-      <Text style={s.bookingTitle}>{booking.title}</Text>
-
-      {dateTimeLine ? (
-        <View style={s.fieldRow}>
-          <Text style={s.fieldLabel}>Time</Text>
-          <Text style={s.fieldValue}>{dateTimeLine}</Text>
-        </View>
-      ) : null}
-      {meta.checkInDate ? (
-        <View style={s.fieldRow}>
-          <Text style={s.fieldLabel}>Check-in</Text>
-          <Text style={s.fieldValue}>
-            {meta.checkInDate}{meta.checkInTime ? ` at ${meta.checkInTime}` : ''}
-            {meta.checkOutDate ? `  ·  Check-out: ${meta.checkOutDate}` : ''}
-          </Text>
-        </View>
-      ) : null}
-      {meetingPoint ? (
-        <View style={s.fieldRow}>
-          <Text style={s.fieldLabel}>Meeting point</Text>
-          <Text style={s.fieldValue}>{meetingPoint}</Text>
-        </View>
-      ) : null}
-      {booking.confirmationReference ? (
-        <View style={s.fieldRow}>
-          <Text style={s.fieldLabel}>Reference</Text>
-          <Text style={s.bookingRef}>{booking.confirmationReference}</Text>
-        </View>
-      ) : null}
-      {(booking.provider || booking.url) ? (
-        <View style={s.fieldRow}>
-          <Text style={s.fieldLabel}>Contact</Text>
-          {booking.url ? (
-            <Link src={booking.url} style={[s.fieldValue, { color: C.teal, textDecoration: 'underline' }]}>
-              {booking.provider || 'View booking'}
-            </Link>
-          ) : (
-            <Text style={s.fieldValue}>{booking.provider}</Text>
-          )}
-        </View>
-      ) : null}
-      {adults && paid ? (
-        <View style={s.fieldRow}>
-          <Text style={s.fieldLabel}>Party</Text>
-          <Text style={s.fieldValue}>{adults} {Number(adults) === 1 ? 'person' : 'people'} · Paid: {paid} {currency}</Text>
-        </View>
-      ) : adults ? (
-        <View style={s.fieldRow}>
-          <Text style={s.fieldLabel}>Party</Text>
-          <Text style={s.fieldValue}>{adults} {Number(adults) === 1 ? 'person' : 'people'}</Text>
-        </View>
-      ) : paid ? (
-        <View style={s.fieldRow}>
-          <Text style={s.fieldLabel}>Paid</Text>
-          <Text style={s.fieldValue}>{paid} {currency}</Text>
-        </View>
-      ) : null}
+      <View wrap={false}>
+        <Text style={s.bookingTitle}>{booking.title}</Text>
+        {dateTimeLine ? (
+          <View style={s.fieldRow}>
+            <Text style={s.fieldLabel}>Time</Text>
+            <Text style={s.fieldValue}>{dateTimeLine}</Text>
+          </View>
+        ) : null}
+        {meta.checkInDate ? (
+          <View style={s.fieldRow}>
+            <Text style={s.fieldLabel}>Check-in</Text>
+            <Text style={s.fieldValue}>
+              {meta.checkInDate}{meta.checkInTime ? ` at ${meta.checkInTime}` : ''}
+              {meta.checkOutDate ? `  ·  Check-out: ${meta.checkOutDate}` : ''}
+            </Text>
+          </View>
+        ) : null}
+        <FieldRow label="Meeting point" value={meetingPoint} fieldKey="meeting point" />
+        {booking.confirmationReference ? (
+          <View style={s.fieldRow}>
+            <Text style={s.fieldLabel}>Reference</Text>
+            <Text style={s.bookingRef}>{booking.confirmationReference}</Text>
+          </View>
+        ) : null}
+        <ContactField provider={booking.provider} url={booking.url} />
+        {adults && paid ? (
+          <View style={s.fieldRow}>
+            <Text style={s.fieldLabel}>Party</Text>
+            <Text style={s.fieldValue}>{adults} {Number(adults) === 1 ? 'person' : 'people'} · Paid: {paid} {currency}</Text>
+          </View>
+        ) : adults ? (
+          <View style={s.fieldRow}>
+            <Text style={s.fieldLabel}>Party</Text>
+            <Text style={s.fieldValue}>{adults} {Number(adults) === 1 ? 'person' : 'people'}</Text>
+          </View>
+        ) : paid ? (
+          <View style={s.fieldRow}>
+            <Text style={s.fieldLabel}>Paid</Text>
+            <Text style={s.fieldValue}>{paid} {currency}</Text>
+          </View>
+        ) : null}
+      </View>
       {booking.notes ? <BulletedNotes text={booking.notes} /> : null}
     </View>
   );
@@ -465,56 +489,61 @@ function AddedItemCard({ item }) {
 // title AND a duplicate booking card for the same real-world activity.
 // `primary` is the stop or item (name/location/duration source); `bookings`
 // are its linked TripBooking row(s) (date/time/reference/notes/contact source).
+//
+// Deliberately no `position: absolute` anywhere and no fixed height on the
+// card itself — every element sits in normal vertical flow so content can
+// never overlap or get clipped. Two layouts:
+//   SHORT — no long notes/instructions: header+main-info next to the image
+//           in a row (image gets an explicit height, but only that top row
+//           does — the row's real height is whichever sibling is taller, so
+//           short text and the image end up roughly the same height without
+//           ever stretching one to force-fit the other).
+//   LONG  — has instructions/meeting point/what's-included text: the same
+//           header row sits on top (image confined to that top strip only,
+//           per spec), followed by full-width practical-info blocks below.
+// Pagination: the header+main-info row is one `wrap={false}` unit (a short
+// card, or a long card's top strip, moves to the next page as a whole if it
+// doesn't fit); each practical-info section is its own `wrap={false}` unit
+// below that, so a very tall card can break between sections without ever
+// splitting a line, while the header never separates from the main fields.
+const ACTIVITY_TOP_IMG_H = 100;
+
 function ConsolidatedActivityCard({ primary, bookings = [], trip }) {
-  const booking      = bookings[0] || null;
+  const booking       = bookings[0] || null;
   const extraBookings = bookings.slice(1);
   const meta          = booking?.metadata || {};
 
-  const title       = primary?.title || booking?.title || 'Activity';
-  const dateLabel   = booking ? getBookingDateLabel(booking, trip) : null;
-  const timeLabel   = primary?.suggestedTime || primary?.startTime || booking?.time || meta.checkInTime || null;
-  const durationLabel = primary?.durationMinutes ? formatDurationMinutes(primary.durationMinutes) : null;
-  const timePill    = [dateLabel, timeLabel].filter(Boolean).join(' · ') || timeLabel;
-  const location    = primary?.locationName || booking?.locationName || booking?.address || null;
-  const notesText    = booking?.notes || primary?.notes || primary?.description || null;
-  const imageUrl     = primary?.imageUrl ? imgUrl(primary.imageUrl) : null;
+  const title         = primary?.title || booking?.title || 'Activity';
+  const dateLabel      = booking ? getBookingDateLabel(booking, trip) : null;
+  const timeLabel      = primary?.suggestedTime || primary?.startTime || booking?.time || meta.checkInTime || null;
+  const durationLabel  = primary?.durationMinutes ? formatDurationMinutes(primary.durationMinutes) : null;
+  const timePill       = [dateLabel, timeLabel, durationLabel].filter(Boolean).join('  ·  ');
+  const location       = primary?.locationName || booking?.locationName || booking?.address || null;
+  const notesText      = booking?.notes || primary?.notes || primary?.description || null;
+  const imageUrl       = primary?.imageUrl ? imgUrl(primary.imageUrl) : null;
 
-  const body = (
-    <View style={s.activityCardBody}>
+  const { intro, sections } = notesText ? parseNoteBulletSections(notesText) : { intro: '', sections: [] };
+  const isLong = !!(intro || sections.length > 0);
+
+  const headerBlock = (
+    <View style={{ flex: 1, minWidth: 0 }}>
       <Text style={s.activityBadge}>ACTIVITY</Text>
       <Text style={s.activityTitle}>{title}</Text>
-      {(timePill || durationLabel) ? (
+      {timePill ? (
         <View style={s.activityTimePill}>
-          <Text style={s.activityTimePillText}>{[timePill, durationLabel].filter(Boolean).join('  ·  ')}</Text>
+          <Text style={s.activityTimePillText}>{timePill}</Text>
         </View>
       ) : null}
-      {location ? (
-        <View style={s.fieldRow}>
-          <Text style={s.fieldLabel}>Location</Text>
-          <Text style={s.fieldValue}>{location}</Text>
-        </View>
-      ) : null}
+      <FieldRow label="Location" value={location} fieldKey="location" />
       {booking?.confirmationReference ? (
         <View style={s.fieldRow}>
           <Text style={s.fieldLabel}>Reference</Text>
           <Text style={s.bookingRef}>{booking.confirmationReference}</Text>
         </View>
       ) : null}
-      {(booking?.provider || booking?.url) ? (
-        <View style={s.fieldRow}>
-          <Text style={s.fieldLabel}>Contact</Text>
-          {booking.url ? (
-            <Link src={booking.url} style={[s.fieldValue, { color: C.teal, textDecoration: 'underline' }]}>
-              {booking.provider || 'View booking'}
-            </Link>
-          ) : (
-            <Text style={s.fieldValue}>{booking.provider}</Text>
-          )}
-        </View>
-      ) : null}
-      {notesText ? <BulletedNotes text={notesText} /> : null}
+      <ContactField provider={booking?.provider} url={booking?.url} />
       {extraBookings.map(b => (
-        <View key={b.id} style={{ marginTop: 6, paddingTop: 6, borderTopWidth: 0.5, borderTopColor: C.border }}>
+        <View key={b.id} style={{ marginTop: 4, paddingTop: 4, borderTopWidth: 0.5, borderTopColor: C.border }}>
           <Text style={[s.fieldValue, { fontFamily: 'Helvetica-Bold' }]}>{b.title}</Text>
           {b.confirmationReference ? <Text style={s.bookingRef}>{b.confirmationReference}</Text> : null}
         </View>
@@ -522,13 +551,41 @@ function ConsolidatedActivityCard({ primary, bookings = [], trip }) {
     </View>
   );
 
-  if (!imageUrl) {
-    return <View style={s.activityCard} wrap={false}>{body}</View>;
-  }
+  const topRow = (
+    <View style={imageUrl ? { flexDirection: 'row', gap: 10, alignItems: 'flex-start' } : undefined} wrap={false}>
+      {headerBlock}
+      {imageUrl ? (
+        <Image src={imageUrl} style={{ width: ACTIVITY_IMG_W, height: ACTIVITY_TOP_IMG_H, objectFit: 'cover', borderRadius: 3, flexShrink: 0 }} />
+      ) : null}
+    </View>
+  );
+
   return (
-    <View style={[s.activityCard, { position: 'relative', minHeight: ACTIVITY_MIN_H }]} wrap={false}>
-      <View style={{ paddingRight: ACTIVITY_IMG_W }}>{body}</View>
-      <Image src={imageUrl} style={[s.activityImg, { width: ACTIVITY_IMG_W }]} />
+    <View style={s.activityCard}>
+      <View style={s.activityCardBody}>
+        {topRow}
+        {isLong ? (
+          <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: C.border }}>
+            {intro ? <LinkifiedText text={intro} textStyle={s.fieldValue} linkStyle={s.noteLink} /> : null}
+            {sections.map((sec, i) => {
+              const bodyText = sec.paragraphs.join(' ');
+              const linkLabel = bodyText ? contextualLinkLabel(sec.heading, bodyText) : null;
+              return (
+                <View key={i} style={{ marginTop: i === 0 && !intro ? 0 : 8 }} wrap={false}>
+                  {sec.heading ? <Text style={s.bulletHeading}>{sec.heading}</Text> : null}
+                  {bodyText ? <LinkifiedText text={bodyText} textStyle={s.fieldValue} linkStyle={s.noteLink} labelOverride={linkLabel} /> : null}
+                  {sec.items.map((item, j) => (
+                    <View key={j} style={s.bulletRow}>
+                      <View style={s.bulletDot} />
+                      <Text style={s.bulletText}>{item}</Text>
+                    </View>
+                  ))}
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }

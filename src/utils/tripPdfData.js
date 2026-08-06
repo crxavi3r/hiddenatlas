@@ -142,13 +142,18 @@ export function resolveAccommodationName({ hotelBookings = [], contentDay, trip,
   return null;
 }
 
-// ── "#"-line bullet parser ───────────────────────────────────────────────────
+// ── Note section parser (headings + bullets + plain paragraphs) ─────────────
 
-// Literal to the spec: any line starting with "#" becomes a bullet item (the
-// "#" is stripped). The plain line immediately preceding a run of "#" lines
-// (usually ending in ":") becomes that block's heading. Supports multiple
-// heading+bullets blocks in one note; non-"#" lines outside a block are
-// returned as plain intro text.
+// A "heading" line is short and ends in ":" (e.g. "What's included:",
+// "Meeting point:") and starts a new named section. Within a section, lines
+// starting with "#" become bullet items (the "#" is stripped); any other
+// line becomes wrapped paragraph text for that section. Lines before the
+// first heading are returned as plain `intro` text. Supports multiple
+// heading blocks in one note (e.g. "Instructions:" ... "Meeting point:" ...
+// "What's included:" #bullet #bullet).
+const HEADING_RE = /:\s*$/;
+const MAX_HEADING_LEN = 60;
+
 export function parseNoteBulletSections(text) {
   if (!text) return { intro: '', sections: [] };
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
@@ -160,19 +165,19 @@ export function parseNoteBulletSections(text) {
   for (const line of lines) {
     if (line.startsWith('#')) {
       const item = line.replace(/^#+\s*/, '').trim();
-      if (!current) {
-        const heading = introLines.length > 0 ? introLines.pop().replace(/:\s*$/, '') : '';
-        current = { heading, items: [] };
-        sections.push(current);
-      }
+      if (!current) { current = { heading: '', items: [], paragraphs: [] }; sections.push(current); }
       if (item) current.items.push(item);
+    } else if (HEADING_RE.test(line) && line.length <= MAX_HEADING_LEN) {
+      current = { heading: line.replace(HEADING_RE, ''), items: [], paragraphs: [] };
+      sections.push(current);
+    } else if (current) {
+      current.paragraphs.push(line);
     } else {
-      current = null;
       introLines.push(line);
     }
   }
 
-  return { intro: introLines.join('\n'), sections };
+  return { intro: introLines.join(' '), sections };
 }
 
 // ── URL → clickable link runs ────────────────────────────────────────────────
@@ -192,8 +197,9 @@ function shortLinkLabel(url) {
 
 // Splits text into an array of { type: 'text', value } / { type: 'link', url, label }
 // runs so callers can render URLs as short clickable labels inline instead of
-// printing the raw address.
-export function linkifyText(text) {
+// printing the raw address. Pass `labelOverride` to force a specific label
+// (e.g. a field-contextual one) instead of the generic hostname-based one.
+export function linkifyText(text, labelOverride) {
   if (!text) return [];
   const parts = [];
   let lastIndex = 0;
@@ -202,11 +208,30 @@ export function linkifyText(text) {
   while ((match = URL_RE.exec(text))) {
     const rawUrl = match[0].replace(/[.,;:)]+$/, '');
     if (match.index > lastIndex) parts.push({ type: 'text', value: text.slice(lastIndex, match.index) });
-    parts.push({ type: 'link', url: rawUrl, label: shortLinkLabel(rawUrl) });
+    parts.push({ type: 'link', url: rawUrl, label: labelOverride || shortLinkLabel(rawUrl) });
     lastIndex = match.index + rawUrl.length;
   }
   if (lastIndex < text.length) parts.push({ type: 'text', value: text.slice(lastIndex) });
   return parts;
+}
+
+// True when a field's whole value is itself a URL — callers should render a
+// short clickable label instead of the raw address so it never overflows a
+// card's width.
+export function isUrlLike(value) {
+  return typeof value === 'string' && /^https?:\/\//i.test(value.trim());
+}
+
+// Context-aware short link label for a booking/activity field (Google Maps
+// link, meeting point, contact, booking reference) — distinct from the
+// generic hostname-based label used for freeform note text.
+export function contextualLinkLabel(fieldKeyOrHeading, url) {
+  const key = (fieldKeyOrHeading || '').toLowerCase();
+  if (/maps\.google|google\.[a-z.]+\/maps|goo\.gl\/maps/i.test(url || '')) return 'Open in Google Maps';
+  if (/encontro|meeting/.test(key)) return 'View meeting point';
+  if (/contact|contacto/.test(key)) return 'View contact';
+  if (/reserva|booking/.test(key)) return 'View booking';
+  return shortLinkLabel(url);
 }
 
 // ── Pre-render validation (lightweight, data-level only) ────────────────────
