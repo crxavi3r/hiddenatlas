@@ -1515,8 +1515,10 @@ function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, 
   }
 
   // ── With image, desktop: absolutely-positioned image panel ────
-  // Absolute positioning fully decouples image height from content height.
-  // minHeight on the card guarantees the image always renders at exactly imgH px.
+  // Image column stretches top-to-bottom (top:0, bottom:0) so it always fills
+  // the card's actual rendered height, not just the imgH floor set via minHeight —
+  // otherwise cards whose content grows past imgH (e.g. hotel notes/booking chips)
+  // leave a gap below a fixed-height image, making it read as a stray square thumbnail.
   // Content area uses paddingRight to avoid overlapping the image column.
   return (
     <>
@@ -1533,9 +1535,9 @@ function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, 
           </div>
           {actionButtons}
         </div>
-        {/* Image: fixed width + height, position absolute so it never affects card height */}
+        {/* Image: fixed width, stretched to the card's full rendered height so it always fills the column */}
         <div
-          style={{ position: 'absolute', right: 0, top: 0, width: `${IMG_W}px`, height: `${imgH}px`, overflow: 'hidden', cursor: 'pointer' }}
+          style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: `${IMG_W}px`, overflow: 'hidden', cursor: 'pointer' }}
           onMouseEnter={() => setImgHovered(true)}
           onMouseLeave={() => setImgHovered(false)}
           onClick={() => setLightboxOpen(true)}
