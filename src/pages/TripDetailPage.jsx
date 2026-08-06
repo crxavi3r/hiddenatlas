@@ -2918,24 +2918,29 @@ export default function TripDetailPage() {
   const [savingBooking, setSavingBooking]       = useState(false);
   const [downloadPersonalisedState, setDownloadPersonalisedState] = useState('idle');
 
+  // Fetches the workspace fresh from the server — used both for the initial
+  // page load and right before generating a PDF, so downloads never bake in
+  // stale in-memory state.
+  async function fetchWorkspace() {
+    const res = await api.get(`/api/trips?id=${id}&action=workspace`);
+    if (res.status === 404) { setStatus('notfound'); return null; }
+    if (!res.ok) throw new Error('Load failed');
+    return res.json();
+  }
+
   // ── Load workspace ────────────────────────────────────────────
   useEffect(() => {
     if (!isLoaded) return;
     if (!isSignedIn) { navigate('/sign-in'); return; }
 
-    api.get(`/api/trips?id=${id}&action=workspace`)
-      .then(res => {
-        if (res.status === 404) { setStatus('notfound'); return; }
-        if (!res.ok) throw new Error('Load failed');
-        return res.json();
-      })
+    fetchWorkspace()
       .then(data => {
         if (!data) return;
         setWorkspace(data);
         setStatus('ok');
       })
       .catch(() => setStatus('error'));
-  }, [isLoaded, isSignedIn, id]);
+  }, [isLoaded, isSignedIn, id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function triggerBlobDownload(blob, filename) {
     const url = URL.createObjectURL(blob);
@@ -2951,7 +2956,9 @@ export default function TripDetailPage() {
     if (!workspace || downloadState === 'downloading') return;
     setDownloadState('downloading');
 
-    const { trip, itinerary } = workspace;
+    const fresh = await fetchWorkspace().catch(() => null);
+    if (fresh) setWorkspace(fresh);
+    const { trip, itinerary } = fresh || workspace;
     const slug = itinerary?.slug || trip.itinerarySlug;
     const filename = `${(slug || trip.destination || 'trip').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-hiddenatlas.pdf`;
 
@@ -3015,8 +3022,11 @@ export default function TripDetailPage() {
     if (!workspace || downloadPersonalisedState === 'downloading') return;
     setDownloadPersonalisedState('downloading');
     try {
+      const fresh = await fetchWorkspace();
+      if (!fresh) throw new Error('Could not reload trip data');
+      setWorkspace(fresh);
       const { downloadPersonalisedPDF } = await import('../utils/downloadPersonalisedPDF');
-      await downloadPersonalisedPDF(workspace);
+      await downloadPersonalisedPDF(fresh);
       setDownloadPersonalisedState('done');
     } catch (err) {
       console.error('[TripDetailPage] personalised PDF error:', err.message);
