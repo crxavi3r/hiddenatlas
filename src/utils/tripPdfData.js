@@ -222,6 +222,18 @@ export function isUrlLike(value) {
   return typeof value === 'string' && /^https?:\/\//i.test(value.trim());
 }
 
+// Strips URLs OUT of a paragraph entirely and returns them as separate
+// { url, label } entries — callers render `cleanText` as plain wrapped text
+// and each link as its own standalone row underneath, so a link is never
+// mixed inline with surrounding prose (avoids relying on <Link> elements
+// interleaved inside a wrapping <Text> run).
+export function extractLinks(text, labelOverride) {
+  const parts = linkifyText(text, labelOverride);
+  const cleanText = parts.filter(p => p.type === 'text').map(p => p.value).join('').replace(/\s{2,}/g, ' ').trim();
+  const links = parts.filter(p => p.type === 'link').map(p => ({ url: p.url, label: p.label }));
+  return { cleanText, links };
+}
+
 // Context-aware short link label for a booking/activity field (Google Maps
 // link, meeting point, contact, booking reference) — distinct from the
 // generic hostname-based label used for freeform note text.

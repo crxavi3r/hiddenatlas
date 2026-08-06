@@ -7,7 +7,7 @@ import {
   Svg, Polygon,
 } from '@react-pdf/renderer';
 import {
-  partitionDayContent, parseNoteBulletSections, linkifyText, isUrlLike, contextualLinkLabel,
+  partitionDayContent, parseNoteBulletSections, extractLinks, isUrlLike, contextualLinkLabel,
 } from '../utils/tripPdfData';
 
 // ── Colour tokens (mirrors ItineraryPDF) ─────────────────────────────────────
@@ -148,7 +148,15 @@ const s = StyleSheet.create({
   bookingMeta:     { fontFamily: 'Helvetica', fontSize: 9, color: C.muted, lineHeight: 1.5 },
   fieldRow:        { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 3 },
   fieldLabel:      { fontFamily: 'Helvetica-Bold', fontSize: 8, color: C.muted, width: 84, flexShrink: 0 },
-  fieldValue:      { fontFamily: 'Helvetica', fontSize: 9, color: C.charcoal, flex: 1, lineHeight: 1.45 },
+  // Base value style — NOT flexed. `flex: 1` here caused a Yoga measurement
+  // bug (flex-basis:0 collapses the Text to zero height whenever it isn't a
+  // row child with a fixed-width sibling), which visually overlapped the
+  // next sibling — reproduced and confirmed while investigating the activity
+  // card overlap. Use `fieldRowValue` below for the one context where flex
+  // is actually correct (a value <Text>/<Link> next to a fixed-width label
+  // inside `fieldRow`).
+  fieldValue:      { fontFamily: 'Helvetica', fontSize: 9, color: C.charcoal, lineHeight: 1.45 },
+  fieldRowValue:   { fontFamily: 'Helvetica', fontSize: 9, color: C.charcoal, lineHeight: 1.45, flex: 1 },
   bookingRef:      { fontFamily: 'Helvetica-Bold', fontSize: 9, color: C.teal },
   bulletHeading:   { fontFamily: 'Helvetica-Bold', fontSize: 8, color: C.muted, marginTop: 4, marginBottom: 3 },
   bulletRow:       { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 2 },
@@ -185,6 +193,9 @@ const s = StyleSheet.create({
   noteLabel:   { fontFamily: 'Helvetica-Bold', fontSize: 7, letterSpacing: 1.5, color: '#9B7B3A', marginBottom: 3 },
   noteContent: { fontFamily: 'Helvetica', fontSize: 9.5, color: C.charcoal, lineHeight: 1.6, marginBottom: 4 },
   noteLink:    { fontFamily: 'Helvetica-Bold', fontSize: 9.5, color: C.teal, textDecoration: 'underline' },
+  // A link always renders on its own row, never mixed inline within a
+  // paragraph's <Text> run.
+  linkRow:     { marginTop: 3 },
 
   // Page number
   pageNum: { position: 'absolute', bottom: 18, right: 48, fontFamily: 'Helvetica', fontSize: 8, color: C.muted },
@@ -279,25 +290,44 @@ function formatDurationMinutes(mins) {
   return rem ? `${h}h ${rem}min` : `${h}h`;
 }
 
+// Renders text with any URL stripped out and shown as its own clickable row
+// below the paragraph (never mixed inline within the running text) — plain
+// text stays as normal wrapped <Text>.
+function TextWithLinks({ text, textStyle, labelOverride }) {
+  if (!text) return null;
+  const { cleanText, links } = extractLinks(text, labelOverride);
+  return (
+    <View>
+      {cleanText ? <Text style={textStyle}>{cleanText}</Text> : null}
+      {links.map((link, i) => (
+        <View key={i} style={s.linkRow}>
+          <Link src={link.url} style={s.noteLink}>{link.label}</Link>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 // Renders text with any "#"-prefixed lines turned into a bulleted list, plain
-// paragraph lines rendered as wrapped text, and headings (lines ending in
-// ":") as their own labelled sub-block — used for booking.notes instead of a
-// raw text dump. Each heading + its body is one `wrap={false}` unit so a
-// section is never split mid-line, while different sections may still land
-// on different physical pages when a card is taller than one page.
+// paragraph lines rendered as wrapped text (with any URL extracted to its own
+// link row), and headings (lines ending in ":") as their own labelled
+// sub-block — used for booking.notes instead of a raw text dump. Each
+// heading + its body is one `wrap={false}` unit so a section is never split
+// mid-line, while different sections may still land on different physical
+// pages when a card is taller than one page.
 function BulletedNotes({ text }) {
   if (!text) return null;
   const { intro, sections } = parseNoteBulletSections(text);
   return (
     <>
-      {intro ? <LinkifiedText text={intro} textStyle={s.fieldValue} linkStyle={s.noteLink} /> : null}
+      {intro ? <TextWithLinks text={intro} textStyle={s.fieldValue} /> : null}
       {sections.map((sec, i) => {
         const bodyText = sec.paragraphs.join(' ');
         const linkLabel = bodyText ? contextualLinkLabel(sec.heading, bodyText) : null;
         return (
           <View key={i} style={{ marginTop: i === 0 && !intro ? 0 : 6 }} wrap={false}>
             {sec.heading ? <Text style={s.bulletHeading}>{sec.heading}</Text> : null}
-            {bodyText ? <LinkifiedText text={bodyText} textStyle={s.fieldValue} linkStyle={s.noteLink} labelOverride={linkLabel} /> : null}
+            {bodyText ? <TextWithLinks text={bodyText} textStyle={s.fieldValue} labelOverride={linkLabel} /> : null}
             {sec.items.map((item, j) => (
               <View key={j} style={s.bulletRow}>
                 <View style={s.bulletDot} />
@@ -311,22 +341,6 @@ function BulletedNotes({ text }) {
   );
 }
 
-// Renders linkified text as inline runs — plain text stays as-is, URLs become
-// short clickable labels via <Link> instead of printing the raw address.
-function LinkifiedText({ text, textStyle, linkStyle, labelOverride }) {
-  if (!text) return null;
-  const parts = linkifyText(text, labelOverride);
-  if (!parts.some(p => p.type === 'link')) return <Text style={textStyle}>{text}</Text>;
-  return (
-    <Text style={textStyle}>
-      {parts.map((part, i) => part.type === 'link'
-        ? <Link key={i} src={part.url} style={linkStyle}>{part.label}</Link>
-        : <Text key={i}>{part.value}</Text>
-      )}
-    </Text>
-  );
-}
-
 // One labelled field row. When `value` is itself a URL, renders a short
 // context-aware clickable label instead of the raw address so it can never
 // overflow the card's width.
@@ -336,8 +350,8 @@ function FieldRow({ label, value, fieldKey }) {
     <View style={s.fieldRow} wrap={false}>
       <Text style={s.fieldLabel}>{label}</Text>
       {isUrlLike(value)
-        ? <Link src={value.trim()} style={[s.fieldValue, s.noteLink]}>{contextualLinkLabel(fieldKey || label, value)}</Link>
-        : <Text style={s.fieldValue}>{value}</Text>}
+        ? <Link src={value.trim()} style={[s.fieldRowValue, s.noteLink]}>{contextualLinkLabel(fieldKey || label, value)}</Link>
+        : <Text style={s.fieldRowValue}>{value}</Text>}
     </View>
   );
 }
@@ -352,8 +366,8 @@ function ContactField({ provider, url }) {
     <View style={s.fieldRow} wrap={false}>
       <Text style={s.fieldLabel}>Contact</Text>
       {url
-        ? <Link src={url} style={[s.fieldValue, s.noteLink]}>{label}</Link>
-        : <Text style={s.fieldValue}>{provider}</Text>}
+        ? <Link src={url} style={[s.fieldRowValue, s.noteLink]}>{label}</Link>
+        : <Text style={s.fieldRowValue}>{provider}</Text>}
     </View>
   );
 }
@@ -381,13 +395,13 @@ function BookingCard({ booking, trip }) {
         {dateTimeLine ? (
           <View style={s.fieldRow}>
             <Text style={s.fieldLabel}>Time</Text>
-            <Text style={s.fieldValue}>{dateTimeLine}</Text>
+            <Text style={s.fieldRowValue}>{dateTimeLine}</Text>
           </View>
         ) : null}
         {meta.checkInDate ? (
           <View style={s.fieldRow}>
             <Text style={s.fieldLabel}>Check-in</Text>
-            <Text style={s.fieldValue}>
+            <Text style={s.fieldRowValue}>
               {meta.checkInDate}{meta.checkInTime ? ` at ${meta.checkInTime}` : ''}
               {meta.checkOutDate ? `  ·  Check-out: ${meta.checkOutDate}` : ''}
             </Text>
@@ -404,17 +418,17 @@ function BookingCard({ booking, trip }) {
         {adults && paid ? (
           <View style={s.fieldRow}>
             <Text style={s.fieldLabel}>Party</Text>
-            <Text style={s.fieldValue}>{adults} {Number(adults) === 1 ? 'person' : 'people'} · Paid: {paid} {currency}</Text>
+            <Text style={s.fieldRowValue}>{adults} {Number(adults) === 1 ? 'person' : 'people'} · Paid: {paid} {currency}</Text>
           </View>
         ) : adults ? (
           <View style={s.fieldRow}>
             <Text style={s.fieldLabel}>Party</Text>
-            <Text style={s.fieldValue}>{adults} {Number(adults) === 1 ? 'person' : 'people'}</Text>
+            <Text style={s.fieldRowValue}>{adults} {Number(adults) === 1 ? 'person' : 'people'}</Text>
           </View>
         ) : paid ? (
           <View style={s.fieldRow}>
             <Text style={s.fieldLabel}>Paid</Text>
-            <Text style={s.fieldValue}>{paid} {currency}</Text>
+            <Text style={s.fieldRowValue}>{paid} {currency}</Text>
           </View>
         ) : null}
       </View>
@@ -507,6 +521,12 @@ function AddedItemCard({ item }) {
 // below that, so a very tall card can break between sections without ever
 // splitting a line, while the header never separates from the main fields.
 const ACTIVITY_TOP_IMG_H = 100;
+// Explicit width for the text column when it sits beside the image, computed
+// from the day page's usable content width (499pt) minus the card's own
+// padding (24pt) minus the image column and gap — deliberately NOT `flex: 1`
+// (react-pdf's Yoga port has measured-height bugs with flex-basis:0 columns
+// inside a row, which corrupted this card's whole layout during testing).
+const ACTIVITY_CONTENT_W = 335;
 
 function ConsolidatedActivityCard({ primary, bookings = [], trip }) {
   const booking       = bookings[0] || null;
@@ -523,10 +543,10 @@ function ConsolidatedActivityCard({ primary, bookings = [], trip }) {
   const imageUrl       = primary?.imageUrl ? imgUrl(primary.imageUrl) : null;
 
   const { intro, sections } = notesText ? parseNoteBulletSections(notesText) : { intro: '', sections: [] };
-  const isLong = !!(intro || sections.length > 0);
+  const isLong = !!(intro || sections.length > 0); // has description/instructions/meeting point/included list
 
   const headerBlock = (
-    <View style={{ flex: 1, minWidth: 0 }}>
+    <View style={imageUrl ? { width: ACTIVITY_CONTENT_W } : {}}>
       <Text style={s.activityBadge}>ACTIVITY</Text>
       <Text style={s.activityTitle}>{title}</Text>
       {timePill ? (
@@ -552,10 +572,10 @@ function ConsolidatedActivityCard({ primary, bookings = [], trip }) {
   );
 
   const topRow = (
-    <View style={imageUrl ? { flexDirection: 'row', gap: 10, alignItems: 'flex-start' } : undefined} wrap={false}>
+    <View style={imageUrl ? { flexDirection: 'row', gap: 10 } : {}} wrap={false}>
       {headerBlock}
       {imageUrl ? (
-        <Image src={imageUrl} style={{ width: ACTIVITY_IMG_W, height: ACTIVITY_TOP_IMG_H, objectFit: 'cover', borderRadius: 3, flexShrink: 0 }} />
+        <Image src={imageUrl} style={{ width: ACTIVITY_IMG_W, height: ACTIVITY_TOP_IMG_H, objectFit: 'cover', borderRadius: 3 }} />
       ) : null}
     </View>
   );
@@ -566,23 +586,7 @@ function ConsolidatedActivityCard({ primary, bookings = [], trip }) {
         {topRow}
         {isLong ? (
           <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 0.5, borderTopColor: C.border }}>
-            {intro ? <LinkifiedText text={intro} textStyle={s.fieldValue} linkStyle={s.noteLink} /> : null}
-            {sections.map((sec, i) => {
-              const bodyText = sec.paragraphs.join(' ');
-              const linkLabel = bodyText ? contextualLinkLabel(sec.heading, bodyText) : null;
-              return (
-                <View key={i} style={{ marginTop: i === 0 && !intro ? 0 : 8 }} wrap={false}>
-                  {sec.heading ? <Text style={s.bulletHeading}>{sec.heading}</Text> : null}
-                  {bodyText ? <LinkifiedText text={bodyText} textStyle={s.fieldValue} linkStyle={s.noteLink} labelOverride={linkLabel} /> : null}
-                  {sec.items.map((item, j) => (
-                    <View key={j} style={s.bulletRow}>
-                      <View style={s.bulletDot} />
-                      <Text style={s.bulletText}>{item}</Text>
-                    </View>
-                  ))}
-                </View>
-              );
-            })}
+            <BulletedNotes text={notesText} />
           </View>
         ) : null}
       </View>
@@ -596,9 +600,7 @@ function NoteBox({ note }) {
     <View style={s.noteBox} wrap={false}>
       {note.title ? <Text style={s.noteLabel}>{note.title.toUpperCase()}</Text> : null}
       {lines.length > 0
-        ? lines.map((line, i) => (
-          <LinkifiedText key={i} text={line} textStyle={s.noteContent} linkStyle={s.noteLink} />
-        ))
+        ? lines.map((line, i) => <TextWithLinks key={i} text={line} textStyle={s.noteContent} />)
         : <Text style={s.noteContent}>{note.content}</Text>}
     </View>
   );
