@@ -88,10 +88,26 @@ export function calendarReadiness(booking) {
   return 'ok';
 }
 
+// "YYYYMMDDTHHmmss" x2 → whole minutes between them (local wall-clock diff).
+function diffMinutes(startDt, endDt) {
+  if (!startDt || !endDt || startDt.length < 15 || endDt.length < 15) return null;
+  const at = s => new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8), +s.slice(9, 11), +s.slice(11, 13));
+  return Math.round((at(endDt).getTime() - at(startDt).getTime()) / 60000);
+}
+
+function formatDurationLabel(mins) {
+  if (!mins || mins <= 0) return null;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (h && m) return `${h}h ${m}min`;
+  if (h) return `${h}h`;
+  return `${m}min`;
+}
+
 /**
  * Build the description string for a calendar event.
  */
 function buildDescription(booking, tripName, itineraryDayStops = []) {
+  const meta = booking.metadata || {};
   const catLabel = { hotel: 'Hotel', restaurant: 'Restaurant', experience: 'Experience',
     flight: 'Flight', transfer: 'Transfer', event: 'Event', other: 'Other' }[booking.type] || booking.type;
   const lines = [];
@@ -108,6 +124,20 @@ function buildDescription(booking, tripName, itineraryDayStops = []) {
   }
 
   lines.push(`Type: ${catLabel}`);
+
+  if (booking.type === 'hotel') {
+    // Check-in is the event itself (DTSTART); check-out only ever appears in
+    // the description, since a check-in calendar entry isn't multi-day.
+    if (meta.checkInDate)  lines.push(`Check-in: ${meta.checkInDate}${meta.checkInTime ? ` ${meta.checkInTime}` : ''}`);
+    if (meta.checkOutDate) lines.push(`Check-out: ${meta.checkOutDate}${meta.checkOutTime ? ` ${meta.checkOutTime}` : ''}`);
+  } else {
+    const { startDt, endDt, allDay } = resolveDateRange(booking);
+    if (!allDay) {
+      const durationLabel = formatDurationLabel(diffMinutes(startDt, endDt));
+      if (durationLabel) lines.push(`Duration: ${durationLabel}`);
+    }
+  }
+
   if (booking.provider)              lines.push(`Provider: ${booking.provider}`);
   if (booking.confirmationReference) lines.push(`Reference: ${booking.confirmationReference}`);
   if (booking.notes)                 lines.push(`Notes: ${booking.notes}`);
@@ -127,29 +157,23 @@ function resolveDateRange(booking) {
   const timeStr  = booking.time || null;
 
   if (booking.type === 'hotel') {
-    const checkIn  = meta.checkInDate  || dateStr;
-    const checkOut = meta.checkOutDate || null;
-    const inTime   = meta.checkInTime  || null;
-    const outTime  = meta.checkOutTime || null;
+    // The calendar event is the check-in itself, not the whole stay —
+    // check-out is a separate day the traveller isn't "at" this event, and
+    // showing it in the calendar as one long all-day block reads as if the
+    // hotel occupies the whole trip. Check-out date/time is surfaced in the
+    // description instead (see buildDescription).
+    const checkIn = meta.checkInDate || dateStr;
+    const inTime  = meta.checkInTime || null;
 
-    if (inTime && outTime && checkIn && checkOut) {
-      return {
-        startDt: formatDateTime(checkIn, inTime),
-        endDt:   formatDateTime(checkOut, outTime),
-        allDay:  false,
-      };
-    }
     if (inTime && checkIn) {
       const start = formatDateTime(checkIn, inTime);
       return { startDt: start, endDt: addMinutes(start, 60), allDay: false };
     }
-    // All-day hotel
+    // No check-in time known — a single all-day marker on the check-in date.
     const start = formatAllDay(checkIn);
-    // ICS DTEND for all-day is exclusive (next day); Google Calendar uses the same
-    const endDate = checkOut || checkIn;
-    const endP = parseDateStr(endDate);
-    const nextDay = endP
-      ? new Date(endP.year, endP.month - 1, endP.day + 1)
+    const startP = parseDateStr(checkIn);
+    const nextDay = startP
+      ? new Date(startP.year, startP.month - 1, startP.day + 1)
       : null;
     const end = nextDay
       ? `${nextDay.getFullYear()}${pad(nextDay.getMonth() + 1)}${pad(nextDay.getDate())}`

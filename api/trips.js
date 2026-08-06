@@ -109,13 +109,14 @@ function _icsRange(booking) {
   const timeStr = booking.time || null;
 
   if (booking.type === 'hotel') {
-    const ci = meta.checkInDate || dateStr, co = meta.checkOutDate || null;
-    const inT = meta.checkInTime || null, outT = meta.checkOutTime || null;
-    if (inT && outT && ci && co) return { s: _fmtDT(ci, inT), e: _fmtDT(co, outT), allDay: false };
+    // Check-in is the event itself; check-out is description-only (see _icsDesc)
+    // rather than DTEND, so the calendar entry isn't a multi-day block.
+    const ci = meta.checkInDate || dateStr;
+    const inT = meta.checkInTime || null;
     if (inT && ci) { const s = _fmtDT(ci, inT); return { s, e: _addMin(s, 60), allDay: false }; }
     const s = _fmtAllDay(ci);
-    const endDate = co || ci, ep = _parseDateStr(endDate);
-    const nd = ep ? new Date(ep.year, ep.month - 1, ep.day + 1) : null;
+    const cip = _parseDateStr(ci);
+    const nd = cip ? new Date(cip.year, cip.month - 1, cip.day + 1) : null;
     const e = nd ? `${nd.getFullYear()}${_pad(nd.getMonth()+1)}${_pad(nd.getDate())}` : s;
     return { s, e, allDay: true };
   }
@@ -146,13 +147,36 @@ function _icsRange(booking) {
   return { s, e: _addMin(s, _DUR.other), allDay: false };
 }
 
-function _icsDesc(booking, tripName) {
+// "YYYYMMDDTHHmmss" x2 → whole minutes between them (local wall-clock diff).
+function _diffMin(s, e) {
+  if (!s || !e || s.length < 15 || e.length < 15) return null;
+  const at = v => new Date(+v.slice(0, 4), +v.slice(4, 6) - 1, +v.slice(6, 8), +v.slice(9, 11), +v.slice(11, 13));
+  return Math.round((at(e).getTime() - at(s).getTime()) / 60000);
+}
+function _fmtDur(mins) {
+  if (!mins || mins <= 0) return null;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (h && m) return `${h}h ${m}min`;
+  if (h) return `${h}h`;
+  return `${m}min`;
+}
+
+function _icsDesc(booking, tripName, range) {
   const meta = booking.metadata ? (typeof booking.metadata === 'string' ? JSON.parse(booking.metadata) : booking.metadata) : {};
   const catLabel = { hotel:'Hotel', restaurant:'Restaurant', experience:'Experience', flight:'Flight', transfer:'Transfer', event:'Event', other:'Other' }[booking.type] || booking.type;
   const lines = [];
   if (tripName) lines.push(`HiddenAtlas trip: ${tripName}`);
   if (booking.dayNumber) lines.push(`Day: ${booking.dayNumber}`);
   lines.push(`Type: ${catLabel}`);
+  if (booking.type === 'hotel') {
+    // Check-in is the event itself (DTSTART); check-out only ever appears in
+    // the description, since a check-in calendar entry isn't multi-day.
+    if (meta.checkInDate)  lines.push(`Check-in: ${meta.checkInDate}${meta.checkInTime ? ` ${meta.checkInTime}` : ''}`);
+    if (meta.checkOutDate) lines.push(`Check-out: ${meta.checkOutDate}${meta.checkOutTime ? ` ${meta.checkOutTime}` : ''}`);
+  } else if (range && !range.allDay) {
+    const durationLabel = _fmtDur(_diffMin(range.s, range.e));
+    if (durationLabel) lines.push(`Duration: ${durationLabel}`);
+  }
   if (booking.provider)              lines.push(`Provider: ${booking.provider}`);
   if (booking.confirmationReference) lines.push(`Reference: ${booking.confirmationReference}`);
   if (booking.notes)                 lines.push(`Notes: ${booking.notes}`);
@@ -168,7 +192,7 @@ function generateBookingIcs(booking, tripName) {
   const loc  = [booking.address, booking.locationName].filter(Boolean).join(', ');
   const uid  = `hiddenatlas-booking-${booking.id}@hiddenatlas.travel`;
   const now  = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-  const desc = _icsDesc(booking, tripName);
+  const desc = _icsDesc(booking, tripName, range);
   const slug = (booking.title || booking.id).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
 
   const lines = [

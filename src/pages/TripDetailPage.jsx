@@ -1,5 +1,6 @@
 // My Trips detail — traveller workspace
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Calendar, Clock, Users, MapPin, Download, Pencil, Trash2,
@@ -1596,18 +1597,59 @@ function NoteCard({ note, onDelete, onEdit, canEdit = true }) {
 // ─────────────────────────────────────────────
 // CalendarDropdown — "Add to calendar" action
 // ─────────────────────────────────────────────
+// Menu is rendered through a portal into document.body so it can never be
+// clipped by an ancestor card's `overflow: hidden` (image cards) or by the
+// card's own bounding box — only the anchor button lives in the card's DOM.
+const CAL_MENU_W = 196;
+const CAL_MENU_H_ESTIMATE = 132; // ~3 rows — used only to decide open-up vs open-down
+
 function CalendarDropdown({ booking, tripName, itineraryDayStops = [] }) {
-  const [open, setOpen]   = useState(false);
-  const [toast, setToast] = useState('');
-  const ref               = useRef(null);
-  const { getToken }      = useAuth();
-  const readiness         = calendarReadiness(booking);
+  const [open, setOpen]     = useState(false);
+  const [toast, setToast]   = useState('');
+  const [menuPos, setMenuPos] = useState(null); // { left, top, bottom, openUpward }
+  const btnRef             = useRef(null);
+  const menuRef             = useRef(null);
+  const { getToken }        = useAuth();
+  const readiness           = calendarReadiness(booking);
+
+  function computeMenuPosition() {
+    const btn = btnRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const GAP = 4;
+    const spaceBelow  = window.innerHeight - rect.bottom;
+    const openUpward  = spaceBelow < CAL_MENU_H_ESTIMATE && rect.top > CAL_MENU_H_ESTIMATE;
+    const left = Math.min(Math.max(8, rect.right - CAL_MENU_W), window.innerWidth - CAL_MENU_W - 8);
+    setMenuPos({
+      left,
+      top: rect.bottom + GAP,
+      bottom: window.innerHeight - rect.top + GAP,
+      openUpward,
+    });
+  }
+
+  function toggleOpen() {
+    if (disabled) return;
+    if (!open) computeMenuPosition();
+    setOpen(o => !o);
+  }
 
   useEffect(() => {
     if (!open) return;
-    function close(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    function close(e) {
+      if (btnRef.current?.contains(e.target)) return;
+      if (menuRef.current?.contains(e.target)) return;
+      setOpen(false);
+    }
+    function reposition() { computeMenuPosition(); }
     document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
+    window.addEventListener('resize', reposition);
+    window.addEventListener('scroll', reposition, true);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      window.removeEventListener('resize', reposition);
+      window.removeEventListener('scroll', reposition, true);
+    };
   }, [open]);
 
   const disabled = readiness === 'missing';
@@ -1657,47 +1699,52 @@ function CalendarDropdown({ booking, tripName, itineraryDayStops = [] }) {
 
   return (
     <>
-      <div ref={ref} style={{ position: 'relative' }}>
-        <button
-          onClick={() => !disabled && setOpen(o => !o)}
-          title={disabled ? 'Add a date and time before sending this booking to your calendar' : 'Add to calendar'}
+      <button
+        ref={btnRef}
+        onClick={toggleOpen}
+        title={disabled ? 'Add a date and time before sending this booking to your calendar' : 'Add to calendar'}
+        style={{
+          background: 'none', border: 'none', cursor: disabled ? 'default' : 'pointer',
+          color: disabled ? '#C8BFB5' : MUTED, padding: '2px',
+          display: 'flex', alignItems: 'center',
+        }}
+      >
+        <CalendarPlus size={12} />
+      </button>
+
+      {open && menuPos && createPortal(
+        <div
+          ref={menuRef}
           style={{
-            background: 'none', border: 'none', cursor: disabled ? 'default' : 'pointer',
-            color: disabled ? '#C8BFB5' : MUTED, padding: '2px',
-            display: 'flex', alignItems: 'center',
+            position: 'fixed',
+            left: `${menuPos.left}px`,
+            ...(menuPos.openUpward ? { bottom: `${menuPos.bottom}px` } : { top: `${menuPos.top}px` }),
+            background: 'white', border: `1px solid ${BORDER}`, borderRadius: '8px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.12)', zIndex: 1000,
+            width: `${CAL_MENU_W}px`, overflow: 'hidden',
           }}
         >
-          <CalendarPlus size={12} />
-        </button>
-
-        {open && (
-          <div style={{
-            position: 'absolute', right: 0, top: '100%', marginTop: '4px',
-            background: 'white', border: `1px solid ${BORDER}`, borderRadius: '8px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.12)', zIndex: 200,
-            minWidth: '196px', overflow: 'hidden',
-          }}>
-            <button onClick={handleGoogle} style={menuBtn}
-              onMouseEnter={e => e.currentTarget.style.background = STONE}
-              onMouseLeave={e => e.currentTarget.style.background = 'none'}
-            >
-              <ExternalLink size={13} color={TEAL} /> Google Calendar
-            </button>
-            <button onClick={handleIcs} style={{ ...menuBtn, borderTop: `1px solid ${BORDER}` }}
-              onMouseEnter={e => e.currentTarget.style.background = STONE}
-              onMouseLeave={e => e.currentTarget.style.background = 'none'}
-            >
-              <Download size={13} color={TEAL} /> Apple / Outlook (.ics)
-            </button>
-            <button onClick={handleCopy} style={{ ...menuBtn, borderTop: `1px solid ${BORDER}` }}
-              onMouseEnter={e => e.currentTarget.style.background = STONE}
-              onMouseLeave={e => e.currentTarget.style.background = 'none'}
-            >
-              <Copy size={13} color={TEAL} /> Copy event details
-            </button>
-          </div>
-        )}
-      </div>
+          <button onClick={handleGoogle} style={menuBtn}
+            onMouseEnter={e => e.currentTarget.style.background = STONE}
+            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+          >
+            <ExternalLink size={13} color={TEAL} /> Google Calendar
+          </button>
+          <button onClick={handleIcs} style={{ ...menuBtn, borderTop: `1px solid ${BORDER}` }}
+            onMouseEnter={e => e.currentTarget.style.background = STONE}
+            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+          >
+            <Download size={13} color={TEAL} /> Apple / Outlook (.ics)
+          </button>
+          <button onClick={handleCopy} style={{ ...menuBtn, borderTop: `1px solid ${BORDER}` }}
+            onMouseEnter={e => e.currentTarget.style.background = STONE}
+            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+          >
+            <Copy size={13} color={TEAL} /> Copy event details
+          </button>
+        </div>,
+        document.body
+      )}
 
       {/* Toast */}
       {toast && (
