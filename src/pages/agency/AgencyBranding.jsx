@@ -301,6 +301,21 @@ export default function AgencyBranding() {
 
   useEffect(() => { fetchBranding(); }, [fetchBranding]);
 
+  // Apply the branding object returned by the API to local state.
+  // Only overwrites fields that are present in the response (non-undefined).
+  const applyBrandingResponse = useCallback((b) => {
+    if (!b) return;
+    if (b.primaryColor   !== undefined) setPrimaryColor(b.primaryColor || '#1B6B65');
+    if (b.accentColor    !== undefined) setAccentColor(b.accentColor   || '#C9A96E');
+    if (b.websiteUrl     !== undefined) setWebsite(b.websiteUrl        || '');
+    if (b.supportEmail   !== undefined) setSupportEmail(b.supportEmail || '');
+    if (b.phone          !== undefined) setPhone(b.phone               || '');
+    if (b.whatsapp       !== undefined) setWhatsapp(b.whatsapp         || '');
+    if (b.showPoweredByHiddenatlas !== undefined) setShowPowered(b.showPoweredByHiddenatlas ?? true);
+    if (b.logoUrl        !== undefined) setLightLogoUrl(b.logoUrl      || '');
+    if (b.logoDarkUrl    !== undefined) setDarkLogoUrl(b.logoDarkUrl   || '');
+  }, []);
+
   const authPost = useCallback(async (url, body) => {
     const token = await getToken();
     const res = await fetch(url, {
@@ -308,25 +323,42 @@ export default function AgencyBranding() {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error('Save failed');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error('[branding] save failed', url, data);
+      throw new Error(data.error || 'Save failed');
+    }
+    return data;
   }, [getToken]);
 
   const handleSaveName = useCallback(() => {
-    nameSave.trigger(() => authPost('/api/agency?action=update-agency-name', { agencyId, name: agencyName }));
+    nameSave.trigger(async () => {
+      await authPost('/api/agency?action=update-agency-name', { agencyId, name: agencyName });
+    });
   }, [nameSave, authPost, agencyId, agencyName]);
 
   const handleSaveColors = useCallback(() => {
-    colorSave.trigger(() => authPost('/api/agency?action=update-branding', { agencyId, primaryColor, accentColor }));
-  }, [colorSave, authPost, agencyId, primaryColor, accentColor]);
+    colorSave.trigger(async () => {
+      const data = await authPost('/api/agency?action=update-branding', { agencyId, primaryColor, accentColor });
+      applyBrandingResponse(data.branding);
+    });
+  }, [colorSave, authPost, agencyId, primaryColor, accentColor, applyBrandingResponse]);
 
   const handleSaveContact = useCallback(() => {
-    contactSave.trigger(() => authPost('/api/agency?action=update-branding', { agencyId, website, supportEmail, phone, whatsapp }));
-  }, [contactSave, authPost, agencyId, website, supportEmail, phone, whatsapp]);
+    contactSave.trigger(async () => {
+      // Send websiteUrl to match API field name; API also accepts 'website' for compat
+      const data = await authPost('/api/agency?action=update-branding', { agencyId, websiteUrl: website, supportEmail, phone, whatsapp });
+      applyBrandingResponse(data.branding);
+    });
+  }, [contactSave, authPost, agencyId, website, supportEmail, phone, whatsapp, applyBrandingResponse]);
 
   const handleSavePortal = useCallback((newVal) => {
     setShowPowered(newVal);
-    portalSave.trigger(() => authPost('/api/agency?action=update-branding', { agencyId, showPoweredByHiddenatlas: newVal }));
-  }, [portalSave, authPost, agencyId]);
+    portalSave.trigger(async () => {
+      const data = await authPost('/api/agency?action=update-branding', { agencyId, showPoweredByHiddenatlas: newVal });
+      applyBrandingResponse(data.branding);
+    });
+  }, [portalSave, authPost, agencyId, applyBrandingResponse]);
 
   const handleLogoUpload = useCallback(async (file, variant) => {
     const setLoading = variant === 'light' ? setLogoLightLoading : setLogoDarkLoading;

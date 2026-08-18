@@ -556,7 +556,30 @@ async function _handler(req, res) {
         return res.status(400).json({ error: 'accentColor must be a valid hex color' });
       }
 
-      // AgencyBranding: snake_case columns, ON CONFLICT on agency_id (the PK)
+      // Parameters:
+      //   $1  agency_id
+      //   $2  logo_url           (null = not touched)
+      //   $3  logo_dark_url      (null = not touched)
+      //   $4  primary_color      (null = not touched)
+      //   $5  accent_color       (null = not touched)
+      //   $6  website_url        (null = not touched)
+      //   $7  support_email      (null = not touched)
+      //   $8  phone              (null = not touched)
+      //   $9  whatsapp           (null = not touched)
+      //   $10 show_powered_by_hiddenatlas (null = not touched; false IS valid)
+      //
+      // INSERT path (new row): COALESCE sets defaults for color/toggle so new rows
+      //   never have null there.
+      // DO UPDATE path: use CASE WHEN $N IS NOT NULL to preserve existing values when
+      //   a field was not included in this save operation.
+      //   We cannot use COALESCE(EXCLUDED.col, existing) for fields that have a
+      //   COALESCE default in VALUES — because EXCLUDED.col already has the default
+      //   baked in (not NULL), which would overwrite custom values on every partial save.
+      console.log('[update-branding] agencyId=%s payload=%j',
+        agCtx.agencyId,
+        { primaryColor, accentColor, resolvedWebsiteUrl, supportEmail, phone, whatsapp, showPoweredByHiddenatlas }
+      );
+
       await pool.query(
         `INSERT INTO "AgencyBranding"
            ("agency_id", "logo_url", "logo_dark_url",
@@ -564,21 +587,27 @@ async function _handler(req, res) {
             phone, whatsapp, "show_powered_by_hiddenatlas", "created_at", "updated_at")
          VALUES ($1, $2, $3, COALESCE($4,'#1B6B65'), COALESCE($5,'#C9A96E'), $6, $7, $8, $9, COALESCE($10,true), NOW(), NOW())
          ON CONFLICT ("agency_id") DO UPDATE SET
-           "logo_url"                    = COALESCE(EXCLUDED."logo_url",                    "AgencyBranding"."logo_url"),
-           "logo_dark_url"               = COALESCE(EXCLUDED."logo_dark_url",               "AgencyBranding"."logo_dark_url"),
-           "primary_color"               = COALESCE(EXCLUDED."primary_color",               "AgencyBranding"."primary_color"),
-           "accent_color"                = COALESCE(EXCLUDED."accent_color",                "AgencyBranding"."accent_color"),
-           "website_url"                 = COALESCE(EXCLUDED."website_url",                 "AgencyBranding"."website_url"),
-           "support_email"               = COALESCE(EXCLUDED."support_email",               "AgencyBranding"."support_email"),
-           phone                         = COALESCE(EXCLUDED.phone,                         "AgencyBranding".phone),
-           whatsapp                      = COALESCE(EXCLUDED.whatsapp,                      "AgencyBranding".whatsapp),
-           "show_powered_by_hiddenatlas" = COALESCE(EXCLUDED."show_powered_by_hiddenatlas", "AgencyBranding"."show_powered_by_hiddenatlas"),
+           "logo_url"       = COALESCE(EXCLUDED."logo_url",       "AgencyBranding"."logo_url"),
+           "logo_dark_url"  = COALESCE(EXCLUDED."logo_dark_url",  "AgencyBranding"."logo_dark_url"),
+           "website_url"    = COALESCE(EXCLUDED."website_url",    "AgencyBranding"."website_url"),
+           "support_email"  = COALESCE(EXCLUDED."support_email",  "AgencyBranding"."support_email"),
+           phone            = COALESCE(EXCLUDED.phone,            "AgencyBranding".phone),
+           whatsapp         = COALESCE(EXCLUDED.whatsapp,         "AgencyBranding".whatsapp),
+           "primary_color"  = CASE WHEN $4  IS NOT NULL
+                                THEN $4
+                                ELSE "AgencyBranding"."primary_color"  END,
+           "accent_color"   = CASE WHEN $5  IS NOT NULL
+                                THEN $5
+                                ELSE "AgencyBranding"."accent_color"   END,
+           "show_powered_by_hiddenatlas" = CASE WHEN $10 IS NOT NULL
+                                             THEN $10
+                                             ELSE "AgencyBranding"."show_powered_by_hiddenatlas" END,
            "updated_at" = NOW()`,
         [
           agCtx.agencyId,
           logoUrl ?? null, logoDarkUrl ?? null,
           primaryColor ?? null, accentColor ?? null,
-          resolvedWebsiteUrl, supportEmail ?? null,
+          resolvedWebsiteUrl ?? null, supportEmail ?? null,
           phone ?? null, whatsapp ?? null,
           showPoweredByHiddenatlas ?? null,
         ]
