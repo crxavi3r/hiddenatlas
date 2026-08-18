@@ -594,10 +594,10 @@ export default function TravelPortal({ mode }) {
         if (isPreview) {
           const authToken = await getToken();
           if (!authToken) throw new Error('unauthenticated');
-          url = `/api/agency-trips?action=preview-data&agencyTripId=${agencyTripId}`;
+          url = `/api/agency?action=trips:preview-data&agencyTripId=${agencyTripId}`;
           headers['Authorization'] = `Bearer ${authToken}`;
         } else {
-          url = `/api/agency-trips?action=resolve-share&token=${token}`;
+          url = `/api/agency?action=trips:resolve-share&token=${token}`;
         }
 
         const res = await fetch(url, { headers });

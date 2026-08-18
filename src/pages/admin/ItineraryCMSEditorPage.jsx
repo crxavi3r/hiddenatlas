@@ -3210,7 +3210,7 @@ function BasicsTab({ form, setForm, onTitleChange, pricingOptions = [], setPrici
       const designerUserId = isAdmin && form.creatorId
         ? (creators.find(c => c.id === form.creatorId)?.userId || null)
         : null;
-      const res = await fetch('/api/pricing-plans?action=create', {
+      const res = await fetch('/api/designer?action=create', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...formData, ...(designerUserId ? { designerUserId } : {}) }),

@@ -215,7 +215,7 @@ export default function CustomPlanningPage() {
   // Load designer's active pricing plans when a designer is selected
   useEffect(() => {
     if (!designerSlug) { setDesignerPlans(null); return; }
-    fetch(`/api/pricing-plans?action=list-public&designerSlug=${encodeURIComponent(designerSlug)}`)
+    fetch(`/api/designer?action=list-public&designerSlug=${encodeURIComponent(designerSlug)}`)
       .then(r => r.ok ? r.json() : { plans: [] })
       .then(data => setDesignerPlans(data.plans || []))
       .catch(() => setDesignerPlans([]));

@@ -139,10 +139,10 @@ function ClientPicker({ value, onChange, clients, onClientsUpdate, agencyId, get
     setCreateError('');
     try {
       const token = await getToken();
-      const res = await fetch('/api/agency-clients?action=create', {
+      const res = await fetch(`/api/agency?action=clients:create&agencyId=${agencyId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ agencyId, name: newName.trim(), email: newEmail.trim() }),
+        body: JSON.stringify({ name: newName.trim(), email: newEmail.trim() }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -473,9 +473,9 @@ export default function AgencyTripCreate({ open, onClose, onCreated, defaultClie
         const token = await getToken();
         const h = { Authorization: `Bearer ${token}` };
         const [cRes, tRes, trRes, mRes] = await Promise.all([
-          fetch(`/api/agency-clients?action=list&agencyId=${agencyId}`, { headers: h }),
-          fetch(`/api/agency-templates?action=list&agencyId=${agencyId}`, { headers: h }),
-          fetch(`/api/agency-trips?action=list&agencyId=${agencyId}`, { headers: h }),
+          fetch(`/api/agency?action=clients:list&agencyId=${agencyId}`, { headers: h }),
+          fetch(`/api/agency?action=templates:list&agencyId=${agencyId}`, { headers: h }),
+          fetch(`/api/agency?action=trips:list&agencyId=${agencyId}`, { headers: h }),
           fetch(`/api/agency?action=members&agencyId=${agencyId}`, { headers: h }),
         ]);
         const [cData, tData, trData, mData] = await Promise.all([
@@ -535,7 +535,7 @@ export default function AgencyTripCreate({ open, onClose, onCreated, defaultClie
     setSubmitting(true);
     try {
       const token = await getToken();
-      const res = await fetch('/api/agency-trips?action=create', {
+      const res = await fetch(`/api/agency?action=trips:create&agencyId=${agencyId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),

@@ -208,7 +208,7 @@ function CreateTripModal({ onClose, onCreated, agencyId, getToken, clients, temp
     setSubmitting(true);
     try {
       const token = await getToken();
-      const res = await fetch('/api/agency-trips?action=create', {
+      const res = await fetch(`/api/agency?action=trips:create&agencyId=${agencyId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),
@@ -502,10 +502,10 @@ export default function AgencyTripsList() {
     setLoading(true);
     try {
       const token = await getToken();
-      const params = new URLSearchParams({ action: 'list', agencyId });
+      const params = new URLSearchParams({ action: 'trips:list', agencyId });
       if (statusFilter !== 'all') params.set('status', statusFilter);
       if (debouncedSearch) params.set('search', debouncedSearch);
-      const res = await fetch(`/api/agency-trips?${params}`, {
+      const res = await fetch(`/api/agency?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed to fetch trips');
@@ -527,8 +527,8 @@ export default function AgencyTripsList() {
     try {
       const token = await getToken();
       const [cRes, tRes] = await Promise.all([
-        fetch(`/api/agency-clients?action=list&agencyId=${agencyId}`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`/api/agency-templates?action=list&agencyId=${agencyId}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/agency?action=clients:list&agencyId=${agencyId}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/agency?action=templates:list&agencyId=${agencyId}`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       const [cData, tData] = await Promise.all([
         cRes.ok ? cRes.json() : { clients: [] },

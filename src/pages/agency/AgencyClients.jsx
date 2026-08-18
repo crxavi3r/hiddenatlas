@@ -102,11 +102,11 @@ function ClientFormModal({ agencyId, getToken, onClose, onSaved, client }) {
     try {
       const token = await getToken();
       const url = isEdit
-        ? '/api/agency-clients?action=update'
-        : '/api/agency-clients?action=create';
+        ? `/api/agency?action=clients:update&agencyId=${agencyId}&id=${client.id}`
+        : `/api/agency?action=clients:create&agencyId=${agencyId}`;
       const body = isEdit
-        ? { agencyId, clientId: client.id, ...form }
-        : { agencyId, ...form };
+        ? { ...form }
+        : { ...form };
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -259,9 +259,9 @@ export default function AgencyClients() {
     setError('');
     try {
       const token = await getToken();
-      const params = new URLSearchParams({ action: 'list', agencyId });
+      const params = new URLSearchParams({ action: 'clients:list', agencyId });
       if (q) params.set('search', q);
-      const res = await fetch(`/api/agency-clients?${params}`, {
+      const res = await fetch(`/api/agency?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed to load clients.');

@@ -224,8 +224,8 @@ export default function AgencyClientDetail() {
     setError('');
     try {
       const token = await getToken();
-      const params = new URLSearchParams({ action: 'detail', agencyId, clientId });
-      const res = await fetch(`/api/agency-clients?${params}`, {
+      const params = new URLSearchParams({ action: 'clients:detail', agencyId, id: clientId });
+      const res = await fetch(`/api/agency?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
@@ -274,10 +274,10 @@ export default function AgencyClientDetail() {
     setSaveError('');
     try {
       const token = await getToken();
-      const res = await fetch('/api/agency-clients?action=update', {
+      const res = await fetch(`/api/agency?action=clients:update&agencyId=${agencyId}&id=${clientId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ agencyId, clientId, ...form }),
+        body: JSON.stringify({ ...form }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));

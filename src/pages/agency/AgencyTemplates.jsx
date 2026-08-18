@@ -334,7 +334,7 @@ export default function AgencyTemplates() {
     setError(null);
     try {
       const token = await getToken();
-      const res = await fetch(`/api/agency-templates?action=list&agencyId=${agencyId}`, {
+      const res = await fetch(`/api/agency?action=templates:list&agencyId=${agencyId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed to load templates');
@@ -353,7 +353,7 @@ export default function AgencyTemplates() {
     setCreateLoading(true);
     try {
       const token = await getToken();
-      const res = await fetch(`/api/agency-templates?action=create&agencyId=${agencyId}`, {
+      const res = await fetch(`/api/agency?action=templates:create&agencyId=${agencyId}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ agencyId, name, description, destination }),
@@ -384,10 +384,10 @@ export default function AgencyTemplates() {
     setDupLoading(true);
     try {
       const token = await getToken();
-      const res = await fetch('/api/agency-templates?action=duplicate', {
+      const res = await fetch(`/api/agency?action=templates:duplicate&agencyId=${agencyId}&id=${template.id}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agencyId, templateId: template.id, name: `${template.name} (copy)` }),
+        body: JSON.stringify({ name: `${template.name} (copy)` }),
       });
       if (!res.ok) throw new Error('Duplicate failed');
       showToast('Template duplicated');
@@ -404,10 +404,10 @@ export default function AgencyTemplates() {
     setArchiveLoading(true);
     try {
       const token = await getToken();
-      const res = await fetch('/api/agency-templates?action=archive', {
+      const res = await fetch(`/api/agency?action=templates:archive&agencyId=${agencyId}&id=${archiveTarget.id}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agencyId, templateId: archiveTarget.id }),
+        body: JSON.stringify({}),
       });
       if (!res.ok) throw new Error('Archive failed');
       setArchiveTarget(null);

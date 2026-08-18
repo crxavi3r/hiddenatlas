@@ -59,7 +59,7 @@ export default function PricingPlansPage() {
     try {
       const token = await getToken();
       const qs = designerUserId ? `&designerUserId=${designerUserId}` : '';
-      const res  = await fetch(`/api/pricing-plans?action=list${qs}`, {
+      const res  = await fetch(`/api/designer?action=list${qs}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
@@ -103,7 +103,7 @@ export default function PricingPlansPage() {
         ...(isAdmin && selectedDesignerId ? { designerUserId: selectedDesignerId } : {}),
       };
 
-      const res  = await fetch(`/api/pricing-plans?action=${action}${qs}`, {
+      const res  = await fetch(`/api/designer?action=${action}${qs}`, {
         method:  'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
@@ -124,7 +124,7 @@ export default function PricingPlansPage() {
   async function handleToggle(plan) {
     try {
       const token = await getToken();
-      const res   = await fetch(`/api/pricing-plans?action=toggle&id=${plan.id}`, {
+      const res   = await fetch(`/api/designer?action=toggle&id=${plan.id}`, {
         method:  'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -146,7 +146,7 @@ export default function PricingPlansPage() {
 
     try {
       const token = await getToken();
-      await fetch('/api/pricing-plans?action=reorder', {
+      await fetch('/api/designer?action=reorder', {
         method:  'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body:    JSON.stringify({ orders }),

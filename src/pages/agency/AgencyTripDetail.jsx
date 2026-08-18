@@ -612,7 +612,7 @@ export default function AgencyTripDetail() {
     try {
       const token = await getToken();
       const res = await fetch(
-        `/api/agency-trips?action=detail&agencyId=${agencyId}&agencyTripId=${agencyTripId}`,
+        `/api/agency?action=trips:detail&agencyId=${agencyId}&agencyTripId=${agencyTripId}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (!res.ok) throw new Error('Failed to load trip');
@@ -642,7 +642,7 @@ export default function AgencyTripDetail() {
 
   async function apiPost(action, body) {
     const token = await getToken();
-    const res = await fetch(`/api/agency-trips?action=${action}`, {
+    const res = await fetch(`/api/agency?action=trips:${action}&agencyId=${agencyId}&agencyTripId=${agencyTripId}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,

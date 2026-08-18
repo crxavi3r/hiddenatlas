@@ -21,7 +21,7 @@ export default function DesignerPricingPage() {
 
   useEffect(() => {
     if (!slug) return;
-    fetch(`/api/pricing-plans?action=list-public&designerSlug=${encodeURIComponent(slug)}`)
+    fetch(`/api/designer?action=list-public&designerSlug=${encodeURIComponent(slug)}`)
       .then(r => r.ok ? r.json() : { plans: [] })
       .then(data => {
         // Only show custom trip plans (not Premium Itinerary / digital)
