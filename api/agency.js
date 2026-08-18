@@ -1482,6 +1482,12 @@ async function _handler(req, res) {
     // ════════════════════════════════════════════════════════════════════
 
     if (action && action.startsWith('admin:')) {
+      // Resolve the authenticated Clerk ID first — needed for audit columns.
+      // verifyAuth returns the Clerk `sub` directly; it must not be null.
+      let actorClerkId;
+      try { actorClerkId = await verifyAuth(authHeader); } catch { return res.status(401).json({ error: 'Unauthorized' }); }
+      if (!actorClerkId) return res.status(401).json({ error: 'Unauthorized' });
+
       const adminUserId = await checkIsGlobalAdmin(authHeader, pool);
       if (!adminUserId) return res.status(403).json({ error: 'Forbidden: requires global HiddenAtlas admin' });
 
@@ -1610,12 +1616,12 @@ async function _handler(req, res) {
         try {
           await client.query('BEGIN');
 
-          // Agency: snake_case columns
+          // Agency: snake_case columns. created_by_clerk_user_id = authenticated admin's Clerk ID.
           const { rows: agRows } = await client.query(
-            `INSERT INTO "Agency" (id, name, slug, status, "created_at", "updated_at")
-             VALUES (gen_random_uuid(), $1, $2, 'active', NOW(), NOW())
+            `INSERT INTO "Agency" (id, name, slug, status, "created_by_clerk_user_id", "created_at", "updated_at")
+             VALUES (gen_random_uuid(), $1, $2, 'active', $3, NOW(), NOW())
              RETURNING id, name, slug`,
-            [name.trim(), slug.trim()]
+            [name.trim(), slug.trim(), actorClerkId]
           );
           const newAgencyId = agRows[0].id;
 
@@ -1628,13 +1634,14 @@ async function _handler(req, res) {
             [newAgencyId]
           );
 
-          // AgencyMember: snake_case, no user_id
+          // AgencyMember owner: clerk_user_id = selected owner's Clerk ID (NOT the admin's).
+          // invited_by_clerk_user_id = authenticated admin's Clerk ID.
           await client.query(
             `INSERT INTO "AgencyMember"
                (id, "agency_id", "clerk_user_id", email, "display_name", role, status,
-                "created_at", "updated_at")
-             VALUES (gen_random_uuid(), $1, $2, $3, $4, 'owner', 'active', NOW(), NOW())`,
-            [newAgencyId, owner.clerkId, owner.email, owner.name]
+                "invited_by_clerk_user_id", "created_at", "updated_at")
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, 'owner', 'active', $5, NOW(), NOW())`,
+            [newAgencyId, owner.clerkId, owner.email, owner.name, actorClerkId]
           );
 
           await client.query('COMMIT');
