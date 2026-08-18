@@ -42,6 +42,8 @@ import DesignerPricingPage from './pages/DesignerPricingPage';
 import DesignerApplicationsPage from './pages/admin/DesignerApplicationsPage';
 import PricingPlansPage from './pages/admin/PricingPlansPage';
 import ItineraryReviewsPage from './pages/admin/ItineraryReviewsPage';
+import AgenciesAdminPage from './pages/admin/AgenciesAdminPage';
+import AgencyAdminDetailPage from './pages/admin/AgencyAdminDetailPage';
 import CreatorAcquisitionDashboardPage from './pages/admin/CreatorAcquisitionDashboardPage';
 import CreatorDiscoveryPage from './pages/admin/CreatorDiscoveryPage';
 import CreatorCRMPage from './pages/admin/CreatorCRMPage';
@@ -147,6 +149,8 @@ export default function App() {
           <Route path="designer-applications" element={<DesignerApplicationsPage />} />
           <Route path="pricing" element={<PricingPlansPage />} />
           <Route path="itinerary-reviews" element={<ItineraryReviewsPage />} />
+          <Route path="agencies" element={<AgenciesAdminPage />} />
+          <Route path="agencies/:agencyId" element={<AgencyAdminDetailPage />} />
           <Route path="creator-acquisition" element={<CreatorAcquisitionDashboardPage />} />
           <Route path="creator-acquisition/discovery" element={<CreatorDiscoveryPage />} />
           <Route path="creator-acquisition/crm" element={<CreatorCRMPage />} />

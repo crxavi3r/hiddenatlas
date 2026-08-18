@@ -3,10 +3,12 @@
 //
 // SECURITY RULES (enforced here, never trust frontend):
 //   1. Authenticate the Clerk JWT → clerkId
-//   2. Look up User row → userId
-//   3. Look up active AgencyMember → memberId + agencyId + role
-//   4. If a specific agencyId is requested, verify membership in THAT agency
-//   5. Only return after all checks pass
+//   2. Look up User row → userId + role
+//   3a. Global HiddenAtlas admin (User.role='admin'): may access any active Agency.
+//       Returns synthetic ctx with isGlobalAdmin=true, role='owner'.
+//       No AgencyMember row is created or required.
+//   3b. Normal user: must have an active AgencyMember row in the requested Agency.
+//   4. Only return after all checks pass.
 //
 // Usage:
 //   const agCtx = await resolveAgencyCtx(authHeader, pool, agencyId?);
@@ -57,49 +59,96 @@ export function canShareTrips(role) {
   return role === 'owner' || role === 'admin' || role === 'agent';
 }
 
-// ── Agency context resolution ─────────────────────────────────────────────────
+// ── Internal: resolve Clerk JWT → { clerkId, userId, userRole } ───────────────
 
-/**
- * @typedef {Object} AgencyCtx
- * @property {string}      clerkId       — Clerk user_xxx ID
- * @property {string}      userId        — HiddenAtlas User.id
- * @property {string}      memberId      — AgencyMember.id
- * @property {string}      agencyId      — Agency.id the member belongs to
- * @property {string}      role          — owner | admin | agent | editor
- * @property {string}      status        — invited | active | disabled
- * @property {string}      agencyName    — Agency.name
- * @property {string}      agencyStatus  — Agency.status
- */
-
-/**
- * Resolves agency membership for the authenticated user.
- *
- * @param {string|undefined} authHeader   Authorization header from the request
- * @param {import('pg').Pool} pool
- * @param {string|null} [agencyId]        When provided, validates membership in THIS agency specifically.
- *                                        When null/undefined, returns the first active membership found.
- * @returns {Promise<AgencyCtx|null>}     null → unauthenticated or no membership
- */
-export async function resolveAgencyCtx(authHeader, pool, agencyId = null) {
+async function resolveUserBase(authHeader, pool) {
   if (!authHeader?.startsWith('Bearer ')) return null;
-
   let clerkId;
   try {
     clerkId = await verifyAuth(authHeader);
   } catch {
     return null;
   }
-
   try {
-    // Resolve User row — we need User.id (the internal UUID), not clerkId.
-    const { rows: userRows } = await pool.query(
-      `SELECT id FROM "User" WHERE "clerkId" = $1 LIMIT 1`,
+    const { rows } = await pool.query(
+      `SELECT id, role FROM "User" WHERE "clerkId" = $1 LIMIT 1`,
       [clerkId]
     );
-    if (!userRows.length) return null;
-    const userId = userRows[0].id;
+    if (!rows.length) return null;
+    return { clerkId, userId: rows[0].id, userRole: rows[0].role };
+  } catch (err) {
+    console.error('[agencyAuth] resolveUserBase DB error:', err.message);
+    throw err;
+  }
+}
 
-    // Build member query — scoped by agencyId if provided.
+// ── Agency context resolution ─────────────────────────────────────────────────
+
+/**
+ * @typedef {Object} AgencyCtx
+ * @property {string}      clerkId        — Clerk user_xxx ID
+ * @property {string}      userId         — HiddenAtlas User.id
+ * @property {string|null} memberId       — AgencyMember.id (null for global admin override)
+ * @property {string}      agencyId       — Agency.id
+ * @property {string}      role           — owner | admin | agent | editor
+ * @property {string}      status         — active
+ * @property {string}      agencyName     — Agency.name
+ * @property {string}      agencyStatus   — Agency.status
+ * @property {boolean}     isGlobalAdmin  — true when accessed via HiddenAtlas global admin override
+ */
+
+/**
+ * Resolves agency membership for the authenticated user.
+ *
+ * Global HiddenAtlas admin (User.role='admin') bypass:
+ *   - May access any active Agency by specifying agencyId.
+ *   - Returns a synthetic ctx with isGlobalAdmin=true and role='owner'.
+ *   - No AgencyMember row is required or created.
+ *
+ * Normal users:
+ *   - Must have an active AgencyMember row.
+ *   - If agencyId is provided, validates membership in THAT agency specifically.
+ *   - If agencyId is null, returns the first active membership found.
+ *
+ * @returns {Promise<AgencyCtx|null>}  null → unauthenticated or no access
+ */
+export async function resolveAgencyCtx(authHeader, pool, agencyId = null) {
+  let base;
+  try {
+    base = await resolveUserBase(authHeader, pool);
+  } catch {
+    return null;
+  }
+  if (!base) return null;
+  const { clerkId, userId, userRole } = base;
+
+  try {
+    // ── Global admin bypass ───────────────────────────────────────────────────
+    if (userRole === 'admin') {
+      // Admin must specify which agency to access.
+      if (!agencyId) return null;
+
+      const { rows: agencyRows } = await pool.query(
+        `SELECT id, name, status FROM "Agency" WHERE id = $1 LIMIT 1`,
+        [agencyId]
+      );
+      if (!agencyRows.length) return null;
+
+      const agency = agencyRows[0];
+      return {
+        clerkId,
+        userId,
+        memberId:     null,
+        agencyId:     agency.id,
+        role:         'owner',     // Full access
+        status:       'active',
+        agencyName:   agency.name,
+        agencyStatus: agency.status,
+        isGlobalAdmin: true,
+      };
+    }
+
+    // ── Normal user: require active AgencyMember ──────────────────────────────
     const memberQuery = agencyId
       ? `SELECT m.id, m."agencyId", m.role, m.status,
                 a.name AS "agencyName", a.status AS "agencyStatus"
@@ -129,12 +178,13 @@ export async function resolveAgencyCtx(authHeader, pool, agencyId = null) {
     return {
       clerkId,
       userId,
-      memberId:     m.id,
-      agencyId:     m.agencyId,
-      role:         m.role,
-      status:       m.status,
-      agencyName:   m.agencyName,
-      agencyStatus: m.agencyStatus,
+      memberId:      m.id,
+      agencyId:      m.agencyId,
+      role:          m.role,
+      status:        m.status,
+      agencyName:    m.agencyName,
+      agencyStatus:  m.agencyStatus,
+      isGlobalAdmin: false,
     };
   } catch (err) {
     console.error('[agencyAuth] DB error:', err.message);
@@ -147,30 +197,23 @@ export async function resolveAgencyCtx(authHeader, pool, agencyId = null) {
 
 /**
  * Returns all active agency memberships for the authenticated user.
- * Used by the workspace selector in the frontend.
- *
- * @param {string|undefined} authHeader
- * @param {import('pg').Pool} pool
- * @returns {Promise<AgencyCtx[]>}
+ * Global admins return an empty array — they find agencies via the Admin panel.
  */
 export async function resolveAllAgencyMemberships(authHeader, pool) {
   if (!authHeader?.startsWith('Bearer ')) return [];
 
-  let clerkId;
+  let base;
   try {
-    clerkId = await verifyAuth(authHeader);
+    base = await resolveUserBase(authHeader, pool);
   } catch {
     return [];
   }
+  if (!base) return [];
+
+  // Global admins don't get agency memberships in the workspace switcher.
+  if (base.userRole === 'admin') return [];
 
   try {
-    const { rows: userRows } = await pool.query(
-      `SELECT id FROM "User" WHERE "clerkId" = $1 LIMIT 1`,
-      [clerkId]
-    );
-    if (!userRows.length) return [];
-    const userId = userRows[0].id;
-
     const { rows } = await pool.query(
       `SELECT m.id, m."agencyId", m.role, m.status,
               a.name AS "agencyName", a.status AS "agencyStatus", a.slug AS "agencySlug"
@@ -180,22 +223,37 @@ export async function resolveAllAgencyMemberships(authHeader, pool) {
          AND m.status = 'active'
          AND a.status = 'active'
        ORDER BY m."createdAt" ASC`,
-      [userId]
+      [base.userId]
     );
 
     return rows.map(m => ({
-      clerkId,
-      userId,
-      memberId:     m.id,
-      agencyId:     m.agencyId,
-      role:         m.role,
-      status:       m.status,
-      agencyName:   m.agencyName,
-      agencyStatus: m.agencyStatus,
-      agencySlug:   m.agencySlug,
+      clerkId:     base.clerkId,
+      userId:      base.userId,
+      memberId:    m.id,
+      agencyId:    m.agencyId,
+      role:        m.role,
+      status:      m.status,
+      agencyName:  m.agencyName,
+      agencyStatus:m.agencyStatus,
+      agencySlug:  m.agencySlug,
     }));
   } catch (err) {
     console.error('[agencyAuth] resolveAllAgencyMemberships error:', err.message);
     return [];
   }
+}
+
+/**
+ * Checks if the authenticated user is a HiddenAtlas global admin.
+ * Returns the userId if admin, null otherwise.
+ */
+export async function checkIsGlobalAdmin(authHeader, pool) {
+  let base;
+  try {
+    base = await resolveUserBase(authHeader, pool);
+  } catch {
+    return null;
+  }
+  if (!base || base.userRole !== 'admin') return null;
+  return base.userId;
 }

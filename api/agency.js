@@ -57,6 +57,7 @@ import { generateShareToken, hashShareToken } from './_lib/shareToken.js';
 import {
   resolveAgencyCtx,
   resolveAllAgencyMemberships,
+  checkIsGlobalAdmin,
   canManageAgency,
   canManageBranding,
   canManageTeam,
@@ -269,8 +270,11 @@ async function _handler(req, res) {
     // ════════════════════════════════════════════════════════════════════
 
     if (req.method === 'GET' && action === 'memberships') {
-      const memberships = await resolveAllAgencyMemberships(authHeader, pool);
-      return res.status(200).json({ memberships });
+      const [memberships, adminUserId] = await Promise.all([
+        resolveAllAgencyMemberships(authHeader, pool),
+        checkIsGlobalAdmin(authHeader, pool),
+      ]);
+      return res.status(200).json({ memberships, isGlobalAdmin: !!adminUserId });
     }
 
     if (req.method === 'GET' && action === 'dashboard') {
@@ -1066,6 +1070,199 @@ async function _handler(req, res) {
             [item.sortOrder, item.id, agencyTripId]
           );
         }
+        return res.status(200).json({ ok: true });
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // ADMIN actions (admin:*) — requires HiddenAtlas global admin role
+    // ════════════════════════════════════════════════════════════════════
+
+    if (action && action.startsWith('admin:')) {
+      const adminUserId = await checkIsGlobalAdmin(authHeader, pool);
+      if (!adminUserId) return res.status(403).json({ error: 'Forbidden: requires global HiddenAtlas admin' });
+
+      // GET admin:list-agencies — all agencies with aggregated stats
+      if (req.method === 'GET' && action === 'admin:list-agencies') {
+        const { rows } = await pool.query(
+          `SELECT
+             a.id, a.name, a.slug, a.status, a."createdAt",
+             COUNT(DISTINCT m.id)::int         AS "memberCount",
+             COUNT(DISTINCT ac.id)::int        AS "clientCount",
+             COUNT(DISTINCT at2.id)::int       AS "tripCount",
+             COUNT(DISTINCT at2.id) FILTER (WHERE at2.status NOT IN ('archived','completed'))::int AS "activeTripCount"
+           FROM "Agency" a
+           LEFT JOIN "AgencyMember" am ON am."agencyId" = a.id AND am.status = 'active'
+           LEFT JOIN "AgencyMember" m  ON m."agencyId"  = a.id
+           LEFT JOIN "AgencyClient" ac ON ac."agencyId" = a.id
+           LEFT JOIN "AgencyTrip"  at2 ON at2."agencyId" = a.id
+           GROUP BY a.id
+           ORDER BY a."createdAt" DESC`
+        );
+        return res.status(200).json({ agencies: rows });
+      }
+
+      // GET admin:get-agency — full detail for one agency
+      if (req.method === 'GET' && action === 'admin:get-agency') {
+        const { agencyId: targetAgencyId } = req.query;
+        if (!targetAgencyId) return res.status(400).json({ error: 'agencyId is required' });
+
+        const [agencyRes, metricsRes, membersRes, tripsRes] = await Promise.all([
+          pool.query(
+            `SELECT id, name, slug, status, "createdAt", "updatedAt" FROM "Agency" WHERE id = $1`,
+            [targetAgencyId]
+          ),
+          pool.query(
+            `SELECT
+               COUNT(DISTINCT m.id)::int                                                    AS "memberCount",
+               COUNT(DISTINCT ac.id)::int                                                   AS "clientCount",
+               COUNT(DISTINCT at2.id)::int                                                  AS "tripCount",
+               COUNT(DISTINCT at2.id) FILTER (WHERE at2.status NOT IN ('archived','completed'))::int AS "activeTripCount",
+               COUNT(DISTINCT at2.id) FILTER (WHERE at2."startDate" >= NOW() AND at2.status IN ('draft','ready','shared'))::int AS "upcomingTripCount"
+             FROM "Agency" a
+             LEFT JOIN "AgencyMember" m  ON m."agencyId"  = a.id
+             LEFT JOIN "AgencyClient" ac ON ac."agencyId" = a.id
+             LEFT JOIN "AgencyTrip"  at2 ON at2."agencyId" = a.id
+             WHERE a.id = $1`,
+            [targetAgencyId]
+          ),
+          pool.query(
+            `SELECT m.id, m.role, m.status, m."invitedAt", m."acceptedAt",
+                    u.name, u.email
+             FROM "AgencyMember" m
+             LEFT JOIN "User" u ON u.id = m."userId"
+             WHERE m."agencyId" = $1
+             ORDER BY m."createdAt" ASC`,
+            [targetAgencyId]
+          ),
+          pool.query(
+            `SELECT at2.id, at2.name, at2.destination, at2."startDate", at2."endDate", at2.status,
+                    at2."createdAt", ac.name AS "clientName"
+             FROM "AgencyTrip" at2
+             LEFT JOIN "AgencyClient" ac ON ac.id = at2."clientId"
+             WHERE at2."agencyId" = $1
+             ORDER BY at2."createdAt" DESC LIMIT 10`,
+            [targetAgencyId]
+          ),
+        ]);
+
+        if (!agencyRes.rows.length) return res.status(404).json({ error: 'Agency not found' });
+
+        return res.status(200).json({
+          agency:      agencyRes.rows[0],
+          metrics:     metricsRes.rows[0],
+          members:     membersRes.rows,
+          recentTrips: tripsRes.rows,
+        });
+      }
+
+      // GET admin:search-users — find HiddenAtlas users by email for owner assignment
+      if (req.method === 'GET' && action === 'admin:search-users') {
+        const q = (req.query.q || '').trim();
+        if (!q || q.length < 2) return res.status(200).json({ users: [] });
+        const { rows } = await pool.query(
+          `SELECT id, name, email, role, "clerkId"
+           FROM "User"
+           WHERE email ILIKE $1 OR name ILIKE $1
+           ORDER BY email ASC LIMIT 10`,
+          [`%${q}%`]
+        );
+        return res.status(200).json({ users: rows });
+      }
+
+      // POST admin:create-agency — create Agency + AgencyBranding + AgencyMember
+      if (req.method === 'POST' && action === 'admin:create-agency') {
+        const { name, slug, ownerUserId } = req.body || {};
+        if (!name?.trim())  return res.status(400).json({ error: 'name is required' });
+        if (!slug?.trim() || !/^[a-z0-9-]{3,50}$/.test(slug)) {
+          return res.status(400).json({ error: 'slug must be 3-50 lowercase chars, numbers, hyphens' });
+        }
+        if (!ownerUserId) return res.status(400).json({ error: 'ownerUserId is required' });
+
+        // Verify slug uniqueness
+        const { rows: slugRows } = await pool.query(
+          `SELECT id FROM "Agency" WHERE slug = $1 LIMIT 1`, [slug.trim()]
+        );
+        if (slugRows.length) return res.status(409).json({ error: 'Slug is already taken' });
+
+        // Verify owner exists
+        const { rows: ownerRows } = await pool.query(
+          `SELECT id, "clerkId" FROM "User" WHERE id = $1 LIMIT 1`, [ownerUserId]
+        );
+        if (!ownerRows.length) return res.status(404).json({ error: 'Owner user not found' });
+        const owner = ownerRows[0];
+
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          const { rows: agRows } = await client.query(
+            `INSERT INTO "Agency" (id, name, slug, status, "createdAt", "updatedAt")
+             VALUES (gen_random_uuid(), $1, $2, 'active', NOW(), NOW()) RETURNING id, name, slug`,
+            [name.trim(), slug.trim()]
+          );
+          const newAgencyId = agRows[0].id;
+
+          await client.query(
+            `INSERT INTO "AgencyBranding" (id, "agencyId", "primaryColor", "accentColor",
+                                           "showPoweredByHiddenatlas", "createdAt", "updatedAt")
+             VALUES (gen_random_uuid(), $1, '#1B6B65', '#C9A96E', true, NOW(), NOW())`,
+            [newAgencyId]
+          );
+
+          await client.query(
+            `INSERT INTO "AgencyMember" (id, "agencyId", "clerkUserId", "userId", role, status,
+                                         "invitedAt", "acceptedAt", "createdAt", "updatedAt")
+             VALUES (gen_random_uuid(), $1, $2, $3, 'owner', 'active', NOW(), NOW(), NOW(), NOW())`,
+            [newAgencyId, owner.clerkId, owner.id]
+          );
+
+          await client.query('COMMIT');
+          return res.status(201).json({ agencyId: newAgencyId, name: agRows[0].name, slug: agRows[0].slug });
+        } catch (err) {
+          await client.query('ROLLBACK');
+          throw err;
+        } finally {
+          client.release();
+        }
+      }
+
+      // POST admin:update-agency — update name, slug, status
+      if (req.method === 'POST' && action === 'admin:update-agency') {
+        const { agencyId: targetAgencyId, name, slug, status } = req.body || {};
+        if (!targetAgencyId) return res.status(400).json({ error: 'agencyId is required' });
+
+        const { rows: existing } = await pool.query(
+          `SELECT id FROM "Agency" WHERE id = $1 LIMIT 1`, [targetAgencyId]
+        );
+        if (!existing.length) return res.status(404).json({ error: 'Agency not found' });
+
+        if (slug) {
+          if (!/^[a-z0-9-]{3,50}$/.test(slug)) {
+            return res.status(400).json({ error: 'Invalid slug format' });
+          }
+          const { rows: slugRows } = await pool.query(
+            `SELECT id FROM "Agency" WHERE slug = $1 AND id != $2 LIMIT 1`, [slug, targetAgencyId]
+          );
+          if (slugRows.length) return res.status(409).json({ error: 'Slug is already taken' });
+        }
+
+        const VALID_STATUSES = new Set(['active', 'disabled', 'archived']);
+        if (status && !VALID_STATUSES.has(status)) {
+          return res.status(400).json({ error: 'Invalid status' });
+        }
+
+        const sets = [], params = [];
+        const add = (col, val) => { params.push(val); sets.push(`${col} = $${params.length}`); };
+        if (name)   add('name',   name.trim());
+        if (slug)   add('slug',   slug.trim());
+        if (status) add('status', status);
+        if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
+        sets.push(`"updatedAt" = NOW()`);
+        params.push(targetAgencyId);
+        await pool.query(
+          `UPDATE "Agency" SET ${sets.join(', ')} WHERE id = $${params.length}`,
+          params
+        );
         return res.status(200).json({ ok: true });
       }
     }

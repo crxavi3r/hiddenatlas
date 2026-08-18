@@ -2,24 +2,26 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import { useAuth } from '@clerk/clerk-react';
 
 const DEFAULT = {
-  agencyId:    null,
-  agencyName:  null,
-  agencySlug:  null,
-  memberId:    null,
-  role:        null,
-  loading:     true,
-  memberships: [],
-  setAgencyId: () => {},
-  refetch:     () => {},
+  agencyId:     null,
+  agencyName:   null,
+  agencySlug:   null,
+  memberId:     null,
+  role:         null,
+  loading:      true,
+  memberships:  [],
+  isGlobalAdmin: false,
+  setAgencyId:  () => {},
+  refetch:      () => {},
 };
 
 const AgencyCtx = createContext(DEFAULT);
 
 export function AgencyCtxProvider({ children }) {
   const { isLoaded, isSignedIn, getToken } = useAuth();
-  const [memberships, setMemberships]   = useState([]);
-  const [agencyId,    setAgencyIdState] = useState(null);
-  const [loading,     setLoading]       = useState(true);
+  const [memberships,   setMemberships]   = useState([]);
+  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
+  const [agencyId,      setAgencyIdState] = useState(null);
+  const [loading,       setLoading]       = useState(true);
 
   const fetchMemberships = useCallback(async () => {
     if (!isSignedIn) { setLoading(false); return; }
@@ -31,22 +33,33 @@ export function AgencyCtxProvider({ children }) {
       });
       if (!res.ok) { setLoading(false); return; }
       const data = await res.json();
-      const list = data.memberships || [];
+      const list    = data.memberships   || [];
+      const isAdmin = !!data.isGlobalAdmin;
       setMemberships(list);
+      setIsGlobalAdmin(isAdmin);
 
-      // Restore previously selected agency from sessionStorage
       const stored = typeof sessionStorage !== 'undefined'
         ? sessionStorage.getItem('ha_agency_id')
         : null;
-      const found = stored ? list.find(m => m.agencyId === stored) : null;
-      const resolved = found ? stored : (list[0]?.agencyId ?? null);
-      setAgencyIdState(resolved);
+
+      if (isAdmin) {
+        // Global admins: trust whatever agency was stored (no membership check needed)
+        setAgencyIdState(stored || null);
+      } else {
+        const found   = stored ? list.find(m => m.agencyId === stored) : null;
+        const resolved = found ? stored : (list[0]?.agencyId ?? null);
+        setAgencyIdState(resolved);
+        // Keep sessionStorage in sync
+        if (resolved && typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('ha_agency_id', resolved);
+        }
+      }
     } catch {
       // silently fail — no agency access is a valid state
     } finally {
       setLoading(false);
     }
-  }, [isSignedIn, getToken]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isSignedIn, getToken]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -63,15 +76,19 @@ export function AgencyCtxProvider({ children }) {
 
   const active = memberships.find(m => m.agencyId === agencyId) ?? null;
 
+  // For global admin with a selected agency, synthesize owner role (no AgencyMember row)
+  const role = active?.role ?? (isGlobalAdmin && agencyId ? 'owner' : null);
+
   return (
     <AgencyCtx.Provider value={{
       agencyId,
-      agencyName:  active?.agencyName  ?? null,
-      agencySlug:  active?.agencySlug  ?? null,
-      memberId:    active?.memberId    ?? null,
-      role:        active?.role        ?? null,
+      agencyName:   active?.agencyName  ?? null,
+      agencySlug:   active?.agencySlug  ?? null,
+      memberId:     active?.memberId    ?? null,
+      role,
       loading,
       memberships,
+      isGlobalAdmin,
       setAgencyId,
       refetch: fetchMemberships,
     }}>
@@ -80,6 +97,7 @@ export function AgencyCtxProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAgencyCtx() {
   return useContext(AgencyCtx);
 }

@@ -62,7 +62,7 @@ function NavItem({ item, onClose }) {
 }
 
 function Sidebar({ mobileOpen, onClose }) {
-  const { agencyName, loading } = useAgencyCtx();
+  const { agencyName, loading, isGlobalAdmin } = useAgencyCtx();
   return (
     <div style={{
       width: 220, flexShrink: 0,
@@ -104,25 +104,36 @@ function Sidebar({ mobileOpen, onClose }) {
 
       {/* Footer links */}
       <div style={{ padding: '12px', borderTop: `1px solid ${S.border}` }}>
-        <Link
-          to="/my-trips"
-          style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
-            padding: '8px 14px',
-            fontSize: '12px', color: S.textMuted,
-            textDecoration: 'none', borderRadius: '8px',
-          }}
-        >
-          <ArrowLeft size={13} strokeWidth={1.75} />
-          Personal workspace
-        </Link>
+        {isGlobalAdmin ? (
+          <>
+            <div style={{ padding: '8px 14px 4px', background: '#FFF8EC', borderRadius: '8px', marginBottom: '4px', border: '1px solid #F0E0B0' }}>
+              <p style={{ fontSize: '10px', fontWeight: '700', color: '#C9A96E', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 2px' }}>Global Admin View</p>
+              <p style={{ fontSize: '11px', color: '#8C8070', margin: 0 }}>Viewing as HiddenAtlas admin</p>
+            </div>
+            <Link
+              to="/admin/agencies"
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', fontSize: '12px', color: S.textMuted, textDecoration: 'none', borderRadius: '8px' }}
+            >
+              <ArrowLeft size={13} strokeWidth={1.75} />
+              Back to admin panel
+            </Link>
+          </>
+        ) : (
+          <Link
+            to="/my-trips"
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', fontSize: '12px', color: S.textMuted, textDecoration: 'none', borderRadius: '8px' }}
+          >
+            <ArrowLeft size={13} strokeWidth={1.75} />
+            Personal workspace
+          </Link>
+        )}
       </div>
     </div>
   );
 }
 
 function AgencyLayoutInner() {
-  const { agencyId, loading } = useAgencyCtx();
+  const { agencyId, loading, isGlobalAdmin } = useAgencyCtx();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   if (loading) {
@@ -134,6 +145,7 @@ function AgencyLayoutInner() {
   }
 
   if (!agencyId) {
+    if (isGlobalAdmin) return <Navigate to="/admin/agencies" replace />;
     return <Navigate to="/agency/onboarding" replace />;
   }
 
