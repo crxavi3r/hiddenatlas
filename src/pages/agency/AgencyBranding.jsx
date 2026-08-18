@@ -280,10 +280,12 @@ export default function AgencyBranding() {
       const data = await res.json();
       const b = data.branding || {};
       setBranding(b);
-      setAgencyName(b.agencyName || '');
+      // agencyName lives on Agency, returned at data.agencyName (not inside data.branding)
+      setAgencyName(data.agencyName || '');
       setPrimaryColor(b.primaryColor || '#1B6B65');
       setAccentColor(b.accentColor || '#C9A96E');
-      setWebsite(b.website || '');
+      // API returns websiteUrl (not website)
+      setWebsite(b.websiteUrl || '');
       setSupportEmail(b.supportEmail || '');
       setPhone(b.phone || '');
       setWhatsapp(b.whatsapp || '');
@@ -331,19 +333,26 @@ export default function AgencyBranding() {
     setLoading(true);
     try {
       const token = await getToken();
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('agencyId', agencyId);
-      fd.append('variant', variant);
-      const res = await fetch('/api/agency?action=branding-logo-upload', {
+      // API expects JSON with base64Data + filename + field (not FormData).
+      // agencyId must be in the URL query so the API can resolve auth context.
+      const base64Data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = () => resolve(reader.result); // data URL incl. mime prefix
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      // variant 'light' → field 'logoUrl'; 'dark' → 'logoDarkUrl'
+      const field = variant === 'light' ? 'logoUrl' : 'logoDarkUrl';
+      const res = await fetch(`/api/agency?action=branding-logo-upload&agencyId=${agencyId}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64Data, filename: file.name, field }),
       });
       if (!res.ok) throw new Error('Upload failed');
+      // API returns { url: '<permanent blob URL>' }
       const data = await res.json();
-      if (variant === 'light') setLightLogoUrl(data.logoUrl || '');
-      else setDarkLogoUrl(data.logoUrl || '');
+      if (variant === 'light') setLightLogoUrl(data.url || '');
+      else setDarkLogoUrl(data.url || '');
     } catch {
       // silently fail; logo state is unchanged
     } finally {
