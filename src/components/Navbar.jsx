@@ -3,10 +3,26 @@ import { Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import {
   SignedIn, SignedOut,
-  useUser, useClerk,
+  useUser, useClerk, useAuth,
 } from '@clerk/clerk-react';
 import { useAccess } from '../lib/useUserCtx.jsx';
 import UserAccountMenu from './UserAccountMenu';
+
+function useHasAgency() {
+  const { isSignedIn, getToken } = useAuth();
+  const [hasAgency, setHasAgency] = useState(false);
+  useEffect(() => {
+    if (!isSignedIn) return;
+    getToken().then(token => {
+      if (!token) return;
+      fetch('/api/agency?action=memberships', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d?.memberships?.length) setHasAgency(true); })
+        .catch(() => {});
+    });
+  }, [isSignedIn]); // eslint-disable-line react-hooks/exhaustive-deps
+  return hasAgency;
+}
 
 // Hardcoded admin emails — checked directly against Clerk's user data.
 // This does NOT depend on any API call or context being ready.
@@ -82,6 +98,7 @@ export default function Navbar() {
   const isHome = location.pathname === '/';
   const { user } = useUser();
   const ctxAccess = useAccess();
+  const hasAgency = useHasAgency();
 
   const primaryEmail = (
     user?.emailAddresses?.find(e => e.id === user.primaryEmailAddressId)?.emailAddress
@@ -160,6 +177,16 @@ export default function Navbar() {
                 onMouseLeave={e => e.target.style.color = isTransparent ? 'rgba(255,255,255,0.85)' : '#4A433A'}
               >
                 {isAdmin ? 'Backoffice' : 'Designer Portal'}
+              </Link>
+            )}
+            {hasAgency && (
+              <Link
+                to="/agency"
+                style={navLinkStyle}
+                onMouseEnter={e => e.target.style.color = isTransparent ? 'white' : '#1B6B65'}
+                onMouseLeave={e => e.target.style.color = isTransparent ? 'rgba(255,255,255,0.85)' : '#4A433A'}
+              >
+                Agency
               </Link>
             )}
           </nav>
@@ -275,6 +302,22 @@ export default function Navbar() {
                 }}
               >
                 {isAdmin ? 'Backoffice' : 'Designer Portal'}
+              </Link>
+            )}
+            {hasAgency && (
+              <Link
+                to="/agency"
+                style={{
+                  fontSize: '20px',
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                  color: '#1C1A16',
+                  textDecoration: 'none',
+                  padding: '14px 0',
+                  borderBottom: '1px solid #F0EBE3',
+                  display: 'block',
+                }}
+              >
+                Agency
               </Link>
             )}
 

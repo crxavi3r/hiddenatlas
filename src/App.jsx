@@ -49,6 +49,17 @@ import CreatorLeadDetailPage from './pages/admin/CreatorLeadDetailPage';
 import CreatorTemplatesPage from './pages/admin/CreatorTemplatesPage';
 import { CustomRequestPaymentSuccessPage, CustomRequestPaymentCancelledPage } from './pages/CustomRequestPaymentPage';
 import ShareAcceptPage from './pages/ShareAcceptPage';
+import AgencyLayout from './pages/agency/AgencyLayout';
+import AgencyDashboard from './pages/agency/AgencyDashboard';
+import AgencyOnboarding from './pages/agency/AgencyOnboarding';
+import AgencyClients from './pages/agency/AgencyClients';
+import AgencyClientDetail from './pages/agency/AgencyClientDetail';
+import AgencyTripsList from './pages/agency/AgencyTripsList';
+import AgencyTripDetail from './pages/agency/AgencyTripDetail';
+import AgencyTemplates from './pages/agency/AgencyTemplates';
+import AgencyTeam from './pages/agency/AgencyTeam';
+import AgencyBranding from './pages/agency/AgencyBranding';
+import TravelPortal from './pages/TravelPortal';
 
 // ── Scroll to top on route change ────────────────────────────────────────────
 function LegacyCustomRedirect() {
@@ -101,6 +112,25 @@ export default function App() {
 
         {/* ── Share accept — standalone full-page, no Navbar/Footer ── */}
         <Route path="/share/trip/:token" element={<ShareAcceptPage />} />
+
+        {/* ── Travel portal — public client portal, no HiddenAtlas nav ── */}
+        <Route path="/travel/:token" element={<TravelPortal />} />
+
+        {/* ── Agency onboarding — standalone, no agency layout needed yet ── */}
+        <Route path="/agency/onboarding" element={<AgencyOnboarding />} />
+
+        {/* ── Agency workspace ── */}
+        <Route path="/agency" element={<AgencyLayout />}>
+          <Route index element={<AgencyDashboard />} />
+          <Route path="trips" element={<AgencyTripsList />} />
+          <Route path="trips/:agencyTripId" element={<AgencyTripDetail />} />
+          <Route path="trips/:agencyTripId/preview" element={<TravelPortal mode="preview" />} />
+          <Route path="clients" element={<AgencyClients />} />
+          <Route path="clients/:clientId" element={<AgencyClientDetail />} />
+          <Route path="templates" element={<AgencyTemplates />} />
+          <Route path="team" element={<AgencyTeam />} />
+          <Route path="branding" element={<AgencyBranding />} />
+        </Route>
 
         {/* ── Admin area — own layout, no public navbar/footer ── */}
         <Route path="/admin" element={<AdminPage />}>

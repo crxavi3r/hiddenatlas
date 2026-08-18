@@ -306,6 +306,8 @@ model Trip {
   notes     TripNote[]
   bookings  TripBooking[]
   shares    TripShare[]
+  agencyTrips     AgencyTrip[]     @relation("AgencyTripSourceTrip")
+  agencyTemplates AgencyTemplate[] @relation("AgencyTemplatSourceTrip")
 
   @@index([userId])
   @@index([itineraryId])
@@ -833,4 +835,163 @@ model CreatorLeadTask {
   @@index([leadId])
   @@index([status])
   @@index([dueAt])
+}
+
+// ─────────────────────────────────────────────
+// HiddenAtlas for Agencies — multi-tenant B2B2C
+// ─────────────────────────────────────────────
+
+model Agency {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  status    String   @default("active")  // active | disabled | archived
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  branding  AgencyBranding?
+  members   AgencyMember[]
+  clients   AgencyClient[]
+  templates AgencyTemplate[]
+  trips     AgencyTrip[]
+
+  @@map("Agency")
+  @@index([status])
+}
+
+model AgencyBranding {
+  id                         String    @id @default(uuid())
+  agencyId                   String    @unique   @map("agencyId")
+  logoUrl                    String?   @map("logoUrl")
+  logoDarkUrl                String?   @map("logoDarkUrl")
+  primaryColor               String    @default("#1B6B65")  @map("primaryColor")
+  accentColor                String    @default("#C9A96E")  @map("accentColor")
+  website                    String?
+  supportEmail               String?   @map("supportEmail")
+  phone                      String?
+  whatsapp                   String?
+  showPoweredByHiddenatlas   Boolean   @default(true)   @map("showPoweredByHiddenatlas")
+  customDomain               String?   @map("customDomain")
+  customDomainVerifiedAt     DateTime? @map("customDomainVerifiedAt")
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @default(now())
+
+  agency Agency @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  @@map("AgencyBranding")
+  @@index([agencyId])
+}
+
+model AgencyMember {
+  id                    String    @id @default(uuid())
+  agencyId              String    @map("agencyId")
+  clerkUserId           String    @map("clerkUserId")
+  userId                String?   @map("userId")
+  role                  String    @default("agent")    // owner | admin | agent | editor
+  status                String    @default("invited")  // invited | active | disabled
+  invitedByClerkUserId  String?   @map("invitedByClerkUserId")
+  invitedAt             DateTime  @default(now())      @map("invitedAt")
+  acceptedAt            DateTime? @map("acceptedAt")
+  disabledAt            DateTime? @map("disabledAt")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @default(now())
+
+  agency       Agency       @relation(fields: [agencyId],   references: [id], onDelete: Cascade)
+  assignedTrips AgencyTrip[] @relation("AgencyTripAssignedMember")
+
+  @@map("AgencyMember")
+  @@unique([agencyId, clerkUserId])
+  @@index([agencyId])
+  @@index([clerkUserId])
+  @@index([userId])
+  @@index([status])
+}
+
+model AgencyClient {
+  id        String   @id @default(uuid())
+  agencyId  String   @map("agencyId")
+  name      String
+  email     String?
+  phone     String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  agency Agency      @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  trips  AgencyTrip[]
+
+  @@map("AgencyClient")
+  @@index([agencyId])
+}
+
+model AgencyTemplate {
+  id            String   @id @default(uuid())
+  agencyId      String   @map("agencyId")
+  name          String
+  description   String?
+  destination   String?
+  sourceTripId  String?  @map("sourceTripId")
+  status        String   @default("active")  // active | archived
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now())
+
+  agency     Agency  @relation(fields: [agencyId],     references: [id], onDelete: Cascade)
+  sourceTrip Trip?   @relation("AgencyTemplatSourceTrip", fields: [sourceTripId], references: [id], onDelete: SetNull)
+  trips      AgencyTrip[]
+
+  @@map("AgencyTemplate")
+  @@index([agencyId])
+  @@index([status])
+  @@index([sourceTripId])
+}
+
+model AgencyTrip {
+  id                    String    @id @default(uuid())
+  agencyId              String    @map("agencyId")
+  tripId                String?   @map("tripId")
+  clientId              String?   @map("clientId")
+  assignedMemberId      String?   @map("assignedMemberId")
+  templateId            String?   @map("templateId")
+  name                  String
+  destination           String?
+  startDate             DateTime? @map("startDate") @db.Date
+  endDate               DateTime? @map("endDate")   @db.Date
+  status                String    @default("draft")  // draft | ready | shared | travelling | completed | archived
+  createdByClerkUserId  String    @map("createdByClerkUserId")
+  shareTokenHash        String?   @map("shareTokenHash")
+  shareEnabled          Boolean   @default(false)    @map("shareEnabled")
+  shareExpiresAt        DateTime? @map("shareExpiresAt")
+  sharedAt              DateTime? @map("sharedAt")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @default(now())
+
+  agency         Agency          @relation(fields: [agencyId],         references: [id], onDelete: Cascade)
+  trip           Trip?           @relation("AgencyTripSourceTrip",     fields: [tripId],          references: [id], onDelete: SetNull)
+  client         AgencyClient?   @relation(fields: [clientId],         references: [id], onDelete: SetNull)
+  assignedMember AgencyMember?   @relation("AgencyTripAssignedMember", fields: [assignedMemberId], references: [id], onDelete: SetNull)
+  template       AgencyTemplate? @relation(fields: [templateId],       references: [id], onDelete: SetNull)
+  travellers     AgencyTripTraveller[]
+
+  @@map("AgencyTrip")
+  @@index([agencyId])
+  @@index([clientId])
+  @@index([assignedMemberId])
+  @@index([status])
+  @@index([tripId])
+}
+
+model AgencyTripTraveller {
+  id           String   @id @default(uuid())
+  agencyTripId String   @map("agencyTripId")
+  name         String
+  email        String?
+  type         String   @default("adult")  // adult | child
+  sortOrder    Int      @default(0)        @map("sortOrder")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now())
+
+  agencyTrip AgencyTrip @relation(fields: [agencyTripId], references: [id], onDelete: Cascade)
+
+  @@map("AgencyTripTraveller")
+  @@index([agencyTripId])
 }
