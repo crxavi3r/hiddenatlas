@@ -2,6 +2,10 @@
 // Single Vercel Function for the entire Agency surface.
 // Routes via ?action= (namespaced with colons for sub-resources).
 //
+// Database naming: Agency tables use snake_case columns. SQL aliases them
+// to camelCase at the boundary so JavaScript/API remains camelCase.
+// Existing HiddenAtlas tables (Trip, User, TripDay …) keep their camelCase columns.
+//
 // CORE (no namespace)
 //   GET  ?action=memberships
 //   GET  ?agencyId=&action=dashboard
@@ -35,7 +39,7 @@
 //     GET  ?agencyId=&action=trips:list         [&status=]
 //     GET  ?agencyId=&agencyTripId=&action=trips:detail
 //     GET  ?agencyId=&agencyTripId=&action=trips:travellers
-//     GET  ?agencyId=&agencyTripId=&action=trips:preview-data
+//     GET  ?agencyTripId=&action=trips:preview-data  (agencyId not needed)
 //     GET  ?agencyId=&action=trips:list-for-client&clientId=
 //     POST ?agencyId=&action=trips:create
 //     POST ?agencyId=&agencyTripId=&action=trips:update-status   { status }
@@ -93,6 +97,7 @@ function computeDuration(startDate, endDate) {
 }
 
 async function loadTripWorkspace(pool, tripId) {
+  // "Trip" table uses camelCase columns — no aliases needed here.
   const { rows: tripRows } = await pool.query(
     `SELECT id, "userId", "itinerarySlug", "itineraryId", title, destination, country,
             duration, "durationDays", overview, highlights, hotels, experiences,
@@ -158,17 +163,33 @@ async function loadTripWorkspace(pool, tripId) {
   };
 }
 
+// agTrip must already have camelCase properties (via SQL aliases).
 async function buildPortalPayload(pool, agTrip, agencyRow) {
   const [{ rows: brandingRows }, { rows: travellers }] = await Promise.all([
+    // AgencyBranding uses snake_case columns — alias to camelCase.
     pool.query(
-      `SELECT "logoUrl", "logoDarkUrl", "primaryColor", "accentColor",
-              website, "supportEmail", phone, whatsapp, "showPoweredByHiddenatlas"
-       FROM "AgencyBranding" WHERE "agencyId" = $1`,
+      `SELECT
+         "logo_url"                    AS "logoUrl",
+         "logo_dark_url"               AS "logoDarkUrl",
+         "primary_color"               AS "primaryColor",
+         "accent_color"                AS "accentColor",
+         "website_url"                 AS "websiteUrl",
+         "support_email"               AS "supportEmail",
+         phone,
+         whatsapp,
+         "show_powered_by_hiddenatlas" AS "showPoweredByHiddenatlas"
+       FROM "AgencyBranding" WHERE "agency_id" = $1`,
       [agTrip.agencyId]
     ),
+    // AgencyTripTraveller uses snake_case — alias to camelCase.
     pool.query(
-      `SELECT id, name, email, type, "sortOrder"
-       FROM "AgencyTripTraveller" WHERE "agencyTripId" = $1 ORDER BY "sortOrder" ASC`,
+      `SELECT
+         id, name, email,
+         "traveller_type" AS "type",
+         "sort_order"     AS "sortOrder"
+       FROM "AgencyTripTraveller"
+       WHERE "agency_trip_id" = $1
+       ORDER BY "sort_order" ASC`,
       [agTrip.id]
     ),
   ]);
@@ -176,7 +197,7 @@ async function buildPortalPayload(pool, agTrip, agencyRow) {
   let client = null;
   if (agTrip.clientId) {
     const { rows } = await pool.query(
-      `SELECT name FROM "AgencyClient" WHERE id = $1 AND "agencyId" = $2`,
+      `SELECT name FROM "AgencyClient" WHERE id = $1 AND "agency_id" = $2`,
       [agTrip.clientId, agTrip.agencyId]
     );
     client = rows[0] || null;
@@ -197,6 +218,44 @@ async function buildPortalPayload(pool, agTrip, agencyRow) {
   };
 }
 
+// Fetch a single AgencyTrip row with full camelCase aliases.
+async function fetchAgencyTrip(pool, atId, agencyId) {
+  const { rows } = await pool.query(
+    `SELECT
+       id,
+       "agency_id"              AS "agencyId",
+       "trip_id"                AS "tripId",
+       "client_id"              AS "clientId",
+       "assigned_member_id"     AS "assignedMemberId",
+       "template_id"            AS "templateId",
+       name,
+       destination,
+       "start_date"             AS "startDate",
+       "end_date"               AS "endDate",
+       status,
+       "share_token_hash"       AS "shareTokenHash",
+       "share_enabled"          AS "shareEnabled",
+       "share_expires_at"       AS "shareExpiresAt",
+       "shared_at"              AS "sharedAt",
+       "created_by_clerk_user_id" AS "createdByClerkUserId",
+       "created_at"             AS "createdAt",
+       "updated_at"             AS "updatedAt"
+     FROM "AgencyTrip"
+     WHERE id = $1 AND "agency_id" = $2`,
+    [atId, agencyId]
+  );
+  return rows[0] || null;
+}
+
+// SQL fragment: traveller columns aliased to camelCase
+const TRAVELLER_SELECT = `
+  id, name, email,
+  "traveller_type" AS "type",
+  "sort_order"     AS "sortOrder",
+  "created_at"     AS "createdAt",
+  "updated_at"     AS "updatedAt"
+`;
+
 // ── Exported handler ──────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
@@ -211,12 +270,14 @@ async function _handler(req, res) {
   if (!['GET', 'POST'].includes(req.method)) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  if (!process.env.DATABASE_URL) {
+  // eslint-disable-next-line no-undef
+  const DATABASE_URL = process.env.DATABASE_URL;
+  if (!DATABASE_URL) {
     return res.status(500).json({ error: 'Server misconfigured' });
   }
 
   const pool = new Pool({
-    connectionString:        process.env.DATABASE_URL,
+    connectionString:        DATABASE_URL,
     connectionTimeoutMillis: 8000,
     idleTimeoutMillis:       5000,
     max: 3,
@@ -224,9 +285,7 @@ async function _handler(req, res) {
   pool.on('error', err => console.error('[api/agency] pool error:', err.message));
 
   const { action, agencyId } = req.query;
-  // agencyTripId supports both param names for backwards compatibility
   const agencyTripId = req.query.agencyTripId || req.query.id;
-  // clientId / templateId use the generic 'id' param
   const id = req.query.id;
   const authHeader = req.headers.authorization;
 
@@ -240,12 +299,21 @@ async function _handler(req, res) {
       if (!token) return res.status(400).json({ error: 'token is required' });
 
       const hash = hashShareToken(token);
+      // AgencyTrip: snake_case → camelCase aliases
       const { rows: atRows } = await pool.query(
-        `SELECT id, "agencyId", "tripId", "clientId",
-                name, destination, "startDate", "endDate", status,
-                "shareEnabled", "shareExpiresAt"
+        `SELECT
+           id,
+           "agency_id"        AS "agencyId",
+           "trip_id"          AS "tripId",
+           "client_id"        AS "clientId",
+           name, destination,
+           "start_date"       AS "startDate",
+           "end_date"         AS "endDate",
+           status,
+           "share_enabled"    AS "shareEnabled",
+           "share_expires_at" AS "shareExpiresAt"
          FROM "AgencyTrip"
-         WHERE "shareTokenHash" = $1 AND "shareEnabled" = true`,
+         WHERE "share_token_hash" = $1 AND "share_enabled" = true`,
         [hash]
       );
       if (!atRows.length) return res.status(404).json({ error: 'Not found' });
@@ -282,36 +350,45 @@ async function _handler(req, res) {
       const agCtx = await resolveAgencyCtx(authHeader, pool, agencyId);
       if (!agCtx) return res.status(401).json({ error: 'Unauthorized' });
 
-      const [tripCountsRes, clientCountRes, recentTripsRes] = await Promise.all([
+      // Use the AgencyDashboardSummary view for aggregated stats.
+      // View columns: agency_id, active_trips, draft_trips, shared_trips, travelling_trips, upcoming_trips, clients
+      const [summaryRes, recentTripsRes] = await Promise.all([
         pool.query(
           `SELECT
-             COUNT(*) FILTER (WHERE status NOT IN ('archived','completed'))                        AS "activeTripCount",
-             COUNT(*) FILTER (WHERE "startDate" >= NOW() AND status IN ('draft','ready','shared')) AS "upcomingTripCount",
-             COUNT(*) FILTER (WHERE status = 'travelling')                                         AS "travellingCount"
-           FROM "AgencyTrip" WHERE "agencyId" = $1`,
+             "active_trips"     AS "activeTripCount",
+             "upcoming_trips"   AS "upcomingTripCount",
+             "travelling_trips" AS "travellingCount",
+             "clients"          AS "totalClients"
+           FROM "AgencyDashboardSummary"
+           WHERE "agency_id" = $1`,
           [agCtx.agencyId]
         ),
         pool.query(
-          `SELECT COUNT(*) AS "clientCount" FROM "AgencyClient" WHERE "agencyId" = $1`,
-          [agCtx.agencyId]
-        ),
-        pool.query(
-          `SELECT t.id, t.name, t.destination, t."startDate", t."endDate", t.status,
-                  t."clientId", c.name AS "clientName"
+          `SELECT
+             t.id, t.name, t.destination,
+             t."start_date"  AS "startDate",
+             t."end_date"    AS "endDate",
+             t.status,
+             t."client_id"   AS "clientId",
+             c.name          AS "clientName"
            FROM "AgencyTrip" t
-           LEFT JOIN "AgencyClient" c ON c.id = t."clientId"
-           WHERE t."agencyId" = $1
-           ORDER BY t."createdAt" DESC LIMIT 10`,
+           LEFT JOIN "AgencyClient" c ON c.id = t."client_id"
+           WHERE t."agency_id" = $1
+           ORDER BY t."created_at" DESC LIMIT 10`,
           [agCtx.agencyId]
         ),
       ]);
-      const tc = tripCountsRes.rows[0];
+
+      const summary = summaryRes.rows[0] ?? {
+        activeTripCount: 0, upcomingTripCount: 0, travellingCount: 0, totalClients: 0,
+      };
+
       return res.status(200).json({
         stats: {
-          activeTripCount:   parseInt(tc.activeTripCount, 10),
-          upcomingTripCount: parseInt(tc.upcomingTripCount, 10),
-          travellingCount:   parseInt(tc.travellingCount, 10),
-          totalClients:      parseInt(clientCountRes.rows[0].clientCount, 10),
+          activeTripCount:   parseInt(summary.activeTripCount,   10) || 0,
+          upcomingTripCount: parseInt(summary.upcomingTripCount, 10) || 0,
+          travellingCount:   parseInt(summary.travellingCount,   10) || 0,
+          totalClients:      parseInt(summary.totalClients,      10) || 0,
         },
         recentTrips: recentTripsRes.rows,
       });
@@ -322,21 +399,51 @@ async function _handler(req, res) {
       const agCtx = await resolveAgencyCtx(authHeader, pool, agencyId);
       if (!agCtx) return res.status(401).json({ error: 'Unauthorized' });
 
+      // AgencyBranding has no id column; agency_id is the primary key.
+      // LEFT JOIN so we always get agencyName even if no branding row exists.
       const { rows } = await pool.query(
-        `SELECT b.*, a.name AS "agencyName"
+        `SELECT
+           a.name                                   AS "agencyName",
+           b."agency_id"                            AS "brandingAgencyId",
+           b."logo_url"                             AS "logoUrl",
+           b."logo_dark_url"                        AS "logoDarkUrl",
+           b."primary_color"                        AS "primaryColor",
+           b."accent_color"                         AS "accentColor",
+           b."website_url"                          AS "websiteUrl",
+           b."support_email"                        AS "supportEmail",
+           b.phone,
+           b.whatsapp,
+           b."show_powered_by_hiddenatlas"          AS "showPoweredByHiddenatlas",
+           b."created_at"                           AS "createdAt",
+           b."updated_at"                           AS "updatedAt"
          FROM "Agency" a
-         LEFT JOIN "AgencyBranding" b ON b."agencyId" = a.id
+         LEFT JOIN "AgencyBranding" b ON b."agency_id" = a.id
          WHERE a.id = $1`,
         [agCtx.agencyId]
       );
       if (!rows.length) return res.status(404).json({ error: 'Agency not found' });
       const row = rows[0];
-      const branding = row.id ? row : {
+
+      const branding = row.brandingAgencyId ? {
+        agencyId:               agCtx.agencyId,
+        logoUrl:                row.logoUrl,
+        logoDarkUrl:            row.logoDarkUrl,
+        primaryColor:           row.primaryColor  ?? '#1B6B65',
+        accentColor:            row.accentColor   ?? '#C9A96E',
+        websiteUrl:             row.websiteUrl,
+        supportEmail:           row.supportEmail,
+        phone:                  row.phone,
+        whatsapp:               row.whatsapp,
+        showPoweredByHiddenatlas: row.showPoweredByHiddenatlas ?? true,
+        createdAt:              row.createdAt,
+        updatedAt:              row.updatedAt,
+      } : {
         agencyId: agCtx.agencyId, logoUrl: null, logoDarkUrl: null,
         primaryColor: '#1B6B65', accentColor: '#C9A96E',
-        website: null, supportEmail: null, phone: null, whatsapp: null,
+        websiteUrl: null, supportEmail: null, phone: null, whatsapp: null,
         showPoweredByHiddenatlas: true,
       };
+
       return res.status(200).json({ branding, agencyName: row.agencyName });
     }
 
@@ -345,14 +452,24 @@ async function _handler(req, res) {
       const agCtx = await resolveAgencyCtx(authHeader, pool, agencyId);
       if (!agCtx) return res.status(401).json({ error: 'Unauthorized' });
 
+      // AgencyMember snake_case → camelCase. No user_id column — join via clerkId.
       const { rows } = await pool.query(
-        `SELECT m.id, m."agencyId", m."clerkUserId", m."userId", m.role, m.status,
-                m."invitedAt", m."acceptedAt",
-                u.name AS name, u.email AS email
+        `SELECT
+           m.id,
+           m."agency_id"              AS "agencyId",
+           m."clerk_user_id"          AS "clerkUserId",
+           m.email,
+           m."display_name"           AS "displayName",
+           m.role,
+           m.status,
+           m."invited_by_clerk_user_id" AS "invitedByClerkUserId",
+           m."created_at"             AS "createdAt",
+           m."updated_at"             AS "updatedAt",
+           u.name                     AS "userName"
          FROM "AgencyMember" m
-         LEFT JOIN "User" u ON u.id = m."userId"
-         WHERE m."agencyId" = $1
-         ORDER BY m."createdAt" ASC`,
+         LEFT JOIN "User" u ON u."clerkId" = m."clerk_user_id"
+         WHERE m."agency_id" = $1
+         ORDER BY m."created_at" ASC`,
         [agCtx.agencyId]
       );
       return res.status(200).json({ members: rows });
@@ -369,12 +486,7 @@ async function _handler(req, res) {
         return res.status(400).json({ error: 'slug must be 3-50 chars: lowercase letters, numbers, hyphens' });
       }
 
-      const { rows: userRows } = await pool.query(
-        `SELECT id FROM "User" WHERE "clerkId" = $1 LIMIT 1`, [clerkId]
-      );
-      if (!userRows.length) return res.status(404).json({ error: 'User not found' });
-      const userId = userRows[0].id;
-
+      // User table: camelCase columns
       const { rows: slugRows } = await pool.query(
         `SELECT id FROM "Agency" WHERE slug = $1 LIMIT 1`, [slug.trim()]
       );
@@ -383,27 +495,38 @@ async function _handler(req, res) {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+
+        // Agency: snake_case columns
         const { rows: agRows } = await client.query(
-          `INSERT INTO "Agency" (id, name, slug, status, "createdAt", "updatedAt")
-           VALUES (gen_random_uuid(), $1, $2, 'active', NOW(), NOW()) RETURNING id`,
-          [name.trim(), slug.trim()]
+          `INSERT INTO "Agency" (id, name, slug, status, "created_by_clerk_user_id", "created_at", "updated_at")
+           VALUES (gen_random_uuid(), $1, $2, 'active', $3, NOW(), NOW()) RETURNING id`,
+          [name.trim(), slug.trim(), clerkId]
         );
         const newAgencyId = agRows[0].id;
+
+        // AgencyBranding: snake_case columns, no id column (agency_id is PK)
         await client.query(
-          `INSERT INTO "AgencyBranding" (id, "agencyId", "primaryColor", "accentColor",
-                                         "showPoweredByHiddenatlas", "createdAt", "updatedAt")
-           VALUES (gen_random_uuid(), $1, '#1B6B65', '#C9A96E', true, NOW(), NOW())`,
+          `INSERT INTO "AgencyBranding"
+             ("agency_id", "primary_color", "accent_color", "show_powered_by_hiddenatlas", "created_at", "updated_at")
+           VALUES ($1, '#1B6B65', '#C9A96E', true, NOW(), NOW())`,
           [newAgencyId]
         );
+
+        // AgencyMember: snake_case, no user_id column — keyed by clerk_user_id
         const { rows: memberRows } = await client.query(
-          `INSERT INTO "AgencyMember" (id, "agencyId", "clerkUserId", "userId", role, status,
-                                       "invitedAt", "acceptedAt", "createdAt", "updatedAt")
-           VALUES (gen_random_uuid(), $1, $2, $3, 'owner', 'active', NOW(), NOW(), NOW(), NOW())
+          `INSERT INTO "AgencyMember"
+             (id, "agency_id", "clerk_user_id", email, role, status, "created_at", "updated_at")
+           SELECT gen_random_uuid(), $1, $2, u.email, 'owner', 'active', NOW(), NOW()
+           FROM "User" u WHERE u."clerkId" = $2
            RETURNING id`,
-          [newAgencyId, clerkId, userId]
+          [newAgencyId, clerkId]
         );
+
         await client.query('COMMIT');
-        return res.status(201).json({ agencyId: newAgencyId, memberId: memberRows[0].id });
+        return res.status(201).json({
+          agencyId: newAgencyId,
+          memberId: memberRows[0]?.id ?? null,
+        });
       } catch (err) {
         await client.query('ROLLBACK');
         throw err;
@@ -418,7 +541,14 @@ async function _handler(req, res) {
       if (!agCtx) return res.status(401).json({ error: 'Unauthorized' });
       if (!canManageBranding(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
 
-      const { logoUrl, logoDarkUrl, primaryColor, accentColor, website, supportEmail, phone, whatsapp, showPoweredByHiddenatlas } = req.body ?? {};
+      // Accept either websiteUrl (new) or website (old) for backward compat
+      const {
+        logoUrl, logoDarkUrl, primaryColor, accentColor,
+        websiteUrl, website,
+        supportEmail, phone, whatsapp, showPoweredByHiddenatlas,
+      } = req.body ?? {};
+      const resolvedWebsiteUrl = websiteUrl ?? website ?? null;
+
       if (primaryColor !== undefined && !HEX_COLOR_RE.test(primaryColor)) {
         return res.status(400).json({ error: 'primaryColor must be a valid hex color' });
       }
@@ -426,26 +556,50 @@ async function _handler(req, res) {
         return res.status(400).json({ error: 'accentColor must be a valid hex color' });
       }
 
-      const { rows } = await pool.query(
-        `INSERT INTO "AgencyBranding" (id, "agencyId", "logoUrl", "logoDarkUrl",
-                                       "primaryColor", "accentColor", website, "supportEmail",
-                                       phone, whatsapp, "showPoweredByHiddenatlas", "createdAt", "updatedAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, COALESCE($4,'#1B6B65'), COALESCE($5,'#C9A96E'), $6, $7, $8, $9, COALESCE($10,true), NOW(), NOW())
-         ON CONFLICT ("agencyId") DO UPDATE SET
-           "logoUrl"                  = COALESCE(EXCLUDED."logoUrl",                  "AgencyBranding"."logoUrl"),
-           "logoDarkUrl"              = COALESCE(EXCLUDED."logoDarkUrl",              "AgencyBranding"."logoDarkUrl"),
-           "primaryColor"             = COALESCE(EXCLUDED."primaryColor",             "AgencyBranding"."primaryColor"),
-           "accentColor"              = COALESCE(EXCLUDED."accentColor",              "AgencyBranding"."accentColor"),
-           website                    = COALESCE(EXCLUDED.website,                    "AgencyBranding".website),
-           "supportEmail"             = COALESCE(EXCLUDED."supportEmail",             "AgencyBranding"."supportEmail"),
-           phone                      = COALESCE(EXCLUDED.phone,                      "AgencyBranding".phone),
-           whatsapp                   = COALESCE(EXCLUDED.whatsapp,                   "AgencyBranding".whatsapp),
-           "showPoweredByHiddenatlas" = COALESCE(EXCLUDED."showPoweredByHiddenatlas","AgencyBranding"."showPoweredByHiddenatlas"),
-           "updatedAt" = NOW()
-         RETURNING *`,
-        [agCtx.agencyId, logoUrl??null, logoDarkUrl??null, primaryColor??null, accentColor??null, website??null, supportEmail??null, phone??null, whatsapp??null, showPoweredByHiddenatlas??null]
+      // AgencyBranding: snake_case columns, ON CONFLICT on agency_id (the PK)
+      await pool.query(
+        `INSERT INTO "AgencyBranding"
+           ("agency_id", "logo_url", "logo_dark_url",
+            "primary_color", "accent_color", "website_url", "support_email",
+            phone, whatsapp, "show_powered_by_hiddenatlas", "created_at", "updated_at")
+         VALUES ($1, $2, $3, COALESCE($4,'#1B6B65'), COALESCE($5,'#C9A96E'), $6, $7, $8, $9, COALESCE($10,true), NOW(), NOW())
+         ON CONFLICT ("agency_id") DO UPDATE SET
+           "logo_url"                    = COALESCE(EXCLUDED."logo_url",                    "AgencyBranding"."logo_url"),
+           "logo_dark_url"               = COALESCE(EXCLUDED."logo_dark_url",               "AgencyBranding"."logo_dark_url"),
+           "primary_color"               = COALESCE(EXCLUDED."primary_color",               "AgencyBranding"."primary_color"),
+           "accent_color"                = COALESCE(EXCLUDED."accent_color",                "AgencyBranding"."accent_color"),
+           "website_url"                 = COALESCE(EXCLUDED."website_url",                 "AgencyBranding"."website_url"),
+           "support_email"               = COALESCE(EXCLUDED."support_email",               "AgencyBranding"."support_email"),
+           phone                         = COALESCE(EXCLUDED.phone,                         "AgencyBranding".phone),
+           whatsapp                      = COALESCE(EXCLUDED.whatsapp,                      "AgencyBranding".whatsapp),
+           "show_powered_by_hiddenatlas" = COALESCE(EXCLUDED."show_powered_by_hiddenatlas", "AgencyBranding"."show_powered_by_hiddenatlas"),
+           "updated_at" = NOW()`,
+        [
+          agCtx.agencyId,
+          logoUrl ?? null, logoDarkUrl ?? null,
+          primaryColor ?? null, accentColor ?? null,
+          resolvedWebsiteUrl, supportEmail ?? null,
+          phone ?? null, whatsapp ?? null,
+          showPoweredByHiddenatlas ?? null,
+        ]
       );
-      return res.status(200).json({ branding: rows[0] });
+
+      // Return updated branding with camelCase
+      const { rows: updated } = await pool.query(
+        `SELECT
+           "logo_url"                    AS "logoUrl",
+           "logo_dark_url"               AS "logoDarkUrl",
+           "primary_color"               AS "primaryColor",
+           "accent_color"                AS "accentColor",
+           "website_url"                 AS "websiteUrl",
+           "support_email"               AS "supportEmail",
+           phone, whatsapp,
+           "show_powered_by_hiddenatlas" AS "showPoweredByHiddenatlas",
+           "updated_at"                  AS "updatedAt"
+         FROM "AgencyBranding" WHERE "agency_id" = $1`,
+        [agCtx.agencyId]
+      );
+      return res.status(200).json({ branding: updated[0] ?? null });
     }
 
     if (req.method === 'POST' && action === 'update-agency-name') {
@@ -455,7 +609,11 @@ async function _handler(req, res) {
       if (!canManageAgency(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
       const { name } = req.body ?? {};
       if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
-      await pool.query(`UPDATE "Agency" SET name = $1, "updatedAt" = NOW() WHERE id = $2`, [name.trim(), agCtx.agencyId]);
+      // Agency: snake_case updated_at
+      await pool.query(
+        `UPDATE "Agency" SET name = $1, "updated_at" = NOW() WHERE id = $2`,
+        [name.trim(), agCtx.agencyId]
+      );
       return res.status(200).json({ name: name.trim() });
     }
 
@@ -464,33 +622,47 @@ async function _handler(req, res) {
       const agCtx = await resolveAgencyCtx(authHeader, pool, agencyId);
       if (!agCtx) return res.status(401).json({ error: 'Unauthorized' });
       if (!canManageTeam(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
+
       const { email, role } = req.body ?? {};
       if (!email?.trim()) return res.status(400).json({ error: 'email is required' });
       const VALID_ROLES = new Set(['admin', 'agent', 'editor']);
       if (!VALID_ROLES.has(role)) return res.status(400).json({ error: 'role must be admin, agent, or editor' });
 
       const normalizedEmail = email.toLowerCase().trim();
+
+      // Look up User by email (User table: camelCase)
       const { rows: userRows } = await pool.query(
-        `SELECT id, "clerkId" FROM "User" WHERE email = $1 LIMIT 1`, [normalizedEmail]
+        `SELECT id, "clerkId", name FROM "User" WHERE email = $1 LIMIT 1`, [normalizedEmail]
       );
       const existingUser = userRows[0] ?? null;
-      let inviteUserId = null, inviteClerkId = `pending:${normalizedEmail}`, memberStatus = 'invited', acceptedAt = null;
+
+      let inviteClerkId = `pending:${normalizedEmail}`;
+      let inviteDisplayName = null;
+      let memberStatus = 'invited';
+
       if (existingUser) {
-        inviteUserId = existingUser.id;
-        inviteClerkId = existingUser.clerkId ?? `pending:${normalizedEmail}`;
-        memberStatus = 'active';
-        acceptedAt = new Date();
+        inviteClerkId    = existingUser.clerkId ?? `pending:${normalizedEmail}`;
+        inviteDisplayName = existingUser.name ?? null;
+        memberStatus     = 'active';
+
+        // Check not already a member (by clerk_user_id)
         const { rows: existingRows } = await pool.query(
-          `SELECT id FROM "AgencyMember" WHERE "agencyId" = $1 AND "userId" = $2 LIMIT 1`,
-          [agCtx.agencyId, existingUser.id]
+          `SELECT id FROM "AgencyMember" WHERE "agency_id" = $1 AND "clerk_user_id" = $2 LIMIT 1`,
+          [agCtx.agencyId, inviteClerkId]
         );
-        if (existingRows.length) return res.status(409).json({ error: 'User is already a member of this agency' });
+        if (existingRows.length) {
+          return res.status(409).json({ error: 'User is already a member of this agency' });
+        }
       }
+
+      // AgencyMember: snake_case columns. No user_id, invited_at, accepted_at.
       const { rows: memberRows } = await pool.query(
-        `INSERT INTO "AgencyMember" (id, "agencyId", "clerkUserId", "userId", role, status,
-                                     "invitedByClerkUserId", "invitedAt", "acceptedAt", "createdAt", "updatedAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW(), $7, NOW(), NOW()) RETURNING id, status`,
-        [agCtx.agencyId, inviteClerkId, inviteUserId, role, memberStatus, agCtx.clerkId, acceptedAt]
+        `INSERT INTO "AgencyMember"
+           (id, "agency_id", "clerk_user_id", email, "display_name", role, status,
+            "invited_by_clerk_user_id", "created_at", "updated_at")
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+         RETURNING id, status`,
+        [agCtx.agencyId, inviteClerkId, normalizedEmail, inviteDisplayName, role, memberStatus, agCtx.clerkId]
       );
       return res.status(201).json({ memberId: memberRows[0].id, status: memberRows[0].status });
     }
@@ -500,22 +672,29 @@ async function _handler(req, res) {
       const agCtx = await resolveAgencyCtx(authHeader, pool, agencyId);
       if (!agCtx) return res.status(401).json({ error: 'Unauthorized' });
       if (!canManageTeam(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
+
       const { memberId, role, status } = req.body ?? {};
       if (!memberId) return res.status(400).json({ error: 'memberId is required' });
+
       const { rows: targetRows } = await pool.query(
-        `SELECT id, role, status FROM "AgencyMember" WHERE id = $1 AND "agencyId" = $2 LIMIT 1`,
+        `SELECT id, role, status FROM "AgencyMember" WHERE id = $1 AND "agency_id" = $2 LIMIT 1`,
         [memberId, agCtx.agencyId]
       );
       if (!targetRows.length) return res.status(404).json({ error: 'Member not found' });
       if (targetRows[0].role === 'owner') return res.status(403).json({ error: 'Cannot modify the agency owner' });
+
       if (role !== undefined) {
         const VALID = new Set(['admin', 'agent', 'editor']);
         if (!VALID.has(role)) return res.status(400).json({ error: 'Invalid role' });
-        await pool.query(`UPDATE "AgencyMember" SET role = $1, "updatedAt" = NOW() WHERE id = $2`, [role, memberId]);
+        await pool.query(
+          `UPDATE "AgencyMember" SET role = $1, "updated_at" = NOW() WHERE id = $2`,
+          [role, memberId]
+        );
       }
       if (status === 'disabled') {
+        // No disabled_at column — just set status
         await pool.query(
-          `UPDATE "AgencyMember" SET status = 'disabled', "disabledAt" = NOW(), "updatedAt" = NOW() WHERE id = $1`,
+          `UPDATE "AgencyMember" SET status = 'disabled', "updated_at" = NOW() WHERE id = $1`,
           [memberId]
         );
       }
@@ -527,26 +706,41 @@ async function _handler(req, res) {
       const agCtx = await resolveAgencyCtx(authHeader, pool, agencyId);
       if (!agCtx) return res.status(401).json({ error: 'Unauthorized' });
       if (!canManageBranding(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
+
       const { base64Data, filename, field } = req.body ?? {};
       if (!base64Data || !filename) return res.status(400).json({ error: 'base64Data and filename are required' });
-      if (!['logoUrl', 'logoDarkUrl'].includes(field)) return res.status(400).json({ error: 'field must be logoUrl or logoDarkUrl' });
+      if (!['logoUrl', 'logoDarkUrl'].includes(field)) {
+        return res.status(400).json({ error: 'field must be logoUrl or logoDarkUrl' });
+      }
+
       const rawBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+      // eslint-disable-next-line no-undef
       const buffer = Buffer.from(rawBase64, 'base64');
       if (buffer.byteLength > MAX_LOGO_BYTES) return res.status(400).json({ error: 'File exceeds 5 MB limit' });
+
       const ext  = (filename.split('.').pop() ?? '').toLowerCase();
       const mime = EXT_MIME[ext];
       if (!mime) return res.status(400).json({ error: 'File type not allowed. Use jpg, png, webp, or svg.' });
+
       const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const blob = await put(`agencies/${agCtx.agencyId}/branding/${Date.now()}-${safeName}`, buffer, { access: 'public', contentType: mime });
+      const blob = await put(
+        `agencies/${agCtx.agencyId}/branding/${Date.now()}-${safeName}`,
+        buffer, { access: 'public', contentType: mime }
+      );
+
       const logoUrlVal     = field === 'logoUrl'     ? blob.url : null;
       const logoDarkUrlVal = field === 'logoDarkUrl' ? blob.url : null;
+
+      // AgencyBranding: snake_case columns, no id column, ON CONFLICT on agency_id
       await pool.query(
-        `INSERT INTO "AgencyBranding" (id, "agencyId", "logoUrl", "logoDarkUrl", "primaryColor", "accentColor", "showPoweredByHiddenatlas", "createdAt", "updatedAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, '#1B6B65', '#C9A96E', true, NOW(), NOW())
-         ON CONFLICT ("agencyId") DO UPDATE SET
-           "logoUrl"     = CASE WHEN $2 IS NOT NULL THEN $2 ELSE "AgencyBranding"."logoUrl" END,
-           "logoDarkUrl" = CASE WHEN $3 IS NOT NULL THEN $3 ELSE "AgencyBranding"."logoDarkUrl" END,
-           "updatedAt"   = NOW()`,
+        `INSERT INTO "AgencyBranding"
+           ("agency_id", "logo_url", "logo_dark_url", "primary_color", "accent_color",
+            "show_powered_by_hiddenatlas", "created_at", "updated_at")
+         VALUES ($1, $2, $3, '#1B6B65', '#C9A96E', true, NOW(), NOW())
+         ON CONFLICT ("agency_id") DO UPDATE SET
+           "logo_url"     = CASE WHEN $2 IS NOT NULL THEN $2 ELSE "AgencyBranding"."logo_url" END,
+           "logo_dark_url" = CASE WHEN $3 IS NOT NULL THEN $3 ELSE "AgencyBranding"."logo_dark_url" END,
+           "updated_at"   = NOW()`,
         [agCtx.agencyId, logoUrlVal, logoDarkUrlVal]
       );
       return res.status(200).json({ url: blob.url });
@@ -554,7 +748,6 @@ async function _handler(req, res) {
 
     // ════════════════════════════════════════════════════════════════════
     // CLIENTS actions (clients:*)
-    // All require agencyId + auth
     // ════════════════════════════════════════════════════════════════════
 
     if (action && action.startsWith('clients:')) {
@@ -565,17 +758,24 @@ async function _handler(req, res) {
       if (req.method === 'GET' && action === 'clients:list') {
         const search = req.query.search?.trim() || '';
         const params = [agCtx.agencyId];
-        let where = `WHERE ac."agencyId" = $1`;
+        let where = `WHERE ac."agency_id" = $1`;
         if (search) {
           params.push(`%${search}%`);
           where += ` AND (ac.name ILIKE $${params.length} OR ac.email ILIKE $${params.length})`;
         }
+        // AgencyClient and AgencyTrip: snake_case → camelCase
         const { rows } = await pool.query(
-          `SELECT ac.id, ac."agencyId", ac.name, ac.email, ac.phone, ac.notes, ac."createdAt",
-                  COUNT(at2.id)::int AS "tripCount"
+          `SELECT
+             ac.id,
+             ac."agency_id"  AS "agencyId",
+             ac.name, ac.email, ac.phone, ac.notes,
+             ac."created_at" AS "createdAt",
+             COUNT(at2.id)::int AS "tripCount"
            FROM "AgencyClient" ac
-           LEFT JOIN "AgencyTrip" at2 ON at2."clientId" = ac.id
-           ${where} GROUP BY ac.id ORDER BY ac.name ASC`,
+           LEFT JOIN "AgencyTrip" at2 ON at2."client_id" = ac.id
+           ${where}
+           GROUP BY ac.id
+           ORDER BY ac.name ASC`,
           params
         );
         return res.status(200).json({ clients: rows });
@@ -584,13 +784,27 @@ async function _handler(req, res) {
       if (req.method === 'GET' && action === 'clients:detail') {
         if (!id) return res.status(400).json({ error: 'id is required' });
         const { rows: clientRows } = await pool.query(
-          `SELECT * FROM "AgencyClient" WHERE id = $1 AND "agencyId" = $2 LIMIT 1`,
+          `SELECT
+             id,
+             "agency_id"   AS "agencyId",
+             name, email, phone, notes,
+             "created_at"  AS "createdAt",
+             "updated_at"  AS "updatedAt"
+           FROM "AgencyClient" WHERE id = $1 AND "agency_id" = $2 LIMIT 1`,
           [id, agCtx.agencyId]
         );
         if (!clientRows.length) return res.status(404).json({ error: 'Client not found' });
+
         const { rows: trips } = await pool.query(
-          `SELECT id, name, destination, "startDate", "endDate", status, "createdAt"
-           FROM "AgencyTrip" WHERE "clientId" = $1 AND "agencyId" = $2 ORDER BY "createdAt" DESC`,
+          `SELECT
+             id, name, destination,
+             "start_date" AS "startDate",
+             "end_date"   AS "endDate",
+             status,
+             "created_at" AS "createdAt"
+           FROM "AgencyTrip"
+           WHERE "client_id" = $1 AND "agency_id" = $2
+           ORDER BY "created_at" DESC`,
           [id, agCtx.agencyId]
         );
         return res.status(200).json({ client: clientRows[0], trips });
@@ -600,10 +814,15 @@ async function _handler(req, res) {
         if (!canManageClients(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
         const { name, email, phone, notes } = req.body || {};
         if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
+
         const { rows } = await pool.query(
-          `INSERT INTO "AgencyClient" (id, "agencyId", name, email, phone, notes, "createdAt", "updatedAt")
-           VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, NOW(), NOW()) RETURNING *`,
-          [agCtx.agencyId, name.trim(), email?.trim()||null, phone?.trim()||null, notes?.trim()||null]
+          `INSERT INTO "AgencyClient"
+             (id, "agency_id", name, email, phone, notes, "created_by_clerk_user_id", "created_at", "updated_at")
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW(), NOW())
+           RETURNING
+             id, "agency_id" AS "agencyId", name, email, phone, notes,
+             "created_at" AS "createdAt", "updated_at" AS "updatedAt"`,
+          [agCtx.agencyId, name.trim(), email?.trim()||null, phone?.trim()||null, notes?.trim()||null, agCtx.clerkId]
         );
         return res.status(200).json(rows[0]);
       }
@@ -613,9 +832,11 @@ async function _handler(req, res) {
         if (!id) return res.status(400).json({ error: 'id is required' });
         const { name, email, phone, notes } = req.body || {};
         if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
+
         const { rowCount } = await pool.query(
-          `UPDATE "AgencyClient" SET name=$1, email=$2, phone=$3, notes=$4, "updatedAt"=NOW()
-           WHERE id=$5 AND "agencyId"=$6`,
+          `UPDATE "AgencyClient"
+           SET name=$1, email=$2, phone=$3, notes=$4, "updated_at"=NOW()
+           WHERE id=$5 AND "agency_id"=$6`,
           [name.trim(), email?.trim()||null, phone?.trim()||null, notes?.trim()||null, id, agCtx.agencyId]
         );
         if (!rowCount) return res.status(404).json({ error: 'Client not found' });
@@ -625,16 +846,21 @@ async function _handler(req, res) {
       if (req.method === 'POST' && action === 'clients:delete') {
         if (!canManageClients(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
         if (!id) return res.status(400).json({ error: 'id is required' });
+
         const { rows: activeTrips } = await pool.query(
-          `SELECT id FROM "AgencyTrip" WHERE "clientId" = $1 AND "agencyId" = $2
-           AND status NOT IN ('archived','completed') LIMIT 1`,
+          `SELECT id FROM "AgencyTrip"
+           WHERE "client_id" = $1 AND "agency_id" = $2
+             AND status NOT IN ('archived','completed')
+           LIMIT 1`,
           [id, agCtx.agencyId]
         );
         if (activeTrips.length) {
           return res.status(409).json({ error: 'Cannot delete client with active trips. Archive or complete them first.' });
         }
+
         const { rowCount } = await pool.query(
-          `DELETE FROM "AgencyClient" WHERE id = $1 AND "agencyId" = $2`, [id, agCtx.agencyId]
+          `DELETE FROM "AgencyClient" WHERE id = $1 AND "agency_id" = $2`,
+          [id, agCtx.agencyId]
         );
         if (!rowCount) return res.status(404).json({ error: 'Client not found' });
         return res.status(200).json({ ok: true });
@@ -652,14 +878,25 @@ async function _handler(req, res) {
 
       if (req.method === 'GET' && action === 'templates:list') {
         const includeArchived = req.query.includeArchived === 'true';
+        // AgencyTemplate: snake_case → camelCase. Trip table: camelCase unchanged.
         const { rows } = await pool.query(
-          `SELECT at2.id, at2."agencyId", at2.name, at2.description, at2.destination,
-                  at2."sourceTripId", at2.status, at2."createdAt", at2."updatedAt",
-                  t.title AS "tripTitle", t."durationDays" AS "tripDurationDays"
+          `SELECT
+             at2.id,
+             at2."agency_id"     AS "agencyId",
+             at2.name,
+             at2.description,
+             at2.destination,
+             at2."source_trip_id" AS "sourceTripId",
+             at2.status,
+             at2."created_at"    AS "createdAt",
+             at2."updated_at"    AS "updatedAt",
+             t.title             AS "tripTitle",
+             t."durationDays"    AS "tripDurationDays"
            FROM "AgencyTemplate" at2
-           LEFT JOIN "Trip" t ON t.id = at2."sourceTripId"
-           WHERE at2."agencyId" = $1 ${includeArchived ? '' : "AND at2.status = 'active'"}
-           ORDER BY at2."updatedAt" DESC`,
+           LEFT JOIN "Trip" t ON t.id = at2."source_trip_id"
+           WHERE at2."agency_id" = $1
+             ${includeArchived ? '' : "AND at2.status = 'active'"}
+           ORDER BY at2."updated_at" DESC`,
           [agCtx.agencyId]
         );
         return res.status(200).json({ templates: rows });
@@ -669,10 +906,17 @@ async function _handler(req, res) {
         if (!canManageTemplates(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
         const { name, description, destination, sourceTripId } = req.body || {};
         if (!name?.trim()) return res.status(400).json({ error: 'Template name is required' });
+
         const { rows } = await pool.query(
-          `INSERT INTO "AgencyTemplate" (id, "agencyId", name, description, destination, "sourceTripId", status, "createdAt", "updatedAt")
-           VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, 'active', NOW(), NOW()) RETURNING *`,
-          [agCtx.agencyId, name.trim(), description?.trim()||null, destination?.trim()||null, sourceTripId||null]
+          `INSERT INTO "AgencyTemplate"
+             (id, "agency_id", name, description, destination, "source_trip_id", status,
+              "created_by_clerk_user_id", "created_at", "updated_at")
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'active', $6, NOW(), NOW())
+           RETURNING
+             id, "agency_id" AS "agencyId", name, description, destination,
+             "source_trip_id" AS "sourceTripId", status,
+             "created_at" AS "createdAt", "updated_at" AS "updatedAt"`,
+          [agCtx.agencyId, name.trim(), description?.trim()||null, destination?.trim()||null, sourceTripId||null, agCtx.clerkId]
         );
         return res.status(200).json(rows[0]);
       }
@@ -682,9 +926,11 @@ async function _handler(req, res) {
         if (!id) return res.status(400).json({ error: 'id is required' });
         const { name, description, destination } = req.body || {};
         if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
+
         const { rowCount } = await pool.query(
-          `UPDATE "AgencyTemplate" SET name=$1, description=$2, destination=$3, "updatedAt"=NOW()
-           WHERE id=$4 AND "agencyId"=$5`,
+          `UPDATE "AgencyTemplate"
+           SET name=$1, description=$2, destination=$3, "updated_at"=NOW()
+           WHERE id=$4 AND "agency_id"=$5`,
           [name.trim(), description?.trim()||null, destination?.trim()||null, id, agCtx.agencyId]
         );
         if (!rowCount) return res.status(404).json({ error: 'Template not found' });
@@ -694,8 +940,11 @@ async function _handler(req, res) {
       if (req.method === 'POST' && action === 'templates:archive') {
         if (!canManageTemplates(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
         if (!id) return res.status(400).json({ error: 'id is required' });
+
         const { rowCount } = await pool.query(
-          `UPDATE "AgencyTemplate" SET status='archived', "updatedAt"=NOW() WHERE id=$1 AND "agencyId"=$2`,
+          `UPDATE "AgencyTemplate"
+           SET status='archived', "updated_at"=NOW()
+           WHERE id=$1 AND "agency_id"=$2`,
           [id, agCtx.agencyId]
         );
         if (!rowCount) return res.status(404).json({ error: 'Template not found' });
@@ -705,22 +954,31 @@ async function _handler(req, res) {
       if (req.method === 'POST' && action === 'templates:duplicate') {
         if (!canManageTemplates(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
         if (!id) return res.status(400).json({ error: 'id is required' });
+
         const { rows: tplRows } = await pool.query(
-          `SELECT * FROM "AgencyTemplate" WHERE id = $1 AND "agencyId" = $2 LIMIT 1`,
+          `SELECT
+             id, name, description, destination,
+             "source_trip_id" AS "sourceTripId"
+           FROM "AgencyTemplate" WHERE id = $1 AND "agency_id" = $2 LIMIT 1`,
           [id, agCtx.agencyId]
         );
         if (!tplRows.length) return res.status(404).json({ error: 'Template not found' });
         const tpl = tplRows[0];
+
         let newTripId = null;
         if (tpl.sourceTripId) {
           newTripId = await duplicateTrip(pool, tpl.sourceTripId, {
             userId: agCtx.userId, title: `${tpl.name} (copy)`, tripType: 'personal', createdFrom: 'duplicate',
           });
         }
+
         const { rows: newTpl } = await pool.query(
-          `INSERT INTO "AgencyTemplate" (id, "agencyId", name, description, destination, "sourceTripId", status, "createdAt", "updatedAt")
-           VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, 'active', NOW(), NOW()) RETURNING id`,
-          [agCtx.agencyId, `${tpl.name} (copy)`, tpl.description, tpl.destination, newTripId]
+          `INSERT INTO "AgencyTemplate"
+             (id, "agency_id", name, description, destination, "source_trip_id", status,
+              "created_by_clerk_user_id", "created_at", "updated_at")
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'active', $6, NOW(), NOW())
+           RETURNING id`,
+          [agCtx.agencyId, `${tpl.name} (copy)`, tpl.description, tpl.destination, newTripId, agCtx.clerkId]
         );
         return res.status(200).json({ templateId: newTpl[0].id });
       }
@@ -733,22 +991,36 @@ async function _handler(req, res) {
     if (action && action.startsWith('trips:')) {
       // trips:resolve-share handled above as public
 
-      // trips:preview-data: auth required but agencyId not needed in URL
-      // (preview link is /agency/trips/:agencyTripId/preview — no agencyId param)
+      // trips:preview-data: auth required; agencyId not available in the URL
+      // because the preview route is /agency/trips/:agencyTripId/preview.
       if (req.method === 'GET' && action === 'trips:preview-data') {
         if (!agencyTripId) return res.status(400).json({ error: 'agencyTripId is required' });
         let clerkId;
         try { clerkId = await verifyAuth(authHeader); }
         catch { return res.status(401).json({ error: 'Unauthorized' }); }
+
+        // Verify the requesting user is an active member of the agency that owns this trip
         const { rows: atRows } = await pool.query(
-          `SELECT at.* FROM "AgencyTrip" at
-           JOIN "AgencyMember" m ON m."agencyId" = at."agencyId"
-             AND m."clerkUserId" = $1 AND m.status = 'active'
+          `SELECT
+             at.id,
+             at."agency_id"   AS "agencyId",
+             at."trip_id"     AS "tripId",
+             at."client_id"   AS "clientId",
+             at.name, at.destination,
+             at."start_date"  AS "startDate",
+             at."end_date"    AS "endDate",
+             at.status
+           FROM "AgencyTrip" at
+           JOIN "AgencyMember" m
+             ON m."agency_id" = at."agency_id"
+            AND m."clerk_user_id" = $1
+            AND m.status = 'active'
            WHERE at.id = $2 LIMIT 1`,
           [clerkId, agencyTripId]
         );
         if (!atRows.length) return res.status(404).json({ error: 'Agency trip not found' });
         const agTrip = atRows[0];
+
         const { rows: agencyRows } = await pool.query(
           `SELECT id, name, slug FROM "Agency" WHERE id = $1`, [agTrip.agencyId]
         );
@@ -760,53 +1032,74 @@ async function _handler(req, res) {
       const agCtx = await resolveAgencyCtx(authHeader, pool, agencyId);
       if (!agCtx) return res.status(401).json({ error: 'Unauthorized' });
 
-      async function getAgencyTrip(atId) {
-        const { rows } = await pool.query(
-          `SELECT * FROM "AgencyTrip" WHERE id = $1 AND "agencyId" = $2`,
-          [atId, agCtx.agencyId]
-        );
-        return rows[0] || null;
-      }
+      // Reusable: fetch one AgencyTrip with full camelCase aliases
+      const getAgencyTrip = (atId) => fetchAgencyTrip(pool, atId, agCtx.agencyId);
 
       // ── GET actions ──────────────────────────────────────────────────
 
       if (req.method === 'GET' && action === 'trips:list') {
         let query = `
-          SELECT at.id, at.name, at.destination, at."startDate", at."endDate",
-                 at.status, at."tripId", at."clientId", at."assignedMemberId",
-                 at."templateId", at."createdAt",
-                 ac.name AS "clientName"
+          SELECT
+            at.id, at.name, at.destination,
+            at."start_date"          AS "startDate",
+            at."end_date"            AS "endDate",
+            at.status,
+            at."trip_id"             AS "tripId",
+            at."client_id"           AS "clientId",
+            at."assigned_member_id"  AS "assignedMemberId",
+            at."template_id"         AS "templateId",
+            at."created_at"          AS "createdAt",
+            ac.name                  AS "clientName"
           FROM "AgencyTrip" at
-          LEFT JOIN "AgencyClient" ac ON ac.id = at."clientId"
-          WHERE at."agencyId" = $1`;
+          LEFT JOIN "AgencyClient" ac ON ac.id = at."client_id"
+          WHERE at."agency_id" = $1`;
         const params = [agCtx.agencyId];
         const { status: statusFilter } = req.query;
         if (statusFilter) { params.push(statusFilter); query += ` AND at.status = $${params.length}`; }
-        query += ` ORDER BY at."createdAt" DESC`;
+        query += ` ORDER BY at."created_at" DESC`;
         const { rows } = await pool.query(query, params);
         return res.status(200).json({ trips: rows });
       }
 
       if (req.method === 'GET' && action === 'trips:detail') {
         if (!agencyTripId) return res.status(400).json({ error: 'agencyTripId is required' });
+
         const { rows: atRows } = await pool.query(
-          `SELECT at.id, at."agencyId", at."tripId", at."clientId", at."assignedMemberId", at."templateId",
-                  at.name, at.destination, at."startDate", at."endDate", at.status,
-                  at."createdByClerkUserId", at."shareEnabled", at."shareExpiresAt", at."sharedAt",
-                  at."createdAt", at."updatedAt",
-                  ac.name AS "clientName", ac.email AS "clientEmail"
+          `SELECT
+             at.id,
+             at."agency_id"               AS "agencyId",
+             at."trip_id"                 AS "tripId",
+             at."client_id"               AS "clientId",
+             at."assigned_member_id"      AS "assignedMemberId",
+             at."template_id"             AS "templateId",
+             at.name, at.destination,
+             at."start_date"              AS "startDate",
+             at."end_date"               AS "endDate",
+             at.status,
+             at."created_by_clerk_user_id" AS "createdByClerkUserId",
+             at."share_enabled"           AS "shareEnabled",
+             at."share_expires_at"        AS "shareExpiresAt",
+             at."shared_at"              AS "sharedAt",
+             at."created_at"             AS "createdAt",
+             at."updated_at"             AS "updatedAt",
+             ac.name                     AS "clientName",
+             ac.email                    AS "clientEmail"
            FROM "AgencyTrip" at
-           LEFT JOIN "AgencyClient" ac ON ac.id = at."clientId"
-           WHERE at.id = $1 AND at."agencyId" = $2`,
+           LEFT JOIN "AgencyClient" ac ON ac.id = at."client_id"
+           WHERE at.id = $1 AND at."agency_id" = $2`,
           [agencyTripId, agCtx.agencyId]
         );
         if (!atRows.length) return res.status(404).json({ error: 'Agency trip not found' });
         const agTrip = atRows[0];
+
         const { rows: travellers } = await pool.query(
-          `SELECT id, name, email, type, "sortOrder", "createdAt", "updatedAt"
-           FROM "AgencyTripTraveller" WHERE "agencyTripId" = $1 ORDER BY "sortOrder" ASC`,
+          `SELECT ${TRAVELLER_SELECT}
+           FROM "AgencyTripTraveller"
+           WHERE "agency_trip_id" = $1
+           ORDER BY "sort_order" ASC`,
           [agencyTripId]
         );
+
         let tripInfo = null;
         if (agTrip.tripId) {
           const { rows: tripRows } = await pool.query(
@@ -823,8 +1116,16 @@ async function _handler(req, res) {
         const { clientId } = req.query;
         if (!clientId) return res.status(400).json({ error: 'clientId is required' });
         const { rows } = await pool.query(
-          `SELECT at.id, at.name, at.destination, at."startDate", at."endDate", at.status, at."tripId", at."createdAt"
-           FROM "AgencyTrip" at WHERE at."agencyId" = $1 AND at."clientId" = $2 ORDER BY at."createdAt" DESC`,
+          `SELECT
+             at.id, at.name, at.destination,
+             at."start_date" AS "startDate",
+             at."end_date"   AS "endDate",
+             at.status,
+             at."trip_id"   AS "tripId",
+             at."created_at" AS "createdAt"
+           FROM "AgencyTrip" at
+           WHERE at."agency_id" = $1 AND at."client_id" = $2
+           ORDER BY at."created_at" DESC`,
           [agCtx.agencyId, clientId]
         );
         return res.status(200).json(rows);
@@ -834,65 +1135,99 @@ async function _handler(req, res) {
         if (!agencyTripId) return res.status(400).json({ error: 'agencyTripId is required' });
         const agTrip = await getAgencyTrip(agencyTripId);
         if (!agTrip) return res.status(404).json({ error: 'Agency trip not found' });
+
         const { rows } = await pool.query(
-          `SELECT id, name, email, type, "sortOrder", "createdAt", "updatedAt"
-           FROM "AgencyTripTraveller" WHERE "agencyTripId" = $1 ORDER BY "sortOrder" ASC`,
+          `SELECT ${TRAVELLER_SELECT}
+           FROM "AgencyTripTraveller"
+           WHERE "agency_trip_id" = $1
+           ORDER BY "sort_order" ASC`,
           [agencyTripId]
         );
         return res.status(200).json(rows);
       }
 
-
       // ── POST actions ─────────────────────────────────────────────────
 
       if (req.method === 'POST' && action === 'trips:create') {
         if (!canManageTrips(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
-        const { name, clientId, destination, startDate, endDate, assignedMemberId, templateId, sourceAgencyTripId } = req.body || {};
+        const {
+          name, clientId, destination, startDate, endDate,
+          assignedMemberId, templateId, sourceAgencyTripId,
+        } = req.body || {};
 
         if (clientId) {
-          const { rows } = await pool.query(`SELECT id FROM "AgencyClient" WHERE id = $1 AND "agencyId" = $2`, [clientId, agCtx.agencyId]);
+          const { rows } = await pool.query(
+            `SELECT id FROM "AgencyClient" WHERE id = $1 AND "agency_id" = $2`,
+            [clientId, agCtx.agencyId]
+          );
           if (!rows.length) return res.status(400).json({ error: 'Client not found in this agency' });
         }
         if (assignedMemberId) {
-          const { rows } = await pool.query(`SELECT id FROM "AgencyMember" WHERE id = $1 AND "agencyId" = $2 AND status = 'active'`, [assignedMemberId, agCtx.agencyId]);
+          const { rows } = await pool.query(
+            `SELECT id FROM "AgencyMember" WHERE id = $1 AND "agency_id" = $2 AND status = 'active'`,
+            [assignedMemberId, agCtx.agencyId]
+          );
           if (!rows.length) return res.status(400).json({ error: 'Member not found in this agency' });
         }
 
         let newTripId, resolvedTemplateId = null;
 
         if (templateId) {
+          // AgencyTemplate: source_trip_id (snake_case)
           const { rows: tmplRows } = await pool.query(
-            `SELECT id, name, "sourceTripId" FROM "AgencyTemplate" WHERE id = $1 AND "agencyId" = $2 AND status = 'active'`,
+            `SELECT id, name, "source_trip_id" AS "sourceTripId"
+             FROM "AgencyTemplate"
+             WHERE id = $1 AND "agency_id" = $2 AND status = 'active'`,
             [templateId, agCtx.agencyId]
           );
           if (!tmplRows.length) return res.status(400).json({ error: 'Template not found' });
           if (!tmplRows[0].sourceTripId) return res.status(400).json({ error: 'Template has no source trip' });
-          newTripId = await duplicateTrip(pool, tmplRows[0].sourceTripId, { userId: agCtx.userId, title: name?.trim() || tmplRows[0].name, tripType: 'personal', createdFrom: 'duplicate' });
+          newTripId = await duplicateTrip(pool, tmplRows[0].sourceTripId, {
+            userId: agCtx.userId, title: name?.trim() || tmplRows[0].name,
+            tripType: 'personal', createdFrom: 'duplicate',
+          });
           resolvedTemplateId = templateId;
 
         } else if (sourceAgencyTripId) {
           if (!name?.trim()) return res.status(400).json({ error: 'name is required when duplicating' });
-          const { rows: srcRows } = await pool.query(`SELECT id, "tripId" FROM "AgencyTrip" WHERE id = $1 AND "agencyId" = $2`, [sourceAgencyTripId, agCtx.agencyId]);
-          if (!srcRows.length || !srcRows[0].tripId) return res.status(400).json({ error: 'Source agency trip not found or has no linked trip' });
-          newTripId = await duplicateTrip(pool, srcRows[0].tripId, { userId: agCtx.userId, title: name.trim(), tripType: 'personal', createdFrom: 'duplicate' });
+          const { rows: srcRows } = await pool.query(
+            `SELECT id, "trip_id" AS "tripId"
+             FROM "AgencyTrip"
+             WHERE id = $1 AND "agency_id" = $2`,
+            [sourceAgencyTripId, agCtx.agencyId]
+          );
+          if (!srcRows.length || !srcRows[0].tripId) {
+            return res.status(400).json({ error: 'Source agency trip not found or has no linked trip' });
+          }
+          newTripId = await duplicateTrip(pool, srcRows[0].tripId, {
+            userId: agCtx.userId, title: name.trim(), tripType: 'personal', createdFrom: 'duplicate',
+          });
 
         } else {
           if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
           const { durationDays, duration } = computeDuration(startDate, endDate);
+          // Trip table: camelCase columns
           const { rows: created } = await pool.query(
-            `INSERT INTO "Trip" (id, "userId", title, destination, country, duration, "durationDays",
-                                 overview, highlights, hotels, experiences, source,
-                                 "tripType", "createdFrom", "isEditable",
-                                 "startDate", "endDate", "personalPdfConfig", "itinerarySnapshot", "pdfStatus", "createdAt", "updatedAt")
-             VALUES (gen_random_uuid(), $1, $2, $3, '', $4, $5, '', '[]', '[]', '[]', 'MANUAL',
-                    'personal', 'manual', true, $6, $7, '{}', '{}', 'idle', NOW(), NOW()) RETURNING id`,
+            `INSERT INTO "Trip"
+               (id, "userId", title, destination, country, duration, "durationDays",
+                overview, highlights, hotels, experiences, source,
+                "tripType", "createdFrom", "isEditable",
+                "startDate", "endDate", "personalPdfConfig", "itinerarySnapshot", "pdfStatus",
+                "createdAt", "updatedAt")
+             VALUES
+               (gen_random_uuid(), $1, $2, $3, '', $4, $5,
+                '', '[]', '[]', '[]', 'MANUAL',
+                'personal', 'manual', true,
+                $6, $7, '{}', '{}', 'idle', NOW(), NOW())
+             RETURNING id`,
             [agCtx.userId, name.trim(), destination||'', duration, durationDays, startDate||null, endDate||null]
           );
           newTripId = created[0].id;
           if (durationDays && durationDays > 0) {
             for (let i = 0; i < durationDays; i++) {
               await pool.query(
-                `INSERT INTO "TripDay" (id, "tripId", "dayNumber", title, description, "sortOrder", "isHidden", "resetToOriginal", "updatedAt")
+                `INSERT INTO "TripDay"
+                   (id, "tripId", "dayNumber", title, description, "sortOrder", "isHidden", "resetToOriginal", "updatedAt")
                  VALUES (gen_random_uuid(), $1, $2, $3, '', $4, false, false, NOW())`,
                 [newTripId, i + 1, `Day ${i + 1}`, i + 1]
               );
@@ -900,11 +1235,21 @@ async function _handler(req, res) {
           }
         }
 
+        // AgencyTrip: snake_case columns
         const { rows: atInserted } = await pool.query(
-          `INSERT INTO "AgencyTrip" (id, "agencyId", "tripId", "clientId", "assignedMemberId", "templateId",
-                                     name, destination, "startDate", "endDate", status, "createdByClerkUserId", "createdAt", "updatedAt")
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10, NOW(), NOW()) RETURNING id`,
-          [agCtx.agencyId, newTripId, clientId||null, assignedMemberId||null, resolvedTemplateId, name?.trim()||'', destination||null, startDate||null, endDate||null, agCtx.clerkId]
+          `INSERT INTO "AgencyTrip"
+             (id, "agency_id", "trip_id", "client_id", "assigned_member_id", "template_id",
+              name, destination, "start_date", "end_date", status,
+              "created_by_clerk_user_id", "created_at", "updated_at")
+           VALUES
+             (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10, NOW(), NOW())
+           RETURNING id`,
+          [
+            agCtx.agencyId, newTripId,
+            clientId||null, assignedMemberId||null, resolvedTemplateId,
+            name?.trim()||'', destination||null, startDate||null, endDate||null,
+            agCtx.clerkId,
+          ]
         );
         return res.status(200).json({ agencyTripId: atInserted[0].id, tripId: newTripId });
       }
@@ -914,10 +1259,16 @@ async function _handler(req, res) {
         if (!canManageTrips(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
         const agTrip = await getAgencyTrip(agencyTripId);
         if (!agTrip) return res.status(404).json({ error: 'Agency trip not found' });
+
         const { status } = req.body || {};
         const VALID = ['draft','ready','shared','travelling','completed','archived'];
-        if (!VALID.includes(status)) return res.status(400).json({ error: `status must be one of: ${VALID.join(', ')}` });
-        await pool.query(`UPDATE "AgencyTrip" SET status = $1, "updatedAt" = NOW() WHERE id = $2`, [status, agencyTripId]);
+        if (!VALID.includes(status)) {
+          return res.status(400).json({ error: `status must be one of: ${VALID.join(', ')}` });
+        }
+        await pool.query(
+          `UPDATE "AgencyTrip" SET status = $1, "updated_at" = NOW() WHERE id = $2`,
+          [status, agencyTripId]
+        );
         return res.status(200).json({ ok: true });
       }
 
@@ -926,24 +1277,34 @@ async function _handler(req, res) {
         if (!canEditTrips(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
         const agTrip = await getAgencyTrip(agencyTripId);
         if (!agTrip) return res.status(404).json({ error: 'Agency trip not found' });
+
         const body = req.body || {};
         const { name, clientId, destination, startDate, endDate, assignedMemberId } = body;
+
         if (clientId) {
-          const { rows } = await pool.query(`SELECT id FROM "AgencyClient" WHERE id = $1 AND "agencyId" = $2`, [clientId, agCtx.agencyId]);
+          const { rows } = await pool.query(
+            `SELECT id FROM "AgencyClient" WHERE id = $1 AND "agency_id" = $2`,
+            [clientId, agCtx.agencyId]
+          );
           if (!rows.length) return res.status(400).json({ error: 'Client not found' });
         }
+
         const sets = [], params = [];
         const add = (col, val) => { params.push(val); sets.push(`${col} = $${params.length}`); };
-        if ('name' in body)            add('name',                name?.trim()||null);
-        if ('clientId' in body)         add('"clientId"',           clientId||null);
+        // AgencyTrip uses snake_case column names
+        if ('name' in body)             add('name',                 name?.trim()||null);
+        if ('clientId' in body)         add('"client_id"',          clientId||null);
         if ('destination' in body)      add('destination',          destination||null);
-        if ('startDate' in body)        add('"startDate"',          startDate||null);
-        if ('endDate' in body)          add('"endDate"',            endDate||null);
-        if ('assignedMemberId' in body) add('"assignedMemberId"',   assignedMemberId||null);
+        if ('startDate' in body)        add('"start_date"',         startDate||null);
+        if ('endDate' in body)          add('"end_date"',           endDate||null);
+        if ('assignedMemberId' in body) add('"assigned_member_id"', assignedMemberId||null);
         if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
-        sets.push(`"updatedAt" = NOW()`);
+        sets.push(`"updated_at" = NOW()`);
         params.push(agencyTripId);
-        await pool.query(`UPDATE "AgencyTrip" SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+        await pool.query(
+          `UPDATE "AgencyTrip" SET ${sets.join(', ')} WHERE id = $${params.length}`,
+          params
+        );
         return res.status(200).json({ ok: true });
       }
 
@@ -952,13 +1313,21 @@ async function _handler(req, res) {
         if (!canManageTemplates(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
         const agTrip = await getAgencyTrip(agencyTripId);
         if (!agTrip || !agTrip.tripId) return res.status(400).json({ error: 'Agency trip has no linked trip' });
+
         const { templateName, description } = req.body || {};
         if (!templateName?.trim()) return res.status(400).json({ error: 'templateName is required' });
-        const newTripId = await duplicateTrip(pool, agTrip.tripId, { userId: agCtx.userId, title: templateName.trim(), tripType: 'personal', createdFrom: 'manual' });
+
+        const newTripId = await duplicateTrip(pool, agTrip.tripId, {
+          userId: agCtx.userId, title: templateName.trim(), tripType: 'personal', createdFrom: 'manual',
+        });
+
         const { rows } = await pool.query(
-          `INSERT INTO "AgencyTemplate" (id, "agencyId", name, description, destination, "sourceTripId", status, "createdAt", "updatedAt")
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'active', NOW(), NOW()) RETURNING id`,
-          [agCtx.agencyId, templateName.trim(), description||null, agTrip.destination||null, newTripId]
+          `INSERT INTO "AgencyTemplate"
+             (id, "agency_id", name, description, destination, "source_trip_id", status,
+              "created_by_clerk_user_id", "created_at", "updated_at")
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'active', $6, NOW(), NOW())
+           RETURNING id`,
+          [agCtx.agencyId, templateName.trim(), description||null, agTrip.destination||null, newTripId, agCtx.clerkId]
         );
         return res.status(200).json({ templateId: rows[0].id });
       }
@@ -968,12 +1337,15 @@ async function _handler(req, res) {
         if (!canShareTrips(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
         const agTrip = await getAgencyTrip(agencyTripId);
         if (!agTrip) return res.status(404).json({ error: 'Agency trip not found' });
+
         if (agTrip.shareEnabled && agTrip.shareTokenHash) {
           return res.status(200).json({ shareEnabled: true, alreadyShared: true });
         }
         const { token, hash } = generateShareToken();
         await pool.query(
-          `UPDATE "AgencyTrip" SET "shareTokenHash" = $1, "shareEnabled" = true, "sharedAt" = NOW(), "updatedAt" = NOW() WHERE id = $2`,
+          `UPDATE "AgencyTrip"
+           SET "share_token_hash" = $1, "share_enabled" = true, "shared_at" = NOW(), "updated_at" = NOW()
+           WHERE id = $2`,
           [hash, agencyTripId]
         );
         return res.status(200).json({ shareUrl: '/travel/' + token, shareEnabled: true });
@@ -984,9 +1356,12 @@ async function _handler(req, res) {
         if (!canShareTrips(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
         const agTrip = await getAgencyTrip(agencyTripId);
         if (!agTrip) return res.status(404).json({ error: 'Agency trip not found' });
+
         const { token, hash } = generateShareToken();
         await pool.query(
-          `UPDATE "AgencyTrip" SET "shareTokenHash" = $1, "shareEnabled" = true, "sharedAt" = NOW(), "updatedAt" = NOW() WHERE id = $2`,
+          `UPDATE "AgencyTrip"
+           SET "share_token_hash" = $1, "share_enabled" = true, "shared_at" = NOW(), "updated_at" = NOW()
+           WHERE id = $2`,
           [hash, agencyTripId]
         );
         return res.status(200).json({ shareUrl: '/travel/' + token });
@@ -997,9 +1372,15 @@ async function _handler(req, res) {
         if (!canShareTrips(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
         const agTrip = await getAgencyTrip(agencyTripId);
         if (!agTrip) return res.status(404).json({ error: 'Agency trip not found' });
+
         const { shareEnabled } = req.body || {};
-        if (typeof shareEnabled !== 'boolean') return res.status(400).json({ error: 'shareEnabled must be a boolean' });
-        await pool.query(`UPDATE "AgencyTrip" SET "shareEnabled" = $1, "updatedAt" = NOW() WHERE id = $2`, [shareEnabled, agencyTripId]);
+        if (typeof shareEnabled !== 'boolean') {
+          return res.status(400).json({ error: 'shareEnabled must be a boolean' });
+        }
+        await pool.query(
+          `UPDATE "AgencyTrip" SET "share_enabled" = $1, "updated_at" = NOW() WHERE id = $2`,
+          [shareEnabled, agencyTripId]
+        );
         return res.status(200).json({ ok: true });
       }
 
@@ -1008,15 +1389,20 @@ async function _handler(req, res) {
         if (!canEditTrips(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
         const agTrip = await getAgencyTrip(agencyTripId);
         if (!agTrip) return res.status(404).json({ error: 'Agency trip not found' });
+
         const { name, email, type } = req.body || {};
         if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
         const travellerType = ['adult', 'child'].includes(type) ? type : 'adult';
+
         const { rows: countRows } = await pool.query(
-          `SELECT COUNT(*)::int AS cnt FROM "AgencyTripTraveller" WHERE "agencyTripId" = $1`, [agencyTripId]
+          `SELECT COUNT(*)::int AS cnt FROM "AgencyTripTraveller" WHERE "agency_trip_id" = $1`,
+          [agencyTripId]
         );
         const { rows: inserted } = await pool.query(
-          `INSERT INTO "AgencyTripTraveller" (id, "agencyTripId", name, email, type, "sortOrder", "createdAt", "updatedAt")
-           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW()) RETURNING *`,
+          `INSERT INTO "AgencyTripTraveller"
+             (id, "agency_trip_id", name, email, "traveller_type", "sort_order", "created_at", "updated_at")
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())
+           RETURNING ${TRAVELLER_SELECT}`,
           [agencyTripId, name.trim(), email?.trim()||null, travellerType, (countRows[0].cnt||0)+1]
         );
         return res.status(200).json(inserted[0]);
@@ -1027,15 +1413,24 @@ async function _handler(req, res) {
         if (!canEditTrips(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
         const agTrip = await getAgencyTrip(agencyTripId);
         if (!agTrip) return res.status(404).json({ error: 'Agency trip not found' });
+
         const { travellerId, name, email, type } = req.body || {};
         if (!travellerId) return res.status(400).json({ error: 'travellerId is required' });
+
         const { rows: tvRows } = await pool.query(
-          `SELECT id FROM "AgencyTripTraveller" WHERE id = $1 AND "agencyTripId" = $2`, [travellerId, agencyTripId]
+          `SELECT id FROM "AgencyTripTraveller" WHERE id = $1 AND "agency_trip_id" = $2`,
+          [travellerId, agencyTripId]
         );
         if (!tvRows.length) return res.status(404).json({ error: 'Traveller not found' });
+
         const resolvedType = ['adult', 'child'].includes(type) ? type : null;
         await pool.query(
-          `UPDATE "AgencyTripTraveller" SET name = COALESCE($1, name), email = COALESCE($2, email), type = COALESCE($3, type), "updatedAt" = NOW() WHERE id = $4`,
+          `UPDATE "AgencyTripTraveller"
+           SET name = COALESCE($1, name),
+               email = COALESCE($2, email),
+               "traveller_type" = COALESCE($3, "traveller_type"),
+               "updated_at" = NOW()
+           WHERE id = $4`,
           [name?.trim()||null, email?.trim()||null, resolvedType, travellerId]
         );
         return res.status(200).json({ ok: true });
@@ -1046,12 +1441,16 @@ async function _handler(req, res) {
         if (!canEditTrips(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
         const agTrip = await getAgencyTrip(agencyTripId);
         if (!agTrip) return res.status(404).json({ error: 'Agency trip not found' });
+
         const { travellerId } = req.body || {};
         if (!travellerId) return res.status(400).json({ error: 'travellerId is required' });
+
         const { rows: tvRows } = await pool.query(
-          `SELECT id FROM "AgencyTripTraveller" WHERE id = $1 AND "agencyTripId" = $2`, [travellerId, agencyTripId]
+          `SELECT id FROM "AgencyTripTraveller" WHERE id = $1 AND "agency_trip_id" = $2`,
+          [travellerId, agencyTripId]
         );
         if (!tvRows.length) return res.status(404).json({ error: 'Traveller not found' });
+
         await pool.query(`DELETE FROM "AgencyTripTraveller" WHERE id = $1`, [travellerId]);
         return res.status(200).json({ ok: true });
       }
@@ -1061,12 +1460,16 @@ async function _handler(req, res) {
         if (!canEditTrips(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
         const agTrip = await getAgencyTrip(agencyTripId);
         if (!agTrip) return res.status(404).json({ error: 'Agency trip not found' });
+
         const { order } = req.body || {};
         if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array' });
+
         for (const item of order) {
           if (!item.id || item.sortOrder == null) continue;
           await pool.query(
-            `UPDATE "AgencyTripTraveller" SET "sortOrder" = $1, "updatedAt" = NOW() WHERE id = $2 AND "agencyTripId" = $3`,
+            `UPDATE "AgencyTripTraveller"
+             SET "sort_order" = $1, "updated_at" = NOW()
+             WHERE id = $2 AND "agency_trip_id" = $3`,
             [item.sortOrder, item.id, agencyTripId]
           );
         }
@@ -1086,18 +1489,18 @@ async function _handler(req, res) {
       if (req.method === 'GET' && action === 'admin:list-agencies') {
         const { rows } = await pool.query(
           `SELECT
-             a.id, a.name, a.slug, a.status, a."createdAt",
-             COUNT(DISTINCT m.id)::int         AS "memberCount",
-             COUNT(DISTINCT ac.id)::int        AS "clientCount",
-             COUNT(DISTINCT at2.id)::int       AS "tripCount",
+             a.id, a.name, a.slug, a.status,
+             a."created_at"                                                              AS "createdAt",
+             COUNT(DISTINCT m.id)::int                                                   AS "memberCount",
+             COUNT(DISTINCT ac.id)::int                                                  AS "clientCount",
+             COUNT(DISTINCT at2.id)::int                                                 AS "tripCount",
              COUNT(DISTINCT at2.id) FILTER (WHERE at2.status NOT IN ('archived','completed'))::int AS "activeTripCount"
            FROM "Agency" a
-           LEFT JOIN "AgencyMember" am ON am."agencyId" = a.id AND am.status = 'active'
-           LEFT JOIN "AgencyMember" m  ON m."agencyId"  = a.id
-           LEFT JOIN "AgencyClient" ac ON ac."agencyId" = a.id
-           LEFT JOIN "AgencyTrip"  at2 ON at2."agencyId" = a.id
+           LEFT JOIN "AgencyMember" m  ON m."agency_id" = a.id
+           LEFT JOIN "AgencyClient" ac ON ac."agency_id" = a.id
+           LEFT JOIN "AgencyTrip"  at2 ON at2."agency_id" = a.id
            GROUP BY a.id
-           ORDER BY a."createdAt" DESC`
+           ORDER BY a."created_at" DESC`
         );
         return res.status(200).json({ agencies: rows });
       }
@@ -1109,7 +1512,10 @@ async function _handler(req, res) {
 
         const [agencyRes, metricsRes, membersRes, tripsRes] = await Promise.all([
           pool.query(
-            `SELECT id, name, slug, status, "createdAt", "updatedAt" FROM "Agency" WHERE id = $1`,
+            `SELECT id, name, slug, status,
+                    "created_at" AS "createdAt",
+                    "updated_at" AS "updatedAt"
+             FROM "Agency" WHERE id = $1`,
             [targetAgencyId]
           ),
           pool.query(
@@ -1118,30 +1524,38 @@ async function _handler(req, res) {
                COUNT(DISTINCT ac.id)::int                                                   AS "clientCount",
                COUNT(DISTINCT at2.id)::int                                                  AS "tripCount",
                COUNT(DISTINCT at2.id) FILTER (WHERE at2.status NOT IN ('archived','completed'))::int AS "activeTripCount",
-               COUNT(DISTINCT at2.id) FILTER (WHERE at2."startDate" >= NOW() AND at2.status IN ('draft','ready','shared'))::int AS "upcomingTripCount"
+               COUNT(DISTINCT at2.id) FILTER (WHERE at2."start_date" >= NOW() AND at2.status IN ('draft','ready','shared'))::int AS "upcomingTripCount"
              FROM "Agency" a
-             LEFT JOIN "AgencyMember" m  ON m."agencyId"  = a.id
-             LEFT JOIN "AgencyClient" ac ON ac."agencyId" = a.id
-             LEFT JOIN "AgencyTrip"  at2 ON at2."agencyId" = a.id
+             LEFT JOIN "AgencyMember" m  ON m."agency_id"  = a.id
+             LEFT JOIN "AgencyClient" ac ON ac."agency_id" = a.id
+             LEFT JOIN "AgencyTrip"  at2 ON at2."agency_id" = a.id
              WHERE a.id = $1`,
             [targetAgencyId]
           ),
+          // AgencyMember: snake_case → camelCase. Join User via clerkId.
           pool.query(
-            `SELECT m.id, m.role, m.status, m."invitedAt", m."acceptedAt",
-                    u.name, u.email
+            `SELECT
+               m.id, m.role, m.status,
+               m."display_name" AS "displayName",
+               m.email
              FROM "AgencyMember" m
-             LEFT JOIN "User" u ON u.id = m."userId"
-             WHERE m."agencyId" = $1
-             ORDER BY m."createdAt" ASC`,
+             WHERE m."agency_id" = $1
+             ORDER BY m."created_at" ASC`,
             [targetAgencyId]
           ),
+          // AgencyTrip + AgencyClient: snake_case → camelCase
           pool.query(
-            `SELECT at2.id, at2.name, at2.destination, at2."startDate", at2."endDate", at2.status,
-                    at2."createdAt", ac.name AS "clientName"
+            `SELECT
+               at2.id, at2.name, at2.destination,
+               at2."start_date" AS "startDate",
+               at2."end_date"   AS "endDate",
+               at2.status,
+               at2."created_at" AS "createdAt",
+               ac.name          AS "clientName"
              FROM "AgencyTrip" at2
-             LEFT JOIN "AgencyClient" ac ON ac.id = at2."clientId"
-             WHERE at2."agencyId" = $1
-             ORDER BY at2."createdAt" DESC LIMIT 10`,
+             LEFT JOIN "AgencyClient" ac ON ac.id = at2."client_id"
+             WHERE at2."agency_id" = $1
+             ORDER BY at2."created_at" DESC LIMIT 10`,
             [targetAgencyId]
           ),
         ]);
@@ -1160,6 +1574,7 @@ async function _handler(req, res) {
       if (req.method === 'GET' && action === 'admin:search-users') {
         const q = (req.query.q || '').trim();
         if (!q || q.length < 2) return res.status(200).json({ users: [] });
+        // User table: camelCase columns
         const { rows } = await pool.query(
           `SELECT id, name, email, role, "clerkId"
            FROM "User"
@@ -1173,21 +1588,20 @@ async function _handler(req, res) {
       // POST admin:create-agency — create Agency + AgencyBranding + AgencyMember
       if (req.method === 'POST' && action === 'admin:create-agency') {
         const { name, slug, ownerUserId } = req.body || {};
-        if (!name?.trim())  return res.status(400).json({ error: 'name is required' });
+        if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
         if (!slug?.trim() || !/^[a-z0-9-]{3,50}$/.test(slug)) {
           return res.status(400).json({ error: 'slug must be 3-50 lowercase chars, numbers, hyphens' });
         }
         if (!ownerUserId) return res.status(400).json({ error: 'ownerUserId is required' });
 
-        // Verify slug uniqueness
         const { rows: slugRows } = await pool.query(
           `SELECT id FROM "Agency" WHERE slug = $1 LIMIT 1`, [slug.trim()]
         );
         if (slugRows.length) return res.status(409).json({ error: 'Slug is already taken' });
 
-        // Verify owner exists
+        // User table: camelCase
         const { rows: ownerRows } = await pool.query(
-          `SELECT id, "clerkId" FROM "User" WHERE id = $1 LIMIT 1`, [ownerUserId]
+          `SELECT id, "clerkId", name, email FROM "User" WHERE id = $1 LIMIT 1`, [ownerUserId]
         );
         if (!ownerRows.length) return res.status(404).json({ error: 'Owner user not found' });
         const owner = ownerRows[0];
@@ -1195,29 +1609,38 @@ async function _handler(req, res) {
         const client = await pool.connect();
         try {
           await client.query('BEGIN');
+
+          // Agency: snake_case columns
           const { rows: agRows } = await client.query(
-            `INSERT INTO "Agency" (id, name, slug, status, "createdAt", "updatedAt")
-             VALUES (gen_random_uuid(), $1, $2, 'active', NOW(), NOW()) RETURNING id, name, slug`,
+            `INSERT INTO "Agency" (id, name, slug, status, "created_at", "updated_at")
+             VALUES (gen_random_uuid(), $1, $2, 'active', NOW(), NOW())
+             RETURNING id, name, slug`,
             [name.trim(), slug.trim()]
           );
           const newAgencyId = agRows[0].id;
 
+          // AgencyBranding: snake_case, no id column
           await client.query(
-            `INSERT INTO "AgencyBranding" (id, "agencyId", "primaryColor", "accentColor",
-                                           "showPoweredByHiddenatlas", "createdAt", "updatedAt")
-             VALUES (gen_random_uuid(), $1, '#1B6B65', '#C9A96E', true, NOW(), NOW())`,
+            `INSERT INTO "AgencyBranding"
+               ("agency_id", "primary_color", "accent_color", "show_powered_by_hiddenatlas",
+                "created_at", "updated_at")
+             VALUES ($1, '#1B6B65', '#C9A96E', true, NOW(), NOW())`,
             [newAgencyId]
           );
 
+          // AgencyMember: snake_case, no user_id
           await client.query(
-            `INSERT INTO "AgencyMember" (id, "agencyId", "clerkUserId", "userId", role, status,
-                                         "invitedAt", "acceptedAt", "createdAt", "updatedAt")
-             VALUES (gen_random_uuid(), $1, $2, $3, 'owner', 'active', NOW(), NOW(), NOW(), NOW())`,
-            [newAgencyId, owner.clerkId, owner.id]
+            `INSERT INTO "AgencyMember"
+               (id, "agency_id", "clerk_user_id", email, "display_name", role, status,
+                "created_at", "updated_at")
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, 'owner', 'active', NOW(), NOW())`,
+            [newAgencyId, owner.clerkId, owner.email, owner.name]
           );
 
           await client.query('COMMIT');
-          return res.status(201).json({ agencyId: newAgencyId, name: agRows[0].name, slug: agRows[0].slug });
+          return res.status(201).json({
+            agencyId: newAgencyId, name: agRows[0].name, slug: agRows[0].slug,
+          });
         } catch (err) {
           await client.query('ROLLBACK');
           throw err;
@@ -1257,7 +1680,7 @@ async function _handler(req, res) {
         if (slug)   add('slug',   slug.trim());
         if (status) add('status', status);
         if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
-        sets.push(`"updatedAt" = NOW()`);
+        sets.push(`"updated_at" = NOW()`);
         params.push(targetAgencyId);
         await pool.query(
           `UPDATE "Agency" SET ${sets.join(', ')} WHERE id = $${params.length}`,
@@ -1270,6 +1693,6 @@ async function _handler(req, res) {
     return res.status(400).json({ error: 'Unknown action' });
 
   } finally {
-    try { await pool.end(); } catch {}
+    try { await pool.end(); } catch (_e) { /* ignore */ } // eslint-disable-line no-unused-vars
   }
 }

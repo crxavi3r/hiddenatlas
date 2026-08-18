@@ -3,17 +3,16 @@
 //
 // SECURITY RULES (enforced here, never trust frontend):
 //   1. Authenticate the Clerk JWT → clerkId
-//   2. Look up User row → userId + role
+//   2. Look up User row → userId + role   (User table: camelCase columns)
 //   3a. Global HiddenAtlas admin (User.role='admin'): may access any active Agency.
 //       Returns synthetic ctx with isGlobalAdmin=true, role='owner'.
 //       No AgencyMember row is created or required.
 //   3b. Normal user: must have an active AgencyMember row in the requested Agency.
+//       AgencyMember uses snake_case columns — always alias to camelCase.
 //   4. Only return after all checks pass.
 //
-// Usage:
-//   const agCtx = await resolveAgencyCtx(authHeader, pool, agencyId?);
-//   if (!agCtx) return res.status(401).json({ error: 'Unauthorized' });
-//   if (!canManageTeam(agCtx.role)) return res.status(403).json({ error: 'Forbidden' });
+// Agency table columns are snake_case; existing HiddenAtlas tables (User, Trip…)
+// remain camelCase.  SQL below aliases snake_case → camelCase at the boundary.
 
 import { verifyAuth } from './verifyAuth.js';
 
@@ -60,6 +59,7 @@ export function canShareTrips(role) {
 }
 
 // ── Internal: resolve Clerk JWT → { clerkId, userId, userRole } ───────────────
+// Reads from "User" table which has camelCase columns.
 
 async function resolveUserBase(authHeader, pool) {
   if (!authHeader?.startsWith('Bearer ')) return null;
@@ -70,6 +70,7 @@ async function resolveUserBase(authHeader, pool) {
     return null;
   }
   try {
+    // "User" table has camelCase columns: "clerkId", "id", "role"
     const { rows } = await pool.query(
       `SELECT id, role FROM "User" WHERE "clerkId" = $1 LIMIT 1`,
       [clerkId]
@@ -107,8 +108,11 @@ async function resolveUserBase(authHeader, pool) {
  *
  * Normal users:
  *   - Must have an active AgencyMember row.
+ *   - Membership is resolved via AgencyMember.clerk_user_id = clerkId.
  *   - If agencyId is provided, validates membership in THAT agency specifically.
  *   - If agencyId is null, returns the first active membership found.
+ *
+ * AgencyMember snake_case columns are aliased to camelCase in all queries.
  *
  * @returns {Promise<AgencyCtx|null>}  null → unauthenticated or no access
  */
@@ -125,7 +129,6 @@ export async function resolveAgencyCtx(authHeader, pool, agencyId = null) {
   try {
     // ── Global admin bypass ───────────────────────────────────────────────────
     if (userRole === 'admin') {
-      // Admin must specify which agency to access.
       if (!agencyId) return null;
 
       const { rows: agencyRows } = await pool.query(
@@ -140,7 +143,7 @@ export async function resolveAgencyCtx(authHeader, pool, agencyId = null) {
         userId,
         memberId:     null,
         agencyId:     agency.id,
-        role:         'owner',     // Full access
+        role:         'owner',
         status:       'active',
         agencyName:   agency.name,
         agencyStatus: agency.status,
@@ -149,27 +152,39 @@ export async function resolveAgencyCtx(authHeader, pool, agencyId = null) {
     }
 
     // ── Normal user: require active AgencyMember ──────────────────────────────
+    // AgencyMember columns: agency_id, clerk_user_id (snake_case) — aliased below.
+    // Membership is keyed on clerk_user_id, NOT on a user_id foreign key.
     const memberQuery = agencyId
-      ? `SELECT m.id, m."agencyId", m.role, m.status,
-                a.name AS "agencyName", a.status AS "agencyStatus"
+      ? `SELECT
+           m.id,
+           m."agency_id"  AS "agencyId",
+           m.role,
+           m.status,
+           a.name         AS "agencyName",
+           a.status       AS "agencyStatus"
          FROM "AgencyMember" m
-         JOIN "Agency" a ON a.id = m."agencyId"
-         WHERE m."userId" = $1
-           AND m."agencyId" = $2
+         JOIN "Agency" a ON a.id = m."agency_id"
+         WHERE m."clerk_user_id" = $1
+           AND m."agency_id" = $2
            AND m.status = 'active'
            AND a.status = 'active'
          LIMIT 1`
-      : `SELECT m.id, m."agencyId", m.role, m.status,
-                a.name AS "agencyName", a.status AS "agencyStatus"
+      : `SELECT
+           m.id,
+           m."agency_id"  AS "agencyId",
+           m.role,
+           m.status,
+           a.name         AS "agencyName",
+           a.status       AS "agencyStatus"
          FROM "AgencyMember" m
-         JOIN "Agency" a ON a.id = m."agencyId"
-         WHERE m."userId" = $1
+         JOIN "Agency" a ON a.id = m."agency_id"
+         WHERE m."clerk_user_id" = $1
            AND m.status = 'active'
            AND a.status = 'active'
-         ORDER BY m."createdAt" ASC
+         ORDER BY m."created_at" ASC
          LIMIT 1`;
 
-    const params = agencyId ? [userId, agencyId] : [userId];
+    const params = agencyId ? [clerkId, agencyId] : [clerkId];
     const { rows: memberRows } = await pool.query(memberQuery, params);
 
     if (!memberRows.length) return null;
@@ -178,12 +193,12 @@ export async function resolveAgencyCtx(authHeader, pool, agencyId = null) {
     return {
       clerkId,
       userId,
-      memberId:      m.id,
-      agencyId:      m.agencyId,
-      role:          m.role,
-      status:        m.status,
-      agencyName:    m.agencyName,
-      agencyStatus:  m.agencyStatus,
+      memberId:     m.id,
+      agencyId:     m.agencyId,
+      role:         m.role,
+      status:       m.status,
+      agencyName:   m.agencyName,
+      agencyStatus: m.agencyStatus,
       isGlobalAdmin: false,
     };
   } catch (err) {
@@ -198,6 +213,8 @@ export async function resolveAgencyCtx(authHeader, pool, agencyId = null) {
 /**
  * Returns all active agency memberships for the authenticated user.
  * Global admins return an empty array — they find agencies via the Admin panel.
+ *
+ * AgencyMember snake_case columns are aliased to camelCase.
  */
 export async function resolveAllAgencyMemberships(authHeader, pool) {
   if (!authHeader?.startsWith('Bearer ')) return [];
@@ -210,32 +227,38 @@ export async function resolveAllAgencyMemberships(authHeader, pool) {
   }
   if (!base) return [];
 
-  // Global admins don't get agency memberships in the workspace switcher.
+  // Global admins do not get agency memberships in the workspace switcher.
   if (base.userRole === 'admin') return [];
 
   try {
     const { rows } = await pool.query(
-      `SELECT m.id, m."agencyId", m.role, m.status,
-              a.name AS "agencyName", a.status AS "agencyStatus", a.slug AS "agencySlug"
+      `SELECT
+         m.id,
+         m."agency_id"  AS "agencyId",
+         m.role,
+         m.status,
+         a.name         AS "agencyName",
+         a.status       AS "agencyStatus",
+         a.slug         AS "agencySlug"
        FROM "AgencyMember" m
-       JOIN "Agency" a ON a.id = m."agencyId"
-       WHERE m."userId" = $1
+       JOIN "Agency" a ON a.id = m."agency_id"
+       WHERE m."clerk_user_id" = $1
          AND m.status = 'active'
          AND a.status = 'active'
-       ORDER BY m."createdAt" ASC`,
-      [base.userId]
+       ORDER BY m."created_at" ASC`,
+      [base.clerkId]
     );
 
     return rows.map(m => ({
-      clerkId:     base.clerkId,
-      userId:      base.userId,
-      memberId:    m.id,
-      agencyId:    m.agencyId,
-      role:        m.role,
-      status:      m.status,
-      agencyName:  m.agencyName,
-      agencyStatus:m.agencyStatus,
-      agencySlug:  m.agencySlug,
+      clerkId:      base.clerkId,
+      userId:       base.userId,
+      memberId:     m.id,
+      agencyId:     m.agencyId,
+      role:         m.role,
+      status:       m.status,
+      agencyName:   m.agencyName,
+      agencyStatus: m.agencyStatus,
+      agencySlug:   m.agencySlug,
     }));
   } catch (err) {
     console.error('[agencyAuth] resolveAllAgencyMemberships error:', err.message);
