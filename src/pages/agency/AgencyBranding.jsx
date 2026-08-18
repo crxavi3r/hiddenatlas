@@ -38,24 +38,28 @@ function SectionCard({ title, subtitle, children }) {
   );
 }
 
-function SaveButton({ onClick, loading, saved }) {
+function SaveButton({ onClick, loading, saved, error }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={loading || saved}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: '7px',
-        padding: '9px 20px', borderRadius: '8px', border: 'none',
-        background: saved ? '#2D7A45' : loading ? C.border : C.teal,
-        color: loading ? C.muted : C.white,
-        fontSize: '14px', fontWeight: '700',
-        cursor: loading || saved ? 'not-allowed' : 'pointer',
-        transition: 'background 0.2s',
-        flexShrink: 0,
-      }}
-    >
-      {saved ? <><Check size={14} /> Saved</> : loading ? 'Saving...' : 'Save'}
-    </button>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+      <button
+        onClick={onClick}
+        disabled={loading || saved}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: '7px',
+          padding: '9px 20px', borderRadius: '8px', border: 'none',
+          background: saved ? '#2D7A45' : loading ? C.border : C.teal,
+          color: loading ? C.muted : C.white,
+          fontSize: '14px', fontWeight: '700',
+          cursor: loading || saved ? 'not-allowed' : 'pointer',
+          transition: 'background 0.2s',
+        }}
+      >
+        {saved ? <><Check size={14} /> Saved</> : loading ? 'Saving...' : 'Save'}
+      </button>
+      {error && (
+        <span style={{ fontSize: '12px', color: '#B91C1C' }}>{error}</span>
+      )}
+    </div>
   );
 }
 
@@ -221,22 +225,26 @@ function Toggle({ checked, onChange, readOnly }) {
 function useSaveState() {
   const [loading, setLoading] = useState(false);
   const [saved, setSaved]     = useState(false);
+  const [error, setError]     = useState(null);
   const timerRef              = useRef(null);
 
   const trigger = useCallback(async (fn) => {
     setLoading(true);
     setSaved(false);
+    setError(null);
     try {
       await fn();
       setSaved(true);
       clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      setError(err.message || 'Save failed');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  return { loading, saved, trigger };
+  return { loading, saved, error, trigger };
 }
 
 export default function AgencyBranding() {
@@ -331,23 +339,29 @@ export default function AgencyBranding() {
     return data;
   }, [getToken]);
 
+  // agencyId MUST be in the URL query string — the API reads it from req.query, not req.body.
   const handleSaveName = useCallback(() => {
     nameSave.trigger(async () => {
-      await authPost('/api/agency?action=update-agency-name', { agencyId, name: agencyName });
+      await authPost(`/api/agency?action=update-agency-name&agencyId=${agencyId}`, { name: agencyName });
     });
   }, [nameSave, authPost, agencyId, agencyName]);
 
   const handleSaveColors = useCallback(() => {
     colorSave.trigger(async () => {
-      const data = await authPost('/api/agency?action=update-branding', { agencyId, primaryColor, accentColor });
+      const data = await authPost(
+        `/api/agency?action=update-branding&agencyId=${agencyId}`,
+        { primaryColor, accentColor }
+      );
       applyBrandingResponse(data.branding);
     });
   }, [colorSave, authPost, agencyId, primaryColor, accentColor, applyBrandingResponse]);
 
   const handleSaveContact = useCallback(() => {
     contactSave.trigger(async () => {
-      // Send websiteUrl to match API field name; API also accepts 'website' for compat
-      const data = await authPost('/api/agency?action=update-branding', { agencyId, websiteUrl: website, supportEmail, phone, whatsapp });
+      const data = await authPost(
+        `/api/agency?action=update-branding&agencyId=${agencyId}`,
+        { websiteUrl: website, supportEmail, phone, whatsapp }
+      );
       applyBrandingResponse(data.branding);
     });
   }, [contactSave, authPost, agencyId, website, supportEmail, phone, whatsapp, applyBrandingResponse]);
@@ -355,7 +369,10 @@ export default function AgencyBranding() {
   const handleSavePortal = useCallback((newVal) => {
     setShowPowered(newVal);
     portalSave.trigger(async () => {
-      const data = await authPost('/api/agency?action=update-branding', { agencyId, showPoweredByHiddenatlas: newVal });
+      const data = await authPost(
+        `/api/agency?action=update-branding&agencyId=${agencyId}`,
+        { showPoweredByHiddenatlas: newVal }
+      );
       applyBrandingResponse(data.branding);
     });
   }, [portalSave, authPost, agencyId, applyBrandingResponse]);
@@ -447,7 +464,7 @@ export default function AgencyBranding() {
             />
           </div>
           {!readOnly && (
-            <SaveButton onClick={handleSaveName} loading={nameSave.loading} saved={nameSave.saved} />
+            <SaveButton onClick={handleSaveName} loading={nameSave.loading} saved={nameSave.saved} error={nameSave.error} />
           )}
         </div>
       </SectionCard>
@@ -469,7 +486,7 @@ export default function AgencyBranding() {
           />
         </div>
         {!readOnly && (
-          <SaveButton onClick={handleSaveColors} loading={colorSave.loading} saved={colorSave.saved} />
+          <SaveButton onClick={handleSaveColors} loading={colorSave.loading} saved={colorSave.saved} error={colorSave.error} />
         )}
       </SectionCard>
 
@@ -506,7 +523,7 @@ export default function AgencyBranding() {
           </div>
         </div>
         {!readOnly && (
-          <SaveButton onClick={handleSaveContact} loading={contactSave.loading} saved={contactSave.saved} />
+          <SaveButton onClick={handleSaveContact} loading={contactSave.loading} saved={contactSave.saved} error={contactSave.error} />
         )}
       </SectionCard>
 
