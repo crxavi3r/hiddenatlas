@@ -554,10 +554,10 @@ export default async function handler(req, res) {
          LEFT JOIN "TripDay" d ON d."tripId" = t.id
          WHERE t."userId" = $1
            AND NOT EXISTS (
-             SELECT 1 FROM "AgencyTrip" at2 WHERE at2."tripId" = t.id
+             SELECT 1 FROM "AgencyTrip" at2 WHERE at2."trip_id" = t.id
            )
            AND NOT EXISTS (
-             SELECT 1 FROM "AgencyTemplate" atpl WHERE atpl."sourceTripId" = t.id
+             SELECT 1 FROM "AgencyTemplate" atpl WHERE atpl."source_trip_id" = t.id
            )
          GROUP BY t.id
 
