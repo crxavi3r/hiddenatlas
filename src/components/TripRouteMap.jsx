@@ -344,6 +344,7 @@ function LocationPickerModal({ entry, trip, onConfirm, onClose }) {
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       subdomains: 'abc', maxZoom: 19,
     }).addTo(map);
+    map.getPane('tilePane').style.filter = 'grayscale(100%) brightness(1.08)';
     map.setView([initLat, initLng], zoom);
 
     const marker = L.marker([initLat, initLng], {
@@ -677,6 +678,7 @@ export default function TripRouteMap({ itineraryStops = [], tripItems = [], trip
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       subdomains: 'abc', maxZoom: 19,
     }).addTo(map);
+    map.getPane('tilePane').style.filter = 'grayscale(100%) brightness(1.08)';
     mapRef.current = map;
     setMapReady(true);
     return () => { map.remove(); mapRef.current = null; setMapReady(false); };

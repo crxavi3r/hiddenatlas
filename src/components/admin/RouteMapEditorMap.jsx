@@ -68,6 +68,7 @@ export default function RouteMapEditorMap({ stops = [], selectedStopId, onSelect
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       subdomains: 'abc', maxZoom: 19,
     }).addTo(map);
+    map.getPane('tilePane').style.filter = 'grayscale(100%) brightness(1.08)';
     map.on('click', () => onSelectStop?.(null));
     mapRef.current = map;
     setMapReady(true); // eslint-disable-line react-compiler/react-compiler
