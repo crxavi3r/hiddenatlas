@@ -78,9 +78,9 @@ export default function PublicRouteMap({ stops = [], isUnlocked = true, onDaySel
     injectCSS();
     const map = L.map(mapDivRef.current, { zoomControl: true, scrollWheelZoom: false });
     map.attributionControl.setPrefix(false);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · © <a href="https://carto.com">CARTO</a>',
-      subdomains: 'abcd', maxZoom: 18,
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      subdomains: 'abc', maxZoom: 19,
     }).addTo(map);
     mapRef.current = map;
     setMapReady(true);
