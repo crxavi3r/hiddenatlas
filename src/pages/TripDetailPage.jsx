@@ -1573,6 +1573,28 @@ function ItemCard({ item, linkedBookings = [], onDelete, onEdit, onEditBooking, 
   );
 }
 
+// Detect URLs in plain text and return React nodes with <a> links
+const URL_RE = /https?:\/\/[^\s)>\]"']+/g;
+function linkify(text) {
+  if (!text) return null;
+  const parts = [];
+  let last = 0;
+  let m;
+  URL_RE.lastIndex = 0;
+  while ((m = URL_RE.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    parts.push(
+      <a key={m.index} href={m[0]} target="_blank" rel="noopener noreferrer"
+         style={{ color: TEAL, wordBreak: 'break-all', textDecorationLine: 'underline' }}>
+        {m[0]}
+      </a>
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
 // ─────────────────────────────────────────────
 // NoteCard
 // ─────────────────────────────────────────────
@@ -1588,7 +1610,7 @@ function NoteCard({ note, onDelete, onEdit, canEdit = true }) {
           {note.title}
         </p>
       )}
-      <p style={{ fontSize: '14px', color: CHAR, lineHeight: '1.65', whiteSpace: 'pre-wrap' }}>{note.content}</p>
+      <p style={{ fontSize: '14px', color: CHAR, lineHeight: '1.65', whiteSpace: 'pre-wrap' }}>{linkify(note.content)}</p>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px' }}>
         <span style={{ fontSize: '11px', color: '#B5A09A' }}>{formatDate(note.createdAt)}</span>
         {canEdit && (
