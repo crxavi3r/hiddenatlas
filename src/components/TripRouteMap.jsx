@@ -120,7 +120,15 @@ function getOrderedTripLocations({ itineraryStops, tripItems, tripBookings, trip
   if (!days.length) {
     const itin  = activeDay ? itineraryStops.filter(s => s.dayNumber === activeDay) : itineraryStops;
     const items = (activeDay ? tripItems.filter(i => i.dayNumber === activeDay) : tripItems)
-      .filter(i => !i.isHidden).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+      .filter(i => !i.isHidden)
+      .sort((a, b) => {
+        const ta = a.startTime || a.time || null;
+        const tb = b.startTime || b.time || null;
+        if (ta && tb) return ta < tb ? -1 : ta > tb ? 1 : 0;
+        if (ta) return -1;
+        if (tb) return 1;
+        return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+      });
     const books = activeDay ? tripBookings.filter(b => b.dayNumber === activeDay) : tripBookings;
     const { stopBookMap, itemBookMap, freeBooks } = buildBookMaps(books, itin);
     let seq = 0;
@@ -149,10 +157,17 @@ function getOrderedTripLocations({ itineraryStops, tripItems, tripBookings, trip
     // Itinerary stops for this day (already pre-sorted by MapTab via dayNumber+sortOrder)
     const dayStops = itineraryStops.filter(s => s.dayNumber === dn);
 
-    // User items for this day, sorted by sortOrder
+    // User items for this day, sorted by time then sortOrder (mirrors Day by Day order)
     const dayItems = tripItems
       .filter(i => i.tripDayId === tripDay.id && !i.isHidden)
-      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+      .sort((a, b) => {
+        const ta = a.startTime || a.time || null;
+        const tb = b.startTime || b.time || null;
+        if (ta && tb) return ta < tb ? -1 : ta > tb ? 1 : 0;
+        if (ta) return -1;
+        if (tb) return 1;
+        return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+      });
 
     // All bookings for this day
     const dayBookings = tripBookings.filter(b =>
