@@ -3049,14 +3049,9 @@ export default function TripDetailPage() {
         }
       }
 
-      // 4. Fallback: TripPDF (AI-generated trips or anything else)
-      const [{ pdf }, { TripPDF }] = await Promise.all([
-        import('@react-pdf/renderer'),
-        import('../components/TripPDF'),
-      ]);
-      const { createElement } = await import('react');
-      const blob = await pdf(createElement(TripPDF, { trip })).toBlob();
-      triggerBlobDownload(blob, filename);
+      // 4. Fallback: use the personalised PDF which has the full workspace data
+      const { downloadPersonalisedPDF } = await import('../utils/downloadPersonalisedPDF');
+      await downloadPersonalisedPDF(fresh || workspace);
       setDownloadState('done'); audit();
     } catch (err) {
       console.error('[TripDetailPage] download error:', err.message);
