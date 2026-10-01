@@ -639,9 +639,9 @@ function PersonalOverviewModal({ workspace, tripId, open, onClose, onSave, savin
 // ─────────────────────────────────────────────
 // ItemModal — add or edit a custom TripItem
 // ─────────────────────────────────────────────
-function ItemModal({ open, dayNumber, editItem, onClose, onSave, saving }) {
+function ItemModal({ open, dayNumber, editItem, tripDays = [], onClose, onSave, saving }) {
   const isEdit = !!editItem;
-  const EMPTY = { type: 'attraction', title: '', time: '', locationName: '', durationMinutes: '', notes: '', imageUrl: null, imageAlt: '', imageFile: null, imagePreview: null };
+  const EMPTY = { type: 'attraction', title: '', time: '', locationName: '', durationMinutes: '', notes: '', imageUrl: null, imageAlt: '', imageFile: null, imagePreview: null, tripDayId: null };
   const [form, setForm] = useState(EMPTY);
   const fileInputRef = useRef(null);
 
@@ -658,6 +658,7 @@ function ItemModal({ open, dayNumber, editItem, onClose, onSave, saving }) {
         imageAlt:        editItem.imageAlt        || '',
         imageFile:       null,
         imagePreview:    null,
+        tripDayId:       editItem.tripDayId       || null,
       } : EMPTY);
     }
   }, [open, editItem]);
@@ -691,6 +692,17 @@ function ItemModal({ open, dayNumber, editItem, onClose, onSave, saving }) {
           {ITEM_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
         </select>
       </FormField>
+      {isEdit && tripDays.length > 0 && (
+        <FormField label="Day">
+          <select value={form.tripDayId || ''} onChange={e => set('tripDayId', e.target.value || null)} style={inputStyle}>
+            {tripDays.map(d => (
+              <option key={d.id} value={d.id}>
+                Day {d.dayNumber}{d.title ? ` — ${d.title}` : ''}
+              </option>
+            ))}
+          </select>
+        </FormField>
+      )}
       <FormField label="Name / Title">
         <input type="text" value={form.title} onChange={e => set('title', e.target.value)} placeholder="e.g. Djemaa el-Fna" style={inputStyle} autoFocus />
       </FormField>
@@ -2035,7 +2047,7 @@ function DayBookingItem({ booking, onEdit, tripName, itineraryDayStops = [], tri
 // DaySection — one full day in the timeline
 // ─────────────────────────────────────────────
 
-function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditItem, onEditBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, hiddenStopIds = [], tripName = '', tripDestination = '', canEdit = true }) {
+function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, dayBookings, isLast, assets, onAddItem, onAddNote, onAddBooking, onDeleteItem, onEditItem, onEditBooking, onAddBookingFromStop, onHideStop, onRestoreStop, onRestoreDayStops, hiddenStopIds = [], tripName = '', tripDestination = '', canEdit = true, tripStartDate = null }) {
   const [expanded,     setExpanded]     = useState(true);
   const [confirmHide,  setConfirmHide]  = useState(null);  // stop object pending confirmation
   const [lastHidden,   setLastHidden]   = useState(null);  // { stopId, stopTitle } for undo
@@ -2116,7 +2128,16 @@ function DaySection({ tripDay, itinDay, itinDayStops = [], dayItems, dayNotes, d
       {/* Content */}
       <div style={{ flex: 1, paddingBottom: '40px', minWidth: 0 }}>
         <button onClick={() => setExpanded(e => !e)} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0, width: '100%', marginBottom: '10px' }}>
-          <span style={{ fontSize: '10.5px', fontWeight: '700', letterSpacing: '1.8px', textTransform: 'uppercase', color: TEAL }}>Day {tripDay.dayNumber}</span>
+          <span style={{ fontSize: '10.5px', fontWeight: '700', letterSpacing: '1.8px', textTransform: 'uppercase', color: TEAL }}>
+            Day {tripDay.dayNumber}
+            {tripStartDate && (() => {
+              const d = new Date(tripStartDate.slice(0, 10) + 'T00:00:00Z');
+              d.setUTCDate(d.getUTCDate() + tripDay.dayNumber - 1);
+              return <span style={{ fontWeight: '500', letterSpacing: '0.5px', marginLeft: '8px', color: MUTED, textTransform: 'none', fontSize: '10px' }}>
+                {d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })}
+              </span>;
+            })()}
+          </span>
           <ChevronDown size={14} color={MUTED} style={{ transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s', marginLeft: 'auto' }} />
         </button>
 
@@ -2607,6 +2628,7 @@ function DaysTab({ workspace, onAddItem, onAddNote, onAddBooking, onAddBookingFr
               tripName={tripName}
               tripDestination={tripDestination}
               canEdit={canEdit}
+              tripStartDate={trip?.startDate || null}
             />
           );
         })}
@@ -3219,7 +3241,7 @@ export default function TripDetailPage() {
       let imageUrl = form.imageUrl !== undefined ? (form.imageUrl || null) : undefined;
       if (form.imageFile) imageUrl = await uploadItemImage(form.imageFile);
       const { imageFile: _f, imagePreview: _p, ...rest } = form;
-      const body = { ...rest, imageUrl, imageAlt: form.imageAlt || null };
+      const body = { ...rest, imageUrl, imageAlt: form.imageAlt || null, tripDayId: form.tripDayId || null };
       const res = await api.post(`/api/trips?action=item&itemId=${editingItem.id}`, body);
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -3686,6 +3708,7 @@ export default function TripDetailPage() {
           open={!!(addItemCtx || editingItem)}
           dayNumber={addItemCtx?.dayNumber}
           editItem={editingItem}
+          tripDays={workspace?.tripDays || []}
           onClose={() => { setAddItemCtx(null); setEditingItem(null); }}
           onSave={editingItem ? handleUpdateItem : handleSaveItem}
           saving={savingItem}

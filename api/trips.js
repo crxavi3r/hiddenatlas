@@ -902,7 +902,7 @@ export default async function handler(req, res) {
       const itemAccess = await getTripAccess(itemRows[0].tripId);
       if (!itemAccess.canEdit) return res.status(403).json({ error: 'Permission denied' });
 
-      const { type: rawType, title, description, time, startTime, endTime, durationMinutes, locationName, address, notes, url, provider, bookingReference, status, sortOrder, latitude, longitude, imageUrl: rawImageUrl, imageAlt: rawImageAlt } = req.body || {};
+      const { type: rawType, title, description, time, startTime, endTime, durationMinutes, locationName, address, notes, url, provider, bookingReference, status, sortOrder, latitude, longitude, imageUrl: rawImageUrl, imageAlt: rawImageAlt, tripDayId: rawTripDayId } = req.body || {};
 
       // Normalize and whitelist type
       const ITEM_TYPE_WHITELIST = ['attraction','restaurant','hotel','transfer','flight','event','note','break','booking','other'];
@@ -913,6 +913,24 @@ export default async function handler(req, res) {
         normalizedType = ITEM_TYPE_WHITELIST.includes(lower) ? lower : (ITEM_TYPE_ALIAS[lower] ?? null);
         if (!normalizedType) return res.status(400).json({ error: 'Invalid item type' });
       }
+
+      // Resolve tripDayId change (move item to a different day)
+      let newTripDayId;
+      let newDayNumber;
+      if (rawTripDayId !== undefined) {
+        if (!rawTripDayId) {
+          newTripDayId = null; newDayNumber = null;
+        } else {
+          const { rows: dayRows } = await pool.query(
+            `SELECT "dayNumber" FROM "TripDay" WHERE id = $1 AND "tripId" = $2`,
+            [rawTripDayId, itemRows[0].tripId]
+          );
+          if (!dayRows.length) return res.status(400).json({ error: 'Invalid day' });
+          newTripDayId = rawTripDayId;
+          newDayNumber = dayRows[0].dayNumber;
+        }
+      }
+      const updateDay = newTripDayId !== undefined;
 
       const hasImageUrl = rawImageUrl !== undefined;
       const hasImageAlt = rawImageAlt !== undefined;
@@ -929,6 +947,8 @@ export default async function handler(req, res) {
              longitude = COALESCE($18::float8, longitude),
              "imageUrl" = CASE WHEN $19::boolean THEN $20 ELSE "imageUrl" END,
              "imageAlt" = CASE WHEN $21::boolean THEN $22 ELSE "imageAlt" END,
+             "tripDayId" = CASE WHEN $23::boolean THEN $24 ELSE "tripDayId" END,
+             "dayNumber" = CASE WHEN $23::boolean THEN $25::int ELSE "dayNumber" END,
              "updatedAt" = NOW()
          WHERE id = $16
          RETURNING id, "tripId", "tripDayId", "dayNumber", type, title, description,
@@ -949,7 +969,10 @@ export default async function handler(req, res) {
          hasImageUrl,                                     // $19
          hasImageUrl ? (rawImageUrl || null) : null,     // $20
          hasImageAlt,                                     // $21
-         hasImageAlt ? (rawImageAlt || null) : null]     // $22
+         hasImageAlt ? (rawImageAlt || null) : null,     // $22
+         updateDay,                                       // $23
+         updateDay ? (newTripDayId ?? null) : null,      // $24
+         updateDay ? (newDayNumber ?? null) : null]      // $25
       );
       return res.status(200).json({ item: updated[0] });
     }
