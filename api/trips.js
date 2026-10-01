@@ -1100,6 +1100,18 @@ export default async function handler(req, res) {
       const tripId = bookingRows[0].tripId;
       const { type, title, date, time, locationName, provider, confirmationReference, notes, url, metadata, latitude, longitude, dayNumber: explicitDayNumber, tripDayId: explicitTripDayId, tripItemId: newTripItemId } = req.body || {};
 
+      // Location-only patch — skip full validation, just update lat/lng
+      const isLocationPatch = latitude != null && longitude != null &&
+        type == null && title == null && date == null && locationName == null &&
+        time == null && provider == null && metadata == null;
+      if (isLocationPatch) {
+        await pool.query(
+          `UPDATE "TripBooking" SET latitude = $1, longitude = $2, "updatedAt" = NOW() WHERE id = $3`,
+          [Number(latitude), Number(longitude), bookingId]
+        );
+        return res.status(200).json({ ok: true });
+      }
+
       const meta = (metadata && typeof metadata === 'object') ? metadata : {};
       const rawBookingType = type || bookingRows[0].currentType || 'other';
       const bookingType = normalizeBookingType(rawBookingType) ?? 'other';
